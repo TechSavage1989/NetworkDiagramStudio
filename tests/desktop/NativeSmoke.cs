@@ -84,6 +84,27 @@ internal sealed partial class Studio
         string? saved=null;
         for(int i=0;i<80;i++) { saved=Directory.EnumerateFiles(folder,"*.svg").FirstOrDefault(); if(saved!=null) break; await Task.Delay(125); }
         if(saved==null || !File.ReadAllText(saved).Contains("<svg")) throw new Exception("The selected sample SVG page was not saved.");
+        var editorCheck=await browser.CoreWebView2.ExecuteScriptAsync("""
+            (() => {
+                try {
+                    document.querySelector('[aria-label="Up SW-1"]').click();
+                    if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed');
+                    document.getElementById('arrange').click();
+                    [...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Add core page').click();
+                    const name=document.querySelector('[aria-label="Core page name"]');
+                    name.value='Native test rack';name.dispatchEvent(new Event('change'));
+                    const target=document.querySelector('[aria-label="Core page for SW-1"]');
+                    target.value=target.options[target.options.length-1].value;target.dispatchEvent(new Event('change'));
+                    if(![...document.querySelectorAll('#tabs button')].some(b=>b.textContent==='Native test rack')) throw Error('Core assignment failed');
+                    document.getElementById('close').click();
+                    document.getElementById('evidence').click();
+                    if(document.getElementById('dialog-title').textContent!=='Imported data') throw Error('Import controls missing');
+                    document.getElementById('close').click();
+                    return 'ok';
+                } catch(e) { return e.message; }
+            })()
+            """);
+        if(editorCheck!="\"ok\"") throw new Exception("Native editor controls: "+editorCheck);
         await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('print').click()");
         await Printed.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }

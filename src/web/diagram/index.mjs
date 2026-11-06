@@ -1,3 +1,5 @@
+import {corePages} from './core.mjs';
+import {orderedDevices} from '../layout.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
 import {C,W,H,addDevice,bridge,fresh,getAnchor,label,list,mediaInfo,optic,physicalPorts,portList,rate,rect,route,short,split,state,svgPage,value,xml} from './scene.mjs';
 export {exportVisio,exportStencil} from './visio.mjs';
@@ -8,7 +10,7 @@ const nameOf=d=>String(d?.name||d?.id||'Unnamed');
 const field=(o,...keys)=>keys.map(k=>value(o?.[k])).find(Boolean)||'';
 function inventory(p){
   const devices=new Map(), links=[];
-  for(const d of list(p.devices))if(d && idOf(d.id) && !devices.has(idOf(d.id)))devices.set(idOf(d.id),d);
+  for(const d of orderedDevices(p))if(d && idOf(d.id) && !devices.has(idOf(d.id)))devices.set(idOf(d.id),d);
   for(const [idx,v] of list(p.links).entries()){
     if(!v||!idOf(v.a)||!idOf(v.b))continue;
     const a=idOf(v.a),b=idOf(v.b);
@@ -22,104 +24,6 @@ function caption(p,x,y,w,code,title,details){
   label(p.items,x,y,100,22,code,13,true,C.teal);
   label(p.items,x,y+23,w,23,title,16,true);
   label(p.items,x,y+48,w,21,details,13,false,C.muted);
-}
-function batches(edges,maxEdges,maxNodes,columnFor){
-  const out=[];let es=[],ids=new Set(),terminals=new Set(),columns=[];
-  function flush(){if(es.length)out.push({es,ids:[...ids]});es=[];ids=new Set();terminals=new Set();columns=[];}
-  for(const e of edges){
-    const t=[e.a+'|'+e.ap,e.b+'|'+e.bp];
-    const exits=[columnFor(e.a,e.ap),columnFor(e.b,e.bp)].filter(Boolean);
-    // Distinct jacks on multirow chassis can share a vertical lead out of the same bank.
-    const sharedLead=exits.some(x=>columns.some(o=>o.id===x.id&&o.top===x.top&&Math.abs(o.x-x.x)<3));
-    if(es.length&&(es.length>=maxEdges||new Set([...ids,e.a,e.b]).size>maxNodes||t.some(k=>terminals.has(k))||sharedLead))flush();
-    es.push(e);ids.add(e.a);ids.add(e.b);t.forEach(k=>terminals.add(k));columns.push(...exits);
-  }
-  flush();return out;
-}
-function core(p,db){
-  const devices=new Map(db.devices),handoffs=[];
-  for(const d of db.devices.values()){
-    if(d.kind==='ap')continue;
-    const occupied=new Set(db.links.flatMap(l=>l.a===d.id?[l.ap]:l.b===d.id?[l.bp]:[]));
-    for(const port of physicalPorts(d)){
-      const children=portList(d).filter(sub=>sub.parent===port.name&&sub.sdwanMember);
-      const uplink=port.sdwanMember||port.role==='wan'?port:children[0]||port;
-      const explicit=port.handoff||port.role==='handoff';
-      if(occupied.has(port.name)||(!explicit&&!((uplink.role==='wan'||uplink.sdwanMember)&&(uplink.gateway||uplink.zone||uplink.ip||uplink.state==='up'))))continue;
-      let id='handoff:'+d.id+'/'+port.name;while(devices.has(id))id+='_';
-      const capability=portCapability(hardwareProfile(d),port.name);
-      const media=port.media||(/base-t$/i.test(capability||'')?'copper':'unknown');
-      const name=typeof port.handoff==='string'?port.handoff:uplink.description||port.description||(children.length?children.map(sub=>sub.name).join(', '):port.name+' handoff');
-      const gateways=[...new Set([port,...children].map(sub=>sub.gateway).filter(Boolean))];
-      devices.set(id,{id,name,kind:'handoff',model:uplink.zone||(uplink.vlan?'VLAN '+uplink.vlan:'Site handoff'),ip:gateways.length?'Gateway '+gateways.join(', '):'',ports:[{name:'handoff'}]});
-      handoffs.push({a:id,ap:'handoff',b:d.id,bp:port.name,media,speed:port.speed,status:'configured',idx:db.links.length+handoffs.length});
-    }
-  }
-  db={devices,links:[...handoffs,...db.links]};
-  const filtered=db.links.filter(e=>![db.devices.get(e.a).kind,db.devices.get(e.b).kind].includes('ap')||[db.devices.get(e.a).kind,db.devices.get(e.b).kind].every(k=>k==='ap'));
-  const probes=new Map();
-  function exitColumn(id,port){
-    if(!probes.has(id))probes.set(id,addDevice({items:[]},p,db.devices.get(id),[384,0,466,50],'probe'));
-    const node=probes.get(id),key=Object.keys(node.ports).find(k=>k.toLowerCase()===port.toLowerCase());
-    if(key===undefined)return null;
-    const [x,y]=node.ports[key];
-    return {id,top:y<=.5,x:x*node.w};
-  }
-  const pages=batches(filtered,6,6,exitColumn), attached=new Set(filtered.flatMap(e=>[e.a,e.b]));
-  const solo=[...db.devices].filter(([id,d])=>d.kind!=='ap'&&!attached.has(id)).map(([id])=>id);
-  for(const ids of split(solo,5))pages.push({es:[],ids});if(!pages.length)pages.push({es:[],ids:[]});
-  return pages.map(({es,ids},ip)=>{
-    const page=fresh('Core Network','Core Network','Infrastructure devices and their reported or configured links',p);const a=page.items;
-    if(!ids.length){empty(page,'No infrastructure devices or links were supplied.');return page;}
-    ids.sort((a,b)=>{const rank=id=>({handoff:0,firewall:1,switch:2})[db.devices.get(id).kind]??3;return rank(a)-rank(b);});
-    const nodes=new Map(),railMarks=[],rowH=Math.min(140,660/ids.length);
-    const top=180+(660-ids.length*rowH)/2;
-    ids.forEach((id,i)=>{
-      const d=db.devices.get(id),y=top+i*rowH+rowH/2;
-      const k=addDevice(page,p,d,[384,y-25,466,50],'node'+i);
-      if(d.kind==='handoff')label(a,k.x+12,k.y,k.w-24,k.h,d.name,16,true,C.ink,'center');
-      nodes.set(id,k);
-      label(a,38,y-26,226,22,short(nameOf(d),28),16,true);
-      label(a,38,y-2,223,17,short([d.vendor,d.model].filter(Boolean).join(' ')||d.kind||'Device',30),13,false,C.muted);
-      label(a,38,y+17,224,16,value(d.ip)||(k.fallback?'Schematic front':''),12,false,C.muted);
-    });
-    rect(a,879,163,1,665,C.rule);
-    label(a,904,163,250,22,es.length?'LINK REGISTER':'DEVICE INVENTORY',14,true,C.teal);
-    if(!es.length)label(a,904,213,248,32,'No links supplied here',15,false,C.muted);
-    const departures=new Map();
-    function endpoint(id,port,unique,prefer,info){
-      const node=nodes.get(id),dist=getAnchor(node,port,prefer,unique),bucket=id+'/'+dist.side;
-      const count=departures.get(bucket)||0;departures.set(bucket,count+1);
-      // Rail lanes sit outside all equipment bodies. Unmapped positions use the perimeter.
-      const ay=dist.edge+(dist.side==='top'?-1:1)*(10+count*5);
-      const start=node.kind!=='handoff' && info.plug && !String(dist.port).startsWith('uplink.')?optic(page,p,db.devices.get(id),node,dist,info):dist;
-      return {anchor:start,ay};
-    }
-    es.forEach((e,i)=>{
-      const info=mediaInfo(e.media),ea=endpoint(e.a,e.ap,i*2,'top',info),eb=endpoint(e.b,e.bp,i*2+1,'bottom',info);
-      const rail=384-14*(i+1);
-      // Keep the full-height rail between chassis and captions. Short horizontal leads run within each row's clearance band.
-      route(page,ea.anchor,eb.anchor,[[ea.anchor.x,ea.anchor.y],[ea.anchor.x,ea.ay],[rail,ea.ay],[rail,eb.ay],[eb.anchor.x,eb.ay],[eb.anchor.x,eb.anchor.y]],info.color,'L'+(e.idx+1)+' · '+[nameOf(db.devices.get(e.a)),e.ap,'/',nameOf(db.devices.get(e.b)),e.bp].join(' '));
-      railMarks.push({x:rail,y1:ea.ay,y2:eb.ay,n:e.idx+1});
-      const y=202+i*98;
-      rect(a,904,y+9,18,3,info.color);
-      label(a,930,y,228,24,'L'+(e.idx+1)+'   '+info.name,15,true);
-      label(a,904,y+25,253,20,nameOf(db.devices.get(e.a))+' · '+(e.ap||'port unknown'),13);
-      label(a,904,y+47,253,20,nameOf(db.devices.get(e.b))+' · '+(e.bp||'port unknown'),13);
-      label(a,904,y+70,253,17,[rate(e.speed),value(e.status)].filter(Boolean).join('  ·  '),12,false,C.muted);
-    });
-    if(es.length){
-      const horizontals=a.filter(v=>v.type==='path').flatMap(v=>v.points.slice(1).map((b,j)=>[v.points[j],b]).filter(([a,b])=>a[1]===b[1]));
-      for(const r of railMarks){
-        const lo=Math.min(r.y1,r.y2)+9,hi=Math.max(r.y1,r.y2)-9;
-        for(let y=(lo+hi)/2; y<=hi; y+=7){
-          if(horizontals.some(([a,b])=>Math.min(a[0],b[0])<r.x+21&&Math.max(a[0],b[0])>r.x&&Math.abs(a[1]-y)<8))continue;
-          label(a,r.x+2,y-6,28,12,'L'+r.n,9,true,C.muted);break;
-        }
-      }
-    }
-    return page;
-  });
 }
 function wrapWords(input,max){
   let rest=String(input??'');if(!rest)return [''];const out=[];
@@ -417,7 +321,7 @@ function logical(project,db){
     ...(matrix.length?matrix:tablePages(project,'Trunk VLANs','Native and tagged VLAN membership on trunks and aggregates',[['Device',243],['Interface',164],['Native VLAN',145],['Tagged VLANs',235],['LAG',94],['Description',247]],trunks,'No trunk, tagged-port or aggregate records were supplied.'))];
 }
 export function buildPages(project={}){
-  const db=inventory(project),pages=[...core(project,db),...portMaps(project,db),...wireless(project,db),...logical(project,db)];
+  const db=inventory(project),pages=[...corePages(project,db),...portMaps(project,db),...wireless(project,db),...logical(project,db)];
   const totals=new Map(),seen=new Map();
   for(const p of pages)totals.set(p.name,(totals.get(p.name)||0)+1);
   pages.forEach((p,i)=>{

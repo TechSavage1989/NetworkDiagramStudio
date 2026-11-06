@@ -1,5 +1,21 @@
 # Development handoff
 
+## Layout and supplemental-data candidate
+
+The feature branch feat/layout-evidence-controls prepares 0.1.0-preview.2. The last published baseline for this work was v0.1.0-preview.1 at main commit 14390bb17036093c00d0ce084b78f6a3854b3010. Do not describe preview.2 as published until its merged workflow, tag and assets have been verified. This change does not authorize a future contributor to merge or publish it without the user's scope for that action.
+
+New controls include Up/Down and drag/drop ordering, named core-page assignments, automatic AP inclusion, per-device core exclusion and scale, visible/numeric jack mapping, and reversible per-file/category import selection. Core packing measures the actual faceplate plus cable tracks. Links to another sheet use native continuation markers and page references. Old schema-1 projects open without conversion; new layout and evidence records are optional schema-1 fields.
+
+layout.mjs owns ordering and validated page settings. diagram/core.mjs packs and routes the core. evidence.mjs keeps the pre-existing model as its base, normalized imported sources, and property/keyed-row patches for subsequent manual changes. Compose sources with configuration intent first, then apply current operational state/speed/media and the manual edits. No raw CLI or configuration text is retained. app.mjs captures changes against evidenceSnapshot before recomposition, and refreshes the snapshot after scope and hardware matching. Do not diff a newly recomposed model against its previous source selection or it will turn removed observations into manual changes.
+
+imports/operational.mjs detects prompted CLI output, separates different host prompts, and parses supported interface, LLDP/CDP, transceiver, VLAN and IPv4 route formats. Captures without a useful hostname can be assigned to the intended device under Imported data. Coverage is documented in HARDWARE_SUPPORT.md. Unknown command syntax is not universal support for a platform.
+
+visio-art.mjs renders supported cached vector geometry and pictures into a local image. Both artwork and child/root jacks use the same inches-based transform before normalization. Geometry that cannot be rendered is rejected with the desktop conversion path. Vector rendering is a supported subset, not an implementation of the entire ShapeSheet language.
+
+Local validation for this candidate passed 34 Node tests and direct browser checks of ordering, drag/drop, page assignments, save/reopen, source/category toggles, six exported stencil masters and a private site fixture. A synthetic vector-only master verified rotated/mirrored artwork against the rendered pixel at its mapped socket. Private core geometry had no unrelated-device crossings or shared parallel segments. Private files and screenshots remain outside the public repository. README screenshots contain only the fictional sample.
+
+The local SDK could not build Windows in the current process environment because .NET process inspection failed before compilation. Hosted Windows validation must build the candidate, exercise export/print and the real timer/update/rollback checks, and supply the tested binary. An offline HTML build alone does not establish Windows results. Desktop Microsoft Visio remains untested.
+
 ## Initial preview
 
 NetworkDiagramStudio 0.1.0-preview.1 is a local network-documentation editor for Windows x64 and current desktop browsers. The public source, release feed, and preview distribution are in the same repository. [Repository](https://github.com/TechSavage1989/NetworkDiagramStudio) · [Public releases](https://github.com/TechSavage1989/NetworkDiagramStudio/releases)
