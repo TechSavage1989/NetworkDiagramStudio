@@ -4,6 +4,8 @@ using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.IO.Compression;
+using System.Xml.Linq;
 
 namespace NetworkDiagramStudio;
 internal static class NativeSmoke
@@ -81,7 +83,7 @@ internal sealed partial class Studio
     internal async Task ExportAndPrint(string folder)
     {
         TestOutputFolder=folder;
-        var chooser=Task.Run(async()=>{
+        Task ChooseExport() => Task.Run(async()=>{
             for(int attempt=0; attempt<100; attempt++) {
                 var hwnd=FindWindow("#32770","Save exported file");
                 if(hwnd!=IntPtr.Zero) { await Task.Delay(400); PostMessage(hwnd,0x0111,(IntPtr)1,IntPtr.Zero); return; }
@@ -89,11 +91,22 @@ internal sealed partial class Studio
             }
             throw new Exception("The real Save As dialog was not displayed.");
         });
+        var chooser=ChooseExport();
         await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('sample').click();document.getElementById('svg').click()");
         await chooser;
         string? saved=null;
         for(int i=0;i<80;i++) { saved=Directory.EnumerateFiles(folder,"*.svg").FirstOrDefault(); if(saved!=null) break; await Task.Delay(125); }
         if(saved==null || !File.ReadAllText(saved).Contains("<svg")) throw new Exception("The selected sample SVG page was not saved.");
+        chooser=ChooseExport();
+        await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('export').click()");
+        await chooser;
+        string? drawing=null;
+        for(int i=0;i<80;i++){drawing=Directory.EnumerateFiles(folder,"*.vsdx").FirstOrDefault();if(drawing!=null)break;await Task.Delay(125);}
+        if(drawing==null)throw new Exception("The native Visio export was not saved.");
+        using(var package=ZipFile.OpenRead(drawing)){
+            foreach(var required in new[]{"[Content_Types].xml","visio/document.xml","visio/pages/pages.xml","visio/windows.xml"})if(package.GetEntry(required)==null)throw new Exception("Native Visio export is missing "+required);
+            foreach(var part in package.Entries.Where(p=>p.FullName.EndsWith(".xml")||p.FullName.EndsWith(".rels"))){using var stream=part.Open();XDocument.Load(stream);}
+        }
         var editorCheck=await browser.CoreWebView2.ExecuteScriptAsync("""
             (() => {
                 try {

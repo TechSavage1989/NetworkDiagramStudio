@@ -73,7 +73,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    tracks.push({side,lane,lo,hi});const rail=side==='left'?left-18-railPitch*lane:right+18+railPitch*lane;
    routes.push({e,a,b,side,rail,hosts:[a.node.key,b.node.key],points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});
   }
-  for(const e of external){const which=nodes.has(e.a)?'a':'b',v=ends.get(e.idx+'/'+which),x=left-26;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
+  for(const e of external){const which=nodes.has(e.a)?'a':'b',v=ends.get(e.idx+'/'+which),x=left-10;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
   for(let i=0;i<routes.length;i++)if(!routes[i].v){routes[i]=minimalCandidate(routes[i],nodes,obstacles,routes.filter((_,j)=>j!==i));for(const v of [routes[i].a,routes[i].b])ends.set(v.e.idx+'/'+v.which,v);}
   return {routes,references,ends};
  }

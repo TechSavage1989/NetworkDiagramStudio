@@ -14,10 +14,12 @@ Read this file, the current development handoff, and the shared standards before
 | src/web/stencil-files.mjs, src/web/stencil-search.mjs, src/web/visio-binary.mjs | Recursive discovery, filtered master selection and bounded legacy picture import. |
 | src/web/vendor | Pinned local EMF renderer and its license. |
 | src/web/history.mjs, src/web/inline-text.mjs, src/web/snapping.mjs | Project deltas, atomic undo/redo, direct text editing, selection geometry and configurable snapping. |
+| src/web/link-styles.mjs, src/web/page-options.mjs | Shared cable/legend styling and captions, validated page-number settings and format tokens. |
 | src/web/connection-edit.mjs, src/web/point-tools.mjs, src/web/color-picker.mjs, src/web/port-table.mjs | Port selection/conflicts, normalized box/group movement, solid-color formats/palettes and port table rules. |
 | src/web/assets/app-icon.svg, desktop/Assets/app.ico | Authored editable vector icon and its multi-size Windows build resource. |
 | desktop | Windows Forms/WebView2 host, release policy, verified download and rollback helper. |
 | scripts | Browser and Windows builds, release packaging, publishing, root guard and optional Visio conversion. |
+| scripts/export-test-fixtures.mjs, scripts/check-visio-package.py | Fictional export fixtures and independent OPC, shape-inheritance and port-glue checks, including the native downloaded file. |
 | tests | Synthetic parser/layout fixtures and browser engine tests. Windows policy and lifecycle checks live in tests/desktop. |
 | docs | Shared standards, hardware support, release intent and notes, dependency notices, and synthetic screenshots. |
 | .github/workflows | Pull-request validation and intent-gated preview publication. |

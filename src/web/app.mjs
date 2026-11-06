@@ -9,6 +9,8 @@ import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-
 import {cableControls} from './cable-controls.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
+import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
+import {cleanPageNumbers,pageNumber} from './page-options.mjs';
 import {connectionPorts,checkConnection,sameConnection} from './connection-edit.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog} from './imports/index.mjs';
@@ -64,8 +66,9 @@ function syncDrawingSelection(){
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');
- const cable=selectedCable();$('cable-tools').hidden=!editDrawing||!cable;
+ const cable=selectedCable();$('cable-tools').hidden=!editDrawing;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
  if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
+ else $('cable-point-info').textContent='Select a cable to edit its bend points or endpoints.';
 }
 function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();}
 function selectedCable(){return drawingSelection.size===1?pages[active]?.items.find(i=>i.type==='path'&&drawingSelection.has(i.editKey)):null;}
@@ -84,12 +87,22 @@ function setDrawingEdits(next){
  try{validateDrawing();}catch(error){project.layout.drawingEdits=previous;draw();throw error;}
  perform('drawing');
 }
+function setLinkStyle(type,change,extraEdits={}){
+ project.layout||={};const before=project.layout,next=changeLinkStyle(project,pages,type,change);project.layout={...before,...next,drawingEdits:cleanDrawingEdits({...next.drawingEdits,...extraEdits})};
+ try{validateDrawing();}catch(error){project.layout=before;draw();throw error;}perform('link-style');
+}
+function editableText(item){return item.legendFullText!=null&&project.layout?.drawingEdits?.[item.editKey]?.value==null?item.legendFullText:item.value;}
+function saveTextEdit(item,value,color){
+ const patch={...project.layout?.drawingEdits?.[item.editKey],color};if(!item.legendEntry)patch.value=value;
+ if(item.legendEntry&&item.linkType&&value!==editableText(item)){delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:value},{[item.editKey]:patch});}
+ else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});
+}
 function editOnDoubleClick(key){
  const item=pages[active]&&drawingObjects(pages[active]).find(i=>i.editKey===key);if(!item)return;
  if(['text','arttext'].includes(item.type)){
   if(inlineSession&&!inlineSession.save())return;editDrawing=true;$('edit-drawing').setAttribute('aria-pressed','true');$('canvas').classList.add('editing');selectDrawingItem(key);
   const box=drawingBounds(item),svg=$('canvas').querySelector('svg'),size=item.type==='arttext'&&item.normalized?item.size*item.parent.w:item.size;
-  inlineSession=inlineTextEditor(svg,{box,value:item.value,size,bold:item.bold,color:item.color,align:item.align,onMore:()=>task(()=>editDrawingObject(key)),onSave(value,color){const text=item.type==='arttext'?value:value.replace(/[\r\n]+/g,' ');if(text===item.value&&color===item.color)return;setDrawingEdits({...project.layout?.drawingEdits,[key]:{...project.layout?.drawingEdits?.[key],value:text,color}});say('Diagram text saved.');},onClose(){inlineSession=null;inlineCancel=null;$('canvas').focus({preventScroll:true});}});inlineCancel=()=>inlineSession?.cancel();
+  inlineSession=inlineTextEditor(svg,{box,value:editableText(item),size,bold:item.bold,color:item.color,align:item.align,onMore:()=>task(()=>editDrawingObject(key)),onSave(value,color){const text=item.type==='arttext'?value:value.replace(/[\r\n]+/g,' ');if(text===editableText(item)&&color===item.color)return;saveTextEdit(item,text,color);say('Diagram text saved.');},onClose(){inlineSession=null;inlineCancel=null;$('canvas').focus({preventScroll:true});}});inlineCancel=()=>inlineSession?.cancel();
  }else task(()=>editDrawingObject(key));
 }
 document.addEventListener('pointerdown',event=>{if(inlineSession&&!event.target.closest('[data-inline-editor]')&&!inlineSession.save()){event.preventDefault();event.stopImmediatePropagation();}},true);
@@ -197,6 +210,26 @@ function portMapOptions(){
  button(actions(body),'Apply port map options',()=>{project.layout.portMap={density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
 }
 $('port-map-options').onclick=()=>task(portMapOptions);
+function linkStyleOptions(selected){
+ const used=new Map();for(const p of pages)for(const line of p.items.filter(i=>i.type==='path'))if(!used.has(line.linkType))used.set(line.linkType,line);
+ const types=[...new Set([...used.keys(),...linkDefaults.map(([type])=>type)])],type=types.includes(selected)?selected:types[0],line=used.get(type),current=project.layout?.linkStyles?.[type]||{},body=modal('Link styles');
+ const choice=field(body,'Link type',type,types.map(t=>[t,t+(used.has(t)?'':' (unused)')]));choice.onchange=()=>linkStyleOptions(choice.value);
+ const title=field(body,'Legend title',current.title??type),description=field(body,'Legend description',current.description||''),lineTitle=field(body,'Line title',current.lineTitle??type),lineDescription=field(body,'Line description',current.lineDescription||'');
+ for(const input of [title,lineTitle])input.maxLength=120;for(const input of [description,lineDescription])input.maxLength=240;
+ body.append(el('p','Changes apply to every cable of this link type and its legend entries across the drawing. Legends show only the types used on their sheet. Text colors remain independently editable.','hint'));
+ const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});
+ const bar=actions(body);button(bar,'Save link style',()=>{setLinkStyle(type,{title:title.value,description:description.value,lineTitle:lineTitle.value,lineDescription:lineDescription.value,color:picker.value,opacity:picker.opacity});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
+ button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1});close();});button(bar,'Cancel',close);
+}
+$('link-styles').onclick=()=>task(()=>linkStyleOptions());
+function pageOptions(){
+ const p=cleanPageNumbers(project.layout?.pageNumbers),body=modal('Page options'),row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));body.append(row);
+ const start=field(body,'First page number',p.start),pad=field(body,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(body,'Page number format',p.format);start.type='number';start.min=0;start.max=9999;start.step=1;format.maxLength=100;
+ body.append(el('p','Use {page} for the current number, {last} for the final number, or {total} for the number of sheets. Examples: {page} / {last}, Page {page}, Sheet {page} of {last}.','hint'));
+ const preview=el('p','','page-number-preview');body.append(preview);function update(){preview.textContent=show.checked?'Preview: '+pageNumber({show:true,start:+start.value,pad:+pad.value,format:format.value},active,pages.length||1):'Page numbers hidden';}for(const input of [show,start,pad,format])input.addEventListener('input',update);update();
+ button(actions(body),'Save page options',()=>{if(start.value===''||!Number.isInteger(+start.value)||+start.value<0||+start.value>9999)throw Error('Use a first page number from 0 to 9999.');if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');project.layout||={};project.layout.pageNumbers=cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value});perform('page-options');close();say('Page numbering saved.');},'primary');
+}
+$('page-options').onclick=()=>task(pageOptions);
 function arrange(){
  const body=modal('Device order and core pages');project.layout||=cleanLayout({},project.devices.map(d=>d.id));const layout=project.layout;
  const check=el('input');check.type='checkbox';check.checked=layout.includeAPs===true;check.id='core-aps';const title=el('label','Include access points on automatic core pages');title.htmlFor=check.id;line(body,check,title);
@@ -452,19 +485,24 @@ function editDrawingObject(key){
  const select=field(body,'Drawing object',item.editKey,options);select.onchange=()=>editDrawingObject(select.value);
  const normalized=item.normalized,factor=normalized?100:1,grid=el('div','','form-grid');body.append(grid);const inputs={};
  for(const k of ['path','vector'].includes(item.type)?[]:item.type==='arttext'?['x','y','w']:['x','y','w','h']){inputs[k]=field(grid,({x:'Left',y:'Top',w:'Width',h:'Height'})[k]+(normalized?' (%)':' (page units)'),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
- if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',item.value,'multiline');inputs.size=field(body,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=field(body,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=field(body,'Alignment',item.align||'left',['left','center','right']);}
+ if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.size=field(body,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=field(body,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=field(body,'Alignment',item.align||'left',['left','center','right']);}
  else inputs.name=field(body,'Object name',item.name||'');
- for(const k of ['rect','vector'].includes(item.type)?['fill','stroke']:[]){inputs[k]=field(body,k[0].toUpperCase()+k.slice(1),item[k]||'#17364A');}
- const picker=['path','text','arttext'].includes(item.type)?colorPicker(body,{kind:item.type==='path'?'line':'text',color:item.color,opacity:item.opacity??1,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
+ const linkedSwatch=item.legendEntry&&item.type==='rect';
+ for(const k of ['rect','vector'].includes(item.type)?linkedSwatch?['stroke']:['fill','stroke']:[]){inputs[k]=field(body,k[0].toUpperCase()+k.slice(1),item[k]||'#17364A');}
+ const picker=['path','text','arttext'].includes(item.type)||linkedSwatch?colorPicker(body,{kind:item.type==='path'||linkedSwatch?'line':'text',color:linkedSwatch?item.fill:item.color,opacity:item.opacity??1,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
+ if(item.type==='path'||linkedSwatch){body.append(el('p','Color and opacity apply to every cable of this link type and its legend entries.','hint'));button(actions(body),'Configure link titles and descriptions',()=>linkStyleOptions(item.linkType));}
  if(['rect','path','vector'].includes(item.type)){inputs.weight=field(body,'Line width',item.weight||1);inputs.weight.type='number';inputs.weight.step=.1;}
  if(item.type==='vector')inputs.commands=field(body,'Vector commands (JSON, normalized coordinates)',JSON.stringify(item.commands),'multiline');
  if(item.type==='path'){const bar=actions(body);button(bar,'Edit bend points',()=>editCablePoints(item));if(item.sourceLink)button(bar,'Connect endpoints',()=>connectSelectedCable(item));}
  const bar=actions(body);button(bar,'Save object',()=>{
   const change={};for(const [k,input] of Object.entries(inputs)){if(['x','y','w','h','size','weight'].includes(k)){const n=Number(input.value)/(normalized&&(['x','y','w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||['w','h','size','weight'].includes(k)&&n<=0)throw Error('Use a valid positive size and finite position.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
-  if(picker){change.color=picker.value;if(item.type==='path')change.opacity=picker.opacity;}
+  if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
   if(item.labelRole&&change.size<12)throw Error('Link labels need a font size of at least 12.');
   const clean=cleanDrawingEdits({[item.editKey]:change})[item.editKey];if(!clean||Object.keys(clean).length!==Object.keys(change).length)throw Error('Use hex colors, valid text settings, and finite dimensions.');
-  setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}});picker?.remember();close();say('Drawing object saved.');
+  if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
+  else if(item.legendEntry&&item.linkType&&clean.value!==editableText(item)){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:clean.value},{[item.editKey]:patch});}
+  else if(item.legendEntry&&item.linkType){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};if(project.layout?.drawingEdits?.[item.editKey]?.value==null)delete patch.value;setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});}
+  else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}});picker?.remember();close();say('Drawing object saved.');
  },'primary');
  button(bar,'Reset object',()=>{const next={...project.layout?.drawingEdits};delete next[item.editKey];if(item.legacyEditKey)delete next[item.legacyEditKey];setDrawingEdits(next);close();});
  if(item.type!=='device'&&item.type!=='path')button(bar,'Hide object',()=>{setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:item.type==='vector'?{commands:[]}:item.type==='arttext'?{value:''}:{hidden:true}});close();});

@@ -2,8 +2,10 @@
 import {deviceFaceplate} from './faceplate.mjs';
 import {editDeviceShape} from '../drawing-edits.mjs';
 import {simplifyRoute} from './routing.mjs';
-export const W = 1200, H = 920;
-export const C = {ink:'#17364A',muted:'#435B6A',teal:'#006775',rule:'#CAD6DB',pale:'#F0F5F6',white:'#FFFFFF',up:'#D8F0DE',down:'#E2E7EA',amber:'#805400'};
+import {linkDefaults,legendStyleId} from '../link-styles.mjs';
+import {wrapPortText} from '../port-table.mjs';
+export const W = 1200, H = 975;
+export const C = {ink:'#16364A',muted:'#536779',teal:'#166574',rule:'#CEDCE0',pale:'#F0F5F6',white:'#FFFFFF',up:'#D8F0DE',down:'#E2E7EA',amber:'#805400'};
 export const xml = s => String(s ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
 export const round = n => Math.round(n*1e5)/1e5;
 export function rect(box,x,y,w,h,fill,stroke='none',weight=1){box.push({type:'rect',x,y,w,h,fill,stroke,weight});}
@@ -29,21 +31,33 @@ export function mediaInfo(v,access=false){
   return {name:'Media unspecified',color:'#707A83'};
 }
 export function linkLegend(page){
- const defaults=[['SR fiber','#FF0000'],['LR fiber','#00B0F0'],['DAC','#000000'],['Copper','#FFD965'],['AP copper','#00B050'],['Fiber / media unspecified','#707A83']],scope=page.editScope||page.name,entries=new Map();
- for(const path of page.items.filter(i=>i.type==='path')){const name=path.linkType||'Link',color=path.color.toUpperCase(),opacity=path.opacity??1,key=JSON.stringify([name,color,opacity]);if(!entries.has(key))entries.set(key,{name,color,opacity});}
+ const defaults=linkDefaults,scope=page.editScope||page.name,entries=new Map();
+ for(const path of page.items.filter(i=>i.type==='path')){const name=path.linkType||'Link',color=path.color.toUpperCase(),opacity=path.opacity??1,key=JSON.stringify([name,color,opacity]);if(!entries.has(key))entries.set(key,{name,color,opacity,style:path.linkStyle});}
  const values=[...entries.values()].sort((a,b)=>{const rank=n=>defaults.findIndex(([name])=>name===n||name.startsWith('Fiber')&&/unspecified|Fiber/.test(n));return (rank(a.name)<0?9:rank(a.name))-(rank(b.name)<0?9:rank(b.name))||a.color.localeCompare(b.color)||a.opacity-b.opacity;});
  if(!values.length)return;
- const cols=values.length<=6?3:6,rows=Math.ceil(values.length/cols),height=Math.min(22,54/rows),size=Math.min(12,height-3);
- if(size<10)throw Error('This sheet has too many distinct link styles for a legible legend. Split it into additional core pages.');
+ if(page.legendLayout==='sidebar'){
+  label(page.items,38,147,244,26,'CONNECTION TYPES',16,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=198;
+  const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
+  for(const {name,color,opacity,style} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style),title=(style?.title||name)+(opacity<1?' ('+Math.round(opacity*100)+'%)':''),lines=wrapPortText(title,176,14),description=style?.description?wrapPortText(style.description,176,12):[];
+   rect(page.items,38,y+11,52,3,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
+   lines.forEach((text,n)=>{label(page.items,102,y+n*18,176,18,text,14,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
+   description.forEach((text,n)=>{label(page.items,102,y+lines.length*18+n*15,176,15,text,12,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44,lines.length*18+description.length*15+12);
+  }page.legendBottom=y;return;
+ }
+ const cols=values.length<=6?3:6,size=12,width=1128/cols-38,rows=[];
+ const entriesWithText=values.map(entry=>({...entry,lines:wrapPortText((entry.style?.title||entry.name)+(entry.opacity<1?' ('+Math.round(entry.opacity*100)+'%)':''),width,size),description:entry.style?.description?wrapPortText(entry.style.description,width,11):[]}));
+ for(let i=0;i<entriesWithText.length;i+=cols)rows.push(Math.max(...entriesWithText.slice(i,i+cols).map(e=>Math.max(22,e.lines.length*15+e.description.length*14+5))));
  label(page.items,38,148,1120,15,'LINK COLORS',11,true,C.muted);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});
- values.forEach(({name,color,opacity},i)=>{const x=38+(i%cols)*1128/cols,y=167+Math.floor(i/cols)*height,canonical=defaults.findIndex(([n,c])=>(n===name||n.startsWith('Fiber')&&/unspecified|Fiber/.test(name))&&c===color&&opacity===1),id=canonical>=0?canonical:'custom|'+name+'|'+color+'|'+opacity;
-  rect(page.items,x,y+6,22,3,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,editKey:scope+'|legend|'+id+'|swatch'});
-  label(page.items,x+30,y,1128/cols-38,height,name+(opacity<1?' ('+Math.round(opacity*100)+'%)':''),size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,editKey:scope+'|legend|'+id+'|text',full:true});
- });
+ entriesWithText.forEach(({name,color,opacity,style,lines,description},i)=>{const x=38+(i%cols)*1128/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style);
+  rect(page.items,x,y+6,22,3,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
+  lines.forEach((text,n)=>{label(page.items,x+30,y+n*15,width,15,text,size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
+  description.forEach((text,n)=>{label(page.items,x+30,y+lines.length*15+n*14,width,14,text,11,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});
+ });page.legendBottom=167+rows.reduce((a,b)=>a+b,0);
 }
 export function fresh(name,title,subtitle,project){
   const p={name,title,width:W,height:H,items:[]}, a=p.items;
-  label(a,36,16,900,23,short(project.name||'Network project',90),15,true,C.teal);
+  label(a,36,16,820,23,short(project.name||'Network project',90),15,true,C.teal);
+  label(a,900,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');
   label(a,36,43,1128,48,title,33,true);
   label(a,36,99,1128,24,subtitle,16,false,C.muted);
   rect(a,36,138,1128,2,C.rule);
@@ -73,7 +87,7 @@ export function physicalPorts(d){
 export function state(v){return /^(up|connected|online|active|operational)$/i.test(value(v))?'up':/down|disabled|offline|disconnected|inactive/i.test(value(v))?'down':'unknown';}
 export function addDevice(page,project,d,bounds,key,opts={}){
   const asset=actualAsset(project,d), ports=physicalPorts(d), ap=d.kind==='ap',panel=!asset&&!ap?deviceFaceplate(d):null;
-  const ratio=asset?+asset.width/+asset.height:panel?.ratio|| (ap?1:d.kind==='unknown'?3:9);
+  const ratio=asset?+asset.width/+asset.height:panel?.ratio|| (ap?1:d.kind==='handoff'?6:d.kind==='unknown'?3:9);
   const g={type:'device',key,sourceId:d.id,instanceKey:opts.instanceKey,name:d.name||d.id,kind:d.kind,model:d.model||'',...fitRatio(ratio,...bounds),asset,
     masterKey:asset?'asset:'+String(asset.id??d.stencilId??d.id):'device:'+d.id,ports:Object.create(null),children:[],fallback:!asset};
   const addAnchor=(k,p)=>{if(Array.isArray(p)&&p.length===2&&p.every(n=>Number.isFinite(n)&&n>=0&&n<=1))g.ports[String(k)]=[...p];};
@@ -192,5 +206,5 @@ export function svgPage(p){
     }).join(' ');
     return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||2.2)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+'<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+i.weight+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
   };
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Arial,Helvetica,sans-serif"><title>'+xml(p.title)+'</title><rect width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title><rect width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
 }

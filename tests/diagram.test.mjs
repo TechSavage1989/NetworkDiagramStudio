@@ -26,7 +26,8 @@ test('media coloring, source field retention, optics and front access point plac
   const ps=buildPages(fixture());
   const core=ps.find(p=>p.name==='Core Network'),wire=ps.find(p=>p.name==='Wireless Connections');
   // Only the mapped switch jack has a known optical cage. The unidentified firewall uses its perimeter.
-  assert.equal(core.items.filter(i=>i.kind==='plug'&&i.asset?.id==='optic').length,1);
+  assert.equal(core.items.filter(i=>i.kind==='plug'&&i.host&&i.asset?.id==='optic').length,1);
+  assert.ok(core.items.some(i=>i.kind==='plug'&&!i.host&&i.asset?.id==='optic'));
   assert.equal(ps.slice(1).flatMap(p=>p.items).filter(i=>i.kind==='plug').length,0);
   assert.equal(core.items.find(x=>x.type==='path').color,'#FF0000');
   const apPath=wire.items.find(x=>x.type==='path'),ap=wire.items.find(x=>x.kind==='ap');
@@ -40,7 +41,7 @@ test('native ZIP, true groups, explicit foreign image parts, port glue on switch
   const project=fixture(),pages=buildPages(project),blob=exportVisio(project,pages),parts=await unzip(await blob.arrayBuffer());
   for(const key of ['[Content_Types].xml','_rels/.rels','visio/document.xml','visio/masters/masters.xml','visio/pages/pages.xml'])assert.ok(parts.has(key),key);
   const p=text.decode(parts.get('visio/pages/page1.xml'));
-  assert.match(p,/Type="Group"/);assert.match(p,/Type="Foreign" MasterShape="6"/);
+  assert.match(p,/Type="Group"/);assert.match(p,/Type="Foreign"[^>]* MasterShape="6"/);
   assert.match(p,/<ForeignData ForeignType="Bitmap" CompressionType="PNG"/);
   assert.match(p,/FromCell="BeginX".*ToCell="Connections.X\d+"/);assert.match(p,/FromCell="EndX"/);
   assert.match(text.decode(parts.get('visio/pages/_rels/page1.xml.rels')),/relationships\/image/);

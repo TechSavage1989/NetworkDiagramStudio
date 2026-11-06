@@ -16,15 +16,16 @@ function outline(w,h,hidden=false){
   return '<Section N="Geometry" IX="0">'+cell('NoFill',hidden?1:0)+cell('NoLine',hidden?1:0)+uv.map(([x,y],i)=>xyRow(i+1,i?'LineTo':'MoveTo',inch(x*w),inch(y*h),'Width*'+x,'Height*'+y)).join('')+'</Section>';
 }
 function rectShape(i,id,H,masterChild,relative){
-  return '<Shape ID="'+id+'" Type="Shape"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+ (relative||box(i.x,i.y,i.w,i.h,H))+
+  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+ (relative||box(i.x,i.y,i.w,i.h,H))+
     cell('LinePattern',i.stroke==='none'?0:1)+cell('LineColor',i.stroke==='none'?'#FFFFFF':i.stroke)+cell('LineWeight',inch(i.weight||1))+
     cell('FillPattern',i.fill==='none'?0:1)+cell('FillForegnd',i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+outline(i.w,i.h)+'</Shape>';
 }
 function textShape(i,id,H,masterChild,relative){
   const shown=i.art||i.full?i.value:short(i.value,Math.max(1,Math.floor(i.w/(i.size*.56))));
-  return '<Shape ID="'+id+'" Type="Shape"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+(relative||box(i.x,i.y,i.w,i.h,H))+(i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',0)+
+  const transform=relative||box(i.x,i.y,i.w,i.h,H).replace(cell('Angle',0),cell('Angle',i.angle||0));
+  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',0)+
     ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+(shown===i.value?'':cell('Comment',i.value))+
-    '<Section N="Character"><Row IX="0">'+cell('Font','Arial')+cell('Size',inch(i.size))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
+    '<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(i.size))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
     '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true)+
     '<Text><cp IX="0"/><pp IX="0"/>'+xml(shown)+'</Text></Shape>';
 }
@@ -52,7 +53,7 @@ function group(i,id,H,m,allocate,rid,asMaster=false,mount=''){
         if(op==='Z'){if(!start)return '';[x,y]=start;op='L';}else if(op==='M')start=[x,y];
         return xyRow(++row,op==='M'?'MoveTo':'LineTo',inch(x*i.w),inch((1-y)*i.h),'Width*'+round(x),'Height*'+round(1-y));
       }).join('');
-      return '<Shape ID="'+child+'" Type="Shape"'+attr('Name',p.name)+attr('MasterShape',asMaster?null:nativeIndex++)+'>'+childXform({x:0,y:0,w:1,h:1},i.w,i.h,id)+cell('LinePattern',p.stroke==='none'?0:1)+cell('LineColor',p.stroke==='none'?'#FFFFFF':p.stroke)+cell('LineWeight',inch(p.weight*i.w))+cell('FillPattern',p.fill==='none'?0:1)+cell('FillForegnd',p.fill==='none'?'#FFFFFF':p.fill)+'<Section N="Geometry" IX="0">'+geometry+'</Section></Shape>';
+      return '<Shape ID="'+child+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',p.name)+attr('MasterShape',asMaster?null:nativeIndex++)+'>'+childXform({x:0,y:0,w:1,h:1},i.w,i.h,id)+cell('LinePattern',p.stroke==='none'?0:1)+cell('LineColor',p.stroke==='none'?'#FFFFFF':p.stroke)+cell('LineWeight',inch(p.weight*i.w))+cell('FillPattern',p.fill==='none'?0:1)+cell('FillForegnd',p.fill==='none'?'#FFFFFF':p.fill)+'<Section N="Geometry" IX="0">'+geometry+'</Section></Shape>';
     }).join('');
     children+=art.texts.map(t=>{
       const size=t.size*i.w,tw=Math.max(t.w*i.w,size),th=size*1.4;
@@ -60,7 +61,7 @@ function group(i,id,H,m,allocate,rid,asMaster=false,mount=''){
     }).join('');
   }else if(i.asset){
     const child=allocate(),fx=childXform({x:0,y:0,w:1,h:1},i.w,i.h,id);
-    children='<Shape ID="'+child+'" Type="Foreign"'+attr('MasterShape',asMaster?null:6)+'>'+fx+
+    children='<Shape ID="'+child+'" Type="Foreign" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('MasterShape',asMaster?null:6)+'>'+fx+
       cell('ImgOffsetX',0)+cell('ImgOffsetY',0)+cell('ImgWidth',inch(i.w),'Width')+cell('ImgHeight',inch(i.h),'Height')+
       cell('LinePattern',0)+cell('FillPattern',0)+outline(i.w,i.h)+
       '<ForeignData ForeignType="Bitmap" CompressionType="'+(m.media.ext==='png'?'PNG':'JPEG')+'" CompressionLevel="1">'+relation(rid)+'</ForeignData></Shape>';
@@ -70,7 +71,7 @@ function group(i,id,H,m,allocate,rid,asMaster=false,mount=''){
       return c.type==='text'?textShape(ci,allocate(),i.h,asMaster?null:6+j,childXform(c,i.w,i.h,id)):rectShape(ci,allocate(),i.h,asMaster?null:6+j,childXform(c,i.w,i.h,id));
     }).join('');
   }
-  return '<Shape ID="'+id+'" Type="Group"'+attr('Name',asMaster?m.title:i.name)+attr('NameU',asMaster?'Panel.'+m.id:'Device.'+id)+attr('Master',asMaster?null:m.id)+'>'+xform+cell('SelectMode',0)+cell('HideText',1)+
+  return '<Shape ID="'+id+'" Type="Group" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',asMaster?m.title:i.name)+attr('NameU',asMaster?'Panel.'+m.id:'Device.'+id)+attr('Master',asMaster?null:m.id)+'>'+xform+cell('SelectMode',0)+cell('HideText',1)+
     connectionRows(asMaster?m.ports:i.ports,i.w,i.h,m.keys)+'<Shapes>'+children+'</Shapes></Shape>';
 }
 function connector(i,id,H,byKey,connects){
@@ -90,7 +91,7 @@ function connector(i,id,H,byKey,connects){
     const follow=(d,total,dim)=>end?dim:Math.abs(d-total)<Math.abs(d)?dim+(d>=total?'+':'')+round(inch(d-total)):undefined;
     return xyRow(j+1,t==='M'?'MoveTo':'LineTo',inch(ox),inch(oy),follow(ox,w,'Width'),follow(oy,h,'Height'));
   }).join('');
-  return '<Shape ID="'+id+'" NameU="Connector.'+id+'" Name="'+xml(i.name)+'" Type="Shape">'+data+'<Section N="Geometry" IX="0">'+cell('NoFill',1)+geom+'</Section></Shape>';
+  return '<Shape ID="'+id+'" NameU="Connector.'+id+'" Name="'+xml(i.name)+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+data+'<Section N="Geometry" IX="0">'+cell('NoFill',1)+geom+'</Section></Shape>';
 }
 function guid(seed){
   const chunk=n=>{let h=n;for(const c of seed)h=Math.imul(h^c.charCodeAt(0),16777619);return (h>>>0).toString(16).padStart(8,'0');};
@@ -126,9 +127,11 @@ function writePackage(pages,stencil){
   if(stencil&&!masters.length)throw Error('There are no hardware shapes in this drawing.');
   const mime='application/vnd.ms-visio.'+(stencil?'stencil':'drawing');
   for(const m of masters)m.keys=Object.keys(m.ports);
-  put('_rels/.rels',rels([[1,vr+'document','visio/document.xml']]));
-  put('visio/document.xml',head+'<VisioDocument'+ns+'><DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0"/><FaceNames><FaceName NameU="Arial"/></FaceNames><StyleSheets><StyleSheet ID="0" Name="Default" NameU="Default">'+cell('LinePattern',1)+cell('FillPattern',0)+'</StyleSheet></StyleSheets><DocumentSheet NameU="TheDoc" LineStyle="0" FillStyle="0" TextStyle="0"/></VisioDocument>',mime+'.main+xml');
-  put('visio/_rels/document.xml.rels',rels([[1,vr+'pages','pages/pages.xml'],...(masters.length?[[2,vr+'masters','masters/masters.xml']]:[])]));
+  put('_rels/.rels',rels([[1,vr+'document','visio/document.xml'],[2,doc+'/custom-properties','docProps/custom.xml']]));
+  put('docProps/custom.xml',head+'<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="RecalcDocument"><vt:bool>true</vt:bool></property></Properties>','application/vnd.openxmlformats-officedocument.custom-properties+xml');
+  put('visio/document.xml',head+'<VisioDocument'+ns+' xml:space="preserve"><DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0" DefaultGuideStyle="0"/><Colors><ColorEntry IX="0" RGB="#000000"/><ColorEntry IX="1" RGB="#FFFFFF"/></Colors><FaceNames><FaceName NameU="Calibri"/><FaceName NameU="Arial"/></FaceNames><StyleSheets><StyleSheet ID="0" Name="No Style" NameU="No Style">'+cell('LinePattern',1)+cell('LineColor','#000000')+cell('LineWeight',inch(1))+cell('FillPattern',0)+'<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(12))+cell('Color','#16364A')+'</Row></Section></StyleSheet></StyleSheets><DocumentSheet NameU="TheDoc" LineStyle="0" FillStyle="0" TextStyle="0"/></VisioDocument>',mime+'.main+xml');
+  put('visio/_rels/document.xml.rels',rels([[1,vr+'pages','pages/pages.xml'],...(masters.length?[[2,vr+'masters','masters/masters.xml']]:[]),...(!stencil?[[3,vr+'windows','windows.xml']]:[])]));
+  if(!stencil)put('visio/windows.xml',head+'<Windows'+ns+' ClientWidth="1200" ClientHeight="975"><Window ID="0" WindowType="Drawing" WindowState="268435456" WindowLeft="0" WindowTop="0" WindowWidth="1200" WindowHeight="975" ContainerType="Page" Page="0" ViewScale="0.75" ViewCenterX="'+round(inch(pages[0].width/2))+'" ViewCenterY="'+round(inch(pages[0].height/2))+'"><ShowRulers>1</ShowRulers><ShowGrid>0</ShowGrid><ShowPageBreaks>0</ShowPageBreaks><ShowGuides>1</ShowGuides><ShowConnectionPoints>1</ShowConnectionPoints></Window></Windows>','application/vnd.ms-visio.windows+xml');
   if(masters.length){
     const rows=[];
     for(const m of masters){
@@ -169,5 +172,5 @@ function writePackage(pages,stencil){
   put('visio/pages/pages.xml',head+'<Pages'+ns+'>'+pagesXml+'</Pages>','application/vnd.ms-visio.pages+xml');
   if(drawingPages.length)put('visio/pages/_rels/pages.xml.rels',rels(drawingPages.map((_,i)=>[i+1,vr+'page','page'+(i+1)+'.xml'])));
   parts['[Content_Types].xml']=head+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/>'+overrides.map(([k,t])=>'<Override PartName="/'+k+'" ContentType="'+t+'"/>').join('')+'</Types>';
-  return zip(parts,mime);
+  return zip({'[Content_Types].xml':parts['[Content_Types].xml'],...parts},mime);
 }

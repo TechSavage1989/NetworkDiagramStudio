@@ -1,5 +1,7 @@
 import {corePages} from './core.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
+import {pageNumber} from '../page-options.mjs';
+import {applyLinkStyles} from '../link-styles.mjs';
 import {orderedDevices} from '../layout.mjs';
 import {comparePorts,hasPortDetails,consecutivePorts,wrapPortText} from '../port-table.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
@@ -195,17 +197,20 @@ function wireless(project,db){
     const sorted=items.slice().sort((a,b)=>cmp(a.sp,b.sp)||cmp(a.apId,b.apId));
     // Keep at most four per bank, including arbitrary imported socket layouts.
     const temp={items:[]},panel=addDevice(temp,project,device,[101,412,998,91],'inspect');
+    const captionFor=e=>{const name=mediaInfo(e.media,true).name,s=project.layout?.linkStyles?.[name]||{};return [s.lineTitle&&s.lineTitle!==name?s.lineTitle:'',s.lineDescription].filter(Boolean).join(' | ');};
+    const captionLines=Math.max(0,...items.map(e=>captionFor(e)?wrapPortText(captionFor(e),245,12).length:0)),longLegend=items.some(e=>(project.layout?.linkStyles?.[mediaInfo(e.media,true).name]?.description||'').length>80),capacity=longLegend?1:Math.min(4,Math.max(1,5-captionLines));
     let bucket=[],counts={top:0,bottom:0},columns=new Set();const batches=[];
     for(const e of sorted){
       const k=getAnchor(panel,e.sp,'top',e.idx),side=k.side;
       const col=side+' '+k.x.toFixed(1);
-      if(counts[side]===4||columns.has(col)||bucket.some(b=>b.sp===e.sp)){batches.push(bucket);bucket=[];counts={top:0,bottom:0};columns=new Set();}
+      if(counts[side]===capacity||capacity===1&&bucket.length||columns.has(col)||bucket.some(b=>b.sp===e.sp)){batches.push(bucket);bucket=[];counts={top:0,bottom:0};columns=new Set();}
       bucket.push(e);counts[side]++;columns.add(col);
     }
     if(bucket.length)batches.push(bucket);
     for(const batch of batches){
       const p=fresh('Wireless Connections','Wireless Connections',nameOf(device)+'  ·  access-point uplinks and physical switch ports',project),a=p.items;p.editScope=p.name+'|'+sw+'|sheet:'+batches.indexOf(batch);
-      const swg=addDevice(p,project,device,[101,459,998,91],'switch');
+      const preview={items:batch.map(e=>({type:'path',color:mediaInfo(e.media,true).color,linkType:mediaInfo(e.media,true).name}))};applyLinkStyles(preview,project.layout?.linkStyles);linkLegend(preview);const headingOffset=Math.max(0,(preview.legendBottom||189)+10-216),topLines=Math.max(0,...batch.map(e=>captionFor(e)?wrapPortText(captionFor(e),capacity===1?680:245,12).length:0)),switchY=Math.max(459,364+headingOffset+topLines*14+39+13*(capacity-1));
+      const swg=addDevice(p,project,device,[101,switchY,998,91],'switch');
       const per={top:[],bottom:[]};
       batch.forEach((e,i)=>{const start=getAnchor(swg,e.sp,'top',e.idx);per[start.side].push({e,start});});
       // Number the switch's own jacks. Connected AP ports are highlighted, and
@@ -234,16 +239,17 @@ function wireless(project,db){
         rs.forEach((r,i)=>(centers[i]>r.start.x?right:left).push(i));
         const order=[...right.reverse(),...left];  // inner to outer without same-bank crossings
         rs.forEach(({e,start},i)=>{
-          const ap=db.devices.get(e.apId),center=centers[i],y=top?292:678;
+          const ap=db.devices.get(e.apId),center=centers[i],lw=Math.min(capacity===1?680:245,980/rs.length),notes=captionFor(e)?wrapPortText(captionFor(e),lw,12):[],shift=top?headingOffset:Math.max(0,switchY+135+13*(rs.length-1)+35-678),y=top?292+shift+notes.length*14:678+shift;
+          if(!top&&833+shift+notes.length*14>H-55)throw Error('This wireless link description needs more space. Shorten the link or legend description.');
           const edgeKey=top?'uplink.bottom':'uplink.top';
           const dest=addDevice(p,project,ap,[center-36,y,72,72],'ap'+side+i,{apEdge:edgeKey,instanceKey:e.sw+'/'+e.sp+'/'+e.apPort});
           const end=getAnchor(dest,edgeKey,top?'bottom':'top',i);
-          const register=[e.sp||'Port unknown',rate(e.speed),value(e.status)].filter(Boolean).join(' · ');
-          const lw=Math.min(245,980/rs.length);
-          label(a,center-lw/2,top?216:760,lw,26,nameOf(ap),18,true,C.ink,'center');
-          label(a,center-lw/2,top?244:788,lw,21,register,13,true,C.teal,'center');
-          label(a,center-lw/2,top?266:811,lw,18,[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · '),12,false,C.muted,'center');
-          const track=order.indexOf(i),lane=top?438-13*track:594+13*track;
+          const register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · ');
+          label(a,center-lw/2,(top?216:760)+shift,lw,26,nameOf(ap),18,true,C.ink,'center');
+          label(a,center-lw/2,(top?244:788)+shift,lw,21,register,13,true,C.teal,'center');
+          label(a,center-lw/2,(top?266:811)+shift,lw,18,[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · '),12,false,C.muted,'center');
+          notes.forEach((text,n)=>{label(a,center-lw/2,(top?286:833)+shift+n*14,lw,14,text,12,false,C.muted,'center');a.at(-1).full=true;});
+          const track=order.indexOf(i),lane=top?switchY-21-13*track:switchY+135+13*track;
           const info=mediaInfo(e.media,true);
           route(p,start,end,[[start.x,start.y],[start.x,lane],[end.x,lane],[end.x,end.y]],info.color,'AP link '+(e.idx+1),info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp});
         });
@@ -326,7 +332,7 @@ export function buildPages(project={}){
   pages.forEach((p,i)=>{
     const n=(seen.get(p.name)||0)+1;seen.set(p.name,n);
     if(totals.get(p.name)>1)p.name+=' '+n;
-    rect(p.items,36,873,1128,1,C.rule);label(p.items,36,881,972,21,p.name,12,false,C.muted);label(p.items,1050,880,114,22,(i+1)+' / '+pages.length,13,true,C.teal,'right');
+    rect(p.items,36,H-47,1128,1,C.rule);label(p.items,36,H-39,972,21,p.name,12,false,C.muted);const number=pageNumber(project.layout?.pageNumbers,i,pages.length);if(number!=null){label(p.items,1000,H-40,164,22,number,13,true,C.teal,'right');p.items.at(-1).editKey=p.name+'|page-number';}
     applyDrawingEdits(p,project);if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p);p.svg=svgPage(p);
   });
   return pages;

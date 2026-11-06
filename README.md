@@ -15,9 +15,10 @@ Network engineers can use the Windows application or the offline browser edition
 - Import supported picture and vector Visio masters from files or recursively scanned folders. Search master names directly in the picker, or click a device to search local stencils. Artwork and mapped jacks retain matching transforms.
 - Drag mapped port markers; align a selected row or column and distribute ports evenly. The sourced native hardware catalog includes model-specific faceplates, declared stack members and chassis modules.
 - Zoom, pan and Fit page. In Edit drawing, box-select or Shift/Ctrl-click items, move them with the mouse or arrow keys, align edges or centers, and distribute spacing. Configure grid snapping and alignment guides. Double-click text to type directly on the diagram; double-click other elements for properties. Ctrl+Z, Ctrl+Shift+Z and Undo all apply to project changes. Alt-drag selects native panel details.
-- Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a spectrum, numeric color formats, presets and saved swatches. Legends include only the styles used on each sheet.
+- Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a spectrum, numeric color formats, presets and saved swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet.
 - Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port detail tables support numeric order, consecutive grouping and optional empty-record filtering.
 - Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
+- Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and handoff cards. Configure page-number visibility, starting values, padding and format.
 
 ## Screenshots
 
@@ -90,6 +91,10 @@ The inline text editor includes a color chooser. **Text options** opens the full
 In **Edit drawing**, select a cable. Drag a square handle to move a bend, click a plus control to add a detour, or select a bend and choose **Remove point** or press Delete. **Edit bend points** offers numeric coordinates and add/remove controls. Arrow keys also nudge a selected bend; Shift moves farther and Ctrl uses a fine step. **Connect endpoints** selects a device and physical port for each end and recalculates the route. It retains the cable's styling and checks occupied sockets.
 
 **Edit selected** opens the line color spectrum, hue slider, HEX/RGB/HSL values, opacity, network presets, colors in the drawing, recent colors and named swatches. The system color picker is also available; supported browsers can sample the screen. The legend reflects only the link styles used on that sheet. Crossings show arc hops with clearance, and the native Visio export includes arc-jump settings.
+
+**Link styles** configures colors, opacity and separate titles/descriptions for connection captions and legend entries. Editing a cable color or a legend swatch updates all cables of that link type and their legends throughout the drawing. Double-click a legend title to rename it directly. Text color is independent of cable color. Wireless connection captions show the port and speed without evidence-status wording.
+
+**Page options** shows or hides page numbers, chooses their starting number and padding, and sets a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. The default is a two-digit number such as 01 / 07. These settings persist in the project.
 
 ## Updates and settings
 
