@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NetworkDiagramStudio</title><link rel="stylesheet" href="./style.css"></head>
+<body>
+<header class="appbar"><div class="brand"><strong>NetworkDiagramStudio</strong><span>Site documentation</span></div><div class="toolbar"><button id="new">New project</button><button id="open">Open project</button><button id="save">Save project</button><button id="export" class="primary" disabled>Export Visio</button></div></header>
+<main>
+<aside aria-label="Project workspace">
+  <section><p class="eyebrow">PROJECT</p><label for="site">Site name</label><input id="site" maxlength="120" value="Untitled site"></section>
+  <section id="drop"><p class="eyebrow">IMPORT</p><h2>Site data</h2><p class="hint">Drop switch or firewall configs and Auvik workbooks here.</p><button class="primary full" id="import">Import files</button><button class="full" id="paste">Paste configuration</button></section>
+  <section><p class="eyebrow">INVENTORY</p><div class="section-head"><h2>Devices</h2><button id="add-device">Add</button></div><input id="filter" type="search" aria-label="Filter devices" placeholder="Filter by name or model"><div class="scope-actions"><button id="matches">Use matches only</button><button id="all">Include all</button><button id="auto-scope">Site scope</button></div><div id="devices" class="list"></div></section>
+  <section><div class="section-head"><h2>Connections</h2><button id="add-link">Add</button></div><button id="review-links" class="full">Review links <span id="link-count"></span></button></section>
+  <section><div class="section-head"><h2>Hardware</h2><button id="hardware">Manage</button></div><p id="art-count" class="hint">Local stencil library</p></section>
+</aside>
+<div class="stage">
+<div class="stagebar"><div><p class="eyebrow">DRAWING SET</p><h1 id="heading">Untitled site</h1></div><div class="toolbar"><button id="svg" disabled>Save page SVG</button><button id="print" disabled>Print / PDF</button></div></div>
+<div id="feedback" role="status" aria-live="polite"></div><button id="warnings" class="warning" hidden></button>
+<div id="tabs" class="tabs" role="tablist" aria-label="Drawing pages"></div>
+<div id="canvas"><div id="welcome"><p class="eyebrow">NEW DRAWING</p><h2>Build a site diagram</h2><p>Start with device configurations and Auvik data, or explore the editable example.</p><button id="sample">Open sample site</button></div></div>
+<div class="statusbar"><span id="stats">0 devices</span><span>Local workspace</span></div>
+</div></main>
+<input hidden id="data-files" type="file" multiple accept=".txt,.cfg,.conf,.config,.log,.rsc,.cli,.xml,.exp,.csv,.xlsx"><input hidden id="project-file" type="file" accept=".json,.nds"><input hidden id="art-file" type="file" multiple accept=".vssx,.vsdx,.vss,.png,.jpg,.jpeg,.json">
+<div id="print-set" aria-hidden="true"></div>
+<dialog id="dialog"><div class="modalhead"><h2 id="dialog-title"></h2><button id="close" aria-label="Close dialog">Close</button></div><div id="dialog-body"></div></dialog>
+<script src="./vendor/emfjs.min.js"></script><script type="module" src="./app.mjs"></script>
+</body></html>

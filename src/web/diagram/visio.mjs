@@ -1,0 +1,160 @@
+import {xml,round,short} from './scene.mjs';
+import {zip} from './zip.mjs';
+const main='http://schemas.microsoft.com/office/visio/2012/main',doc='http://schemas.openxmlformats.org/officeDocument/2006/relationships',vr='http://schemas.microsoft.com/visio/2010/relationships/',pr='http://schemas.openxmlformats.org/package/2006/relationships';
+const head='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',ns=' xmlns="'+main+'" xmlns:r="'+doc+'"';
+const attr=(k,v)=>v==null?'':' '+k+'="'+xml(v)+'"';
+const cell=(n,v,f)=>'<Cell N="'+n+'" V="'+xml(typeof v==='number'?round(v):v)+'"'+attr('F',f)+'/>';
+const relation=i=>'<Rel r:id="rId'+i+'"/>';
+function rels(rows){return head+'<Relationships xmlns="'+pr+'">'+rows.map(([i,t,target])=>'<Relationship Id="rId'+i+'" Type="'+t+'" Target="'+xml(target)+'"/>').join('')+'</Relationships>';}
+const inch=n=>n/96;
+function box(x,y,w,h,H){return cell('PinX',inch(x+w/2))+cell('PinY',inch(H-y-h/2))+size(w,h);}
+function size(w,h){return cell('Width',inch(w))+cell('Height',inch(h))+cell('LocPinX',inch(w/2),'Width*0.5')+cell('LocPinY',inch(h/2),'Height*0.5')+cell('Angle',0);}
+function xyRow(ix,t,x,y,fx,fy,a){return '<Row IX="'+ix+'" T="'+t+'">'+cell('X',x,fx)+cell('Y',y,fy)+(a==null?'':cell('A',a))+'</Row>';}
+function outline(w,h,hidden=false){
+  const uv=[[0,0],[1,0],[1,1],[0,1],[0,0]];
+  return '<Section N="Geometry" IX="0">'+cell('NoFill',hidden?1:0)+cell('NoLine',hidden?1:0)+uv.map(([x,y],i)=>xyRow(i+1,i?'LineTo':'MoveTo',inch(x*w),inch(y*h),'Width*'+x,'Height*'+y)).join('')+'</Section>';
+}
+function rectShape(i,id,H,masterChild,relative){
+  return '<Shape ID="'+id+'" Type="Shape"'+attr('MasterShape',masterChild)+'>'+ (relative||box(i.x,i.y,i.w,i.h,H))+
+    cell('LinePattern',i.stroke==='none'?0:1)+cell('LineColor',i.stroke==='none'?'#FFFFFF':i.stroke)+cell('LineWeight',inch(i.weight||1))+
+    cell('FillPattern',i.fill==='none'?0:1)+cell('FillForegnd',i.fill==='none'?'#FFFFFF':i.fill)+outline(i.w,i.h)+'</Shape>';
+}
+function textShape(i,id,H){
+  const shown=short(i.value,Math.max(1,Math.floor(i.w/(i.size*.56))));
+  return '<Shape ID="'+id+'" Type="Shape">'+box(i.x,i.y,i.w,i.h,H)+cell('LinePattern',0)+cell('FillPattern',0)+
+    ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+(shown===i.value?'':cell('Comment',i.value))+
+    '<Section N="Character"><Row IX="0">'+cell('Font','Arial')+cell('Size',inch(i.size))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
+    '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true)+
+    '<Text><cp IX="0"/><pp IX="0"/>'+xml(shown)+'</Text></Shape>';
+}
+function connectionRows(ports,w,h,keys){
+  if(!keys.length)return '';
+  return '<Section N="Connection">'+keys.map((k,i)=>{
+    const p=ports[k];if(!p)return '';
+    return '<Row IX="'+i+'" T="Connection">'+cell('X',inch(w*p[0]),'Width*'+round(p[0]))+cell('Y',inch(h*(1-p[1])),'Height*'+round(1-p[1]))+cell('DirX',0)+cell('DirY',0)+cell('Type',0)+cell('Prompt',k)+'</Row>';
+  }).join('')+'</Section>';
+}
+function childXform(child,w,h,owner){
+  const parent='Sheet.'+owner+'!',cx=child.x+child.w/2,cy=1-child.y-child.h/2;
+  return cell('PinX',inch(w*cx),parent+'Width*'+round(cx))+cell('PinY',inch(h*cy),parent+'Height*'+round(cy))+
+    cell('Width',inch(w*child.w),parent+'Width*'+round(child.w))+cell('Height',inch(h*child.h),parent+'Height*'+round(child.h))+
+    cell('LocPinX',inch(w*child.w/2),'Width*0.5')+cell('LocPinY',inch(h*child.h/2),'Height*0.5');
+}
+function group(i,id,H,m,allocate,rid,asMaster=false,mount=''){
+  const xform=mount||box(asMaster?0:i.x,asMaster?0:i.y,i.w,i.h,asMaster?i.h:H);
+  let children='';
+  if(i.asset){
+    const child=allocate(),fx=childXform({x:0,y:0,w:1,h:1},i.w,i.h,id);
+    children='<Shape ID="'+child+'" Type="Foreign"'+attr('MasterShape',asMaster?null:6)+'>'+fx+
+      cell('ImgOffsetX',0)+cell('ImgOffsetY',0)+cell('ImgWidth',inch(i.w),'Width')+cell('ImgHeight',inch(i.h),'Height')+
+      cell('LinePattern',0)+cell('FillPattern',0)+outline(i.w,i.h)+
+      '<ForeignData ForeignType="Bitmap" CompressionType="'+(m.media.ext==='png'?'PNG':'JPEG')+'" CompressionLevel="1">'+relation(rid)+'</ForeignData></Shape>';
+  }else{
+    children=i.children.map((c,j)=>{
+      const ci={...c,x:c.x*i.w,y:c.y*i.h,w:c.w*i.w,h:c.h*i.h};
+      return rectShape(ci,allocate(),i.h,asMaster?null:6+j,childXform(c,i.w,i.h,id));
+    }).join('');
+  }
+  return '<Shape ID="'+id+'" Type="Group"'+attr('Name',asMaster?m.title:i.name)+attr('NameU',asMaster?'Panel.'+m.id:'Device.'+id)+attr('Master',asMaster?null:m.id)+'>'+xform+cell('SelectMode',0)+cell('HideText',1)+
+    connectionRows(asMaster?m.ports:i.ports,i.w,i.h,m.keys)+'<Shapes>'+children+'</Shapes></Shape>';
+}
+function svgArcSag(last,mid,end){
+  const dx=end[0]-last[0],dy=end[1]-last[1],d=Math.hypot(dx,dy);
+  return d?((mid[0]-(last[0]+end[0])/2)*dy-(mid[1]-(last[1]+end[1])/2)*dx)/d:0;
+}
+function connector(i,id,H,byKey,connects){
+  const [x0,y0]=i.points[0], [xn,yn]=i.points.at(-1),w=xn-x0,h=y0-yn;
+  let data=cell('PinX',inch((x0+xn)/2),'(BeginX+EndX)*0.5')+cell('PinY',inch(H-(y0+yn)/2),'(BeginY+EndY)*0.5')+
+    cell('Width',inch(w),'GUARD(EndX-BeginX)')+cell('Height',inch(h),'GUARD(EndY-BeginY)')+cell('LocPinX',inch(w/2),'Width*0.5')+cell('LocPinY',inch(h/2),'Height*0.5')+cell('Angle',0);
+  for(const [end,a,part] of [['Begin',i.from,9],['End',i.to,12]]){
+    const target=byKey.get(a.device),ix=target.m.keys.indexOf(a.port);if(ix<0)throw Error('Missing Visio attachment: '+a.port);
+    const ref='Sheet.'+target.id+'!Connections.',f='PAR(PNT('+ref+'X'+(ix+1)+','+ref+'Y'+(ix+1)+'))';
+    data+=cell(end+'X',inch(a.x),f)+cell(end+'Y',inch(H-a.y),f)+cell(end==='Begin'?'BegTrigger':'EndTrigger',2,'_XFTRIGGER(Sheet.'+target.id+'!EventXFMod)');
+    connects.push('<Connect FromSheet="'+id+'" FromCell="'+end+'X" FromPart="'+part+'" ToSheet="'+target.id+'" ToCell="Connections.X'+(ix+1)+'" ToPart="'+(100+ix)+'"/>');
+  }
+  data+=cell('ObjType',2)+cell('GlueType',2)+cell('ConFixedCode',1)+cell('ShapeRouteStyle',1)+cell('LineColor',i.color)+cell('LineWeight',inch(i.weight))+cell('LinePattern',1)+cell('FillPattern',0)+cell('BeginArrow',0)+cell('EndArrow',0);
+  let old=i.points[0];
+  const geom=i.commands.map(([t,x,y,ex,ey],j)=>{
+    const pt=t==='A'?[ex,ey]:[x,y], ox=pt[0]-x0,oy=y0-pt[1],end=j===i.commands.length-1;
+    const follow=(d,total,dim)=>end?dim:Math.abs(d-total)<Math.abs(d)?dim+(d>=total?'+':'')+round(inch(d-total)):undefined;
+    const row=xyRow(j+1,t==='A'?'ArcTo':t==='M'?'MoveTo':'LineTo',inch(ox),inch(oy),follow(ox,w,'Width'),follow(oy,h,'Height'),t==='A'?inch(svgArcSag(old,[x,y],pt)):null);old=pt;return row;
+  }).join('');
+  return '<Shape ID="'+id+'" NameU="Connector.'+id+'" Name="'+xml(i.name)+'" Type="Shape">'+data+'<Section N="Geometry" IX="0">'+cell('NoFill',1)+geom+'</Section></Shape>';
+}
+function guid(seed){
+  const chunk=n=>{let h=n;for(const c of seed)h=Math.imul(h^c.charCodeAt(0),16777619);return (h>>>0).toString(16).padStart(8,'0');};
+  const a=chunk(2166136261),b=chunk(2),c=chunk(3),d=chunk(4);
+  return '{'+[a,b.slice(0,4),'5'+b.slice(5),'8'+c.slice(1,4),c.slice(4)+d].join('-').toUpperCase()+'}';
+}
+function imageBytes(uri){const str=atob(uri.slice(uri.indexOf(',')+1));return Uint8Array.from(str,c=>c.charCodeAt(0));}
+function sheet(w,h){return '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+cell('PageWidth',inch(w))+cell('PageHeight',inch(h))+cell('PageScale',1)+cell('DrawingScale',1)+cell('DrawingSizeType',0)+cell('DrawingScaleType',0)+'</PageSheet>';}
+export const exportVisio=(project,pages)=>writePackage(pages,false);
+export const exportStencil=(project,pages)=>writePackage(pages,true);
+function writePackage(pages,stencil){
+  if(!Array.isArray(pages)||!pages.length)throw Error('Build at least one diagram page before exporting.');
+  const parts=Object.create(null), records=new Map(),media=new Map(),overrides=[];
+  function put(path,body,type){parts[path]=body;if(type)overrides.push([path,type]);}
+  for(const p of pages)for(const i of p.items)if(i.type==='device'){
+    let m=records.get(i.masterKey);
+    if(!m){
+      m={id:records.size+1,first:i,title:short(i.asset?.name||[i.model,i.kind==='plug'?i.name:i.kind+' schematic'].filter(Boolean).join(' '),110),ports:Object.create(null)};records.set(i.masterKey,m);
+      if(i.asset){
+        let ref=media.get(i.asset.dataUrl);
+        if(!ref){
+          const ext=i.asset.dataUrl.toLowerCase().startsWith('data:image/png;')?'png':'jpg';
+          ref={ext,file:'image'+(media.size+1)+'.'+ext};media.set(i.asset.dataUrl,ref);put('visio/media/'+ref.file,imageBytes(i.asset.dataUrl));
+        }
+        m.media=ref;
+      }
+    }
+    for(const [k,pos] of Object.entries(i.ports))if(!Object.hasOwn(m.ports,k))m.ports[k]=pos;
+  }
+  const masters=[...records.values()];
+  if(stencil&&!masters.length)throw Error('There are no hardware shapes in this drawing.');
+  const mime='application/vnd.ms-visio.'+(stencil?'stencil':'drawing');
+  for(const m of masters)m.keys=Object.keys(m.ports);
+  put('_rels/.rels',rels([[1,vr+'document','visio/document.xml']]));
+  put('visio/document.xml',head+'<VisioDocument'+ns+'><DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0"/><FaceNames><FaceName NameU="Arial"/></FaceNames><StyleSheets><StyleSheet ID="0" Name="Default" NameU="Default">'+cell('LinePattern',1)+cell('FillPattern',0)+'</StyleSheet></StyleSheets><DocumentSheet NameU="TheDoc" LineStyle="0" FillStyle="0" TextStyle="0"/></VisioDocument>',mime+'.main+xml');
+  put('visio/_rels/document.xml.rels',rels([[1,vr+'pages','pages/pages.xml'],...(masters.length?[[2,vr+'masters','masters/masters.xml']]:[])]));
+  if(masters.length){
+    const rows=[];
+    for(const m of masters){
+      rows.push('<Master ID="'+m.id+'" NameU="Panel.'+m.id+'" Name="'+xml(m.title)+'" IsCustomNameU="1" IsCustomName="1" IconSize="1" AlignName="2" MatchByName="0" IconUpdate="1" UniqueID="'+guid('unique:'+m.first.masterKey)+'" BaseID="'+guid('base:'+m.first.masterKey)+'" PatternFlags="0" Hidden="0" MasterType="1">'+sheet(m.first.w,m.first.h)+relation(m.id)+'</Master>');
+      let n=5;
+      put('visio/masters/master'+m.id+'.xml',head+'<MasterContents'+ns+' xml:space="preserve"><Shapes>'+group(m.first,5,m.first.h,m,()=>++n,1,true)+'</Shapes></MasterContents>','application/vnd.ms-visio.master+xml');
+      if(m.media)put('visio/masters/_rels/master'+m.id+'.xml.rels',rels([[1,doc+'/image','../media/'+m.media.file]]));
+    }
+    put('visio/masters/masters.xml',head+'<Masters'+ns+'>'+rows.join('')+'</Masters>','application/vnd.ms-visio.masters+xml');
+    put('visio/masters/_rels/masters.xml.rels',rels(masters.map(m=>[m.id,vr+'master','master'+m.id+'.xml'])));
+  }
+  let pagesXml='';
+  const drawingPages=stencil?[]:pages;
+  drawingPages.forEach((p,index)=>{
+    const n=index+1,name=p.name;
+    pagesXml+='<Page ID="'+index+'" Name="'+xml(name)+'" NameU="'+xml(name)+'" IsCustomName="1" IsCustomNameU="1" ViewScale="0.75" ViewCenterX="'+round(inch(p.width/2))+'" ViewCenterY="'+round(inch(p.height/2))+'">'+sheet(p.width,p.height)+relation(n)+'</Page>';
+    const rel=[],relKeys=new Map(),byKey=new Map(),connect=[];
+    function relId(type,target){if(!relKeys.has(target)){relKeys.set(target,rel.length+1);rel.push([rel.length+1,type,target]);}return relKeys.get(target);}
+    let seq=p.items.length;
+    p.items.forEach((i,j)=>{if(i.type==='device'){const m=records.get(i.masterKey);byKey.set(i.key,{id:j+1,m});relId(vr+'master','../masters/master'+m.id+'.xml');}});
+    const shapes=p.items.map((i,j)=>{
+      if(i.type==='rect')return rectShape(i,j+1,p.height);
+      if(i.type==='text')return textShape(i,j+1,p.height);
+      if(i.type==='path')return connector(i,j+1,p.height,byKey,connect);
+      const m=byKey.get(i.key).m;
+      const rid=m.media?relId(doc+'/image','../media/'+m.media.file):null;
+      let mount='';
+      if(i.host){
+        const host=byKey.get(i.host.device),ix=host.m.keys.indexOf(i.host.port)+1;
+        const s='Sheet.'+host.id+'!',pf=a=>s+'Pin'+a+'-'+s+'LocPin'+a+'+'+s+'Connections.'+a+ix;
+        mount=cell('PinX',inch(i.x+i.w/2),pf('X'))+cell('PinY',inch(p.height-i.y-i.h/2),pf('Y'))+size(i.w,i.h);
+      }
+      return group(i,j+1,p.height,m,()=>++seq,rid,false,mount);
+    }).join('');
+    put('visio/pages/page'+n+'.xml',head+'<PageContents'+ns+' xml:space="preserve"><Shapes>'+shapes+'</Shapes>'+(connect.length?'<Connects>'+connect.join('')+'</Connects>':'')+'</PageContents>','application/vnd.ms-visio.page+xml');
+    if(rel.length)put('visio/pages/_rels/page'+n+'.xml.rels',rels(rel));
+  });
+  put('visio/pages/pages.xml',head+'<Pages'+ns+'>'+pagesXml+'</Pages>','application/vnd.ms-visio.pages+xml');
+  if(drawingPages.length)put('visio/pages/_rels/pages.xml.rels',rels(drawingPages.map((_,i)=>[i+1,vr+'page','page'+(i+1)+'.xml'])));
+  parts['[Content_Types].xml']=head+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpg" ContentType="image/jpeg"/>'+overrides.map(([k,t])=>'<Override PartName="/'+k+'" ContentType="'+t+'"/>').join('')+'</Types>';
+  return zip(parts,mime);
+}

@@ -1,0 +1,5 @@
+EMFJS from rtf.js 3.0.9
+https://github.com/tbluemel/rtf.js
+https://www.npmjs.com/package/rtf.js/v/3.0.9
+MIT license. Copyright Thomas Bluemel and Tom Zoehner.
+The distribution bundle is included locally for rendering user-imported EMF stencils. See EMFJS-LICENSE.txt.
