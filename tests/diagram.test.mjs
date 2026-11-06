@@ -85,3 +85,32 @@ test('six independent optical links on a multirow front do not share a vertical 
     }
   }
 });
+test('MDF assignments distinguish AP evidence, matching trunk profiles, infrastructure and state',()=>{
+  const trunk=(name,extra={})=>({name,role:'trunk',native:12,tagged:[14,90],...extra});
+  const ports=[trunk('p1',{state:'up'}),trunk('p2',{state:'up',tagged:[90,14]}),
+    trunk('p3',{state:'down'}),trunk('p4',{lag:'2'}),trunk('p5',{handoff:'Carrier'}),
+    trunk('p6'),trunk('p7'),trunk('p8',{tagged:[14]}),trunk('p9'),
+    trunk('p10',{description:'Backbone to branch'}),trunk('p11')];
+  const backbone={id:'sw',name:'Lab switch',kind:'switch',ports};
+  const peer=(id,kind)=>({id,name:id,kind,ports:[]});
+  const link=(n,id)=>({a:'sw',ap:n,b:id,bp:'eth0',status:'observed'});
+  const site={devices:[backbone,peer('ap-a','ap'),peer('ap-b','ap'),peer('fw','firewall'),peer('desk','unknown')],
+    links:[link('p1','ap-a'),{a:'ap-b',ap:'eth0',b:'sw',bp:'p2',status:'confirmed'},
+      link('p6','desk'),link('p7','fw'),{...link('p9','ap-a'),status:'conflict'}],excludedPeerPorts:[['sw','p11']]};
+  const pages=buildPages(site).filter(p=>p.title==='MDF Port Map');
+  const rows=[];
+  for(const page of pages){
+    const cells=page.items.filter(i=>i.type==='text'&&i.y>=389&&i.y<870);
+    for(const portCell of cells.filter(c=>c.x===44&&c.value))rows.push(cells.filter(c=>c.y===portCell.y).map(c=>c.value));
+  }
+  const row=n=>rows.find(r=>r[0]===n);
+  assert.deepEqual(row('p1-2').slice(1,6),['AP peer','up','','trunk','12']);
+  assert.equal(row('p3')[1],'Matches AP profile');assert.equal(row('p3')[2],'down');
+  assert.equal(row('p4')[1],'LAG 2 member');assert.equal(row('p5')[1],'Handoff');
+  assert.equal(row('p6')[1],'Other wired peer');assert.equal(row('p7')[1],'Firewall uplink');
+  assert.equal(row('p8')[1],'No peer reported');assert.equal(row('p9')[1],'Peer needs review');
+  assert.equal(row('p10')[1],'Labeled uplink');assert.equal(row('p11')[1],'Peer outside scope');
+  const onlyOne={...site,links:site.links.filter(l=>l.a!=='ap-b')};
+  const labels=buildPages(onlyOne).filter(p=>p.title==='MDF Port Map').flatMap(p=>p.items.filter(i=>i.type==='text'&&i.y>=389));
+  assert.ok(!labels.some(c=>c.value==='Matches AP profile'));
+});

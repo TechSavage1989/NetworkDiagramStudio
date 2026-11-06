@@ -36,7 +36,14 @@ function field(parent,labelText,value='',opts=null){
 function perform(){dirty=true;draw();}
 function scoped(){
  const devices=project.devices.filter(d=>!d.hidden);const ids=new Set(devices.map(d=>d.id));
- return {...project,devices,links:project.links.filter(l=>ids.has(l.a)&&ids.has(l.b))};
+ const links=[],excludedPeerPorts=[];
+ for(const l of project.links){
+   const a=ids.has(l.a),b=ids.has(l.b);
+   if(a&&b)links.push(l);
+   else if(a)excludedPeerPorts.push([l.a,l.ap]);
+   else if(b)excludedPeerPorts.push([l.b,l.bp]);
+ }
+ return {...project,devices,links,excludedPeerPorts};
 }
 const matchName=d=>[d.name,d.model,d.vendor,d.kind,d.ip].some(v=>String(v||'').toLowerCase().includes($('filter').value.trim().toLowerCase()));
 function deviceList(){

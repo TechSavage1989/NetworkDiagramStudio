@@ -30,6 +30,8 @@ Device IDs retain the hostname punctuation and use lowercase for comparison. Auv
 
 Configuration settings take priority over report metadata in a single import. Links reported from both directions are merged using both device names and both port names. Multiple peers at the same endpoint and a down port with a reported peer are flagged for review. An SD-WAN member gateway is stored on its configured interface. A missing explicit zone remains unspecified. A configured port description is a label. It does not create a physical link. An empty port state or media field means the source did not establish its value.
 
+On the switch port map, a reported AP peer is separate from a matching AP profile. The latter requires an available trunk with the same native and tagged settings as at least two connected APs on that switch. Aggregates, configured handoffs, and ports with a reported peer are excluded from this inference.
+
 ## Hardware identities
 
 The offline lookup includes 249 HPE switch SKU identities and 84 exact device profiles with network-interface names and capabilities. Six Aruba 6100 profiles belong to both sets. The 84 profiles cover 11 manufacturers, including HPE Aruba, Cisco, Fortinet, Juniper, Arista, MikroTik, Palo Alto Networks, Sophos, SonicWall, Netgate and Deciso. A model outside the profiles can still be imported with the ports supplied by the configuration or report. Hostnames, family names and port counts alone do not select an exact chassis model.

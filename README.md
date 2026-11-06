@@ -8,7 +8,7 @@
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
 
 - Import supported configuration text and Auvik XLSX or CSV reports. Review the device inventory, select the site scope, and correct links before export.
-- Generate core topology with documented WAN handoffs, switch port maps, wireless connections, VLAN and routing records, and a site-specific trunk matrix showing native, tagged and excluded VLANs.
+- Generate core topology with documented WAN handoffs, switch port maps, wireless connections, VLAN and routing records, and a site-specific trunk matrix showing native, tagged and excluded VLANs. Port maps separate the endpoint assignment from configured mode and operational state.
 - Use schematic devices or import compatible front-panel artwork, map physical jacks, and assign optics to documented links.
 - Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
 

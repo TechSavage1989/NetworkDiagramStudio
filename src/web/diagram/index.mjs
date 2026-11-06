@@ -174,15 +174,84 @@ function interfaceList(names){
   }
   return out.join(', ');
 }
+const portFills = {ap:'#BCDFCC', profile:'#E2EFE6', uplink:'#BDD9E9', wired:'#EEE1C2', other:'#E5EAED'};
+const stateMarks = {up:'#27734E', down:'#5B6871', unknown:'#A26B14'};
+
+function portAssignments(project,db,device,ports){
+  const key=name=>String(name).trim().toLowerCase();
+  const peers=new Map(), outside=new Set();
+  for(const [id,port] of list(project.excludedPeerPorts))if(id===device.id)outside.add(key(port));
+  for(const link of db.links){
+    for(const [id,port,remote,remotePort] of [[link.a,link.ap,link.b,link.bp],[link.b,link.bp,link.a,link.ap]]){
+      if(id!==device.id)continue;
+      const ids=peers.get(key(port))||new Map();
+      ids.set(JSON.stringify([remote,key(remotePort)]),{id:remote,kind:db.devices.get(remote)?.kind,status:link.status});
+      peers.set(key(port),ids);
+    }
+  }
+  const special=p=>p.lag||p.handoff||p.sdwanMember||/^(uplink|handoff|wan)$/i.test(p.role||'')||
+    /\b(uplink|handoff|backbone)\b/i.test(p.description||'');
+  const profileKey=p=>{
+    if(special(p)||p.role!=='trunk'||!Number.isInteger(Number(p.native))||Number(p.native)<1||
+        !Array.isArray(p.tagged)||!p.tagged.length||p.tagged.some(v=>!Number.isInteger(Number(v))))return '';
+    return JSON.stringify([Number(p.native),vlanSet(p.tagged),!!p.nativeTagged,value(p.voice),vlanSet(p.allowedExcept)]);
+  };
+  const roles=new Map(), apProfiles=new Map();
+  for(const p of ports){
+    const id=key(p.name),records=peers.get(id);
+    if(outside.has(id)){roles.set(id,[records?.size?'Peer needs review':'Peer outside scope','other']);continue;}
+    if(!records?.size)continue;
+    const [peer]=records.values();
+    if(records.size!==1 || state(p.state)==='down' || /conflict|unverified|inferred/i.test(peer.status||'')){
+      roles.set(id,['Peer needs review','other']);
+    }else if(peer.kind==='ap'){
+      roles.set(id,['AP peer','ap']);
+      const signature=profileKey(p);
+      if(signature){
+        if(!apProfiles.has(signature))apProfiles.set(signature,new Set());
+        apProfiles.get(signature).add(peer.id);
+      }
+    }else if(peer.kind==='switch'||peer.kind==='firewall'||peer.kind==='handoff'){
+      roles.set(id,[peer.kind==='switch'?'Switch uplink':peer.kind==='firewall'?'Firewall uplink':'Handoff','uplink']);
+    }else{
+      roles.set(id,['Other wired peer','wired']);
+    }
+  }
+  for(const p of ports){
+    const id=key(p.name);if(roles.has(id))continue;
+    if(p.lag)roles.set(id,['LAG '+p.lag+' member','uplink']);
+    else if(special(p))roles.set(id,[p.handoff||p.role==='handoff'?'Handoff':'Labeled uplink','uplink']);
+    else if(apProfiles.get(profileKey(p))?.size>=2)roles.set(id,['Matches AP profile','profile']);
+    else if(p.role==='ap')roles.set(id,['Configured AP port','profile']);
+    else if(['access','wired','voice'].includes(p.role))roles.set(id,['Wired access','wired']);
+    else roles.set(id,['No peer reported','other']);
+  }
+  return p=>roles.get(key(p.name));
+}
+
+function portMapLegend(items,hasAsset){
+  for(const [x,color,title] of [[38,'ap','AP peer'],[148,'profile','AP profile'],[282,'uplink','Uplink / LAG'],
+      [438,'wired','Wired'],[534,'other','Other / unassigned']]){
+    rect(items,x,314,18,14,portFills[color],'#647781',.6);
+    label(items,x+25,309,144,24,title,13,false,C.muted);
+  }
+  label(items,755,309,405,24,hasAsset?'Imported front view':'Schematic port positions',13,false,C.muted,'right');
+  label(items,38,330,82,20,'State mark',12,true,C.muted);
+  for(const [x,st] of [[128,'up'],[189,'down'],[268,'unknown']]){
+    rect(items,x,338,18,3,stateMarks[st]);label(items,x+23,330,68,20,st,12,false,C.muted);
+  }
+}
+
 function portMaps(project,db){
   const switches=[...db.devices.values()].filter(d=>d.kind==='switch');
   if(!switches.length){const p=fresh('MDF Port Map','MDF Port Map','Port identity, state and configured assignment',project);empty(p,'No switch inventory was supplied.');return [p];}
   const out=[];
   for(const d of switches){
-    const ports=physicalPorts(d), cols=[['Interfaces',198],['State',102],['Speed',111],['Role / description',363],['Native VLAN',125],['Tagged VLANs',229]];
+    const ports=physicalPorts(d), assignment=portAssignments(project,db,d,ports);
+    const cols=[['Interfaces',148],['Assignment',178],['State',80],['Speed',99],['Mode / description',249],['Native VLAN',107],['Tagged VLANs',267]];
     const settings=new Map();
     for(const port of ports){
-      const o=uplinkSettings(d,port), fields=[o.state||'Unknown',rate(o.speed),[o.role,o.description].filter(Boolean).join(' · '),value(o.native),vlanSet(o.tagged)];
+      const o=uplinkSettings(d,port), fields=[assignment(port)[0],o.state||'Unknown',rate(o.speed),[o.role,o.description].filter(Boolean).join(' · '),value(o.native),vlanSet(o.tagged)];
       const key=JSON.stringify(fields);
       if(!settings.has(key))settings.set(key,{fields,names:[]});
       settings.get(key).names.push(o.name);
@@ -192,7 +261,11 @@ function portMaps(project,db){
     const dense=Object.keys(probe.ports).length>80;
     const indexPorts=ports.filter(o=>dense||!probe.ports[o.name]);
     const indexes=split(indexPorts,36),buckets=split(wrappedRows(cols,rows),indexes.length?11:15);
-    const fillFor=o=>state(o.state)==='up'?C.up:state(o.state)==='down'?C.down:'#F6E7BB';
+    function badge(a,x,y,w,h,o,text,size){
+      rect(a,x,y,w,h,portFills[assignment(o)[1]],'#617480',.65);
+      rect(a,x+1,y+h-3,w-2,2,stateMarks[state(o.state)]);
+      label(a,x,y-1,w,h,text,size,true,C.ink,'center');
+    }
     for(let i=0;i<Math.max(1,buckets.length,indexes.length);i++){
       const br=buckets[i]||[],index=indexes[i]||[];
       const p=fresh('MDF Port Map','MDF Port Map',nameOf(d)+'  ·  '+[d.vendor,d.model,d.ip].filter(Boolean).join('  ·  '),project), a=p.items;
@@ -201,15 +274,15 @@ function portMaps(project,db){
       for(const o of ports){
         const pt=g.ports[o.name];if(!pt||dense)continue;
         const [nx,ny]=pt,cx=g.x+nx*g.w,cy=g.y+ny*g.h;
-        const badge=String(o.name).split(/[/:]/).at(-1),bw=Math.min(32,Math.max(12,(badge.length*6)+5));
-        rect(a,cx-bw/2,cy-8,bw,16,fillFor(o),'#46606A',.65);label(a,cx-bw/2,cy-8,bw,16,badge,10,true,C.ink,'center');
+        const text=String(o.name).split(/[/:]/).at(-1),bw=Math.min(32,Math.max(12,(text.length*6)+5));
+        badge(a,cx-bw/2,cy-8,bw,16,o,text,10);
       }
-      label(a,38,315,1110,24,(g.asset?'Imported front view':'Schematic port positions')+'   ·   Green = up     Gray = down     Amber = unknown',14,false,C.muted);
+      portMapLegend(a,!!g.asset);
       if(index.length){
-        label(a,38,347,1120,22,'INTERFACE INDEX   /   '+(dense?'Dense panel':'Unmapped jack positions'),13,true,C.teal);
+        label(a,38,354,1120,22,'INTERFACE INDEX   /   '+(dense?'Dense panel':'Unmapped jack positions'),13,true,C.teal);
         index.forEach((o,j)=>{
-          const x=38+(j%12)*94,y=372+Math.floor(j/12)*25;
-          rect(a,x,y,89,20,fillFor(o),C.rule,.6);label(a,x+3,y,83,20,o.name,11,true,C.ink,'center');
+          const x=38+(j%12)*94,y=380+Math.floor(j/12)*25;
+          badge(a,x,y,89,20,o,o.name,11);
         });
       }
       if(br.length)table(p,cols,br,index.length?468:357);

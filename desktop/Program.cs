@@ -28,7 +28,18 @@ static class Program
             using var window = new Studio(args is ["--confirm-update", var id] ? id : null);
             Application.Run(window); return 0;
         }
-        catch (Exception e) { MessageBox.Show(e.Message, "NetworkDiagramStudio", MessageBoxButtons.OK, MessageBoxIcon.Error); return 1; }
+        catch (Exception e)
+        {
+#if NDS_TEST_HOST
+            if ((args.Length > 0 && args[0].StartsWith("--test-",StringComparison.Ordinal)) || Environment.GetEnvironmentVariable("NDS_TEST_ERROR_LOG") != null)
+            {
+                var log=Environment.GetEnvironmentVariable("NDS_TEST_ERROR_LOG");
+                if (!string.IsNullOrEmpty(log)) File.AppendAllText(log, e+Environment.NewLine);
+                Console.Error.WriteLine(e); return 1;
+            }
+#endif
+            MessageBox.Show(e.Message, "NetworkDiagramStudio", MessageBoxButtons.OK, MessageBoxIcon.Error); return 1;
+        }
     }
 }
 

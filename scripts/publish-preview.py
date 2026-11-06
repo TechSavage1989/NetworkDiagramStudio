@@ -19,6 +19,19 @@ def optional(endpoint):
     if 'HTTP 404' in proc.stderr: return None
     raise RuntimeError('GitHub lookup failed: '+proc.stderr)
 
+def clean_merged_branch(pulls, sha):
+    for pull in pulls:
+        head=pull['head']; branch=head['ref']
+        if pull['merge_commit_sha']!=sha or not pull.get('merged_at') or pull['base']['ref']!='main': continue
+        if (head.get('repo') or {}).get('full_name')!=REPO or not re.fullmatch(r'(feat|fix|docs|chore|release)/[A-Za-z0-9._/-]+',branch): continue
+        ref='refs/heads/'+branch
+        current=subprocess.check_output(['git','ls-remote','--heads','origin',ref],text=True).split()
+        if not current or current[0]!=head['sha']: continue
+        # The lease protects a branch that acquired new commits after the merge.
+        subprocess.run(['git','-c','credential.helper=','-c','credential.helper=!gh auth git-credential','push',
+                        '--force-with-lease='+ref+':'+head['sha'],'origin',':'+ref],check=True)
+        print('Removed merged branch',branch)
+
 def main():
     if os.getenv('GITHUB_REPOSITORY')!=REPO or os.getenv('GITHUB_REF')!='refs/heads/main':raise ValueError('Unexpected release destination or branch.')
     intent=json.loads(Path('docs/releases/intent.json').read_text());tag=intent['tag'];sha=os.environ['GITHUB_SHA'];version=intent['version']
@@ -57,7 +70,7 @@ def main():
     seen=verify_assets(info)
     if not info['isDraft']:
         if seen!=set(NAMES):raise ValueError('Published release is incomplete; refusing modification.')
-        print('Verified previously published immutable release',tag);return
+        print('Verified previously published immutable release',tag);clean_merged_branch(pulls,sha);return
     for name in NAMES:
         if name not in seen:gh('release','upload',tag,str(files[name]),'--repo',REPO,raw=True)
     ready=gh('release','view',tag,'--repo',REPO,'--json','assets')
@@ -66,5 +79,6 @@ def main():
     published=gh('api',f'repos/{REPO}/releases/tags/{tag}')
     if published['draft'] or not published['prerelease'] or verify_assets(published)!=set(NAMES):raise ValueError('Publication verification failed.')
     print(published['html_url'])
+    clean_merged_branch(pulls,sha)
 
 if __name__=='__main__':main()
