@@ -137,6 +137,20 @@ internal sealed partial class Studio
         await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Page options') throw Error('A stale detached session blocked page options')","detached session recovery");
         await ClickEditorTarget("#close");
     }
+    async Task CheckAddDevice()
+    {
+        await ClickEditorTarget("#add-device");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; const name=field('Device name'),kind=field('Device type'),model=field('Model'),platform=field('Platform / technology'); if(!name||!kind||!model||!platform) throw Error('Add device fields missing'); name.value='LAB-HYPERVISOR-NODE-01'; kind.value='hypervisor'; kind.dispatchEvent(new Event('change')); model.value='Dell PowerEdge R750'; model.dispatchEvent(new Event('change')); platform.value='Proxmox VE'; if(kind.value!=='hypervisor') throw Error('Model lookup replaced the selected device type'); const save=[...document.querySelectorAll('#dialog button')].find(button=>button.textContent==='Save device'); if(!save) throw Error('Save device missing'); save.dataset.nativeAddDevice='save'; save.scrollIntoView({block:'center'})","prepare explicit hypervisor");
+        await ClickEditorTarget("[data-native-add-device='save']");
+        await RequireEditor("if(document.getElementById('dialog').open) throw Error('Add device did not close'); const row=[...document.querySelectorAll('#devices .device-row')].find(row=>row.textContent.includes('LAB-HYPERVISOR-NODE-01')); if(!row?.textContent.includes('Hypervisor host')||!row.textContent.includes('Dell PowerEdge R750')||!row.querySelector('input[type=checkbox]')?.checked) throw Error('Added hypervisor lost its type, model or scope'); if(!document.querySelector('#canvas>svg')||!document.querySelector('#tabs button')||document.querySelector('#welcome')) throw Error('Add device lost the diagram'); row.querySelector('button[title]').dataset.nativeAddDevice='open'","save added hypervisor");
+        await ClickEditorTarget("[data-native-add-device='open']");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Device type')?.value!=='hypervisor'||field('Model')?.value!=='Dell PowerEdge R750'||field('Platform / technology')?.value!=='Proxmox VE') throw Error('Added device details were not retained')","reopen added hypervisor");
+        await ClickEditorTarget("#close");
+        await ClickEditorTarget("#drawing-undo");
+        await RequireEditor("if(document.getElementById('devices').textContent.includes('LAB-HYPERVISOR-NODE-01')) throw Error('Undo retained the added device'); if(!document.querySelector('#canvas>svg')||!document.querySelector('#tabs button')||document.querySelector('#welcome')) throw Error('Undo lost the diagram')","undo added hypervisor");
+        await ClickEditorTarget("#drawing-redo");
+        await RequireEditor("const row=[...document.querySelectorAll('#devices .device-row')].find(row=>row.textContent.includes('LAB-HYPERVISOR-NODE-01')); if(!row?.textContent.includes('Hypervisor host')||!row.querySelector('input[type=checkbox]')?.checked) throw Error('Redo did not restore the scoped hypervisor'); if(!document.querySelector('#canvas>svg')||!document.querySelector('#tabs button')||document.querySelector('#welcome')) throw Error('Redo lost the diagram')","redo added hypervisor");
+    }
     internal async Task ExportAndPrint(string folder)
     {
         TestOutputFolder=folder;
@@ -166,6 +180,7 @@ internal sealed partial class Studio
             foreach(var part in package.Entries.Where(p=>p.FullName.EndsWith(".xml")||p.FullName.EndsWith(".rels"))){using var stream=part.Open();XDocument.Load(stream);}
         }
         await CheckEditRecovery();
+        await CheckAddDevice();
         var editorCheck=await browser.CoreWebView2.ExecuteScriptAsync("""
             (() => {
                 try {

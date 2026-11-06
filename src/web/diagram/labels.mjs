@@ -28,14 +28,17 @@ export function placeDeviceTitles(page,project,nodes){
  for(const node of bodies)for(const slot of ['title','detail']){
   const group=titles.filter(i=>i.titleOwner===node.sourceId&&(i.titleSlot||'title')===slot);if(!group.length)continue;
   const fixed=group.some(i=>Number.isFinite(edits[i.editKey]?.x)||Number.isFinite(edits[i.editKey]?.y));if(fixed){occupied.push(...group);continue;}
-  const x0=group[0].x,y0=group[0].y,w=Math.max(...group.map(i=>i.x-x0+Math.max(i.w,textWidth(i.value,i.size,i.bold)))),h=Math.max(...group.map(i=>i.y-y0+i.h)),candidates=[];
+  // Caption boxes are measured before placement and can contain wrapped text.
+  // Reserving the complete string's unwrapped width would make a valid box
+  // impossible to place, even when it fits by itself on an otherwise empty page.
+  const x0=group[0].x,y0=group[0].y,w=Math.max(...group.map(i=>i.x-x0+i.w)),h=Math.max(...group.map(i=>i.y-y0+i.h)),candidates=[];
   const xs=visibleOffsets(node.x,1,8,Math.max(0,node.w-w),page.legendLayout==='sidebar'?318:38,1162-w).map(p=>p.x);
   if(slot==='detail')for(const x of xs)candidates.push({x,y:node.y+node.h+5,w,h});
   for(const gap of [5,12,24,40])for(const x of xs)candidates.push({x,y:node.y-h-gap,w,h});
   for(const x of xs)candidates.push({x,y:node.y+node.h+7,w,h});
   candidates.push({x:node.x-w-12,y:node.y,w,h},{x:node.x+node.w+12,y:node.y,w,h});
   const fit=candidates.find(b=>b.x>=(page.legendLayout==='sidebar'?318:38)&&b.x+b.w<=1162&&b.y>=151&&b.y+b.h<906&&!bodies.some(n=>intersects(b,n,3))&&!occupied.some(t=>intersects(b,t,3))&&!paths.some(p=>pathCrossesText(p,b,3)));
-  if(!fit)throw Error('This page needs more space for a device title. Move a device to another core page.');
+  if(!fit){const error=Error('This page needs more space for a device title. Move a device to another core page.');Object.assign(error,{code:'CORE_LAYOUT_CAPACITY',role:'title',owner:node.sourceId,page:page.name,slot});throw error;}
   for(const t of group){t.x+=fit.x-x0;t.y+=fit.y-y0;occupied.push({...t});}
  }
 }

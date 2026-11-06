@@ -4,6 +4,9 @@ import {editDeviceShape} from '../drawing-edits.mjs';
 import {simplifyRoute} from './routing.mjs';
 import {linkDefaults,legendStyleId} from '../link-styles.mjs';
 import {wrapPortText} from '../port-table.mjs';
+import {connectionMediaInfo} from '../connection-types.mjs';
+import {genericDeviceSymbol} from '../device-symbols.mjs';
+import {textWidth} from './labels.mjs';
 export const W = 1200, H = 975;
 export const C = {ink:'#16364A',muted:'#536779',teal:'#166574',rule:'#CEDCE0',pale:'#F0F5F6',white:'#FFFFFF',up:'#D8F0DE',down:'#E2E7EA',amber:'#805400'};
 export const xml = s => String(s ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
@@ -13,7 +16,19 @@ export function rect(box,x,y,w,h,fill,stroke='none',weight=1){box.push({type:'re
 export function label(box,x,y,w,h,value,size=15,bold=false,color=C.ink,align='left'){
   box.push({type:'text',x,y,w,h,value:String(value ?? ''),size,bold,color,align});
 }
-export function short(s,n){return [...String(s??'')].length>n ? [...String(s)].slice(0,n-1).join('')+'…' : String(s??'');}
+export function displayPortCaption(port){const name=String(port??'');return /port/i.test(name)?name:'Port '+name;}
+// A scene caption always retains its complete editable value. Both exporters
+// use the same measured lines and only fit a fixed box down to a readable size.
+export function textLayout(item){
+ const original=Number(item.size)||12,min=Math.min(8,original),width=Math.max(1,item.w),height=Math.max(1,item.h);
+ const failure=()=>Error('This text needs more space. Enlarge its text box or shorten the caption: '+String(item.value).slice(0,80));
+ if(!item.art&&textWidth(String(item.value).replace(/\s/g,''),min,item.bold)-6>width*Math.max(1,Math.floor(height/(min*1.2))))throw failure();
+ const at=size=>{const lines=item.art?String(item.value).split('\n'):wrapPortText(item.value,width+6,size,item.bold),lineHeight=lines.length===1?Math.min(height,size*1.2):size*1.2;return {lines,size,lineHeight};},fits=layout=>layout.lines.length*layout.lineHeight<=height+.001&&layout.lines.every(line=>textWidth(line,layout.size,item.bold)-6<=width+.001);
+ const normal=at(original);if(item.art||fits(normal))return normal;
+ let lo=min,hi=original,result=at(min);if(!fits(result))throw failure();
+ for(let n=0;n<20;n++){const middle=(lo+hi)/2,candidate=at(middle);if(fits(candidate)){lo=middle;result=candidate;}else hi=middle;}
+ return result;
+}
 export const list = x => Array.isArray(x)?x:[];
 export const split = (a,n)=>Array.from({length:Math.ceil(a.length/n)},(_,i)=>a.slice(i*n,i*n+n));
 export function value(v){return Array.isArray(v)?v.map(value).join(', '):v!=null && typeof v!=='object'?String(v):'';}
@@ -22,14 +37,7 @@ export function rate(v){
   return value(v);
 }
 export function mediaInfo(v,access=false){
-  const m=value(v).toLowerCase();
-  if(/dac|direct.attach|twinax/.test(m))return {name:'DAC',color:'#000000',plug:'DAC',slot:'dac'};
-  if(/10gbase.sr|\bsr\b|short.reach|multi.?mode/.test(m))return {name:'SR fiber',color:'#FF0000',plug:'SFP',slot:'sr'};
-  if(/10gbase.lr|\blr\b|long.reach|single.?mode/.test(m))return {name:'LR fiber',color:'#00B0F0',plug:'SFP',slot:'lr'};
-  if(/fiber|fibre|optical/.test(m))return {name:'Fiber, reach unspecified',color:'#707A83',plug:'SFP'};
-  if(/sfp/.test(m))return {name:'SFP, media unspecified',color:'#707A83'};
-  if(/copper|rj.?45|twisted|base.t|cat[5-8]/.test(m))return {name:access?'AP copper':'Copper',color:access?'#00B050':'#FFD965'};
-  return {name:'Media unspecified',color:'#707A83'};
+  return connectionMediaInfo(value(v),access);
 }
 export function linkLegend(page){
  const defaults=linkDefaults,scope=page.editScope||page.name,entries=new Map();
@@ -57,10 +65,11 @@ export function linkLegend(page){
 }
 export function fresh(name,title,subtitle,project){
   const p={name,title,width:W,height:H,items:[]}, a=p.items;
-  label(a,36,16,820,23,short(project.name||'Network project',90),15,true,C.teal);
+  const projectName=project.name||'Network project',nameHeight=Math.max(23,wrapPortText(projectName,820,15,true).length*18);
+  label(a,36,Math.max(0,39-nameHeight),820,Math.min(39,nameHeight),projectName,15,true,C.teal);
   label(a,900,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');
   label(a,36,43,1128,48,title,33,true);
-  label(a,36,99,1128,24,subtitle,16,false,C.muted);
+  label(a,36,99,1128,36,subtitle,16,false,C.muted);
   rect(a,36,138,1128,2,C.rule);
   return p;
 }
@@ -88,15 +97,18 @@ export function physicalPorts(d){
 }
 export function state(v){return /^(up|connected|online|active|operational)$/i.test(value(v))?'up':/down|disabled|offline|disconnected|inactive/i.test(value(v))?'down':'unknown';}
 export function addDevice(page,project,d,bounds,key,opts={}){
-  const asset=actualAsset(project,d), ports=physicalPorts(d), ap=d.kind==='ap',panel=!asset&&!ap?deviceFaceplate(d):null;
-  const ratio=asset?+asset.width/+asset.height:panel?.ratio|| (ap?1:d.kind==='handoff'?6:d.kind==='unknown'?3:9);
-  const g={type:'device',key,sourceId:d.id,instanceKey:opts.instanceKey,name:d.name||d.id,kind:d.kind,model:d.model||'',...fitRatio(ratio,...bounds),asset,
+  const asset=actualAsset(project,d), ports=physicalPorts(d), ap=d.kind==='ap',panel=!asset&&!ap?deviceFaceplate(d):null,symbol=!asset&&!panel?genericDeviceSymbol(d.kind):null;
+  const ratio=asset?+asset.width/+asset.height:panel?.ratio||symbol?.ratio|| (ap?1:d.kind==='handoff'?6:d.kind==='unknown'?3:9);
+  const placement=opts.fillBounds?Object.fromEntries(['x','y','w','h'].map((key,n)=>[key,bounds[n]])):fitRatio(ratio,...bounds);
+  const g={type:'device',key,sourceId:d.id,instanceKey:opts.instanceKey,name:d.name||d.id,kind:d.kind,model:d.model||'',...placement,asset,
     masterKey:asset?'asset:'+String(asset.id??d.stencilId??d.id):'device:'+d.id,ports:Object.create(null),children:[],fallback:!asset};
   const addAnchor=(k,p)=>{if(Array.isArray(p)&&p.length===2&&p.every(n=>Number.isFinite(n)&&n>=0&&n<=1))g.ports[String(k)]=[...p];};
   if(asset){
     for(const [k,v] of Object.entries(asset.anchors||{}))addAnchor(k,Array.isArray(v)?v:[v?.x,v?.y]);
   } else if(panel){
     Object.assign(g.ports,panel.ports);g.children=panel.children;g.panelRegions=panel.regions;g.physicalLayout=panel.verified;g.layoutSource=panel.source;
+  } else if(symbol){
+    g.children=symbol.children;g.genericSymbol=true;
   } else if(d.kind==='handoff'){
     rect(g.children,0,0,1,1,'#EDF3F5','#A8BAC1',1);rect(g.children,0,0,.012,1,C.ink);g.ports.handoff=[.5,1];
   } else if(ap){
@@ -187,11 +199,10 @@ export function bridge(page){
   }
 }
 function svgText(i){
-  const scale=Math.max(1,i.size*.56), count=Math.max(1,Math.floor(i.w/scale));
-  // Keep complete content in the SVG accessibility title and native Visio shape.
-  const s=i.full?i.value:short(i.value,count),anchor=i.align==='right'?'end':i.align==='center'?'middle':'start';
+  const {lines,size,lineHeight}=textLayout(i),anchor=i.align==='right'?'end':i.align==='center'?'middle':'start',x=round(i.x+(i.align==='right'?i.w:i.align==='center'?i.w/2:0)),y=i.y+(i.h-lines.length*lineHeight)/2+lineHeight/2+size*.34;
   const rotation=i.angle?' transform="rotate('+round(-i.angle*180/Math.PI)+' '+round(i.x+i.w/2)+' '+round(i.y+i.h/2)+')"':'';
-  return '<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+round(i.x+(i.align==='right'?i.w:i.align==='center'?i.w/2:0))+'" y="'+round(i.y+i.h/2+i.size*.34)+'" text-anchor="'+anchor+'" font-size="'+i.size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+xml(s)+'</text>';
+  const content=lines.length===1?xml(lines[0]):lines.map((line,n)=>'<tspan x="'+x+'" y="'+round(y+n*lineHeight)+'">'+xml(line)+'</tspan>').join('');
+  return '<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
 }
 export function svgPage(p){
   const draw=(i)=>{

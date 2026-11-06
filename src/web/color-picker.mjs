@@ -27,7 +27,7 @@ export function colorPicker(parent,{color='#17364A',opacity=1,kind='line'}={}){
  function set(c,source){const next=parseHex(c);if(!next)return;error.textContent='';value=next;sync(source);}
  function sync(source){native.value=value;if(source!==hex){hex.value=value;hex.setAttribute('aria-invalid','false');}if(opacityRange&&source!==opacityRange)opacityRange.value=Math.round(alpha*100);if(opacityNumber&&source!==opacityNumber)opacityNumber.value=Math.round(alpha*100);const item=sample.querySelector(textMode?'text':'path');item.setAttribute(textMode?'fill':'stroke',value);item.setAttribute(textMode?'fill-opacity':'stroke-opacity',textMode?1:alpha);for(const b of root.querySelectorAll('.color-swatch'))b.setAttribute('aria-pressed',String(parseHex(b.style.getPropertyValue('--swatch'))===value));}
  sync();
- return {get value(){if(!parseHex(hex.value))throw Error('Enter a valid HEX color.');if(opacityNumber&&(opacityNumber.value===''||!Number.isFinite(+opacityNumber.value)||+opacityNumber.value<0||+opacityNumber.value>100))throw Error('Opacity must be between 0 and 100.');return value;},get opacity(){return alpha;},remember(){}};
+ return {get value(){if(!parseHex(hex.value))throw Error('Enter a valid HEX color.');if(opacityNumber&&(opacityNumber.value===''||!Number.isFinite(+opacityNumber.value)||+opacityNumber.value<0||+opacityNumber.value>100))throw Error('Opacity must be between 0 and 100.');return value;},set value(next){if(!parseHex(next))throw Error('Enter a valid HEX color.');set(next);},get opacity(){return alpha;},set opacity(next){if(!Number.isFinite(next)||next<0||next>1)throw Error('Opacity must be between 0 and 1.');alpha=next;error.textContent='';sync();},remember(){}};
 }
 
 export const lineColorPicker=colorPicker;

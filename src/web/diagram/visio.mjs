@@ -1,5 +1,5 @@
 import {cleanNativeArt} from '../native-art.mjs';
-import {xml,round,short} from './scene.mjs';
+import {xml,round,textLayout} from './scene.mjs';
 import {zip} from './zip.mjs';
 const main='http://schemas.microsoft.com/office/visio/2012/main',doc='http://schemas.openxmlformats.org/officeDocument/2006/relationships',vr='http://schemas.microsoft.com/visio/2010/relationships/',pr='http://schemas.openxmlformats.org/package/2006/relationships';
 const head='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',ns=' xmlns="'+main+'" xmlns:r="'+doc+'"';
@@ -24,11 +24,11 @@ function rectShape(i,id,H,masterChild,relative){
     cell('FillPattern',i.fill==='none'?0:1)+cell('FillForegnd',i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+outline(i.w,i.h)+'</Shape>';
 }
 function textShape(i,id,H,masterChild,relative){
-  const shown=i.art||i.full?i.value:short(i.value,Math.max(1,Math.floor(i.w/(i.size*.56))));
+  const {lines,size:fontSize}=textLayout(i),shown=lines.join('\n');
   const transform=relative||box(i.x,i.y,i.w,i.h,H).replace(cell('Angle',0),cell('Angle',i.angle||0));
   return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',0)+
-    ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+(shown===i.value?'':cell('Comment',i.value))+
-    '<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(i.size))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
+    ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+
+    '<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(fontSize))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
     '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true)+
     '<Text><cp IX="0"/><pp IX="0"/>'+xml(shown)+'</Text></Shape>';
 }
@@ -114,7 +114,7 @@ function writePackage(pages,stencil){
   for(const p of pages)for(const i of p.items)if(i.type==='device'&&(!stencil||i.kind!=='handoff')){
     let m=records.get(i.masterKey);
     if(!m){
-      m={id:records.size+1,first:i,title:short(i.asset?.name||[i.model,i.kind==='plug'?i.name:i.kind+' schematic'].filter(Boolean).join(' '),110),ports:Object.create(null)};records.set(i.masterKey,m);
+      m={id:records.size+1,first:i,title:i.asset?.name||[i.model,i.kind==='plug'?i.name:i.kind+' schematic'].filter(Boolean).join(' '),ports:Object.create(null)};records.set(i.masterKey,m);
       if(i.asset&&!i.asset.native){
         let ref=media.get(i.asset.dataUrl);
         if(!ref){

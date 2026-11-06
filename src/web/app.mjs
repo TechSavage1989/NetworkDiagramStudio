@@ -11,10 +11,13 @@ import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
 import {cleanPageNumbers,pageNumber} from './page-options.mjs';
-import {connectionPorts,checkConnection,sameConnection} from './connection-edit.mjs';
+import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
+import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
+import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
 import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog} from './imports/index.mjs';
+import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
 import {buildPages,exportVisio,exportStencil} from './diagram/index.mjs';
 import {openVisioCatalog,loadImageStencil} from './stencils.mjs';
@@ -29,13 +32,12 @@ const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'
 const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
 const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false}});
 let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0;const stencilIndexes=new Map(),openCatalogs=new Map();
-let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=false;
+let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=false,drawingReady=false,displayedProject=null;
 const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
 let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null;
 let cablePoint=-1;
 const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:project.links,warnings:project.warnings}));
-const modelKinds=['switch','firewall','ap','handoff','unknown'];
-const validMedia=['unknown','copper','SR','LR','DAC','fiber'];
+const modelKinds=deviceKinds;
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
 const safeKey=s=>typeof s==='string'&&s.length>0&&s.length<=300&&!['__proto__','constructor','prototype'].includes(s);
 const say=message=>{$('feedback').textContent=message;};
@@ -44,7 +46,7 @@ function download(content,name,mime='application/json'){
   const a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);
 }
 const slug=s=>String(s||'Network').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').slice(0,90)||'Network';
-function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','print','svg'].includes(id)&&!pages.length);}
+function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','print','svg'].includes(id)&&(!pages.length||!drawingReady));}
 async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.error');if(!node){node=el('p','','error');$('dialog-body').prepend(node);}node.textContent=e?.message||'The operation failed.';}}finally{busy(false);}}
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
 function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
@@ -188,11 +190,11 @@ function scoped(){
  }
  return {...project,devices,links,excludedPeerPorts};
 }
-const matchName=d=>[d.name,d.model,d.vendor,d.kind,d.ip].some(v=>String(v||'').toLowerCase().includes($('filter').value.trim().toLowerCase()));
+const matchName=d=>[d.name,d.model,d.vendor,d.kind,deviceKindLabel(d.kind),d.technology,d.ip].some(v=>String(v||'').toLowerCase().includes($('filter').value.trim().toLowerCase()));
 function deviceList(){
  const panel=$('devices');panel.replaceChildren();let count=0;
  for(const d of orderedDevices(project).filter(matchName)){if(count++>=350)break;const row=el('div','','device-row'),include=el('input');include.type='checkbox';include.checked=!d.hidden;include.setAttribute('aria-label','Include '+d.name);
- include.onchange=()=>{d.scopeOverride=include.checked;d.hidden=!include.checked;perform();};const b=el('button',d.name);b.title='Edit '+d.name;b.append(el('small',[d.kind,d.model||d.vendor||'Model unspecified'].join('  /  ')));b.onclick=()=>editDevice(d);row.append(include,b);addOrderControls(row,d);panel.append(row);}
+ include.onchange=()=>{d.scopeOverride=include.checked;d.hidden=!include.checked;perform();};const b=el('button',d.name);b.title='Edit '+d.name;b.append(el('small',[deviceKindLabel(d.kind),d.model||d.vendor||'Model unspecified'].join('  /  ')));b.onclick=()=>editDevice(d);row.append(include,b);addOrderControls(row,d);panel.append(row);}
  if(!count)panel.append(el('p',project.devices.length?'No matching devices.':'No devices imported.','placeholder'));
  if(count>350)panel.append(el('p','Filter to view more devices.','placeholder'));
 }
@@ -221,7 +223,7 @@ function linkStyleOptions(selected){
  const choice=field(body,'Link type',type,types.map(t=>[t,t+(used.has(t)?'':' (unused)')]));choice.onchange=()=>linkStyleOptions(choice.value);
  const captions=el('div','','compact-fields');body.append(captions);const caption=(name,value)=>{const cell=el('div','','compact-field');captions.append(cell);return field(cell,name,value);};
  const title=caption('Legend title',current.title??type),lineTitle=caption('Line title',current.lineTitle??type),description=caption('Legend description',current.description||''),lineDescription=caption('Line description',current.lineDescription||'');
- for(const input of [title,lineTitle])input.maxLength=120;for(const input of [description,lineDescription])input.maxLength=240;
+  for(const input of [title,lineTitle])input.maxLength=160;for(const input of [description,lineDescription])input.maxLength=240;
  body.append(el('p','Applies to matching lines and legends throughout the drawing.','hint'));
  const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});
  const bar=actions(body);button(bar,'Save link style',()=>{setLinkStyle(type,{title:title.value,description:description.value,lineTitle:lineTitle.value,lineDescription:lineDescription.value,color:picker.value,opacity:picker.opacity});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
@@ -282,8 +284,9 @@ function draw(){
  const subset=scoped();const live=subset.devices.length>0;
  $('link-count').textContent='('+project.links.length+')';$('stats').textContent=subset.devices.length+' of '+project.devices.length+' devices   /   '+subset.links.length+' links';
  $('art-count').textContent=Object.keys(project.stencils).length+' local hardware shapes';
- const tabs=$('tabs');tabs.replaceChildren();const canvas=$('canvas');
- try{pages=live?buildPages(subset):[];}catch(e){pages=[];say('Diagram could not be built: '+e.message);}
+ const tabs=$('tabs'),canvas=$('canvas');
+ try{const rebuilt=live?buildPages(subset):[];pages=rebuilt;drawingReady=pages.length>0;displayedProject=project;}catch(e){drawingReady=false;for(const id of ['export','print','svg'])$(id).disabled=true;say('Diagram could not be rebuilt: '+e.message+(displayedProject===project&&pages.length?' The last valid drawing is retained. Undo the last change or correct its settings.':''));if(displayedProject===project&&pages.length){syncDrawingSelection();return;}pages=[];viewport.clear();canvas.replaceChildren(el('p','The drawing needs a layout correction. '+e.message,'error'));tabs.replaceChildren();return;}
+ tabs.replaceChildren();
  $('warnings').hidden=!project.warnings.length;$('warnings').textContent='Review '+project.warnings.length+' import '+(project.warnings.length===1?'note':'notes');
  active=Math.max(0,Math.min(active,pages.length-1));
  pages.forEach((page,i)=>{const b=el('button',page.name);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{active=i;draw();};tabs.append(b);});
@@ -326,8 +329,12 @@ function newProject(){if(!checkDiscard())return;viewport.reset();project=emptyPr
 function sample(){if(!checkDiscard())return;viewport.reset();project=sampleSite();resetDrawingHistory();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('Fictional sample project opened.');draw();}
 function editDevice(current){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
- const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,modelKinds),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip);
- const models=el('datalist');models.id='known-hardware-models';for(const p of hardwareCatalog){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
+ const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip);
+ const models=el('datalist');models.id='known-hardware-models';const suggestions=new Map([...hardwareCatalog,...endpointHardwareCatalog.flatMap(entry=>entry.aliases.map(model=>({model,vendor:entry.vendor})))].map(entry=>[entry.sku||entry.model,entry]));for(const p of suggestions.values()){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
+ const platform=field(body,'Platform / technology',d.technology||''),platforms=el('datalist');platforms.id='known-device-platforms';for(const technology of [...new Set(endpointHardwareCatalog.map(entry=>entry.technology).filter(value=>value!=='Physical server'))]){const option=el('option');option.value=technology;platforms.append(option);}body.append(platforms);platform.setAttribute('list',platforms.id);
+ const knowledge=el('p','','hint');body.insertBefore(knowledge,ip.previousElementSibling);let kindEdited=false;kind.onchange=()=>kindEdited=true;
+ function hardwareKnowledge(fill=false){const known=matchEndpointHardware(model.value,vendor.value);knowledge.hidden=!known;knowledge.textContent=known?known.family+'. '+known.moduleGuidance:'';if(known&&fill){if(!kindEdited&&(!current||kind.value==='unknown'))kind.value=known.kind;if(!vendor.value.trim())vendor.value=known.vendor;if(!platform.value.trim())platform.value=known.technology;}}
+ model.onchange=()=>hardwareKnowledge(true);vendor.onchange=()=>hardwareKnowledge(false);hardwareKnowledge();
  const options=[['','Schematic front'],...Object.values(project.stencils).filter(a=>a.view!=='rear').map(s=>[s.id,s.name])];
  const shape=field(body,'Front-panel stencil',d.stencilId||'',options);
  const scale=field(body,'Core faceplate scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=30;scale.max=100;scale.step=5;
@@ -354,12 +361,12 @@ function editDevice(current){
   if(data.some(arr=>!Array.isArray(arr)||arr.some(x=>!object(x)))||data[0].some(p=>typeof p.name!=='string'||!p.name.trim()))throw Error('Use arrays of objects. Each port needs a name.');
   if(!(Number(scale.value)>=30&&Number(scale.value)<=100))throw Error('Use a faceplate scale from 30 to 100 percent.');
   const composition=hardwareComposition(memberRows.filter(r=>!r.removed).map(r=>({id:r.id.value,model:r.model.value})),moduleRows.filter(r=>!r.removed).map(r=>({member:r.member.value,slot:r.slot.value,model:r.model.value})));
-  if(model.value.trim()!==d.model)delete d.sku;
-  Object.assign(d,{id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),ip:ip.value.trim(),stencilId:shape.value,scale:Number(scale.value)/100,ports:data[0],vlans:data[1],routes:data[2],bridges:data[3]});
-  Object.assign(d,composition);
-  if(!current){d.scopeOverride=true;project.devices.push(d);}
-  const key=modelKey(d.vendor,d.model);if(key&&shape.value){for(const s of Object.values(project.stencils))s.models=(s.models||[]).filter(k=>k!==key);project.stencils[shape.value].models.push(key);assignMatching(project.stencils[shape.value]);}
-  close();perform();say('Device saved.');
+  const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),stencilId:shape.value,scale:Number(scale.value)/100,ports:data[0],vlans:data[1],routes:data[2],bridges:data[3]};if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
+  const before={devices:project.devices,stencils:project.stencils};
+  try{project.devices=project.devices.map(old=>old===current?next:{...old});if(!current)project.devices.push(next);project.stencils=Object.fromEntries(Object.entries(project.stencils).map(([id,s])=>[id,{...s,models:[...(s.models||[])]}]));
+   const key=modelKey(next.vendor,next.model);if(key&&shape.value){for(const s of Object.values(project.stencils))s.models=s.models.filter(k=>k!==key);project.stencils[shape.value].models.push(key);assignMatching(project.stencils[shape.value]);}
+   validateDrawing();perform();close();say('Device saved.');
+  }catch(error){Object.assign(project,before);throw error;}
  },'primary');
  if(current)button(a,'Remove device',()=>{if(!confirm('Remove '+d.name+' and its connections?'))return;project.devices=project.devices.filter(n=>n!==d);project.links=project.links.filter(l=>l.a!==d.id&&l.b!==d.id);close();perform();});
 }
@@ -368,31 +375,40 @@ function reviewLinks(){
  if(!project.links.length)body.append(el('p','No links imported. Add a connection using the local and remote interface names.','hint'));
  project.links.forEach((l,i)=>{const text=el('div');text.append(el('strong',(accounts.get(l.a)||l.a)+' '+l.ap+'  /  '+(accounts.get(l.b)||l.b)+' '+l.bp),el('div',[l.media||'Media unspecified',l.speed,l.status].filter(Boolean).join('  |  '),'asset-info'));const row=line(body,text);button(row,'Edit',()=>editLink(i));});
 }
+function connectionFields(parent,link,{onMediaChange}={}){
+ const grid=el('div','','compact-fields');parent.append(grid);const cell=(title,value,options)=>{const box=el('div','','compact-field');grid.append(box);return {box,input:field(box,title,value,options)};};
+ const media=cell('Cable type',connectionValue(cableTypes,link.media),connectionChoices(cableTypes,link.media)),speed=cell('Link speed',connectionValue(linkSpeeds,link.speed),connectionChoices(linkSpeeds,link.speed));
+ const mediaCustom=cell('Custom cable type',link.media||''),speedCustom=cell('Custom link speed',link.speed||'');mediaCustom.input.maxLength=160;speedCustom.input.maxLength=80;
+ function refresh(){mediaCustom.box.hidden=media.input.value!==customConnectionValue;speedCustom.box.hidden=speed.input.value!==customConnectionValue;try{onMediaChange?.(cleanConnectionDetails({media:media.input.value,mediaCustom:mediaCustom.input.value,speed:''}).media);}catch{}}
+ media.input.onchange=refresh;mediaCustom.input.oninput=refresh;speed.input.onchange=refresh;refresh();
+ return {get value(){return cleanConnectionDetails({media:media.input.value,mediaCustom:mediaCustom.input.value,speed:speed.input.value,speedCustom:speedCustom.input.value});}};
+}
+function drawingConnection(item){return project.links.find(link=>sameConnection(link,item.sourceLink))||item.sourceLink||{};}
+function connectionType(link){const ap=[link.a,link.b].some(id=>project.devices.find(d=>d.id===id)?.kind==='ap');return connectionMediaInfo(link.media,ap);}
+function saveConnection(index,link,{drawing=null,patch=null,style=null}={}){
+ const old=project.links[index]||drawing?.sourceLink||{},before={devices:project.devices,links:project.links,layout:project.layout},sameEnds=sameConnection(old,link),oldPaths=pages.flatMap(page=>page.items.filter(item=>item.type==='path'&&sameConnection(item.sourceLink,old)).map(item=>({page:page.title,key:item.editKey,patch:project.layout?.drawingEdits?.[item.editKey],selected:item.editKey===drawing?.editKey}))),oldType=connectionType(old).name;
+ try{Object.assign(project,prepareConnection(project,link,index,drawing?.generatedDevice));const edits=cleanDrawingEdits(project.layout?.drawingEdits);for(const old of oldPaths)delete edits[old.key];project.layout={...project.layout,drawingEdits:edits};
+  const rebuilt=buildPages(scoped());let selectedType=null;
+  for(const page of rebuilt)for(const path of page.items.filter(item=>item.type==='path'&&sameConnection(item.sourceLink,link))){const previous=oldPaths.find(old=>old.page===page.title)||oldPaths[0],next={...(previous?.patch||{})};if(!sameEnds)delete next.points;if(path.linkType!==oldType){delete next.color;delete next.opacity;}if(previous?.selected&&patch)Object.assign(next,patch);if(Object.keys(next).length)edits[path.editKey]=next;if(previous?.selected)selectedType=path.linkType;}
+  if(style){const type=selectedType||connectionType(link).name;project.layout={...project.layout,...changeLinkStyle(project,rebuilt,type,style)};}
+  validateDrawing();perform('connection');
+ }catch(error){Object.assign(project,before);throw error;}
+}
 function editLink(i=-1,drawing=null){
  if(project.devices.length<2){say('Add or import at least two devices first.');return;}
  const l=project.links[i]||drawing?.sourceLink||{},devices=[...project.devices];if(drawing?.generatedDevice&&!devices.some(d=>d.id===drawing.generatedDevice.id))devices.push(drawing.generatedDevice);
- const body=modal(i<0&&!drawing?'Add connection':'Connect link endpoints'),opts=devices.map(d=>[d.id,d.name]);
- const a=field(body,'First device',l.a||opts[0][0],opts),ap=field(body,'First port','',[]),b=field(body,'Second device',l.b||opts[1][0],opts),bp=field(body,'Second port','',[]);
- function choices(dev,input,initial){
-  const device=devices.find(d=>d.id===dev.value),ports=connectionPorts(project,device),names=new Set(ports.map(p=>p.name));if(initial&&!names.has(initial))ports.unshift({name:initial});
-  input.replaceChildren(...ports.map(p=>{const o=el('option',p.name+(p.description?' - '+p.description:''));o.value=p.name;return o;}));input.value=names.has(initial)||initial?initial:ports[0]?.name||'';
+ const body=modal(i<0&&!drawing?'Add connection':'Configure connection','compact-color-dialog'),opts=devices.map(d=>[d.id,d.name]),grid=el('div','','compact-fields');body.append(grid);
+ const property=(title,value,options)=>{const cell=el('div','','compact-field');grid.append(cell);return field(cell,title,value,options);};
+ const a=property('First device',l.a||opts[0][0],opts),b=property('Second device',l.b||opts[1][0],opts),ap=property('First port','',[]),bp=property('Second port','',[]),apCustom=property('First custom port',''),bpCustom=property('Second custom port','');
+ function choices(dev,input,custom,initial){
+  const device=devices.find(d=>d.id===dev.value),ports=connectionPorts(project,device);if(initial&&!ports.some(p=>p.name===initial))ports.unshift({name:initial});
+  input.replaceChildren(...ports.map(p=>{const option=el('option',p.name+(p.description?' - '+p.description:''));option.value=p.name;return option;}));const option=el('option','Custom port');option.value='__custom_port__';input.append(option);input.value=initial||ports[0]?.name||'__custom_port__';custom.value='';custom.parentElement.hidden=input.value!=='__custom_port__';input.onchange=()=>custom.parentElement.hidden=input.value!=='__custom_port__';
  }
- choices(a,ap,l.ap);choices(b,bp,l.bp);a.onchange=()=>choices(a,ap,'');b.onchange=()=>choices(b,bp,'');
- body.append(el('p','Choose the physical device and port at each end. Mapped sockets connect at their hardware positions. Ports without a mapped location use a perimeter attachment. Endpoint changes recalculate the route.','hint'));
- const media=field(body,'Media',l.media||'unknown',Array.from(new Set([...validMedia,l.media].filter(Boolean)))),speed=field(body,'Link speed',l.speed||''),status=field(body,'Status',l.status||'confirmed',Array.from(new Set(['confirmed','inferred','unverified',l.status].filter(Boolean))));
- const bar=actions(body);button(bar,'Save connection',()=>{
-  const link={...l,a:a.value,ap:ap.value.trim(),b:b.value,bp:bp.value.trim(),media:media.value,speed:speed.value.trim(),status:status.value};checkConnection(project,link,i);
-  const before={devices:project.devices,links:project.links,layout:project.layout},oldPaths=pages.flatMap(p=>p.items.filter(o=>o.type==='path'&&sameConnection(o.sourceLink,l)).map(o=>({page:p.title,key:o.editKey,patch:project.layout?.drawingEdits?.[o.editKey]})));
-  try{
-   project.links=project.links.slice();if(i<0)project.links.push(link);else project.links[i]=link;
-   project.devices=project.devices.map(d=>({...d,ports:d.ports.slice()}));
-   for(const [id,pn] of [[link.a,link.ap],[link.b,link.bp]]){let d=project.devices.find(d=>d.id===id);if(!d){const generated=devices.find(d=>d.id===id);if(!generated)throw Error('The endpoint device is unavailable.');d={...generated,ports:generated.ports.slice()};project.devices.push(d);}if(!d.ports.some(p=>p.name===pn))d.ports.push({name:pn});}
-   const edits=cleanDrawingEdits(project.layout?.drawingEdits);for(const path of oldPaths)delete edits[path.key];project.layout={...project.layout,drawingEdits:edits};
-   const rebuilt=buildPages(scoped());for(const page of rebuilt)for(const path of page.items.filter(o=>o.type==='path'&&sameConnection(o.sourceLink,link))){const previous=oldPaths.find(o=>o.page===page.title&&o.patch);if(previous){const patch={...previous.patch};delete patch.points;if(Object.keys(patch).length)edits[path.editKey]=patch;}}
-   validateDrawing();perform();say('Connection saved and attached to the selected ports.');close();
-  }catch(error){Object.assign(project,before);draw();throw error;}
-
- },'primary');if(i>=0)button(bar,'Remove connection',()=>{project.links.splice(i,1);perform();reviewLinks();});
+ choices(a,ap,apCustom,l.ap);choices(b,bp,bpCustom,l.bp);a.onchange=()=>choices(a,ap,apCustom,'');b.onchange=()=>choices(b,bp,bpCustom,'');
+ body.append(el('p','Choose a mapped socket or enter a custom interface name. Unmapped ports attach at the device boundary. Endpoint changes recalculate the route.','hint'));
+ const details=connectionFields(body,l),status=field(body,'Status',l.status||'confirmed',Array.from(new Set(['confirmed','inferred','unverified',l.status].filter(Boolean))));
+ const bar=actions(body);button(bar,'Save connection',()=>{const link={...l,...details.value,a:a.value,ap:(ap.value==='__custom_port__'?apCustom.value:ap.value).trim(),b:b.value,bp:(bp.value==='__custom_port__'?bpCustom.value:bp.value).trim(),status:status.value};saveConnection(i,link,{drawing});say('Connection type, speed and endpoints saved.');close();},'primary');
+ if(i>=0)button(bar,'Remove connection',()=>{project.links=project.links.filter((_,index)=>index!==i);perform();reviewLinks();});
 }
 function editAnchors(shape){
  const body=modal(shape.name),port=field(body,'Interface name',''),known=field(body,'Mapped ports','',[]);
@@ -509,9 +525,11 @@ function editDrawingObject(key){
  for(const k of ['path','vector'].includes(item.type)?[]:item.type==='arttext'?['x','y','w']:['x','y','w','h']){inputs[k]=property(grid,({x:'Left',y:'Top',w:'Width',h:'Height'})[k]+(normalized?' (%)':' (page units)'),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
  if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
+ let picker=null,currentType=item.linkType;
+ const connection=item.type==='path'&&item.sourceLink?drawingConnection(item):null,details=connection?connectionFields(body,connection,{onMediaChange(media){const info=connectionType({...connection,media});if(info.name===currentType)return;currentType=info.name;if(picker){const style=project.layout?.linkStyles?.[info.name],existing=pages.flatMap(page=>page.items).find(path=>path.type==='path'&&path.linkType===info.name);picker.value=style?.color||existing?.color||info.color;picker.opacity=style?.opacity??existing?.opacity??1;}}}):null;
  const linkedSwatch=item.legendEntry&&item.type==='rect';
  for(const k of ['rect','vector'].includes(item.type)?linkedSwatch?['stroke']:['fill','stroke']:[]){inputs[k]=property(hasPicker?grid:body,k[0].toUpperCase()+k.slice(1),item[k]||'#17364A');}
- const picker=['path','text','arttext'].includes(item.type)||linkedSwatch?colorPicker(body,{kind:item.type==='path'||linkedSwatch?'line':'text',color:linkedSwatch?item.fill:item.color,opacity:item.opacity??1,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
+ picker=['path','text','arttext'].includes(item.type)||linkedSwatch?colorPicker(body,{kind:item.type==='path'||linkedSwatch?'line':'text',color:linkedSwatch?item.fill:item.color,opacity:item.opacity??1,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
  if(item.type==='path'||linkedSwatch){body.append(el('p','Color and opacity apply to every cable of this link type and its legend entries.','hint'));button(actions(body),'Configure link titles and descriptions',()=>linkStyleOptions(item.linkType));}
  if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',item.weight||1);inputs.weight.type='number';inputs.weight.step=.1;}
  if(item.type==='vector')inputs.commands=field(body,'Vector commands (JSON, normalized coordinates)',JSON.stringify(item.commands),'multiline');
@@ -521,7 +539,7 @@ function editDrawingObject(key){
   if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
   if(item.labelRole&&change.size<12)throw Error('Link labels need a font size of at least 12.');
   const clean=cleanDrawingEdits({[item.editKey]:change})[item.editKey];if(!clean||Object.keys(clean).length!==Object.keys(change).length)throw Error('Use hex colors, valid text settings, and finite dimensions.');
-  if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
+  if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];const selected=details?.value,changed=selected&&(selected.media!==String(connection.media||'unknown').trim()||selected.speed!==String(connection.speed||'').trim());if(changed)saveConnection(project.links.findIndex(link=>sameConnection(link,item.sourceLink)),{...connection,...selected},{drawing:item,patch,style});else setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
   else if(item.legendEntry&&item.linkType&&clean.value!==editableText(item)){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:clean.value},{[item.editKey]:patch});}
   else if(item.legendEntry&&item.linkType){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};if(project.layout?.drawingEdits?.[item.editKey]?.value==null)delete patch.value;setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});}
   else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}});picker?.remember();close();say('Drawing object saved.');
@@ -535,7 +553,7 @@ $('edit-drawing').onclick=()=>{editDrawing=!editDrawing;$('edit-drawing').setAtt
 function hardware(){stencilDevice=null;
  const body=modal('Hardware library');body.append(el('p','Import Visio stencils, drawing or template masters, images, or a hardware pack. Folder import searches every subfolder. Legacy picture masters open locally; other legacy artwork can use installed desktop Visio in the Windows app.','hint'));
  const bar=actions(body);button(bar,'Import shapes',()=>$('art-file').click(),'primary');button(bar,'Import stencil folder',()=>$('art-folder').click());if(discoveredStencils.length)button(bar,'Browse found stencils ('+discoveredStencils.length+')',browseStencils);button(bar,'Save hardware pack',()=>download(JSON.stringify({format:'NDS-hardware',schema:1,stencils:Object.values(project.stencils),optics:project.optics}),'NetworkDiagramStudio-hardware.json'));
- if(pages.length)button(bar,'Export Visio stencil',async()=>download(await exportStencil(scoped(),pages),slug(project.name)+'-hardware.vssx'));
+ if(pages.length&&drawingReady)button(bar,'Export Visio stencil',async()=>download(await exportStencil(scoped(),pages),slug(project.name)+'-hardware.vssx'));
  if(stencilResults.length)button(bar,'Import results ('+stencilResults.length+')',importResults);
  const shapes=Object.values(project.stencils);
  for(const shape of shapes){const info=el('div');info.append(el('strong',shape.name),el('div',shape.view+'  |  '+Object.keys(shape.anchors).length+' mapped ports','asset-info'));const row=line(body,info);button(row,'Map ports',()=>editAnchors(shape));}
