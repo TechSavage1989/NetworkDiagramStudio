@@ -65,7 +65,7 @@ function core(p,db){
     const [x,y]=node.ports[key];
     return {id,top:y<=.5,x:x*node.w};
   }
-  const pages=batches(filtered,6,5,exitColumn), attached=new Set(filtered.flatMap(e=>[e.a,e.b]));
+  const pages=batches(filtered,6,6,exitColumn), attached=new Set(filtered.flatMap(e=>[e.a,e.b]));
   const solo=[...db.devices].filter(([id,d])=>d.kind!=='ap'&&!attached.has(id)).map(([id])=>id);
   for(const ids of split(solo,5))pages.push({es:[],ids});if(!pages.length)pages.push({es:[],ids:[]});
   return pages.map(({es,ids},ip)=>{

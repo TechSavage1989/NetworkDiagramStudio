@@ -21,3 +21,12 @@ test('configured local handoffs, date-free output and reusable stencil content t
   assert.match(dec.decode(entries.get('visio/masters/masters.xml')),/<Master ID=/);
   assert.equal(entries.has('visio/pages/page1.xml'),false);
 });
+
+test('three local handoffs, a firewall and two distribution switches fit on the core sheet',()=>{
+  const wan=(name)=>({name,role:'handoff',handoff:name+' service',media:'copper'});
+  const d=(id,kind,ports)=>({id,name:id,kind,ports});
+  const project={devices:[d('gate','firewall',[wan('wan1'),wan('wan2'),{name:'x3'}]),d('sw1','switch',[wan('wan3'),{name:'fiber'},{name:'dac'}]),d('sw2','switch',[{name:'dac'}])],
+    links:[{a:'gate',ap:'x3',b:'sw1',bp:'fiber',media:'SR'},{a:'sw1',ap:'dac',b:'sw2',bp:'dac',media:'DAC'}]};
+  const pages=buildPages(project).filter(p=>p.name.startsWith('Core Network'));
+  assert.equal(pages.length,1);assert.equal(pages[0].items.filter(i=>i.type==='path').length,5);
+});

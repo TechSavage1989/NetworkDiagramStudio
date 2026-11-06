@@ -94,7 +94,7 @@ function writePackage(pages,stencil){
   if(!Array.isArray(pages)||!pages.length)throw Error('Build at least one diagram page before exporting.');
   const parts=Object.create(null), records=new Map(),media=new Map(),overrides=[];
   function put(path,body,type){parts[path]=body;if(type)overrides.push([path,type]);}
-  for(const p of pages)for(const i of p.items)if(i.type==='device'){
+  for(const p of pages)for(const i of p.items)if(i.type==='device'&&(!stencil||i.kind!=='handoff')){
     let m=records.get(i.masterKey);
     if(!m){
       m={id:records.size+1,first:i,title:short(i.asset?.name||[i.model,i.kind==='plug'?i.name:i.kind+' schematic'].filter(Boolean).join(' '),110),ports:Object.create(null)};records.set(i.masterKey,m);
