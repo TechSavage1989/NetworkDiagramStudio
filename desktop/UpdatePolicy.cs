@@ -8,7 +8,7 @@ using System.Text.RegularExpressions;
 namespace NetworkDiagramStudio;
 
 internal sealed record Release(string Tag, string Digest, long Size, string Notes);
-internal sealed record FeedCache(string? ETag, string Body, DateTimeOffset Next);
+internal sealed record FeedCache(string? ETag, string Body, DateTimeOffset Next, bool RateLimited = true);
 
 internal static class Policy
 {
@@ -57,6 +57,18 @@ internal static class Policy
         }
         return best;
     }
+    internal static string? LatestPublished(string json, string installed)
+    {
+        var current = Parse("v"+installed) ?? throw new InvalidDataException("Invalid installed version.");
+        using var doc=JsonDocument.Parse(json); string? latest=null;
+        foreach(var item in doc.RootElement.EnumerateArray()) {
+            if(item.GetProperty("draft").GetBoolean()) continue;
+            var tag=item.GetProperty("tag_name").GetString()??""; var version=Parse(tag);
+            if(version==null || current.Preview==int.MaxValue && version.Value.Preview!=int.MaxValue) continue;
+            if(latest==null || version.Value.CompareTo(Parse(latest)!.Value)>0) latest=tag;
+        }
+        return latest;
+    }
     internal static bool SafeRedirect(Uri url) => url.Scheme == "https" && url.IsDefaultPort && url.UserInfo == "" &&
         url.Host is "release-assets.githubusercontent.com" or "objects.githubusercontent.com" or "github-releases.githubusercontent.com";
     internal static void Verify(string file, Release release)
@@ -78,6 +90,10 @@ internal sealed class Updater : IDisposable
 {
     readonly HttpClient http;
     readonly string cachePath;
+    readonly string reportPath;
+    string lastReport="No update check has completed in this session.";
+    string httpStatus="Not requested";
+    internal string Report => $"NetworkDiagramStudio update details\r\nInstalled version: {Policy.Current}\r\nRelease feed: {Policy.Feed}\r\n\r\n{lastReport}\r\n\r\nUpdates are checked at startup, every five minutes, and on return to the app after the focus cooldown. Download and installation are separate actions.";
     internal readonly string Staged;
     FeedCache cache = new(null, "", DateTimeOffset.MinValue);
     DateTimeOffset lastAttempt;
@@ -88,46 +104,62 @@ internal sealed class Updater : IDisposable
     {
         storage ??= Policy.Home; Directory.CreateDirectory(storage);
         cachePath = Path.Combine(storage, "release-cache.json");
+        reportPath = Path.Combine(storage, "last-update-check.txt");
         Staged = Path.Combine(storage, "updates", "candidate.exe");
         http = new HttpClient(handler ?? new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(4) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("NetworkDiagramStudio/" + Policy.Current);
         http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         try { if (File.Exists(cachePath) && new FileInfo(cachePath).Length < 3_000_000) cache = JsonSerializer.Deserialize<FeedCache>(File.ReadAllText(cachePath)) ?? cache; } catch (Exception e) when (e is IOException or JsonException) { }
+        try { if(File.Exists(reportPath) && new FileInfo(reportPath).Length<32_000) lastReport="Previous check:\r\n"+File.ReadAllText(reportPath); } catch(IOException) { }
     }
     void Save() { File.WriteAllText(cachePath + ".tmp", JsonSerializer.Serialize(cache)); File.Move(cachePath + ".tmp", cachePath, true); }
-    internal async Task<string?> Check(TimeSpan cooldown)
+    string Record(string message)
+    {
+        lastReport=$"Check time (UTC): {DateTimeOffset.UtcNow:u}\r\nInstalled at check: {Policy.Current}\r\nHTTP result: {httpStatus}\r\nResult: {message}";
+        try{File.WriteAllText(reportPath,lastReport);}catch(Exception e) when(e is IOException or UnauthorizedAccessException) { }
+        return message;
+    }
+    internal async Task<string?> Check(TimeSpan cooldown, bool manual = false)
     {
         var now = DateTimeOffset.UtcNow;
-        if (now < cache.Next) return $"Update checks paused until {cache.Next.LocalDateTime:t}.";
+        if (now < cache.Next && (!manual || cache.RateLimited)) { httpStatus="Not requested (retry pause)"; return Record($"Update checks paused until {cache.Next.LocalDateTime:t}. "+(cache.RateLimited?"GitHub requested this pause.":"An automatic retry is scheduled after a connection error. Check updates can retry now.")); }
         if (now - lastAttempt < cooldown || Interlocked.Exchange(ref active, 1) != 0) return null;
         lastAttempt = now;
         try
         {
+            httpStatus="Waiting for release server";
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(25));
             using var req = new HttpRequestMessage(HttpMethod.Get, Policy.Feed);
             if (cache.Body.Length > 0 && System.Net.Http.Headers.EntityTagHeaderValue.TryParse(cache.ETag, out var etag)) req.Headers.IfNoneMatch.Add(etag);
-            using var response = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+            using var response = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, deadline.Token);
+            httpStatus=((int)response.StatusCode)+" "+response.StatusCode;
             var next = DateTimeOffset.MinValue;
             if (response.Headers.RetryAfter is { } retry) next = retry.Date ?? now + (retry.Delta ?? TimeSpan.FromMinutes(5));
             if (response.Headers.TryGetValues("X-RateLimit-Remaining", out var remaining) && int.TryParse(remaining.FirstOrDefault(), out var n) && n <= 2 &&
                 response.Headers.TryGetValues("X-RateLimit-Reset", out var reset) && long.TryParse(reset.FirstOrDefault(), out var unix))
                 next = new[] { next, DateTimeOffset.FromUnixTimeSeconds(unix) }.Max();
-            if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Forbidden) { cache = cache with { Next = next > now ? next : now.AddMinutes(15) }; Save(); return "GitHub limited this check. A later check will retry."; }
+            if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Forbidden) { cache = cache with { Next = next > now ? next : now.AddMinutes(15), RateLimited = true }; Save(); return Record($"GitHub limited this check. Retry after {cache.Next.LocalDateTime:t}."); }
             string body = cache.Body;
             if (response.StatusCode != HttpStatusCode.NotModified)
             {
-                response.EnsureSuccessStatusCode(); await response.Content.LoadIntoBufferAsync(2_000_000); body = await response.Content.ReadAsStringAsync();
+                response.EnsureSuccessStatusCode(); await response.Content.LoadIntoBufferAsync(2_000_000).WaitAsync(deadline.Token); body = await response.Content.ReadAsStringAsync(deadline.Token);
             }
             var release = Policy.Select(body, Policy.Current);
             if (release?.Tag != Offered?.Tag || release?.Digest != Offered?.Digest) Downloaded = false;
             Offered = release;
-            cache = new(response.Headers.ETag?.ToString() ?? (response.StatusCode == HttpStatusCode.NotModified ? cache.ETag : null), body, next);
+            cache = new(response.Headers.ETag?.ToString() ?? (response.StatusCode == HttpStatusCode.NotModified ? cache.ETag : null), body, next, next > now);
             Save(); failures = 0;
-            return release == null ? $"Installed {Policy.Current}. No newer release found." : $"Installed {Policy.Current}  |  Available {release.Tag[1..]}";
+            var published=Policy.LatestPublished(body,Policy.Current);
+            return Record(release != null ? $"Installed {Policy.Current}  |  Available {release.Tag[1..]}" :
+                published==null ? $"Installed {Policy.Current}. No newer release found. The feed contains no published release for this channel." :
+                $"Installed {Policy.Current}. Latest published {published[1..]}. No newer release found."+
+                (Policy.Parse("v"+Policy.Current)!.Value.CompareTo(Policy.Parse(published)!.Value)>0?" This build is ahead of the published feed.":""));
         }
         catch (Exception e) when (e is HttpRequestException or IOException or InvalidOperationException or JsonException or TaskCanceledException or KeyNotFoundException or ArgumentException)
         {
-            cache = cache with { Next = now.AddMinutes(Math.Min(60, 1 << Math.Min(++failures, 6))) }; Save();
-            return $"Could not check for updates. {e.Message}";
+            cache = cache with { Next = now.AddMinutes(Math.Min(60, 1 << Math.Min(++failures, 6))), RateLimited = false }; Save();
+            httpStatus="Request failed: "+httpStatus;
+            return Record("Could not check for updates. "+(e is TaskCanceledException?"The release server did not respond within 25 seconds. Try Check updates again.":e.Message));
         }
         finally { Volatile.Write(ref active, 0); }
     }
@@ -153,7 +185,8 @@ internal sealed class Updater : IDisposable
                 await using (var dest = new FileStream(work, FileMode.Create, FileAccess.Write, FileShare.None, 65536, true))
                 {
                     byte[] buffer = new byte[65536]; long count = 0; int read;
-                    using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+                    httpStatus="Waiting for release server";
+            using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(5));
                     while ((read = await source.ReadAsync(buffer, deadline.Token)) > 0)
                     {
                         count += read; if (count > release.Size) throw new InvalidDataException("Unexpected download size.");

@@ -1,0 +1,8 @@
+import {mkdirSync,writeFileSync} from 'node:fs';
+import {buildPages,exportVisio,exportStencil} from '../src/web/diagram/index.mjs';
+import {sampleSite} from '../src/web/sample.mjs';
+const out=new URL('../.artifacts/visio/',import.meta.url);mkdirSync(out,{recursive:true});
+const site=sampleSite();site.name='Harbor <Workshop> & Lab';site.layout={linkStyles:{'SR fiber':{title:'Optical backbone',color:'#815AC0',opacity:.7,lineDescription:'Building uplink'}},pageNumbers:{start:7,pad:2,format:'Sheet {page} of {last}'}};
+let pages=buildPages(site);writeFileSync(new URL('sample.vsdx',out),new Uint8Array(await exportVisio(site,pages).arrayBuffer()));writeFileSync(new URL('hardware.vssx',out),new Uint8Array(await exportStencil(site,pages).arrayBuffer()));
+site.stencils={lab:{id:'lab',name:'Fictional editable faceplate',view:'front',width:10,height:1,dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5F8AAAAASUVORK5CYII=',anchors:{'1/1/25':[.2,.3],'1/1/27':[.8,.7]},native:{paths:[{commands:[['M',0,0],['L',1,0],['L',1,1],['L',0,1],['Z']],fill:'#E9EFF2',stroke:'#16364A',weight:.001}],texts:[{text:'LAB α & <front>',x:.1,y:.5,w:.15,size:.02,angle:.2,color:'#166574',bold:true}]}}};site.devices.find(d=>d.id==='sw-1').stencilId='lab';pages=buildPages(site);writeFileSync(new URL('native-art.vsdx',out),new Uint8Array(await exportVisio(site,pages).arrayBuffer()));
+delete site.stencils.lab.native;pages=buildPages(site);writeFileSync(new URL('bitmap-art.vsdx',out),new Uint8Array(await exportVisio(site,pages).arrayBuffer()));console.log('Created four fictional Visio validation packages.');

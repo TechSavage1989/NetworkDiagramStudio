@@ -1,17 +1,39 @@
-import {importFiles,mergeModels,deviceId} from './imports/index.mjs';
+import {inlineTextEditor} from './inline-text.mjs';
+import {ProjectHistory} from './history.mjs';
+import {cleanSnap,snapPoint,snapBoxes,boxSelected} from './snapping.mjs';
+import {diagramViewport} from './viewport.mjs';
+import {arrangeAnchors,arrangeBoxes} from './arrange.mjs';
+import {filterStencilMasters} from './stencil-search.mjs';
+import {drawingObjects,drawingBounds,moveDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
+import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
+import {cableControls} from './cable-controls.mjs';
+import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
+import {colorPicker} from './color-picker.mjs';
+import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
+import {cleanPageNumbers,pageNumber} from './page-options.mjs';
+import {connectionPorts,checkConnection,sameConnection} from './connection-edit.mjs';
+import {intersects,pathCrossesText} from './diagram/labels.mjs';
+import {importFiles,mergeModels,deviceId,hardwareCatalog} from './imports/index.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
 import {buildPages,exportVisio,exportStencil} from './diagram/index.mjs';
 import {openVisioCatalog,loadImageStencil} from './stencils.mjs';
+import {stencilFiles,visioFile,filePath,droppedFiles} from './stencil-files.mjs';
+import {cleanNativeArt} from './native-art.mjs';
 import {sampleSite} from './sample.mjs';
 import {orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence} from './evidence.mjs';
 
 const $=id=>document.getElementById(id);
+const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{if(editDrawing){if(cableControlClick(key,e,target))return true;selectDrawingItem(key,e.shiftKey||e.ctrlKey||e.metaKey);return true;}return false;},onBeforeInteraction:()=>inlineSession?inlineSession.save():true,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!target.closest('.cable-controls'))editOnDoubleClick(key);}});
 const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
 const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false}});
-let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null;
+let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0;const stencilIndexes=new Map(),openCatalogs=new Map();
+let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=false;
+const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
+let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null;
+let cablePoint=-1;
 const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:project.links,warnings:project.warnings}));
-const modelKinds=['switch','firewall','ap','unknown'];
+const modelKinds=['switch','firewall','ap','handoff','unknown'];
 const validMedia=['unknown','copper','SR','LR','DAC','fiber'];
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
 const safeKey=s=>typeof s==='string'&&s.length>0&&s.length<=300&&!['__proto__','constructor','prototype'].includes(s);
@@ -24,8 +46,8 @@ const slug=s=>String(s||'Network').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').sli
 function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','print','svg'].includes(id)&&!pages.length);}
 async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.error');if(!node){node=el('p','','error');$('dialog-body').prepend(node);}node.textContent=e?.message||'The operation failed.';}}finally{busy(false);}}
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
-function close(){if($('dialog').open)$('dialog').close();}
-function modal(title){$('dialog-title').textContent=title;const body=$('dialog-body');body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
+function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
+function modal(title){if(inlineSession&&!inlineSession.save())throw Error('Finish editing the diagram text first.');modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;$('dialog-title').textContent=title;const body=$('dialog-body');body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
 function button(parent,label,fn,cls=''){const b=el('button',label,cls);b.type='button';b.onclick=()=>task(fn);parent.append(b);return b;}
 function line(parent,...nodes){const row=el('div','','itemrow');row.append(...nodes);parent.append(row);return row;}
 function actions(parent){const n=el('div','','actions');parent.append(n);return n;}
@@ -36,7 +58,120 @@ function field(parent,labelText,value='',opts=null){
  else{input=el(opts==='multiline'?'textarea':'input');input.value=value??'';if(opts==='multiline')input.className='mono';}
  input.id='setting-'+(++fieldCount);label.htmlFor=input.id;parent.append(label,input);return input;
 }
-function perform(){captureEdits(project,evidenceSnapshot);if(project.evidence)evidenceSnapshot=snapshot();dirty=true;draw();}
+function perform(scope='project'){captureEdits(project,evidenceSnapshot);if(project.evidence)evidenceSnapshot=snapshot();projectHistory.record(project,scope);dirty=projectHistory.dirty;draw();}
+function resetDrawingHistory(){inlineCancel?.();drawingSelection.clear();projectHistory.reset(project);cablePoint=-1;}
+function syncDrawingSelection(){
+ const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls'))n.remove();
+ const objects=pages[active]?drawingObjects(pages[active]):[],known=new Set(objects.map(o=>o.editKey));for(const key of drawingSelection)if(!known.has(key))drawingSelection.delete(key);
+ if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
+ $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;
+ for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');
+ const cable=selectedCable();$('cable-tools').hidden=!editDrawing;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
+ if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
+ else $('cable-point-info').textContent='Select a cable to edit its bend points or endpoints.';
+}
+function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();}
+function selectedCable(){return drawingSelection.size===1?pages[active]?.items.find(i=>i.type==='path'&&drawingSelection.has(i.editKey)):null;}
+function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],points}});}
+function cableControlClick(key,event,target=event.target){
+ const add=target.closest('[data-cable-segment]'),point=target.closest('[data-cable-point]');if(!add&&!point)return false;
+ const item=pages[active]?.items.find(i=>i.editKey===key&&i.type==='path');if(!item)return false;drawingSelection.clear();drawingSelection.add(key);
+ if(add){cablePoint=-1;task(()=>{changeCablePoints(item,addCableBends(item.points,+add.dataset.cableSegment));say('Bend points added. Drag a square to adjust the route.');});}
+ else{cablePoint=+point.dataset.cablePoint;syncDrawingSelection();}return true;
+}
+function connectSelectedCable(item=selectedCable()){if(item?.sourceLink)editLink(project.links.findIndex(l=>sameConnection(l,item.sourceLink)),item);}
+function removeSelectedCablePoint(){const item=selectedCable();if(!item||cablePoint<1)return;const points=removeCablePoint(item.points,cablePoint);cablePoint=-1;changeCablePoints(item,points);say('Bend removed and adjacent segments straightened.');}
+function validateDrawing(){for(const p of buildPages(scoped()).filter(p=>p.title.startsWith('Core Network'))){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&intersects(a,b,0))||paths.some(r=>pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}}
+function setDrawingEdits(next){
+ project.layout||={};const previous=project.layout.drawingEdits||{};project.layout.drawingEdits=cleanDrawingEdits(next);
+ try{validateDrawing();}catch(error){project.layout.drawingEdits=previous;draw();throw error;}
+ perform('drawing');
+}
+function setLinkStyle(type,change,extraEdits={}){
+ project.layout||={};const before=project.layout,next=changeLinkStyle(project,pages,type,change);project.layout={...before,...next,drawingEdits:cleanDrawingEdits({...next.drawingEdits,...extraEdits})};
+ try{validateDrawing();}catch(error){project.layout=before;draw();throw error;}perform('link-style');
+}
+function editableText(item){return item.legendFullText!=null&&project.layout?.drawingEdits?.[item.editKey]?.value==null?item.legendFullText:item.value;}
+function saveTextEdit(item,value,color){
+ const patch={...project.layout?.drawingEdits?.[item.editKey],color};if(!item.legendEntry)patch.value=value;
+ if(item.legendEntry&&item.linkType&&value!==editableText(item)){delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:value},{[item.editKey]:patch});}
+ else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});
+}
+function editOnDoubleClick(key){
+ const item=pages[active]&&drawingObjects(pages[active]).find(i=>i.editKey===key);if(!item)return;
+ if(['text','arttext'].includes(item.type)){
+  if(inlineSession&&!inlineSession.save())return;editDrawing=true;$('edit-drawing').setAttribute('aria-pressed','true');$('canvas').classList.add('editing');selectDrawingItem(key);
+  const box=drawingBounds(item),svg=$('canvas').querySelector('svg'),size=item.type==='arttext'&&item.normalized?item.size*item.parent.w:item.size;
+  inlineSession=inlineTextEditor(svg,{box,value:editableText(item),size,bold:item.bold,color:item.color,align:item.align,onMore:()=>task(()=>editDrawingObject(key)),onSave(value,color){const text=item.type==='arttext'?value:value.replace(/[\r\n]+/g,' ');if(text===editableText(item)&&color===item.color)return;saveTextEdit(item,text,color);say('Diagram text saved.');},onClose(){inlineSession=null;inlineCancel=null;$('canvas').focus({preventScroll:true});}});inlineCancel=()=>inlineSession?.cancel();
+ }else task(()=>editDrawingObject(key));
+}
+document.addEventListener('pointerdown',event=>{if(inlineSession&&!event.target.closest('[data-inline-editor]')&&!inlineSession.save()){event.preventDefault();event.stopImmediatePropagation();}},true);
+function startDrawingBox(event,start){
+ if(!editDrawing||!pages[active])return null;const svg=$('canvas').querySelector('svg'),baseline=new Set(drawingSelection),rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('class','diagram-marquee');svg.append(rect);
+ const objects=drawingObjects(pages[active]).filter(o=>event.altKey?o.parent||o.type!=='device':!o.parent).map(drawingBounds).filter(Boolean);
+ function update(end){for(const [k,v] of Object.entries({x:Math.min(start[0],end[0]),y:Math.min(start[1],end[1]),width:Math.abs(end[0]-start[0]),height:Math.abs(end[1]-start[1])}))rect.setAttribute(k,v);
+  const inside=boxSelected(objects,start,end);drawingSelection.clear();if(event.shiftKey||event.ctrlKey||event.metaKey)for(const key of baseline)drawingSelection.add(key);for(const key of inside)if((event.ctrlKey||event.metaKey)&&baseline.has(key))drawingSelection.delete(key);else drawingSelection.add(key);cablePoint=-1;syncDrawingSelection();
+ }return {preview:update,commit(end){update(end);rect.remove();},cancel(){rect.remove();}};
+}
+function snapTargets(page,excluded){
+ const s=cleanSnap(project.layout?.snapping),targets=[];
+ for(const item of drawingObjects(page)){if(excluded.has(item.editKey)||item.parent&&excluded.has(item.parent.editKey))continue;
+  if(item.type==='path'){if(s.cablePoints)for(const [x,y] of item.points)targets.push({axis:0,value:x},{axis:1,value:y});continue;}
+  if(item.parent||item.type==='device'&&!s.deviceEdges||item.type!=='device'&&!s.objectEdges)continue;const b=drawingBounds(item);if(b)for(const axis of [0,1])for(const value of axis?[b.y,b.y+b.h/2,b.y+b.h]:[b.x,b.x+b.w/2,b.x+b.w])targets.push({axis,value});
+ }return targets;
+}
+function showSnapGuides(guides=[]){const svg=$('canvas').querySelector('svg');if(!svg)return;svg.querySelectorAll('.snap-guide').forEach(n=>n.remove());for(const guide of guides){const n=document.createElementNS('http://www.w3.org/2000/svg','line');n.setAttribute('class','snap-guide');for(const [key,value] of Object.entries(guide.axis===0?{x1:guide.value,x2:guide.value,y1:145,y2:856}:{x1:36,x2:1164,y1:guide.value,y2:guide.value}))n.setAttribute(key,value);svg.append(n);}}
+function snapOptions(){
+ const body=modal('Snapping and automatic alignment'),s=cleanSnap(project.layout?.snapping),fields={};
+ for(const [key,name] of [['enabled','Enable snapping'],['grid','Snap to grid'],['guides','Automatic alignment guides'],['deviceEdges','Align with device edges and centers'],['objectEdges','Align with text and other object edges'],['cablePoints','Align with other cable bend points']]){const row=el('label','','check-option'),input=el('input');input.type='checkbox';input.checked=s[key];input.setAttribute('aria-label',name);row.append(input,document.createTextNode(name));body.append(row);fields[key]=input;}
+ const grid=el('div','','form-grid');body.append(grid);for(const [key,name] of [['gridSize','Grid spacing (page units)'],['distance','Alignment snap distance (page units)'],['nudge','Arrow-key step (page units)']]){const input=field(grid,name,s[key]);input.type='number';input.step=key==='nudge'?.1:1;input.min=key==='nudge'?.1:1;input.max=key==='nudge'?20:key==='distance'?24:100;fields[key]=input;}
+ body.append(el('p','Snapping affects dragging. Press Alt after starting a drag to bypass snapping. Arrow keys use the configured step; Shift multiplies it by 10 and Ctrl divides it by 10. Endpoint ports remain attached. Alignment buttons apply the action you select.','hint'));
+ button(actions(body),'Save snapping options',()=>{for(const key of ['gridSize','distance','nudge'])if(fields[key].value===''||!Number.isFinite(+fields[key].value)||+fields[key].value<+fields[key].min||+fields[key].value>+fields[key].max)throw Error('Use grid spacing 1-100, snap distance 1-24, and an arrow-key step of 0.1-20.');project.layout||={};project.layout.snapping=cleanSnap(Object.fromEntries(Object.entries(fields).map(([key,input])=>[key,input.type==='checkbox'?input.checked:+input.value])));perform('snapping');close();say('Snapping options saved.');},'primary');
+}
+$('drawing-snap').onclick=()=>task(snapOptions);
+function startDrawingMove(key,event){
+ if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]');
+ if(control){if(control.hasAttribute('data-cable-segment'))return {preview(){},commit(){},cancel(){}};
+  const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),path=[...svg.children].find(n=>n.getAttribute('data-drawing-key')===key),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
+  if(settings.cablePoints)for(const [i,p] of item.points.entries())if(i!==index)targets.push({axis:0,value:p[0]},{axis:1,value:p[1]});drawingSelection.clear();drawingSelection.add(key);cablePoint=index;
+  const geometry=(dx,dy,e)=>{const snapped=snapPoint([item.points[index][0]+dx,item.points[index][1]+dy],settings,targets,e?.altKey);return {...snapped,points:moveCablePoint(item.points,index,...snapped.point)};};
+  const restore=()=>{path.setAttribute('d',before);showSnapGuides();};
+  return {preview(dx,dy,e){const next=geometry(dx,dy,e);path.setAttribute('d',next.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));svg.querySelector('.cable-controls')?.remove();cableControls(svg,{...item,points:next.points},next.points.findIndex(p=>p[0]===next.point[0]&&p[1]===next.point[1]));showSnapGuides(next.guides);},commit(dx,dy,e){restore();task(()=>{cablePoint=-1;changeCablePoints(item,geometry(dx,dy,e).points);say('Cable bend moved.');});},cancel(){restore();syncDrawingSelection();}};
+ }
+ const keys=drawingSelection.has(key)?new Set(drawingSelection):new Set(event.shiftKey||event.ctrlKey||event.metaKey?[...drawingSelection,key]:[key]),boxes=drawingObjects(page).filter(o=>keys.has(o.editKey)&&!keys.has(o.parent?.editKey)).map(drawingBounds).filter(Boolean),targets=snapTargets(page,keys),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&keys.has(n.getAttribute('data-drawing-key'))&&!keys.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
+ const restore=()=>{for(const [n,s] of original){if(s.transform==null)n.removeAttribute('transform');else n.setAttribute('transform',s.transform);if(s.d)n.setAttribute('d',s.d);}showSnapGuides();};
+ const geometry=(dx,dy,e)=>snapBoxes(boxes,[dx,dy],settings,targets,e?.altKey);
+ return {preview(dx,dy,e){const next=geometry(dx,dy,e),[x,y]=next.delta;if(!started){drawingSelection.clear();for(const k of keys)drawingSelection.add(k);syncDrawingSelection();started=true;}
+  const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
+  for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else n.setAttribute('transform','translate('+x+' '+y+') '+(s.transform||''));}
+  for(const n of $('canvas').querySelectorAll('.diagram-selection'))n.setAttribute('transform','translate('+x+' '+y+')');$('canvas').querySelector('.cable-controls')?.setAttribute('visibility','hidden');showSnapGuides(next.guides);
+ },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta]))));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
+}
+$('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{drawingSelection.clear();syncDrawingSelection();};
+$('cable-remove-point').onclick=()=>task(removeSelectedCablePoint);
+$('cable-endpoints').onclick=()=>task(()=>connectSelectedCable());
+$('cable-edit-points').onclick=()=>task(()=>editCablePoints(selectedCable()));
+for(const button of $('drawing-tools').querySelectorAll('[data-align]'))button.onclick=()=>task(()=>{const page=pages[active],objects=drawingObjects(page).filter(o=>drawingSelection.has(o.editKey)&&!drawingSelection.has(o.parent?.editKey)),boxes=objects.map(drawingBounds).filter(Boolean);setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,arrangeBoxes(boxes,button.dataset.align)));say('Selected drawing items arranged.');});
+function drawingHistory(redo=false,all=false,scope=modalHistoryScope){
+ const previous=project,next=projectHistory.travel(project,{redo,all,scope,validate(state){project=state;try{validateDrawing();}finally{project=previous;}}});if(next===previous)return;
+ inlineCancel?.();project=next;evidenceSnapshot=project.evidence?snapshot():null;dirty=projectHistory.dirty;draw();modalHistoryRefresh?.();say(all?'All available changes undone.':redo?'Change redone.':'Change undone.');
+}
+$('drawing-undo').onclick=()=>task(()=>drawingHistory());$('drawing-redo').onclick=()=>task(()=>drawingHistory(true));$('drawing-undo-all').onclick=()=>task(()=>drawingHistory(false,true));
+function nudgeSelection(event){
+ if(!pages[active]||!drawingSelection.size)return;const amount=movementStep(event,cleanSnap(project.layout?.snapping).nudge),dx=event.key==='ArrowRight'?amount:event.key==='ArrowLeft'?-amount:0,dy=event.key==='ArrowDown'?amount:event.key==='ArrowUp'?-amount:0,item=selectedCable();
+ if(item&&cablePoint>0){const p=item.points[cablePoint],x=p[0]+dx,y=p[1]+dy,next=moveCablePoint(item.points,cablePoint,x,y);cablePoint=next.findIndex(p=>p[0]===x&&p[1]===y);changeCablePoints(item,next);}
+ else setDrawingEdits(moveDrawingItems(pages[active],project.layout?.drawingEdits,new Map([...drawingSelection].map(key=>[key,[dx,dy]]))));
+ say('Selected items nudged.');
+}
+document.addEventListener('keydown',event=>{
+ if(event.defaultPrevented||event.target.closest('input,textarea,select,[contenteditable=true]'))return;
+ if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){if($('dialog').open&&!modalHistoryScope)return;event.preventDefault();task(()=>drawingHistory(event.shiftKey));return;}
+ if(!editDrawing||!$('canvas').contains(event.target))return;
+ if(event.key==='Escape'){drawingSelection.clear();syncDrawingSelection();}
+ if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();task(()=>nudgeSelection(event));}
+ if(['Delete','Backspace'].includes(event.key)&&cablePoint>0){event.preventDefault();task(removeSelectedCablePoint);}
+ if((event.key==='Enter'||event.key===' ')&&event.target.closest('[data-cable-point],[data-cable-segment]')){event.preventDefault();cableControlClick(event.target.closest('[data-drawing-key]').dataset.drawingKey,event);}
+});
 function scoped(){
  const devices=project.devices.filter(d=>!d.hidden);const ids=new Set(devices.map(d=>d.id));
  const links=[],excludedPeerPorts=[];
@@ -68,6 +203,33 @@ function addOrderControls(row,d,after=()=>{}){
  row.ondragleave=()=>row.classList.remove('order-target');
  row.ondrop=e=>{const id=e.dataTransfer.getData('application/x-nds-device');if(!id)return;e.preventDefault();e.stopPropagation();row.classList.remove('order-target');if(id!==d.id&&project.devices.some(x=>x.id===id)){moveDevice(project,id,d.id);perform();after();}};
 }
+function portMapOptions(){
+ const body=modal('Port map options');project.layout||={};const current=project.layout.portMap||{},filter=field(body,'Port details to show',current.detailFilter||'all',[['all','All physical port records'],['assigned','Hide ports without assignment details'],['connected','Only ports with a peer or description']]),group=field(body,'Port table rows',current.groupConsecutive===false?'each':'group',[['group','Group consecutive ports with matching details'],['each','One row per interface']]);
+ const density=field(body,'Port table layout',current.density||'compact',[['compact','Compact - fewer pages'],['expanded','Expanded - more space per record']]),repeat=field(body,'Faceplate on continued pages',current.repeatFaceplate?'repeat':'first',[['first','First page only'],['repeat','Repeat on every page']]);
+ body.append(el('p','Assignment details include a peer, description, role, VLAN configuration, LAG or IP address. A port number, capacity or up/down state alone does not count. The faceplate always retains every physical port.','hint'));
+ button(actions(body),'Apply port map options',()=>{project.layout.portMap={density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
+}
+$('port-map-options').onclick=()=>task(portMapOptions);
+function linkStyleOptions(selected){
+ const used=new Map();for(const p of pages)for(const line of p.items.filter(i=>i.type==='path'))if(!used.has(line.linkType))used.set(line.linkType,line);
+ const types=[...new Set([...used.keys(),...linkDefaults.map(([type])=>type)])],type=types.includes(selected)?selected:types[0],line=used.get(type),current=project.layout?.linkStyles?.[type]||{},body=modal('Link styles');
+ const choice=field(body,'Link type',type,types.map(t=>[t,t+(used.has(t)?'':' (unused)')]));choice.onchange=()=>linkStyleOptions(choice.value);
+ const title=field(body,'Legend title',current.title??type),description=field(body,'Legend description',current.description||''),lineTitle=field(body,'Line title',current.lineTitle??type),lineDescription=field(body,'Line description',current.lineDescription||'');
+ for(const input of [title,lineTitle])input.maxLength=120;for(const input of [description,lineDescription])input.maxLength=240;
+ body.append(el('p','Changes apply to every cable of this link type and its legend entries across the drawing. Legends show only the types used on their sheet. Text colors remain independently editable.','hint'));
+ const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});
+ const bar=actions(body);button(bar,'Save link style',()=>{setLinkStyle(type,{title:title.value,description:description.value,lineTitle:lineTitle.value,lineDescription:lineDescription.value,color:picker.value,opacity:picker.opacity});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
+ button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1});close();});button(bar,'Cancel',close);
+}
+$('link-styles').onclick=()=>task(()=>linkStyleOptions());
+function pageOptions(){
+ const p=cleanPageNumbers(project.layout?.pageNumbers),body=modal('Page options'),row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));body.append(row);
+ const start=field(body,'First page number',p.start),pad=field(body,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(body,'Page number format',p.format);start.type='number';start.min=0;start.max=9999;start.step=1;format.maxLength=100;
+ body.append(el('p','Use {page} for the current number, {last} for the final number, or {total} for the number of sheets. Examples: {page} / {last}, Page {page}, Sheet {page} of {last}.','hint'));
+ const preview=el('p','','page-number-preview');body.append(preview);function update(){preview.textContent=show.checked?'Preview: '+pageNumber({show:true,start:+start.value,pad:+pad.value,format:format.value},active,pages.length||1):'Page numbers hidden';}for(const input of [show,start,pad,format])input.addEventListener('input',update);update();
+ button(actions(body),'Save page options',()=>{if(start.value===''||!Number.isInteger(+start.value)||+start.value<0||+start.value>9999)throw Error('Use a first page number from 0 to 9999.');if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');project.layout||={};project.layout.pageNumbers=cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value});perform('page-options');close();say('Page numbering saved.');},'primary');
+}
+$('page-options').onclick=()=>task(pageOptions);
 function arrange(){
  const body=modal('Device order and core pages');project.layout||=cleanLayout({},project.devices.map(d=>d.id));const layout=project.layout;
  const check=el('input');check.type='checkbox';check.checked=layout.includeAPs===true;check.id='core-aps';const title=el('label','Include access points on automatic core pages');title.htmlFor=check.id;line(body,check,title);
@@ -86,7 +248,7 @@ function arrange(){
   row.append(select);addOrderControls(row,d,arrange);body.append(row);
  }
 }
-function rebuildEvidence(){composeEvidence(project);initialScope();for(const s of Object.values(project.stencils))assignMatching(s);evidenceSnapshot=snapshot();dirty=true;draw();}
+function rebuildEvidence(){composeEvidence(project);initialScope();for(const s of Object.values(project.stencils))assignMatching(s);evidenceSnapshot=snapshot();projectHistory.record(project,'imports');dirty=projectHistory.dirty;draw();}
 function evidence(){
  const body=modal('Imported data');const sources=project.evidence?.sources||[];
  button(body,'Import files',()=>$('data-files').click(),'primary');
@@ -120,14 +282,15 @@ function draw(){
  active=Math.max(0,Math.min(active,pages.length-1));
  pages.forEach((page,i)=>{const b=el('button',page.name);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{active=i;draw();};tabs.append(b);});
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
-  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else canvas.replaceChildren(document.importNode(svg,true));}
- else if(!canvas.querySelector('#welcome')){const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
+  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true));}
+ else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
  for(const id of ['export','print','svg'])$(id).disabled=!pages.length||working;
+ $('port-map-options').hidden=!pages[active]?.portMap;syncDrawingSelection();
 }
 function cleanStencil(s){
  if(!object(s)||!safeKey(s.id)||typeof s.name!=='string'||!/^data:image\/(png|jpeg);base64,[0-9a-z+/]+=*$/i.test(s.dataUrl)||s.dataUrl.length>20e6||!(s.width>0&&s.height>0))throw Error('Invalid hardware shape.');
  const anchors=Object.create(null);for(const [k,v] of Object.entries(s.anchors||{})){if(safeKey(k)&&Array.isArray(v)&&v.length===2&&v.every(n=>typeof n==='number'&&n>=0&&n<=1))anchors[k]=v;}
- return {id:s.id,name:s.name.slice(0,200),models:Array.isArray(s.models)?s.models.filter(x=>typeof x==='string'&&x.length<=200):[],view:s.view==='rear'?'rear':'front',width:Number(s.width),height:Number(s.height),anchors,dataUrl:s.dataUrl};
+ return {id:s.id,name:s.name.slice(0,200),models:Array.isArray(s.models)?s.models.filter(x=>typeof x==='string'&&x.length<=200):[],view:s.view==='rear'?'rear':'front',width:Number(s.width),height:Number(s.height),anchors,dataUrl:s.dataUrl,...(s.native?{native:cleanNativeArt(s.native)}:{})};
 }
 function loadProject(doc){
  if(doc?.format!=='NetworkDiagramStudio'||doc.schema!==1||!object(doc.project))throw Error('Choose a NetworkDiagramStudio project (schema 1).');
@@ -153,11 +316,12 @@ async function ingest(files){
  captureEdits(project,evidenceSnapshot);const inputs=await readSources(list);ensureEvidence(project).sources.push(...inputs);
  active=0;close();rebuildEvidence();say('Imported '+list.length+' file(s). Review categories under Imported data.');
 }
-function newProject(){if(!checkDiscard())return;project=emptyProject();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('');draw();}
-function sample(){if(!checkDiscard())return;project=sampleSite();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('Fictional sample project opened.');draw();}
+function newProject(){if(!checkDiscard())return;viewport.reset();project=emptyProject();resetDrawingHistory();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('');draw();}
+function sample(){if(!checkDiscard())return;viewport.reset();project=sampleSite();resetDrawingHistory();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('Fictional sample project opened.');draw();}
 function editDevice(current){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
  const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,modelKinds),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip);
+ const models=el('datalist');models.id='known-hardware-models';for(const p of hardwareCatalog){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
  const options=[['','Schematic front'],...Object.values(project.stencils).filter(a=>a.view!=='rear').map(s=>[s.id,s.name])];
  const shape=field(body,'Front-panel stencil',d.stencilId||'',options);
  const scale=field(body,'Core faceplate scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=30;scale.max=100;scale.step=5;
@@ -183,45 +347,174 @@ function reviewLinks(){
  if(!project.links.length)body.append(el('p','No links imported. Add a connection using the local and remote interface names.','hint'));
  project.links.forEach((l,i)=>{const text=el('div');text.append(el('strong',(accounts.get(l.a)||l.a)+' '+l.ap+'  /  '+(accounts.get(l.b)||l.b)+' '+l.bp),el('div',[l.media||'Media unspecified',l.speed,l.status].filter(Boolean).join('  |  '),'asset-info'));const row=line(body,text);button(row,'Edit',()=>editLink(i));});
 }
-function editLink(i=-1){
+function editLink(i=-1,drawing=null){
  if(project.devices.length<2){say('Add or import at least two devices first.');return;}
- const l=project.links[i]||{},body=modal(i<0?'Add connection':'Edit connection'),opts=project.devices.map(d=>[d.id,d.name]);
- const a=field(body,'First device',l.a||opts[0][0],opts),ap=field(body,'First port',l.ap||''),b=field(body,'Second device',l.b||opts[1][0],opts),bp=field(body,'Second port',l.bp||'');
- function suggest(dev,input){
-  const list=el('datalist');list.id='ports-'+input.id;body.append(list);input.setAttribute('list',list.id);
-  const update=()=>{list.replaceChildren(...(project.devices.find(d=>d.id===dev.value)?.ports||[]).slice(0,1500).map(p=>{const o=el('option');o.value=p.name;return o;}));};dev.onchange=update;update();
- }suggest(a,ap);suggest(b,bp);
+ const l=project.links[i]||drawing?.sourceLink||{},devices=[...project.devices];if(drawing?.generatedDevice&&!devices.some(d=>d.id===drawing.generatedDevice.id))devices.push(drawing.generatedDevice);
+ const body=modal(i<0&&!drawing?'Add connection':'Connect link endpoints'),opts=devices.map(d=>[d.id,d.name]);
+ const a=field(body,'First device',l.a||opts[0][0],opts),ap=field(body,'First port','',[]),b=field(body,'Second device',l.b||opts[1][0],opts),bp=field(body,'Second port','',[]);
+ function choices(dev,input,initial){
+  const device=devices.find(d=>d.id===dev.value),ports=connectionPorts(project,device),names=new Set(ports.map(p=>p.name));if(initial&&!names.has(initial))ports.unshift({name:initial});
+  input.replaceChildren(...ports.map(p=>{const o=el('option',p.name+(p.description?' - '+p.description:''));o.value=p.name;return o;}));input.value=names.has(initial)||initial?initial:ports[0]?.name||'';
+ }
+ choices(a,ap,l.ap);choices(b,bp,l.bp);a.onchange=()=>choices(a,ap,'');b.onchange=()=>choices(b,bp,'');
+ body.append(el('p','Choose the physical device and port at each end. Mapped sockets connect at their hardware positions. Ports without a mapped location use a perimeter attachment. Endpoint changes recalculate the route.','hint'));
  const media=field(body,'Media',l.media||'unknown',Array.from(new Set([...validMedia,l.media].filter(Boolean)))),speed=field(body,'Link speed',l.speed||''),status=field(body,'Status',l.status||'confirmed',Array.from(new Set(['confirmed','inferred','unverified',l.status].filter(Boolean))));
  const bar=actions(body);button(bar,'Save connection',()=>{
-  if(a.value===b.value||!ap.value.trim()||!bp.value.trim())throw Error('Select distinct devices and enter both interface names.');
-  const ends=[a.value+'|'+ap.value.trim().toLowerCase(),b.value+'|'+bp.value.trim().toLowerCase()];
-  if(project.links.some((x,j)=>j!==i&&[x.a+'|'+x.ap.toLowerCase(),x.b+'|'+x.bp.toLowerCase()].some(k=>ends.includes(k))))throw Error('This port is already connected. Review or remove the conflicting connection first.');
-  const link={...l,a:a.value,ap:ap.value.trim(),b:b.value,bp:bp.value.trim(),media:media.value,speed:speed.value.trim(),status:status.value};
-  if(i<0)project.links.push(link);else project.links[i]=link;for(const [id,pn] of [[link.a,link.ap],[link.b,link.bp]]){const d=project.devices.find(x=>x.id===id);if(!d.ports.some(p=>p.name===pn))d.ports.push({name:pn});}
-  perform();say('Connection saved.');reviewLinks();
+  const link={...l,a:a.value,ap:ap.value.trim(),b:b.value,bp:bp.value.trim(),media:media.value,speed:speed.value.trim(),status:status.value};checkConnection(project,link,i);
+  const before={devices:project.devices,links:project.links,layout:project.layout},oldPaths=pages.flatMap(p=>p.items.filter(o=>o.type==='path'&&sameConnection(o.sourceLink,l)).map(o=>({page:p.title,key:o.editKey,patch:project.layout?.drawingEdits?.[o.editKey]})));
+  try{
+   project.links=project.links.slice();if(i<0)project.links.push(link);else project.links[i]=link;
+   project.devices=project.devices.map(d=>({...d,ports:d.ports.slice()}));
+   for(const [id,pn] of [[link.a,link.ap],[link.b,link.bp]]){let d=project.devices.find(d=>d.id===id);if(!d){const generated=devices.find(d=>d.id===id);if(!generated)throw Error('The endpoint device is unavailable.');d={...generated,ports:generated.ports.slice()};project.devices.push(d);}if(!d.ports.some(p=>p.name===pn))d.ports.push({name:pn});}
+   const edits=cleanDrawingEdits(project.layout?.drawingEdits);for(const path of oldPaths)delete edits[path.key];project.layout={...project.layout,drawingEdits:edits};
+   const rebuilt=buildPages(scoped());for(const page of rebuilt)for(const path of page.items.filter(o=>o.type==='path'&&sameConnection(o.sourceLink,link))){const previous=oldPaths.find(o=>o.page===page.title&&o.patch);if(previous){const patch={...previous.patch};delete patch.points;if(Object.keys(patch).length)edits[path.editKey]=patch;}}
+   validateDrawing();perform();say('Connection saved and attached to the selected ports.');close();
+  }catch(error){Object.assign(project,before);draw();throw error;}
+
  },'primary');if(i>=0)button(bar,'Remove connection',()=>{project.links.splice(i,1);perform();reviewLinks();});
 }
 function editAnchors(shape){
- const body=modal(shape.name);
- const port=field(body,'Interface name',''),known=field(body,'Mapped ports','',[['','Select a port'],...Object.keys(shape.anchors).map(k=>[k,k])]);
- const map=el('div','','anchor-map');map.style.maxWidth=shape.width/shape.height<3?'340px':'100%';
- const image=el('img');image.src=shape.dataUrl;image.alt=shape.name;map.append(image);body.append(map);
- const coordinates=el('div','','form-grid');body.append(coordinates);const x=field(coordinates,'Horizontal position (%)',''),y=field(coordinates,'Vertical position (%)','');for(const input of [x,y]){input.type='number';input.min=0;input.max=100;input.step=.01;}
- const count=el('p',Object.keys(shape.anchors).length+' mapped ports','asset-info');body.append(count);
- function markers(){for(const n of map.querySelectorAll('.anchor-dot'))n.remove();for(const [key,[px,py]] of Object.entries(shape.anchors)){const dot=el('button','','anchor-dot');dot.style.left=px*100+'%';dot.style.top=py*100+'%';dot.title=key;dot.setAttribute('aria-label','Mapped port '+key);dot.onclick=()=>{port.value=key;known.value=key;x.value=(px*100).toFixed(2);y.value=(py*100).toFixed(2);};map.append(dot);}}
- function savePoint(){const k=port.value.trim(),px=Number(x.value)/100,py=Number(y.value)/100;if(!safeKey(k)||!x.value||!y.value||![px,py].every(n=>Number.isFinite(n)&&n>=0&&n<=1))throw Error('Enter a port and positions from 0 to 100 percent.');shape.anchors[k]=[px,py];dirty=true;count.textContent=k+' mapped. '+Object.keys(shape.anchors).length+' port positions.';markers();draw();}
- known.onchange=()=>{const key=known.value;if(!key)return;port.value=key;x.value=(shape.anchors[key][0]*100).toFixed(2);y.value=(shape.anchors[key][1]*100).toFixed(2);};
- image.onclick=e=>{const r=image.getBoundingClientRect();x.value=((e.clientX-r.left)/r.width*100).toFixed(2);y.value=((e.clientY-r.top)/r.height*100).toFixed(2);try{savePoint();}catch(error){count.textContent=error.message;}};
- const controls=actions(body);button(controls,'Save port position',savePoint);button(controls,'Remove port position',()=>{delete shape.anchors[port.value.trim()];markers();dirty=true;draw();});markers();
- const row=actions(body);button(row,'Done',hardware);
+ const body=modal(shape.name),port=field(body,'Interface name',''),known=field(body,'Mapped ports','',[]);
+ const tools=el('div','','port-zoom-tools');body.append(tools);let zoom=1,space=false,gesture=null,place=false;
+ const view=el('div','','anchor-viewport');view.tabIndex=0;view.setAttribute('aria-label','Port mapping canvas');view.setAttribute('role','group');
+ const map=el('div','','anchor-map'),image=el('img');image.src=shape.dataUrl;image.alt=shape.name;image.draggable=false;map.append(image);view.append(map);body.append(view);
+ const coordinates=el('div','','form-grid');body.append(coordinates);const x=field(coordinates,'Horizontal position (%)',''),y=field(coordinates,'Vertical position (%)','');for(const input of [x,y]){input.type='number';input.min=0;input.max=100;input.step=.001;}
+ const count=el('p','','asset-info');count.setAttribute('role','status');body.append(count);
+ const selection=field(body,'Ports to align','',[]);selection.multiple=true;selection.size=7;const selected=new Set(),portScope='ports:'+shape.id;modalHistoryScope=portScope;
+ body.append(el('p','Drag a box over ports to select them. Shift adds to the selection; Ctrl toggles ports. Drag a selected port to move the group. Arrow keys move 1 screen pixel; Shift moves 10 and Ctrl moves 0.1. Scroll to zoom. Hold Space or the middle mouse button to pan. Choose Place port to map a new socket.','hint'));
+ function current(key){if(!shape.anchors[key])return;port.value=key;known.value=key;x.value=(shape.anchors[key][0]*100).toFixed(3);y.value=(shape.anchors[key][1]*100).toFixed(3);}
+ function markers(){for(const n of map.querySelectorAll('.anchor-dot'))n.remove();for(const [key,[px,py]] of Object.entries(shape.anchors)){const dot=el('button','','anchor-dot'+(selected.has(key)?' selected':''));dot.type='button';dot.dataset.port=key;dot.style.left=px*100+'%';dot.style.top=py*100+'%';dot.title=key;dot.setAttribute('aria-label','Mapped port '+key);dot.setAttribute('aria-pressed',String(selected.has(key)));dot.onclick=e=>e.preventDefault();map.append(dot);}}
+ function refresh(){
+  if(!project.stencils[shape.id]){hardware();return;}shape=project.stencils[shape.id];
+  known.replaceChildren(...[['','Select a port'],...Object.keys(shape.anchors).map(k=>[k,k])].map(([value,name])=>{const o=el('option',name);o.value=value;return o;}));known.value=port.value;
+  selection.replaceChildren(...Object.entries(shape.anchors).map(([k,p])=>{const o=el('option',k+'  ('+(p[0]*100).toFixed(2)+'%, '+(p[1]*100).toFixed(2)+'%)');o.value=k;o.selected=selected.has(k);return o;}));markers();count.textContent=selected.size+' selected / '+Object.keys(shape.anchors).length+' mapped ports.';
+ }
+ function changed(message){perform(portScope);refresh();if(shape.anchors[port.value])current(port.value);count.textContent=message+' '+count.textContent;}
+ modalHistoryRefresh=refresh;
+ selection.onchange=()=>{selected.clear();for(const o of selection.selectedOptions)selected.add(o.value);if(selected.size)current([...selected][0]);markers();count.textContent=selected.size+' selected / '+Object.keys(shape.anchors).length+' mapped ports.';};
+ function size(){const base=Math.max(20,Math.min(view.clientWidth-22,(view.clientHeight-22)*shape.width/shape.height));map.style.width=base*zoom+'px';level.textContent=Math.round(zoom*100)+'%';}
+ function scale(factor,cx,cy){const r=view.getBoundingClientRect(),old=image.getBoundingClientRect();cx??=r.left+r.width/2;cy??=r.top+r.height/2;const px=(cx-old.left)/old.width,py=(cy-old.top)/old.height;zoom=Math.max(.5,Math.min(16,zoom*factor));size();const next=image.getBoundingClientRect();view.scrollLeft+=next.left+px*next.width-cx;view.scrollTop+=next.top+py*next.height-cy;}
+ button(tools,'-',()=>scale(1/1.25)).setAttribute('aria-label','Zoom port mapper out');const level=el('span','100%');level.setAttribute('aria-label','Port mapping zoom');tools.append(level);button(tools,'+',()=>scale(1.25)).setAttribute('aria-label','Zoom port mapper in');button(tools,'Fit device',()=>{zoom=1;size();view.scrollLeft=0;view.scrollTop=0;});
+ const mode=button(tools,'Place port',()=>{place=!place;mode.setAttribute('aria-pressed',String(place));view.classList.toggle('placing',place);});mode.setAttribute('aria-pressed','false');
+ image.onload=()=>size();requestAnimationFrame(size);
+ view.addEventListener('wheel',e=>{e.preventDefault();scale(Math.exp(-e.deltaY*.0015),e.clientX,e.clientY);},{passive:false});
+ const position=e=>{const r=image.getBoundingClientRect();return [Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))];};
+ view.onpointerdown=e=>{
+  if(![0,1].includes(e.button))return;view.focus({preventScroll:true});e.preventDefault();const dot=e.target.closest('.anchor-dot'),key=dot?.dataset.port;
+  const kind=e.button===1||space?'pan':key?'port':place?'place':'box';
+  gesture={kind,id:e.pointerId,start:[e.clientX,e.clientY],point:position(e),scroll:[view.scrollLeft,view.scrollTop],before:JSON.parse(JSON.stringify(shape.anchors)),selected:new Set(selected),key,moved:false,add:e.shiftKey,toggle:e.ctrlKey||e.metaKey};
+  if(kind==='port'){if(!selected.has(key)){if(!gesture.add&&!gesture.toggle)selected.clear();selected.add(key);}current(key);markers();}
+  if(kind==='box'){const box=el('div','','port-selection-box');map.append(box);gesture.box=box;}
+  view.setPointerCapture(e.pointerId);
+ };
+ view.onpointermove=e=>{
+  const g=gesture;if(!g||g.id!==e.pointerId)return;const dx=e.clientX-g.start[0],dy=e.clientY-g.start[1];if(!g.moved&&Math.hypot(dx,dy)>3){g.moved=true;}
+  if(g.kind==='pan'){view.scrollLeft=g.scroll[0]-dx;view.scrollTop=g.scroll[1]-dy;return;}if(!g.moved)return;
+  if(g.kind==='port'){const r=image.getBoundingClientRect();shape.anchors=moveAnchors(g.before,[...selected],dx/r.width,dy/r.height);markers();current(g.key);}
+  if(g.kind==='box'){const p=position(e),a=g.point,b=g.box;b.style.left=Math.min(a[0],p[0])*100+'%';b.style.top=Math.min(a[1],p[1])*100+'%';b.style.width=Math.abs(p[0]-a[0])*100+'%';b.style.height=Math.abs(p[1]-a[1])*100+'%';const inside=selectedInBox(shape.anchors,a,p);selected.clear();if(g.add||g.toggle)for(const k of g.selected)selected.add(k);for(const k of inside)if(g.toggle&&g.selected.has(k))selected.delete(k);else selected.add(k);markers();count.textContent=selected.size+' ports selected.';}
+ };
+ view.onpointerup=e=>{
+  const g=gesture;if(!g||g.id!==e.pointerId)return;gesture=null;if(view.hasPointerCapture(e.pointerId))view.releasePointerCapture(e.pointerId);g.box?.remove();
+  if(g.kind==='port'&&g.moved){changed('Ports moved.');return;}
+  if(g.kind==='port'){if(g.toggle&&g.selected.has(g.key))selected.delete(g.key);else if(!g.add&&!g.toggle){selected.clear();selected.add(g.key);}current(g.key);}
+  if(g.kind==='box'&&!g.moved&&!g.add&&!g.toggle)selected.clear();
+  if(g.kind==='place'&&!g.moved){const p=position(e);x.value=(p[0]*100).toFixed(3);y.value=(p[1]*100).toFixed(3);task(savePoint);}
+  if(selected.size)current([...selected][0]);refresh();
+ };
+ view.onpointercancel=()=>{const g=gesture;if(!g)return;gesture=null;g.box?.remove();if(g.kind==='port'&&g.moved){shape.anchors=g.before;}selected.clear();for(const k of g.selected)selected.add(k);refresh();};
+ view.onkeydown=e=>{
+  if(e.key===' '){space=true;e.preventDefault();return;}if(e.key==='Escape'){selected.clear();refresh();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){e.preventDefault();for(const k of Object.keys(shape.anchors))selected.add(k);refresh();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();task(()=>drawingHistory(e.shiftKey,false,portScope));return;}
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();if(!selected.size)return;const step=movementStep(e),r=image.getBoundingClientRect();shape.anchors=moveAnchors(shape.anchors,[...selected],(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0)/r.width,(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0)/r.height);changed('Ports nudged.');}
+ };
+ view.onkeyup=e=>{if(e.key===' ')space=false;};view.onblur=()=>space=false;
+ function savePoint(){const k=port.value.trim(),px=Number(x.value)/100,py=Number(y.value)/100;if(!safeKey(k)||!x.value||!y.value||![px,py].every(n=>Number.isFinite(n)&&n>=0&&n<=1))throw Error('Enter a port and positions from 0 to 100 percent.');shape.anchors[k]=[px,py];selected.add(k);changed(k+' mapped.');}
+ known.onchange=()=>{const key=known.value;if(!key)return;selected.clear();selected.add(key);current(key);refresh();};
+ const align=actions(body);for(const [name,action] of [['Align row','row'],['Align column','column'],['Equal horizontal spacing','space-x'],['Equal vertical spacing','space-y']])button(align,name,()=>{const next=arrangeAnchors(shape.anchors,[...selected],action,port.value);shape.anchors=next;changed('Port positions arranged.');});
+ button(align,'Select all ports',()=>{for(const k of Object.keys(shape.anchors))selected.add(k);refresh();});button(align,'Clear selection',()=>{selected.clear();refresh();});button(align,'Undo port change',()=>drawingHistory(false,false,portScope));button(align,'Redo port change',()=>drawingHistory(true,false,portScope));button(align,'Undo all port changes',()=>drawingHistory(false,true,portScope));
+ const controls=actions(body);button(controls,'Save port position',savePoint);button(controls,'Remove port position',()=>{delete shape.anchors[port.value.trim()];selected.delete(port.value.trim());changed('Port removed.');});refresh();button(actions(body),'Done',hardware);
 }
 function assignMatching(shape){
  for(const d of project.devices){if(!d.stencilId&&matchesHardware(shape,d))d.stencilId=shape.id;}
 }
-function hardware(){
- const body=modal('Hardware library');body.append(el('p','Import local Visio .vssx or .vsdx masters, a PNG or JPEG faceplate, or a saved hardware pack.','hint'));
- const bar=actions(body);button(bar,'Import shapes',()=>$('art-file').click(),'primary');button(bar,'Save hardware pack',()=>download(JSON.stringify({format:'NDS-hardware',schema:1,stencils:Object.values(project.stencils),optics:project.optics}),'NetworkDiagramStudio-hardware.json'));
+async function stencilCatalog(file){
+ const path=filePath(file);if(openCatalogs.has(path)){const cached=openCatalogs.get(path);if(cached.size===file.size&&cached.modified===file.lastModified){openCatalogs.delete(path);openCatalogs.set(path,cached);return cached.cat;}openCatalogs.delete(path);stencilIndexes.delete(path);}
+ const cat=await openVisioCatalog(file);stencilIndexes.set(path,cat.items.map(i=>({...i})));openCatalogs.set(path,{cat,size:file.size,modified:file.lastModified});while(openCatalogs.size>(file.size>20*1024*1024?1:3))openCatalogs.delete(openCatalogs.keys().next().value);return cat;
+}
+async function deviceStencil(device){
+ stencilDevice=device.id;const body=modal('Stencil for '+device.name),generation=modalGeneration;body.append(el('p',[device.vendor,device.model,device.sku].filter(Boolean).join('  |  '),'hint'));
+ const query=field(body,'Search stencil names or model',device.sku||device.model||'');query.type='search';
+ const status=el('p','','hint'),results=el('div');body.append(status,results);
+ const bar=actions(body);button(bar,'Import stencil folder',()=>$('art-folder').click());button(bar,'Import shapes',()=>$('art-file').click());button(bar,'Device details',()=>editDevice(device));
+ const match=name=>{const norm=v=>String(v).toUpperCase().replace(/[^A-Z0-9]/g,'');const q=norm(query.value);return !q||norm(name).includes(q)||matchesHardware({name,view:'front'},device)&&q===norm(device.sku||device.model);};
+ function assign(shape){const s=cleanStencil(shape);project.stencils[s.id]=s;device.stencilId=s.id;const key=modelKey(device.vendor,device.model);if(key&&!s.models.includes(key))s.models.push(key);assignMatching(s);perform();close();say('Assigned '+s.name+' to '+device.name+'.');}
+ function render(){results.replaceChildren();let count=0;
+  for(const s of Object.values(project.stencils).filter(s=>s.view!=='rear'&&match(s.name))){const info=el('div');info.append(el('strong',s.name),el('div','Loaded hardware','asset-info'));const row=line(results,info);button(row,'Preview / assign',()=>preview(s));count++;}
+  outer:for(const file of discoveredStencils)for(const item of stencilIndexes.get(filePath(file))||[]){if(count>=120)break outer;if(!match(item.name)||/\b(rear|back)\b/i.test(item.name))continue;const info=el('div');info.append(el('strong',item.name),el('div',filePath(file),'asset-info'));const row=line(results,info);button(row,'Preview / assign',async()=>{status.textContent='Loading '+item.name;const cat=await stencilCatalog(file),s=await cat.load(item.key);preview(s);});count++;}
+  if(!count)results.append(el('p','No indexed match. Search stencil folders or import a stencil.','hint'));
+ }
+ function preview(shape){const p=modal('Assign '+shape.name);const img=el('img');img.className='panel-img';img.src=shape.dataUrl;img.alt=shape.name;p.append(img,el('p',Object.keys(shape.anchors).length+' mapped ports','hint'));button(actions(p),'Assign to '+device.name,()=>assign(shape),'primary');button(actions(p),'Back to search',()=>deviceStencil(device));}
+ query.oninput=render;
+ async function index(all=false){const vendor=(device.vendor||'').toLowerCase(),terms=/aruba|hpe|hp/.test(vendor)?['aruba','hpe']:vendor.includes('forti')?['forti']:vendor?vendor.split(/\s+/):[];
+  const files=all?discoveredStencils:discoveredStencils.filter(f=>terms.some(t=>filePath(f).toLowerCase().includes(t)));
+  let indexed=0;for(const file of files){if(!$('dialog').open||modalGeneration!==generation)return;status.textContent='Searching '+(++indexed)+' / '+files.length+': '+filePath(file);await new Promise(r=>setTimeout(r,0));try{if(!stencilIndexes.has(filePath(file)))await stencilCatalog(file);}catch(e){stencilResults.push({path:filePath(file),message:e.message});}if(modalGeneration!==generation)return;render();}
+  status.textContent='Searched '+files.length+' stencil files. '+stencilResults.length+' import results available under Hardware.';
+ }
+ button(bar,'Search vendor stencils',()=>index(false),'primary');button(bar,'Search all stencil folders',()=>index(true));render();
+ if(discoveredStencils.length)await index(false);
+}
+function editCablePoints(item){
+ if(!item)return;let points=item.points.map(p=>[...p]);const body=modal('Edit cable bend points');body.append(el('p','Port endpoints stay attached. Moving a bend adjusts adjacent segments to keep the cable horizontal and vertical.','hint'));
+ const area=el('div');body.append(area);
+ function render(){
+  area.replaceChildren();const table=el('table','','bend-table'),head=el('tr');for(const name of ['Point','X','Y','Action'])head.append(el('th',name));table.append(head);
+  points.forEach((p,i)=>{const row=el('tr'),end=i===0||i===points.length-1;row.append(el('th',end?(i===0?'Start port':'End port'):'Bend '+i));
+   const inputs=p.map((v,axis)=>{const td=el('td'),n=el('input');n.type='number';n.step=1;n.value=Math.round(v*100)/100;n.disabled=end;n.setAttribute('aria-label',(end?(i===0?'Start port':'End port'):'Bend '+i)+' '+(axis?'Y':'X'));td.append(n);row.append(td);return n;});
+   if(!end)for(const n of inputs)n.onchange=()=>task(()=>{if(inputs.some(n=>n.value===''))throw Error('Enter both bend coordinates.');points=moveCablePoint(points,i,+inputs[0].value,+inputs[1].value);render();});
+   const td=el('td');if(!end)button(td,'Remove',()=>{points=removeCablePoint(points,i);render();});else td.textContent='Attached';row.append(td);table.append(row);
+  });area.append(table);
+  const grid=el('div','','form-grid');area.append(grid);const segment=field(grid,'Segment to add bends',0,points.slice(1).map((p,i)=>[i,'Segment '+(i+1)+' ('+Math.round(points[i][0])+', '+Math.round(points[i][1])+' to '+Math.round(p[0])+', '+Math.round(p[1])+')'])),offset=field(grid,'Bend offset (page units)',20);offset.type='number';offset.step=1;
+  button(actions(area),'Add bends',()=>{if(offset.value===''||!Number.isFinite(+offset.value)||+offset.value===0)throw Error('Use a nonzero bend offset.');points=addCableBends(points,+segment.value,+offset.value);render();});
+ }
+ render();const bar=actions(body);button(bar,'Save bend points',()=>{cablePoint=-1;changeCablePoints(item,points);close();say('Cable bend points saved.');},'primary');button(bar,'Cancel',close);
+}
+function editDrawingObject(key){
+ const page=pages[active];if(!page)return;const objects=drawingObjects(page),item=objects.find(i=>i.editKey===key)||objects[0];if(!item)return;
+ const body=modal('Edit drawing object'),options=objects.map((i,n)=>[i.editKey,(i.parent?'Panel detail: ':'')+(i.value||i.name||i.type+' '+(n+1)).slice(0,100)]);
+ const select=field(body,'Drawing object',item.editKey,options);select.onchange=()=>editDrawingObject(select.value);
+ const normalized=item.normalized,factor=normalized?100:1,grid=el('div','','form-grid');body.append(grid);const inputs={};
+ for(const k of ['path','vector'].includes(item.type)?[]:item.type==='arttext'?['x','y','w']:['x','y','w','h']){inputs[k]=field(grid,({x:'Left',y:'Top',w:'Width',h:'Height'})[k]+(normalized?' (%)':' (page units)'),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
+ if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.size=field(body,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=field(body,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=field(body,'Alignment',item.align||'left',['left','center','right']);}
+ else inputs.name=field(body,'Object name',item.name||'');
+ const linkedSwatch=item.legendEntry&&item.type==='rect';
+ for(const k of ['rect','vector'].includes(item.type)?linkedSwatch?['stroke']:['fill','stroke']:[]){inputs[k]=field(body,k[0].toUpperCase()+k.slice(1),item[k]||'#17364A');}
+ const picker=['path','text','arttext'].includes(item.type)||linkedSwatch?colorPicker(body,{kind:item.type==='path'||linkedSwatch?'line':'text',color:linkedSwatch?item.fill:item.color,opacity:item.opacity??1,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
+ if(item.type==='path'||linkedSwatch){body.append(el('p','Color and opacity apply to every cable of this link type and its legend entries.','hint'));button(actions(body),'Configure link titles and descriptions',()=>linkStyleOptions(item.linkType));}
+ if(['rect','path','vector'].includes(item.type)){inputs.weight=field(body,'Line width',item.weight||1);inputs.weight.type='number';inputs.weight.step=.1;}
+ if(item.type==='vector')inputs.commands=field(body,'Vector commands (JSON, normalized coordinates)',JSON.stringify(item.commands),'multiline');
+ if(item.type==='path'){const bar=actions(body);button(bar,'Edit bend points',()=>editCablePoints(item));if(item.sourceLink)button(bar,'Connect endpoints',()=>connectSelectedCable(item));}
+ const bar=actions(body);button(bar,'Save object',()=>{
+  const change={};for(const [k,input] of Object.entries(inputs)){if(['x','y','w','h','size','weight'].includes(k)){const n=Number(input.value)/(normalized&&(['x','y','w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||['w','h','size','weight'].includes(k)&&n<=0)throw Error('Use a valid positive size and finite position.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
+  if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
+  if(item.labelRole&&change.size<12)throw Error('Link labels need a font size of at least 12.');
+  const clean=cleanDrawingEdits({[item.editKey]:change})[item.editKey];if(!clean||Object.keys(clean).length!==Object.keys(change).length)throw Error('Use hex colors, valid text settings, and finite dimensions.');
+  if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
+  else if(item.legendEntry&&item.linkType&&clean.value!==editableText(item)){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:clean.value},{[item.editKey]:patch});}
+  else if(item.legendEntry&&item.linkType){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};if(project.layout?.drawingEdits?.[item.editKey]?.value==null)delete patch.value;setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});}
+  else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}});picker?.remember();close();say('Drawing object saved.');
+ },'primary');
+ button(bar,'Reset object',()=>{const next={...project.layout?.drawingEdits};delete next[item.editKey];if(item.legacyEditKey)delete next[item.legacyEditKey];setDrawingEdits(next);close();});
+ if(item.type!=='device'&&item.type!=='path')button(bar,'Hide object',()=>{setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:item.type==='vector'?{commands:[]}:item.type==='arttext'?{value:''}:{hidden:true}});close();});
+ if(item.type==='device'){const device=project.devices.find(d=>d.id===item.sourceId);if(device){button(bar,'Device details',()=>editDevice(device));button(bar,'Find stencil',()=>deviceStencil(device));if(item.asset)button(bar,'Map ports',()=>editAnchors(project.stencils[device.stencilId]));}if(item.asset)body.append(el('p',item.asset.native?'Vector details remain independently editable in the Visio export.':'This stencil contains a picture. Its image can be replaced and resized; map its ports under Map ports.','hint'));}
+ button(bar,'Reset page edits',()=>{const next={...project.layout?.drawingEdits},prefix=page.name+'|',scope=(page.editScope||page.name)+'|';for(const k of Object.keys(next))if(k.startsWith(prefix)||k.startsWith(scope))delete next[k];for(const o of objects)if(o.legacyEditKey)delete next[o.legacyEditKey];setDrawingEdits(next);close();});
+}
+$('edit-drawing').onclick=()=>{editDrawing=!editDrawing;$('edit-drawing').setAttribute('aria-pressed',String(editDrawing));$('canvas').classList.toggle('editing',editDrawing);syncDrawingSelection();say(editDrawing?'Drag items to move. Shift-click to select multiple items, then use alignment tools. Double-click or Edit selected to change text and style. Alt-drag a panel detail to move it independently. Hold Space to pan.':'Click a device to find its stencil. Drag to pan; scroll to zoom.');};
+function hardware(){stencilDevice=null;
+ const body=modal('Hardware library');body.append(el('p','Import Visio stencils, drawing or template masters, images, or a hardware pack. Folder import searches every subfolder. Legacy picture masters open locally; other legacy artwork can use installed desktop Visio in the Windows app.','hint'));
+ const bar=actions(body);button(bar,'Import shapes',()=>$('art-file').click(),'primary');button(bar,'Import stencil folder',()=>$('art-folder').click());if(discoveredStencils.length)button(bar,'Browse found stencils ('+discoveredStencils.length+')',browseStencils);button(bar,'Save hardware pack',()=>download(JSON.stringify({format:'NDS-hardware',schema:1,stencils:Object.values(project.stencils),optics:project.optics}),'NetworkDiagramStudio-hardware.json'));
  if(pages.length)button(bar,'Export Visio stencil',async()=>download(await exportStencil(scoped(),pages),slug(project.name)+'-hardware.vssx'));
+ if(stencilResults.length)button(bar,'Import results ('+stencilResults.length+')',importResults);
  const shapes=Object.values(project.stencils);
  for(const shape of shapes){const info=el('div');info.append(el('strong',shape.name),el('div',shape.view+'  |  '+Object.keys(shape.anchors).length+' mapped ports','asset-info'));const row=line(body,info);button(row,'Map ports',()=>editAnchors(shape));}
  if(shapes.length){body.append(el('h3','Core uplink module shapes'));
@@ -230,26 +523,30 @@ function hardware(){
   }
   body.append(el('p','Assign a front panel in Device details.','hint'));}
 }
+function importResults(){const body=modal('Import results');for(const r of stencilResults.slice(-50))body.append(el('p',r.path+': '+r.message,'error'));button(actions(body),'Back to hardware',hardware);}
 async function importArt(files){
+ const before=Object.keys(project.stencils).length,errorsBefore=stencilResults.length;
  for(const f of files){
   if(f.size>160*1024*1024)throw Error('Stencil file exceeds 160 MB.');
-  if(/\.vss$/i.test(f.name))throw Error('Save the legacy stencil as .vssx in desktop Visio or run scripts/convert-stencil.ps1 from the source package.');
   if(/\.json$/i.test(f.name)){
    const pack=JSON.parse(await f.text());if(pack.format!=='NDS-hardware'||pack.schema!==1||!Array.isArray(pack.stencils))throw Error('Invalid hardware pack.');
    const shapes=pack.stencils.map(cleanStencil);for(const s of shapes){project.stencils[s.id]=s;assignMatching(s);}for(const [k,id] of Object.entries(pack.optics||{}))if(['sr','fg_sr','lr','dac'].includes(k)&&project.stencils[id])project.optics[k]=id;
-  }else if(/\.(vsdx|vssx)$/i.test(f.name)){
-   const cat=await openVisioCatalog(f);
+  }else if(visioFile(f.name)){
+   const cat=await stencilCatalog(f);
    if(!cat.items.length)throw Error('No masters in '+f.name);
    const selection=await new Promise(resolve=>{
     const body=modal('Choose Visio masters');body.append(el('p','Select the device and module views to import.','hint'));
-    const sel=el('select');sel.multiple=true;sel.size=Math.min(14,cat.items.length);sel.setAttribute('aria-label','Visio masters');for(const item of cat.items){const op=el('option',item.name);op.value=item.key;sel.append(op);}body.append(sel);
-    const a=actions(body),ok=el('button','Import selected','primary');const end=()=>{resolve([]);};$('dialog').addEventListener('close',end,{once:true});ok.onclick=()=>{$('dialog').removeEventListener('close',end);resolve([...sel.selectedOptions].map(x=>x.value));};a.append(ok);
+    const query=field(body,'Search masters','');query.type='search';query.placeholder='Model, SKU, or master name';const info=el('p','','hint'),sel=el('select'),selected=new Set();sel.multiple=true;sel.size=Math.min(14,cat.items.length);sel.setAttribute('aria-label','Visio masters');body.append(info,sel);
+    const a=actions(body),all=el('button','Select all shown'),clear=el('button','Clear selection'),ok=el('button','Import selected','primary');
+    function count(){info.textContent=sel.options.length+' of '+cat.items.length+' masters shown. '+selected.size+' selected.';ok.disabled=!selected.size;}
+    function render(){sel.replaceChildren(...filterStencilMasters(cat.items,query.value).map(item=>{const op=el('option',item.name);op.value=item.key;op.selected=selected.has(item.key);return op;}));count();}
+    sel.onchange=()=>{for(const op of sel.options){if(op.selected)selected.add(op.value);else selected.delete(op.value);}count();};query.oninput=render;all.onclick=()=>{for(const o of sel.options)selected.add(o.value);render();};clear.onclick=()=>{selected.clear();render();};a.append(all,clear);const end=()=>{resolve([]);};$('dialog').addEventListener('close',end,{once:true});ok.onclick=()=>{$('dialog').removeEventListener('close',end);resolve([...selected]);};a.append(ok);render();query.focus();
    });
    let failed=[];for(const key of selection){try{const shape=await cat.load(key);project.stencils[shape.id]=shape;assignMatching(shape);}catch(e){failed.push((cat.items.find(i=>i.key===key)?.name||key)+': '+e.message);}}
-   if(failed.length)project.warnings.push(...failed);
+   if(failed.length){project.warnings.push(...failed);stencilResults.push({path:filePath(f),message:failed.join(' / ')});}
   }else{const s=await loadImageStencil(f);project.stencils[s.id]=s;assignMatching(s);}
  }
- perform();hardware();say('Hardware library updated.');
+ const target=project.devices.find(d=>d.id===stencilDevice);perform();const added=Object.keys(project.stencils).length-before;if(stencilResults.length>errorsBefore&&!added)importResults();else if(target)await deviceStencil(target);else hardware();say(added+' hardware shapes added.'+(stencilResults.length>errorsBefore?' Review the import results.':''));
 }
 $('site').oninput=()=>{project.name=$('site').value;perform();};
 $('filter').oninput=deviceList;$('close').onclick=close;
@@ -260,11 +557,29 @@ $('sample').onclick=sample;$('hardware').onclick=hardware;$('review-links').oncl
 $('arrange').onclick=arrange;$('evidence').onclick=evidence;
 $('add-link').onclick=()=>editLink();$('add-device').onclick=()=>editDevice();
 $('warnings').onclick=()=>{const b=modal('Import review');const ul=el('ul');for(const w of project.warnings)ul.append(el('li',warningText(w)));b.append(ul);};
-$('open').onclick=()=>$('project-file').click();$('save').onclick=()=>{download(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project}),slug(project.name)+'.nds.json');dirty=false;say('Project downloaded.');};
+$('open').onclick=()=>$('project-file').click();$('save').onclick=()=>{download(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project}),slug(project.name)+'.nds.json');projectHistory.markSaved();dirty=false;say('Project downloaded.');};
 $('import').onclick=()=>$('data-files').click();
 $('paste').onclick=()=>{const b=modal('Paste configuration / commands');const n=field(b,'Device name or filename hint','device.cfg');const t=field(b,'Configuration or show-command output','','multiline');button(actions(b),'Import text',()=>ingest([new File([t.value],n.value||'device.cfg',{type:'text/plain'})]),'primary');};
 $('data-files').onchange=e=>{const fs=Array.from(e.target.files);e.target.value='';task(()=>ingest(fs));};
-$('project-file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f||!checkDiscard())return;task(async()=>{if(f.size>160*1024*1024)throw Error('Project exceeds 160 MB.');const p=loadProject(JSON.parse(await f.text()));project=p;evidenceSnapshot=project.evidence?snapshot():null;active=0;dirty=false;draw();say('Project opened.');});};
+$('project-file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f||!checkDiscard())return;task(async()=>{if(f.size>160*1024*1024)throw Error('Project exceeds 160 MB.');const p=loadProject(JSON.parse(await f.text()));viewport.reset();project=p;if(project.evidence){composeEvidence(project);initialScope();for(const shape of Object.values(project.stencils))assignMatching(shape);}evidenceSnapshot=project.evidence?snapshot():null;resetDrawingHistory();active=0;dirty=false;draw();say('Project opened.');});};
+function discoverStencils(files){
+ const found=stencilFiles(files),known=new Set(discoveredStencils.map(f=>filePath(f)+'|'+f.size+'|'+f.lastModified));
+ for(const f of found){const key=filePath(f)+'|'+f.size+'|'+f.lastModified;if(!known.has(key)){discoveredStencils=discoveredStencils.filter(old=>filePath(old)!==filePath(f));stencilIndexes.delete(filePath(f));openCatalogs.delete(filePath(f));discoveredStencils.push(f);known.add(key);}}
+ discoveredStencils.sort((a,b)=>filePath(a).localeCompare(filePath(b),'en',{numeric:true}));
+ say('Found '+found.length+' Visio files in the selected folder and subfolders.');const target=project.devices.find(d=>d.id===stencilDevice);return target?deviceStencil(target):browseStencils();
+}
+function browseStencils(){
+ const body=modal('Stencil folders');body.append(el('p',discoveredStencils.length+' Visio files found. Choose a file, then select the hardware masters to include.','hint'));
+ const search=field(body,'Search folders and stencil filenames','');search.type='search';const listing=el('div');body.append(listing);
+ const render=()=>{listing.replaceChildren();const matches=discoveredStencils.filter(f=>filePath(f).toLowerCase().includes(search.value.toLowerCase()));
+  for(const f of matches.slice(0,150)){const row=line(listing,el('div',filePath(f)));button(row,'Choose masters',async()=>{try{await importArt([f]);}catch(e){stencilResults.push({path:filePath(f),message:e.message});browseStencils();}});}
+  if(matches.length>150)listing.append(el('p','Showing 150 of '+matches.length+' files. Refine the search to see more.','hint'));
+  if(!matches.length)listing.append(el('p','No matching Visio files.','hint'));
+ };search.oninput=render;render();
+ if(stencilResults.length){body.append(el('h3','Import results'));for(const r of stencilResults.slice(-50))body.append(el('p',r.path+': '+r.message,'error'));}
+ button(actions(body),'Back to hardware',hardware);
+}
+$('art-folder').onchange=e=>{const fs=Array.from(e.target.files);e.target.value='';if(fs.length)task(()=>discoverStencils(fs));};
 $('art-file').onchange=e=>{const fs=Array.from(e.target.files);e.target.value='';if(fs.length)task(()=>importArt(fs));};
 $('svg').onclick=()=>download(pages[active].svg,slug(project.name)+'-'+slug(pages[active].name)+'.svg','image/svg+xml');
 $('export').onclick=()=>task(async()=>{download(await exportVisio(scoped(),pages),slug(project.name)+'.vsdx');say('Editable Visio drawing exported.');});
@@ -274,7 +589,10 @@ $('print').onclick=()=>{
  if(window.NDSDesktop)window.NDSDesktop.print();else window.print();
 };
 window.addEventListener('afterprint',()=>$('print-set').replaceChildren());
-for(const ev of ['dragover','drop'])document.addEventListener(ev,e=>{if(![...e.dataTransfer.types].includes('Files'))return;e.preventDefault();$('drop').classList.toggle('dragover',ev==='dragover');if(ev==='drop'){const fs=Array.from(e.dataTransfer.files);if(fs.length)task(()=>ingest(fs));}});
+for(const ev of ['dragover','drop'])document.addEventListener(ev,e=>{
+ if(![...e.dataTransfer.types].includes('Files'))return;e.preventDefault();$('drop').classList.toggle('dragover',ev==='dragover');
+ if(ev==='drop'){const items=Array.from(e.dataTransfer.items),fallback=Array.from(e.dataTransfer.files);task(async()=>{const files=await droppedFiles(items,fallback),art=files.filter(f=>visioFile(f.name)),data=files.filter(f=>!visioFile(f.name)&&/\.(txt|cfg|conf|config|log|rsc|cli|xml|exp|csv|xlsx)$/i.test(f.name));if(data.length)await ingest(data);if(art.length)discoverStencils(art);else if(!data.length)say('No supported site data or Visio stencils were found.');});}
+});
 document.addEventListener('dragleave',()=> $('drop').classList.remove('dragover'));
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 draw();window.NDSDesktop?.ready();

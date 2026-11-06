@@ -4,6 +4,7 @@
 
 - **EMFJS, from rtf.js 3.0.9.** The browser includes the pinned renderer locally to display eligible EMF artwork from a user-selected stencil. Copyright Thomas Bluemel and Tom Zoehner. Distributed under the MIT license. [Upstream](https://github.com/tbluemel/rtf.js) · [License](../src/web/vendor/EMFJS-LICENSE.txt) · [Distribution notice](../src/web/vendor/NOTICE.txt)
 - **NetBox Community Device Type Library.** Selected model, manufacturer, SKU and interface facts were derived from snapshot 7530643cb38decaa1cba31e901892b9131315239 under CC0 1.0 Universal. [Source](https://github.com/netbox-community/devicetype-library/tree/7530643cb38decaa1cba31e901892b9131315239/device-types) · [CC0 notice](../src/web/imports/NETBOX-LICENSE.txt)
+- The owner’s Switchport Diagram Builder hardware facts (85a4673a5a08c45d1f0e65218b4865d25ea4ecfc) and Configuration Inspector bank facts/legacy picture reader (675a806eeb893a55b2272be9fb7e914bac06ee03) informed the new catalog and binary import subset. Manufacturer references remain with the data. Binary format descriptions were checked against [Document Liberation Project libvisio](https://github.com/LibreOffice/libvisio). Manufacturer artwork is not bundled.
 - Additional inventory identifiers and their provenance are documented in the hardware reference. Manufacturer artwork supplied by a user remains subject to its original terms. [Hardware support](HARDWARE_SUPPORT.md)
 
 ## Windows distribution

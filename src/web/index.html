@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NetworkDiagramStudio</title><link rel="stylesheet" href="./style.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NetworkDiagramStudio</title><link rel="icon" type="image/svg+xml" href="./assets/app-icon.svg"><link rel="stylesheet" href="./style.css"></head>
 <body>
-<header class="appbar"><div class="brand"><strong>NetworkDiagramStudio</strong><span>Site documentation</span></div><div class="toolbar"><button id="new">New project</button><button id="open">Open project</button><button id="save">Save project</button><button id="export" class="primary" disabled>Export Visio</button></div></header>
+<header class="appbar"><div class="brand"><img class="app-icon" src="./assets/app-icon.svg" width="34" height="34" alt=""><strong>NetworkDiagramStudio</strong><span>Site documentation</span></div><div class="toolbar"><button id="new">New project</button><button id="open">Open project</button><button id="save">Save project</button><button id="export" class="primary" disabled>Export Visio</button></div></header>
 <main>
 <aside aria-label="Project workspace">
   <section><p class="eyebrow">PROJECT</p><label for="site">Site name</label><input id="site" maxlength="120" value="Untitled site"></section>
@@ -12,13 +12,16 @@
   <section><div class="section-head"><h2>Hardware</h2><button id="hardware">Manage</button></div><p id="art-count" class="hint">Local stencil library</p></section>
 </aside>
 <div class="stage">
-<div class="stagebar"><div><p class="eyebrow">DRAWING SET</p><h1 id="heading">Untitled site</h1></div><div class="toolbar"><button id="svg" disabled>Save page SVG</button><button id="print" disabled>Print / PDF</button></div></div>
+<div class="stagebar"><div><p class="eyebrow">DRAWING SET</p><h1 id="heading">Untitled site</h1></div><div class="toolbar"><div class="zoom-tools" aria-label="Diagram zoom"><button id="zoom-out" aria-label="Zoom out">-</button><span id="zoom-level" aria-live="polite"></span><button id="zoom-in" aria-label="Zoom in">+</button><button id="zoom-fit">Fit page</button></div><button id="link-styles">Link styles</button><button id="page-options">Page options</button><button id="port-map-options" hidden>Port map options</button><button id="edit-drawing" aria-pressed="false">Edit drawing</button><button id="svg" disabled>Save page SVG</button><button id="print" disabled>Print / PDF</button></div></div>
 <div id="feedback" role="status" aria-live="polite"></div><button id="warnings" class="warning" hidden></button>
 <div id="tabs" class="tabs" role="tablist" aria-label="Drawing pages"></div>
+<div id="drawing-tools" class="drawing-tools" hidden aria-label="Drawing alignment tools"><span id="drawing-selection">0 selected</span><button id="drawing-properties">Edit selected</button><button id="drawing-snap">Snapping</button><button data-align="left">Align left</button><button data-align="center-x">Align centers</button><button data-align="right">Align right</button><button data-align="top">Align top</button><button data-align="center-y">Align middles</button><button data-align="bottom">Align bottom</button><button data-align="space-x">Space horizontally</button><button data-align="space-y">Space vertically</button><button id="drawing-clear">Clear selection</button><button id="drawing-undo">Undo</button><button id="drawing-redo">Redo</button><button id="drawing-undo-all">Undo all</button></div>
+<div id="cable-tools" class="drawing-tools cable-tools" hidden aria-label="Cable bend tools"><span id="cable-point-info">Select a cable</span><button id="cable-remove-point">Remove point</button><button id="cable-edit-points">Edit bend points</button><button id="cable-endpoints">Connect endpoints</button><span>Port endpoints stay attached.</span></div>
 <div id="canvas"><div id="welcome"><p class="eyebrow">NEW DRAWING</p><h2>Build a site diagram</h2><p>Start with device configurations and Auvik data, or explore the editable example.</p><button id="sample">Open sample site</button></div></div>
 <div class="statusbar"><span id="stats">0 devices</span><span>Local workspace</span></div>
 </div></main>
-<input hidden id="data-files" type="file" multiple accept=".txt,.cfg,.conf,.config,.log,.rsc,.cli,.xml,.exp,.csv,.xlsx"><input hidden id="project-file" type="file" accept=".json,.nds"><input hidden id="art-file" type="file" multiple accept=".vssx,.vsdx,.vss,.png,.jpg,.jpeg,.json">
+<input hidden id="data-files" type="file" multiple accept=".txt,.cfg,.conf,.config,.log,.rsc,.cli,.xml,.exp,.csv,.xlsx"><input hidden id="project-file" type="file" accept=".json,.nds"><input hidden id="art-file" type="file" multiple accept=".vss,.vssx,.vssm,.vsx,.vst,.vstx,.vstm,.vtx,.vsd,.vsdx,.vsdm,.vdx,.png,.jpg,.jpeg,.json">
+<input hidden id="art-folder" type="file" multiple webkitdirectory directory>
 <div id="print-set" aria-hidden="true"></div>
 <dialog id="dialog"><div class="modalhead"><h2 id="dialog-title"></h2><button id="close" aria-label="Close dialog">Close</button></div><div id="dialog-body"></div></dialog>
 <script src="./vendor/emfjs.min.js"></script><script type="module" src="./app.mjs"></script>

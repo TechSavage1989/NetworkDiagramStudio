@@ -27,6 +27,7 @@ def prepare(executable, output):
     web = output / 'NetworkDiagramStudio-web.zip'
     with zipfile.ZipFile(web, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(html, 'NetworkDiagramStudio.html')
+        archive.write(ROOT / 'src/web/assets/app-icon.svg', 'NetworkDiagramStudio-icon.svg')
         for path in (ROOT/'scripts/convert-stencil.ps1', ROOT/'LICENSE', ROOT/'THIRD_PARTY_NOTICES.md', ROOT/'docs/THIRD_PARTY_NOTICES.md'):
             if path.is_file(): archive.write(path, path.name)
         netbox = ROOT/'src/web/imports/NETBOX-LICENSE.txt'

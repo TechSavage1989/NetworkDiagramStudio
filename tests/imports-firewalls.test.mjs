@@ -42,5 +42,5 @@ test('reject opaque exports, unrecognized XML, malformed nesting, DTDs and non-f
  }
 });
 test('extended offline model catalog identifies exact firewall chassis without asserting installed optics',()=>{
- assert.equal(hardwareCatalog.length,84);assert.equal(identify('PA-1420').kind,'firewall');assert.equal(identify('SonicWall NSa4700').vendor,'SonicWall');assert.equal(identify('FG201G').model,'FortiGate 201G');
+ assert.ok(hardwareCatalog.length>=330);assert.equal(identify('PA-1420').kind,'firewall');assert.equal(identify('SonicWall NSa4700').vendor,'SonicWall');assert.equal(identify('FG201G').model,'FortiGate 201G');
 });

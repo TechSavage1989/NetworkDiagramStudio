@@ -1,8 +1,12 @@
 import {profiles} from './profiles.mjs';
 import {firewallProfiles} from './firewall-profiles.mjs';
 import {switchIdentities} from './switch-identities.mjs';
+import {faceplates} from './faceplates.mjs';
 
-export const hardwareCatalog=[...profiles,...firewallProfiles];
+const physicalProfiles=faceplates.flatMap(p=>p.models.map(model=>({model:p.vendor==='Fortinet'?model.replace('FG-','FortiGate '):model,sku:model,vendor:p.vendor,kind:/Fortinet|SonicWall|Sophos|Palo Alto|Netgate|Deciso/.test(p.vendor)||/^(?:SRX|ASA|FPR|Firepower)/i.test(model)?'firewall':'switch',source:p.source,interfaces:p.sockets?p.sockets.filter(s=>!s[4]).map(s=>[(p.naming==='cx'?'1/1/':'')+s[0],s[3]]):p.banks.flatMap(b=>b.names.map(n=>[n,b.form]))})));
+// Manufacturer guides correct two imported capability records without rewriting their snapshot.
+const correctedFirewalls=firewallProfiles.map(p=>p.sku==='ASA5505'?{...p,manufacturerReference:'https://andovercg.com/datasheets/cisco-asa5505guide-ASA5505HIG.pdf',interfaces:p.interfaces.filter(([name])=>name!=='Ethernet1/0')}:p.sku==='NSA3700'?{...p,manufacturerReference:'https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4162.pdf',interfaces:p.interfaces.map(([name,form])=>[name,/^X2[4-7]$/.test(name)?'5gbase-x-sfpp':form])}:p);
+export const hardwareCatalog=[...physicalProfiles.filter(p=>![...profiles,...correctedFirewalls].some(q=>q.sku===p.sku||q.model===p.model)),...profiles,...correctedFirewalls];
 const exact = new Map();
 const normalize = x => String(x||'').trim().toUpperCase().replace(/[^A-Z0-9+]/g,'');
 for(const [family,os,skus] of switchIdentities)for(const sku of skus.split(' ')){
@@ -11,10 +15,12 @@ for(const [family,os,skus] of switchIdentities)for(const sku of skus.split(' '))
 for(const p of hardwareCatalog) {
   const vendor=p.vendor==='HPE'?'HPE Aruba':p.vendor;
   const item={kind:p.kind,vendor,model:p.vendor==='Fortinet'?p.model:p.sku||p.model,sku:p.sku};
-  for(const alias of [p.model,p.sku,p.source.split('/').at(-1).replace(/\.yaml$/,'')]){
+  for(const alias of [p.model,p.sku,/\.yaml$/.test(p.source)?p.source.split('/').at(-1).replace(/\.yaml$/,''):'']){
     if(alias)exact.set(normalize(alias),item);
   }
 }
+exact.set('FG2H0G',{kind:'firewall',vendor:'Fortinet',model:'FortiGate 200G',sku:'FG-200G'});
+exact.set('FG2H1G',{kind:'firewall',vendor:'Fortinet',model:'FortiGate 201G',sku:'FG-201G'});
 export function identify(label='',description=''){
   const tokens = [label,...label.split(/[\s,;()]+/),...description.split(/[\s,;()]+/)];
   for(const item of tokens){

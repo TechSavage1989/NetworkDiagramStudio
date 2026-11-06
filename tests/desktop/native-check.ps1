@@ -48,6 +48,8 @@ try {
     $p = Start-Process $target -ArgumentList @('--test-timer',('"'+$report+'"')) -PassThru
     if (!$p.WaitForExit(360000) -or $p.ExitCode -ne 0 -or !(Test-Path $report)) { throw 'Real-window timer test failed.' }
     Get-Content $report | Write-Host
+    & python "$root/scripts/check-visio-package.py" $work
+    if ($LASTEXITCODE) { throw 'The native Visio download failed package validation.' }
     $sentinel = Join-Path $store 'qa-setting.txt'
     'preserve-this-setting' | Set-Content $sentinel
     Stage 'Installing an intentionally unhealthy release to exercise rollback.'

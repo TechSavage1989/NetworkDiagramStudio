@@ -82,7 +82,7 @@ function mergeRoutes(routes, incoming) {
   }
 }
 export function mergeModels(...models) {
-  const devices = new Map(), links = new Map(), occupied = new Map(), warnings = new Set();
+  const devices = new Map(), links = new Map(), occupied = new Map(), warnings = new Set(), reported=[];
   for (const model of models.flat()) {
     for (const warning of model.warnings || []) warnings.add(warning);
     for (const input of model.devices || []) {
@@ -103,6 +103,24 @@ export function mergeModels(...models) {
     for (const entry of model.links || []) {
       const e = {...entry, a:deviceId(entry.a), b:deviceId(entry.b), ap:portName(entry.ap), bp:portName(entry.bp)};
       if (!e.a || !e.b || !e.ap || !e.bp) continue;
+      reported.push(e);
+    }
+  }
+  // Reconcile only an existing adjacency with an explicit description naming a
+  // known device AND a known far-end jack. Keep the original report for review.
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  for(const e of reported){
+    for(const [local,lp,remote,rp,field] of [[e.a,e.ap,e.b,e.bp,'bp'],[e.b,e.bp,e.a,e.ap,'ap']]){
+      const from=devices.get(local),to=devices.get(remote),description=from?.ports.find(p=>deviceId(p.name)===deviceId(lp))?.description;
+      if(!to?.fromConfig||!description)continue;
+      const desc=norm(description),stem=norm(to.name.replace(/(?:[-_ ](?:\d+[A-Z]|FG-?\d+[A-Z]))$/i,''));
+      if(stem.length<6)continue;
+      const candidates=to.ports.filter(p=>{const n=norm(p.name);return n&&desc.endsWith(stem+n)&&!['logical','aggregate','virtual'].includes(p.type)&&!p.parent;});
+      if(candidates.length!==1||deviceId(candidates[0].name)===deviceId(rp))continue;
+      e.reportedEndpoints||=[];e.reportedEndpoints.push({a:e.a,ap:e.ap,b:e.b,bp:e.bp});
+      e[field]=candidates[0].name;e.endpointSource='configuration description';e.status='inferred';
+      warnings.add(from.name+' '+lp+': reported peer '+to.name+' '+rp+' differs from the explicit configuration description. Drawing uses '+e[field]+'; verify the connection.');
+    }
       let ends = [[e.a,deviceId(e.ap)],[e.b,deviceId(e.bp)]].map(key);
       if (ends[0] === ends[1]) continue;
       const id = key([...ends].sort());
@@ -112,7 +130,6 @@ export function mergeModels(...models) {
         if (!occupied.has(endpoint)) occupied.set(endpoint,new Set());
         occupied.get(endpoint).add(id);
       }
-    }
   }
   for (const [endpoint,ids] of occupied) if (ids.size > 1) {
     warnings.add(JSON.parse(endpoint).join(' ') + ' has multiple reported peers. Verify physical adjacency.');
@@ -132,8 +149,8 @@ export function mergeModels(...models) {
         warnings.add(d.name+' '+port+' is reported down but has a reported peer.');
       }
     }
-    if(!meaningful(e.media) && e.status!=='conflict' && physical.some(p=>/base-t$/i.test(p)) &&
-       physical.every(p=>/base-t$/i.test(p))) e.media='copper';
+    if(!meaningful(e.media) && e.status!=='conflict' && physical.some(p=>/(?:base-t$|^RJ.?45$)/i.test(p)) &&
+       physical.every(p=>/(?:base-t$|^RJ.?45$)/i.test(p))) e.media='copper';
     e.media ||= 'unknown'; e.speed ||= ''; e.status ||= 'observed';
   }
   return {devices:[...devices.values()], links:[...links.values()],warnings:[...warnings]};

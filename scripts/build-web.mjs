@@ -13,11 +13,13 @@ for(const path of files){
   });
   imports[key(path)]='data:text/javascript;base64,'+Buffer.from(source).toString('base64');
 }
+const icon='data:image/svg+xml;base64,'+Buffer.from(await readFile(resolve(root,'assets/app-icon.svg'))).toString('base64');
 const stylesheet=await readFile(resolve(root,'style.css'),'utf8');
 const emf=await readFile(resolve(root,'vendor/emfjs.min.js'),'utf8');
 const noticeFiles=['vendor/NOTICE.txt','vendor/EMFJS-LICENSE.txt','imports/NETBOX-LICENSE.txt'];
 const notices=(await Promise.all(noticeFiles.map(p=>readFile(resolve(root,p),'utf8')))).join('\n\n');
 const html=(await readFile(resolve(root,'index.html'),'utf8'))
+  .replaceAll('./assets/app-icon.svg',()=>icon)
   .replace('<link rel="stylesheet" href="./style.css">',()=>'<style>'+stylesheet+'</style>')
   .replace('<script src="./vendor/emfjs.min.js"></script>',()=>'<script>'+emf.replace(/<\/script/gi,'<\\/script')+'</script>')
   .replace('<script type="module" src="./app.mjs"></script>',()=>'<script type="importmap">'+JSON.stringify({imports})+'</script>\n<script type="module">import "nds/app.mjs";</script>')

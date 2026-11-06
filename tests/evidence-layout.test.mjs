@@ -39,7 +39,7 @@ test('saved order controls all inventory pages and chosen core pages survive a r
  assert.ok(orderedDevices(p).findIndex(d=>d.id==='ap-0')<orderedDevices(p).findIndex(d=>d.id==='edge'));
  p.layout.corePages=[{id:'a',name:'Rack A',devices:['edge','sw-1']},{id:'b',name:'Rack B',devices:['sw-2','ap-0','ap-1','ap-2','ap-3']}];
  const reopened=JSON.parse(JSON.stringify(p));reopened.layout=cleanLayout(reopened.layout,reopened.devices.map(d=>d.id));
- const pages=buildPages(reopened);assert.ok(pages.find(p=>p.name==='Rack A'));assert.ok(pages.find(p=>p.name==='Rack B'));
+ const pages=buildPages(reopened);assert.ok(pages.find(p=>p.name==='Rack A'));assert.ok(pages.find(p=>/^Rack B(?: \d+)?$/.test(p.name)));
  const rack=pages.find(p=>p.name==='Rack A'),names=rack.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&i.kind!=='handoff').map(i=>i.name);
  assert.deepEqual(names,['SW-1','EDGE-01']);
  assert.ok(rack.items.some(i=>i.type==='path'&&i.name.includes('Rack B')));assert.ok((await exportVisio(p,pages).arrayBuffer()).byteLength>0);

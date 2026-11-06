@@ -11,6 +11,8 @@ var good=Feed(Policy.AssetUri(tag).ToString(),"sha256:"+hash);
 Test(Policy.Select(good,"0.1.0-preview.1")?.Tag==tag);
 Test(Policy.Select(good,"0.1.1")==null && Policy.Select(good,"0.1.0")==null);
 Test(Policy.Select(good,"0.1.1-preview.1")==null);
+Test(Policy.LatestPublished(good,"0.1.2-preview.1")==tag);
+Test(Policy.LatestPublished(good,"0.1.0")==null);
 Test(Policy.Parse("v0.1.1-preview.2")!.Value.CompareTo(Policy.Parse("v0.1.1-preview.10")!.Value)<0);
 Reject(()=>Policy.Select(Feed("https://example.com/app.exe","sha256:"+hash),"0.1.0-preview.1"));
 Reject(()=>Policy.Select(Feed(Policy.AssetUri(tag).ToString(),"md5:"+hash),"0.1.0-preview.1"));
@@ -30,12 +32,24 @@ try {
         var response=new HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new StringContent("[]")};response.Headers.ETag=new System.Net.Http.Headers.EntityTagHeaderValue("\"one\"");return response;
     }),tmp);
     Test((await client.Check(TimeSpan.Zero))!.Contains("No newer release"));
+    Test(client.Report.Contains(Policy.Feed.ToString()) && client.Report.Contains(Policy.Current) && client.Report.Contains("200 OK") && File.ReadAllText(Path.Combine(tmp,"last-update-check.txt")).Contains("No newer release"));
     Test(await client.Check(TimeSpan.FromSeconds(30))==null && calls==1);
     Test((await client.Check(TimeSpan.Zero))!.Contains("No newer release"));
     Test((await client.Check(TimeSpan.Zero))!.Contains("limited"));
     Test((await client.Check(TimeSpan.Zero))!.Contains("paused") && calls==3);
+    Test((await client.Check(TimeSpan.Zero,true))!.Contains("paused") && calls==3);
     using var fail=new Updater(new FakeHandler(_=>throw new HttpRequestException("offline")),Path.Combine(tmp,"offline"));
     Test((await fail.Check(TimeSpan.Zero))!.Contains("Could not check"));
+    int retries=0;
+    using var recover=new Updater(new FakeHandler(_=>{
+        if(++retries==1)throw new HttpRequestException("offline");
+        return new HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new StringContent("[]")};
+    }),Path.Combine(tmp,"recover"));
+    Test((await recover.Check(TimeSpan.Zero))!.Contains("Could not check"));
+    Test((await recover.Check(TimeSpan.Zero))!.Contains("paused") && retries==1);
+    Test((await recover.Check(TimeSpan.Zero,true))!.Contains("No newer release") && retries==2);
+    using var ahead=new Updater(new FakeHandler(_=>new HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new StringContent(good.Replace(tag,"v0.0.1"))}),Path.Combine(tmp,"ahead"));
+    Test((await ahead.Check(TimeSpan.Zero))!.Contains("ahead of the published feed") && ahead.Report.Contains("Latest published 0.0.1"));
     Console.WriteLine("ETag, 304 cache reuse, offline status, cooldown and Retry-After tests passed.");
 } finally{if(Directory.Exists(tmp))Directory.Delete(tmp,true);}
 sealed class FakeHandler(Func<HttpRequestMessage,HttpResponseMessage> send) : HttpMessageHandler {

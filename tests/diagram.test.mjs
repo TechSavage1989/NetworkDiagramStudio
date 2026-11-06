@@ -25,7 +25,9 @@ test('empty inventories have all five pages, and encoded labels are inert',()=>{
 test('media coloring, source field retention, optics and front access point placement',()=>{
   const ps=buildPages(fixture());
   const core=ps.find(p=>p.name==='Core Network'),wire=ps.find(p=>p.name==='Wireless Connections');
-  assert.equal(core.items.filter(i=>i.kind==='plug'&&i.asset?.id==='optic').length,2);
+  // Only the mapped switch jack has a known optical cage. The unidentified firewall uses its perimeter.
+  assert.equal(core.items.filter(i=>i.kind==='plug'&&i.host&&i.asset?.id==='optic').length,1);
+  assert.ok(core.items.some(i=>i.kind==='plug'&&!i.host&&i.asset?.id==='optic'));
   assert.equal(ps.slice(1).flatMap(p=>p.items).filter(i=>i.kind==='plug').length,0);
   assert.equal(core.items.find(x=>x.type==='path').color,'#FF0000');
   const apPath=wire.items.find(x=>x.type==='path'),ap=wire.items.find(x=>x.kind==='ap');
@@ -39,7 +41,7 @@ test('native ZIP, true groups, explicit foreign image parts, port glue on switch
   const project=fixture(),pages=buildPages(project),blob=exportVisio(project,pages),parts=await unzip(await blob.arrayBuffer());
   for(const key of ['[Content_Types].xml','_rels/.rels','visio/document.xml','visio/masters/masters.xml','visio/pages/pages.xml'])assert.ok(parts.has(key),key);
   const p=text.decode(parts.get('visio/pages/page1.xml'));
-  assert.match(p,/Type="Group"/);assert.match(p,/Type="Foreign" MasterShape="6"/);
+  assert.match(p,/Type="Group"/);assert.match(p,/Type="Foreign"[^>]* MasterShape="6"/);
   assert.match(p,/<ForeignData ForeignType="Bitmap" CompressionType="PNG"/);
   assert.match(p,/FromCell="BeginX".*ToCell="Connections.X\d+"/);assert.match(p,/FromCell="EndX"/);
   assert.match(text.decode(parts.get('visio/pages/_rels/page1.xml.rels')),/relationships\/image/);
@@ -54,7 +56,7 @@ test('pagination and unresolved peer handling keep user interface names',()=>{
   // A cross-page connection has a continuation at both ends.
   assert.equal(new Set(core.flatMap(p=>p.items).filter(i=>i.type==='path').map(i=>i.name.match(/^L\d+/)?.[0])).size,24);
   assert.equal(core.flatMap(p=>p.items).filter(i=>i.kind==='plug').length,0);
-  assert.ok(pages.filter(p=>p.name.startsWith('MDF Port Map')).length>=7);
+  const portPages=pages.filter(p=>p.portMap);assert.ok(portPages.length<=4);assert.equal(new Set(portPages.flatMap(p=>p.portMap.rowNames)).size,96);
   assert.equal(new Set(pages.map(p=>p.name)).size,pages.length);
   assert.deepEqual(pages.map(p=>p.svg),buildPages(p).map(p=>p.svg));
 });
@@ -95,22 +97,21 @@ test('MDF assignments distinguish AP evidence, matching trunk profiles, infrastr
   const backbone={id:'sw',name:'Lab switch',kind:'switch',ports};
   const peer=(id,kind)=>({id,name:id,kind,ports:[]});
   const link=(n,id)=>({a:'sw',ap:n,b:id,bp:'eth0',status:'observed'});
-  const site={devices:[backbone,peer('ap-a','ap'),peer('ap-b','ap'),peer('fw','firewall'),peer('desk','unknown')],
+  const site={layout:{portMap:{density:'expanded'}},devices:[backbone,peer('ap-a','ap'),peer('ap-b','ap'),peer('fw','firewall'),peer('desk','unknown')],
     links:[link('p1','ap-a'),{a:'ap-b',ap:'eth0',b:'sw',bp:'p2',status:'confirmed'},
       link('p6','desk'),link('p7','fw'),{...link('p9','ap-a'),status:'conflict'}],excludedPeerPorts:[['sw','p11']]};
   const pages=buildPages(site).filter(p=>p.title==='MDF Port Map');
   const rows=[];
   for(const page of pages){
-    const cells=page.items.filter(i=>i.type==='text'&&i.y>=389&&i.y<870);
-    for(const portCell of cells.filter(c=>c.x===44&&c.value))rows.push(cells.filter(c=>c.y===portCell.y).map(c=>c.value));
+    const cells=page.items.filter(i=>i.type==='text'&&i.portTableRole),ports=cells.filter(c=>c.portTableRole==='interface'&&!c.value.includes('continued'));
+    for(let i=0;i<ports.length;i++)rows.push(cells.filter(c=>c.y>=ports[i].y&&c.y<(ports[i+1]?.y??870)).map(c=>c.value));
   }
-  const row=n=>rows.find(r=>r[0]===n);
-  assert.deepEqual(row('p1-2').slice(1,6),['AP peer','up','','trunk','12']);
-  assert.equal(row('p3')[1],'Matches AP profile');assert.equal(row('p3')[2],'down');
-  assert.equal(row('p4')[1],'LAG 2 member');assert.equal(row('p5')[1],'Handoff');
-  assert.equal(row('p6')[1],'Other wired peer');assert.equal(row('p7')[1],'Firewall uplink');
-  assert.equal(row('p8')[1],'No peer reported');assert.equal(row('p9')[1],'Peer needs review');
-  assert.equal(row('p10')[1],'Labeled uplink');assert.equal(row('p11')[1],'Peer outside scope');
+  const row=n=>rows.find(r=>r[0]===n),has=(n,text)=>assert.ok(row(n)?.includes(text),n+' should show '+text);
+  has('p1','AP peer');has('p1','ap-a / eth0');has('p1','Up');has('p1','Mode: trunk');has('p1','Native: 12');
+  has('p2','AP peer');has('p2','ap-b / eth0');
+  has('p3','Matches AP profile');has('p3','Down');
+  has('p4','LAG 2 member');has('p5','Handoff');has('p6','Other wired peer');has('p7','Firewall uplink');
+  has('p8','No peer reported');has('p9','Peer needs review');has('p10','Labeled uplink');has('p11','Peer outside scope');
   const onlyOne={...site,links:site.links.filter(l=>l.a!=='ap-b')};
   const labels=buildPages(onlyOne).filter(p=>p.title==='MDF Port Map').flatMap(p=>p.items.filter(i=>i.type==='text'&&i.y>=389));
   assert.ok(!labels.some(c=>c.value==='Matches AP profile'));

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Reflection;
+using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -14,6 +15,7 @@ static class Program
         ApplicationConfiguration.Initialize();
         try
         {
+            if (args is ["--convert-stencil", var stencilNonce, var extension]) return StencilConversion.Run(stencilNonce, extension);
             if (args is ["--apply-update", var token])
             {
                 try { return Installer.Apply(token); }
@@ -49,20 +51,27 @@ internal sealed partial class Studio : Form
     readonly WebView2 browser = new() { Dock = DockStyle.Fill };
     readonly FlowLayoutPanel strip = new() { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(6), BackColor = Color.WhiteSmoke, WrapContents = true };
     readonly Label summary = new() { AutoSize = true, Margin = new Padding(4,8,4,0) };
-    readonly Label status = new() { AutoSize = true, Margin = new Padding(4, 8, 9, 0), Text = "Windows preview" };
+    readonly Label status = new() { AutoSize = true, MaximumSize = new Size(520,0), Margin = new Padding(4, 8, 9, 0), Text = "Windows preview" };
     readonly Button check = ButtonOf("Check updates"), download = ButtonOf("Download"), install = ButtonOf("Install and restart"), notes = ButtonOf("Read more");
     readonly System.Windows.Forms.Timer timer = new() { Interval = 300_000 };
     readonly Updater updater;
     readonly string? token;
-    bool loaded, busy, fetching, ready, healthy;
+    bool loaded, busy, fetching, checking, ready, healthy;
     internal bool IsEditorHealthy => healthy;
     static Button ButtonOf(string text) => new() { Text = text, AutoSize = true, FlatStyle = FlatStyle.System };
     public Studio(string? nonce, Updater? client = null)
     {
         updater = client ?? new Updater();
         token = nonce; Text = "NetworkDiagramStudio"; Width = 1380; Height = 900; MinimumSize = new Size(720, 520);
+        Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
         Controls.Add(browser); Controls.Add(strip); strip.Controls.AddRange([status, check, summary, notes, download, install]);
         var notices = ButtonOf("Notices"); strip.Controls.Add(notices);
+        var updateDetails=ButtonOf("Update details");strip.Controls.Add(updateDetails);
+        updateDetails.Click+=(_,_)=>{
+            using var view=new Form {Text="Update details",Width=780,Height=450,StartPosition=FormStartPosition.CenterParent,Icon=Icon};
+            var report=new TextBox {Dock=DockStyle.Fill,ReadOnly=true,Multiline=true,ScrollBars=ScrollBars.Vertical,Text=updater.Report};
+            var copy=ButtonOf("Copy details");copy.Dock=DockStyle.Bottom;copy.Click+=(_,_)=>Clipboard.SetText(updater.Report);view.Controls.Add(report);view.Controls.Add(copy);view.ShowDialog(this);
+        };
         notices.Click += (_,_) => {
             var assembly=typeof(Studio).Assembly;
             var names=assembly.GetManifestResourceNames().Where(n=>n.StartsWith("notices/") || n.StartsWith("web/") && (n.EndsWith("LICENSE.txt",StringComparison.OrdinalIgnoreCase) || n.EndsWith("NOTICE.txt",StringComparison.OrdinalIgnoreCase)));
@@ -74,23 +83,29 @@ internal sealed partial class Studio : Form
         Shown += async (_, _) => { timer.Start(); _ = Check(TimeSpan.Zero); await InitializeBrowser(); };
         Activated += async (_, _) => { if (loaded && NetworkInterface.GetIsNetworkAvailable()) await Check(TimeSpan.FromMinutes(2)); };
         timer.Tick += async (_, _) => { if (NetworkInterface.GetIsNetworkAvailable()) await Check(TimeSpan.FromSeconds(30)); };
-        check.Click += async (_, _) => await Check(TimeSpan.FromSeconds(30));
+        check.Click += async (_, _) => await Check(TimeSpan.Zero, true);
         download.Click += async (_, _) => { fetching = true; RefreshButtons(); try { await updater.Download(new Progress<int>(p => status.Text = $"Downloading {p}%")); status.Text = "Verified and ready to install."; } catch (Exception e) { status.Text = e.Message; } finally { fetching = false; RefreshButtons(); } };
         install.Click += (_, _) => { if (busy || fetching || !updater.Downloaded || updater.Offered == null) return;
             if (MessageBox.Show(this, "Save your project before restarting. Install the downloaded update?", Text, MessageBoxButtons.OKCancel) != DialogResult.OK) return;
             try { Installer.Begin(updater.Offered); Close(); } catch (Exception e) { status.Text = "Install failed. " + e.Message; } };
         notes.Click += (_, _) => { var release = updater.Offered; if (release != null) MessageBox.Show(this, string.IsNullOrWhiteSpace(release.Notes) ? "No release notes were provided." : release.Notes[..Math.Min(4000,release.Notes.Length)], "What's new in " + release.Tag); };
     }
-    async Task Check(TimeSpan cooldown)
+    async Task Check(TimeSpan cooldown, bool manual = false)
     {
-        if (fetching || IsDisposed) return;
-        try { var message = await updater.Check(cooldown); if (message != null && !IsDisposed) { status.Text = message; RefreshButtons(); } }
+        if (fetching || checking || IsDisposed) return;
+        var previous=status.Text;
+        checking = true;
+        status.Text = "Checking for updates...";
+        RefreshButtons();
+        try { var message = await updater.Check(cooldown, manual); if (!IsDisposed) status.Text = message??previous; }
         catch (Exception e) { if (!IsDisposed) status.Text = "Could not check. " + e.Message; }
+        finally { checking = false; if (!IsDisposed) RefreshButtons(); }
     }
     void RefreshButtons()
     {
         download.Visible = updater.Offered != null && !updater.Downloaded; install.Visible = updater.Downloaded;
-        install.Enabled = !busy && ready && !fetching; check.Enabled = download.Enabled = !fetching;
+        install.Enabled = !busy && ready && !fetching && !checking; check.Enabled = download.Enabled = !fetching && !checking;
+        check.Text = checking ? "Checking..." : "Check updates";
         var lines = (updater.Offered?.Notes ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(line => !line.StartsWith('#')).Select(line => line.TrimStart('-', '*', ' ')).Where(line => line.Length > 0).ToArray();
         var first = lines.FirstOrDefault() ?? "";
@@ -136,9 +151,20 @@ internal sealed partial class Studio : Form
             };
             core.NavigationStarting += (_, e) => { if (!e.Uri.StartsWith(Origin+"/",StringComparison.Ordinal)) e.Cancel = true; };
             core.NewWindowRequested += (_, e) => { e.Handled = true; };
-            core.WebMessageReceived += (_,e) => {
+            core.WebMessageReceived += async (_,e) => {
                 if (!e.Source.StartsWith(Origin+"/",StringComparison.Ordinal)) return;
                 string msg; try { msg=e.TryGetWebMessageAsString(); } catch (ArgumentException) { return; }
+                if (msg.StartsWith("stencil:", StringComparison.Ordinal)) {
+                    string? requestId = null;
+                    try {
+                        using var request = JsonDocument.Parse(msg[8..]);
+                        requestId = request.RootElement.GetProperty("id").GetString();
+                        if (requestId == null || requestId.Length > 64) return;
+                        var converted = await StencilConversion.Convert(request.RootElement.GetProperty("name").GetString()!, request.RootElement.GetProperty("data").GetString()!);
+                        if (!IsDisposed) core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type="stencilConverted",id=requestId,name=converted.Name,data=converted.Data }));
+                    } catch (Exception error) { if (!IsDisposed) core.PostWebMessageAsJson(JsonSerializer.Serialize(new {type="stencilConverted",id=requestId,error=error.Message})); }
+                    return;
+                }
                 switch(msg) { case "ready": ready=true; ConfirmHealth(); break; case "busy": busy=true; break; case "idle": busy=false; break; case "print":
 #if NDS_TEST_HOST
                     if (TestOutputFolder != null) { _ = PrintTestPages(); break; }
@@ -147,7 +173,7 @@ internal sealed partial class Studio : Form
                 RefreshButtons();
             };
             core.NavigationCompleted += (_, e) => { loaded=e.IsSuccess; ConfirmHealth(); };
-            await core.AddScriptToExecuteOnDocumentCreatedAsync("Object.defineProperty(window,'NDSDesktop',{value:Object.freeze({ready:()=>chrome.webview.postMessage('ready'),setBusy:b=>chrome.webview.postMessage(b?'busy':'idle'),print:()=>chrome.webview.postMessage('print')})});");
+            await core.AddScriptToExecuteOnDocumentCreatedAsync("(()=>{\n    const pending=new Map();\n    chrome.webview.addEventListener('message',e=>{const m=e.data;if(m?.type!=='stencilConverted')return;const entry=pending.get(m.id);if(!entry)return;pending.delete(m.id);clearTimeout(entry.timer);m.error?entry.reject(Error(m.error)):entry.resolve(m);});\n    Object.defineProperty(window,'NDSDesktop',{value:Object.freeze({\n        ready:()=>chrome.webview.postMessage('ready'),setBusy:b=>chrome.webview.postMessage(b?'busy':'idle'),print:()=>chrome.webview.postMessage('print'),\n        convertStencil:async file=>{\n            if(file.size>160*1024*1024)throw Error('Stencil exceeds 160 MB.');\n            const data=await new Promise((yes,no)=>{const reader=new FileReader();reader.onload=()=>yes(reader.result.split(',')[1]);reader.onerror=()=>no(Error('Could not read stencil.'));reader.readAsDataURL(file);});\n            return new Promise((resolve,reject)=>{const id=crypto.randomUUID();const timer=setTimeout(()=>{pending.delete(id);reject(Error('Visio conversion timed out.'));},135000);pending.set(id,{resolve,reject,timer});chrome.webview.postMessage('stencil:'+JSON.stringify({id,name:file.name,data}));});\n        }\n    })});\n})();");
             core.Navigate(Origin+"/index.html");
         }
         catch (Exception e) { status.Text = "Could not open the editor."; MessageBox.Show(this, "The desktop editor needs the Microsoft Edge WebView2 Runtime. The portable web ZIP also opens in a browser.\n\n"+e.Message,Text); }

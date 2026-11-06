@@ -10,3 +10,4 @@ obj/
 *.vssx
 *.vsdx
 *.xlsx
+__pycache__/
