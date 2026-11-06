@@ -3,7 +3,12 @@ import {firewallProfiles} from './firewall-profiles.mjs';
 import {switchIdentities} from './switch-identities.mjs';
 import {faceplates} from './faceplates.mjs';
 
-const physicalProfiles=faceplates.flatMap(p=>p.models.map(model=>({model:p.vendor==='Fortinet'?model.replace('FG-','FortiGate '):model,sku:model,vendor:p.vendor,kind:/Fortinet|SonicWall|Sophos|Palo Alto|Netgate|Deciso/.test(p.vendor)||/^(?:SRX|ASA|FPR|Firepower)/i.test(model)?'firewall':'switch',source:p.source,interfaces:p.sockets?p.sockets.filter(s=>!s[4]).map(s=>[(p.naming==='cx'?'1/1/':'')+s[0],s[3]]):p.banks.flatMap(b=>b.names.map(n=>[n,b.form]))})));
+function physicalInterfaces(p){
+  const records=p.sockets?p.sockets.map(s=>[(p.naming==='cx'?'1/1/':'')+s[0],s[3]]):p.banks.filter(b=>!b.optional).flatMap(b=>b.names.map(n=>[n,b.form])),groups=new Map();
+  for(const [name,form] of records){if(!groups.has(name))groups.set(name,new Set());groups.get(name).add(form);}
+  return [...groups].map(([name,forms])=>[name,forms.size>1?'shared '+[...forms].join('/'):[...forms][0]]);
+}
+const physicalProfiles=faceplates.flatMap(p=>p.models.map(model=>({model:p.vendor==='Fortinet'?model.replace('FG-','FortiGate '):model,sku:model,vendor:p.vendor,kind:/Fortinet|SonicWall|Sophos|Palo Alto|Netgate|Deciso/.test(p.vendor)||/^(?:SRX|ASA|FPR|Firepower)/i.test(model)?'firewall':'switch',source:p.source,interfaces:physicalInterfaces(p)})));
 // Manufacturer guides correct two imported capability records without rewriting their snapshot.
 const correctedFirewalls=firewallProfiles.map(p=>p.sku==='ASA5505'?{...p,manufacturerReference:'https://andovercg.com/datasheets/cisco-asa5505guide-ASA5505HIG.pdf',interfaces:p.interfaces.filter(([name])=>name!=='Ethernet1/0')}:p.sku==='NSA3700'?{...p,manufacturerReference:'https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4162.pdf',interfaces:p.interfaces.map(([name,form])=>[name,/^X2[4-7]$/.test(name)?'5gbase-x-sfpp':form])}:p);
 export const hardwareCatalog=[...physicalProfiles.filter(p=>![...profiles,...correctedFirewalls].some(q=>q.sku===p.sku||q.model===p.model)),...profiles,...correctedFirewalls];
@@ -34,8 +39,14 @@ export function identify(label='',description=''){
 
 const indexedProfiles=new Map();
 for(const p of hardwareCatalog)for(const key of [p.model,p.sku])if(key)indexedProfiles.set(normalize(key),p);
+const sharedCapabilities=new Map(physicalProfiles.map(p=>[normalize(p.sku),p.interfaces.filter(([,form])=>form.startsWith('shared '))]));
 export function hardwareProfile(device) {
-  return indexedProfiles.get(normalize(device.sku))??indexedProfiles.get(normalize(device.model));
+  let p=indexedProfiles.get(normalize(device.sku))??indexedProfiles.get(normalize(device.model));
+  const shared=p&&sharedCapabilities.get(normalize(p.sku));
+  if(shared?.length)p={...p,interfaces:p.interfaces.map(([name,form])=>[name,shared.find(([n])=>n.toLowerCase()===name.toLowerCase())?.[1]||form])};
+  if(p&&/^FG9[01]G$/.test(normalize(p.sku))&&(device.ports||[]).some(o=>/^x[12]$/i.test(o.name)&&!o.parent))
+    return {...p,interfaces:p.interfaces.map(([name,form])=>[name.replace(/^wan([12])$/,'x$1'),form])};
+  return p;
 }
 export function portCapability(profile, name) {
   const canonical=n=>String(n).toLowerCase().replace(/^gigabitethernet/,'gi').replace(/^ethernet(?=\d)/,'eth');

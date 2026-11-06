@@ -8,12 +8,12 @@
 
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
 
-- Import supported configurations, Auvik XLSX/CSV reports and show-command captures. Enable each file and choose identity, ports, links, VLANs, routes and bridges separately.
+- Import supported configurations, Base64 SonicWall EXP settings, Auvik XLSX/CSV reports and show-command captures. Enable each file and choose identity, ports, links, VLANs, routes and bridges separately.
 - Generate core topology with documented WAN handoffs, switch port maps, wireless connections, VLAN and routing records, and a site-specific trunk matrix showing native, tagged and excluded VLANs. Port maps separate the endpoint assignment from configured mode and operational state.
 - Order devices with Up/Down buttons or drag and drop. Choose equipment for named Core Network pages or let the app fit the selected hardware automatically, including APs.
 - Prefer straight or simple orthogonal core cables, with consistent exterior lanes when needed and jumps at crossings. Nearby device titles move to accommodate clearer routes. Core and wireless sheets include an editable link-color legend. Cross-page links identify the other sheet.
 - Import supported picture and vector Visio masters from files or recursively scanned folders. Search master names directly in the picker, or click a device to search local stencils. Artwork and mapped jacks retain matching transforms.
-- Drag mapped port markers; align a selected row or column and distribute ports evenly. The sourced native hardware catalog includes model-specific faceplates, declared stack members and chassis modules.
+- Drag mapped port markers; align a selected row or column and distribute ports evenly. The sourced native hardware catalog includes model-specific faceplates, declared stack members and chassis modules. Confirm member and module models directly in Device details.
 - Zoom, pan and Fit page. In Edit drawing, box-select or Shift/Ctrl-click items, move them with the mouse or arrow keys, align edges or centers, and distribute spacing. Configure grid snapping and alignment guides. Double-click text to type directly on the diagram; double-click other elements for properties. Ctrl+Z, Ctrl+Shift+Z and Undo all apply to project changes. Alt-drag selects native panel details.
 - Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a spectrum, numeric color formats, presets and saved swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet.
 - Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port detail tables support numeric order, consecutive grouping and optional empty-record filtering.
@@ -30,9 +30,9 @@ Network engineers can use the Windows application or the offline browser edition
 
 <p align="center"><img src="docs/images/wireless.png" width="900" alt="Sample wireless access points and their physical switch uplinks"></p>
 
-**Direct editing and alignment**
+**Physical port layouts and stack modules**
 
-<p align="center"><img src="docs/images/drawing-tools.png" width="900" alt="Multiple selected diagram items with snapping, alignment, Undo and Redo controls"></p>
+<p align="center"><img src="docs/images/hardware-layouts.png" width="900" alt="Fictional FortiGate 91G revision 2 and Aruba 2920 stack with a confirmed rear module and attached cable"></p>
 
 **Visual line color picker**
 
@@ -96,6 +96,8 @@ In **Edit drawing**, select a cable. Drag a square handle to move a bend, click 
 
 **Page options** shows or hides page numbers, chooses their starting number and padding, and sets a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. The default is a two-digit number such as 01 / 07. These settings persist in the project.
 
+Select **Stack members and installed modules** in Device details to confirm hardware composition. Use 2920 slots A/B for J9731A or J9732A; supported 3560-E uplinks use X2-1/X2-2 with the installed X2 transceiver or TwinGig adapter. A file without an exact model declaration needs a confirmed Model selection or mapped stencil. [Hardware import coverage and manufacturer references](docs/HARDWARE_SUPPORT.md).
+
 ## Updates and settings
 
 The Windows edition checks its public GitHub feed at startup, every five minutes while online, and when the window regains focus after two minutes. **Check updates** runs a manual check and shows progress. The result identifies both the installed and latest published versions. A local build ahead of the feed is identified explicitly. **Update details** provides the last timestamp, HTTP result and a copyable report. A lookup times out after 25 seconds; manual retries bypass transient automatic retry delays while respecting GitHub rate-limit pauses. **Download** retrieves and verifies an offered executable. **Install and restart** is a separate decision. Save your project before restarting.
@@ -126,4 +128,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.8.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.9.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)

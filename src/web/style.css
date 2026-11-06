@@ -19,3 +19,5 @@
 .inline-text-actions input[type=color]{width:29px;min-width:29px;height:23px;padding:1px;border:1px solid #aebfc6;cursor:pointer}.color-opacity[hidden]{display:none}
 
 .inline-text-actions{flex-wrap:wrap}.inline-text-actions span{flex-basis:100%}
+.hardware-row{display:flex;flex-wrap:wrap;align-items:end;gap:.6rem;padding:.65rem 0;border-bottom:1px solid var(--border,#CEDCE0)}
+.hardware-field{flex:1;min-width:110px}.hardware-row label{display:block;margin:0 0 .3rem}.hardware-row input{width:100%}.hardware-row button{margin-bottom:.3rem}
