@@ -78,7 +78,9 @@ function namedAnchors(master,name,bounds){
     if(row.getAttribute('Del')==='1')continue;
     const i=Number(row.getAttribute('IX')),r=cellValues(row);
     const x=(Number(r.X)-bounds.x)/bounds.w,y=1-(Number(r.Y)-bounds.y)/bounds.h;
-    if(!Number.isFinite(x+y)||x<0||x>1||y<0||y>1)continue;
+    // A one-dimensional wrapper may have a near-zero Height while artwork and
+    // jacks extend outside it. Clip only after the shared world transform.
+    if(!Number.isFinite(x+y))continue;
     const coord=[x,y], prompt=r.Prompt||cellValues(controls.find(c=>c.getAttribute('N')==='Row_'+(i+1))).Prompt||'';
     if(/JL675A/i.test(name) && ports.length>=60){
       if(i>=12&&i<60)add('1/1/'+(i-11),coord);

@@ -4,7 +4,7 @@ import {parseOperational,isOperational} from '../src/web/imports/operational.mjs
 import {ensureEvidence,composeEvidence,captureEdits,categories} from '../src/web/evidence.mjs';
 import {orderedDevices,moveStep,moveDevice,cleanLayout} from '../src/web/layout.mjs';
 import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
-import {shapeTransform,transform,multiply} from '../src/web/visio-art.mjs';
+import {shapeTransform,transform,multiply,masterBounds,ellipseArc} from '../src/web/visio-art.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
 
 test('operational capture keeps actual LLDP ports and interface observations without treating them as configuration',()=>{
@@ -64,4 +64,17 @@ test('nested Visio rotation and mirroring transform artwork and jacks together',
  assert.deepEqual(transform(parent,5,1),[8,4]);
  const child=shapeTransform({Width:2,Height:1,PinX:5,PinY:1,LocPinX:1,LocPinY:.5,Angle:Math.PI,FlipX:1});
  const point=transform(multiply(parent,child),1,.5);assert.ok(Math.abs(point[0]-8)<1e-9&&Math.abs(point[1]-4)<1e-9);
+});
+test('one-dimensional manufacturer wrappers use the visible child bounds',()=>{
+ const node=(localName,attributes={},children=[])=>({localName,children,getAttribute:k=>attributes[k]??null});
+ const cells=values=>Object.entries(values).map(([N,V])=>node('Cell',{N,V:String(V)}));
+ const picture=node('Shape',{},[...cells({Width:19,Height:1.73,PinX:9.5,PinY:-.865,LocPinX:9.5,LocPinY:.865}),node('ForeignData')]);
+ const root=node('Shape',{},[...cells({Width:19,Height:.001}),node('Shapes',{},[picture])]);
+ assert.deepEqual(masterBounds(root),{x:0,y:-1.73,w:19,h:1.73});
+});
+test('elliptical arc uses its real on-curve control point and aspect ratio',()=>{
+ const arc=ellipseArc([2,0],[Math.SQRT2,Math.SQRT1_2],[0,1],0,2);
+ assert.ok(Math.abs(arc[0])<1e-12&&Math.abs(arc[1])<1e-12);
+ assert.ok(Math.abs(arc[2]-2)<1e-12&&Math.abs(arc[3]-1)<1e-12);assert.equal(arc[7],false);
+ assert.equal(ellipseArc([2,0],[0,-1],[0,1],0,2)[7],true);
 });
