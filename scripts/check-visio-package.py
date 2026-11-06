@@ -1,4 +1,4 @@
-"""Check generated OPC relationships, Visio IDs, inheritance and port glue independently."""
+"""Check generated OPC relationships, Visio IDs, stroke units and port glue independently."""
 from pathlib import Path, PurePosixPath
 import math
 import posixpath
@@ -58,6 +58,22 @@ def check(path):
         for name, root in xml.items():
             for rel in root.iter(V+'Rel'):
                 require(rel.get(R+'id') in relationships.get(name, {}), 'unbound relationship in '+name)
+            for cell in root.iter(V+'Cell'):
+                if cell.get('N') != 'LineWeight':
+                    continue
+                require(cell.get('U') == 'PT', 'LineWeight must declare PT units in '+name)
+                formula = re.fullmatch(r'([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?) pt', cell.get('F', ''))
+                require(formula is not None, 'LineWeight must have a numeric pt formula in '+name)
+                points = float(formula[1])
+                try:
+                    inches = float(cell.get('V', ''))
+                except ValueError:
+                    inches = math.nan
+                require(math.isfinite(points) and math.isfinite(inches) and points >= 0 and inches >= 0,
+                        'LineWeight must be finite and nonnegative in '+name)
+                # Both the point formula and cached inch value are rounded to five decimals.
+                require(math.isclose(inches, points / 72, rel_tol=0, abs_tol=5.1e-6),
+                        'LineWeight formula does not match cached inches in '+name)
         master_parts = {}
         index = xml.get('visio/masters/masters.xml')
         if index is not None:
@@ -116,4 +132,4 @@ if __name__ == '__main__':
             raise SystemExit('No Visio packages to validate.')
         for path in files:
             parts, pages, masters = check(path)
-            print(f'{path.name}: {parts} valid parts, {pages} pages, {masters} masters; relationships, shapes and glued ports checked.')
+            print(f'{path.name}: {parts} valid parts, {pages} pages, {masters} masters; relationships, stroke units, shapes and glued ports checked.')

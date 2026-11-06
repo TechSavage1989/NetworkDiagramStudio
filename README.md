@@ -15,8 +15,8 @@ Network engineers can use the Windows application or the offline browser edition
 - Import supported picture and vector Visio masters from files or recursively scanned folders. Search master names directly in the picker, or click a device to search local stencils. Artwork and mapped jacks retain matching transforms.
 - Drag mapped port markers; align a selected row or column and distribute ports evenly. The sourced native hardware catalog includes model-specific faceplates, declared stack members and chassis modules. Confirm member and module models directly in Device details.
 - Zoom, pan and Fit page. In Edit drawing, box-select or Shift/Ctrl-click items, move them with the mouse or arrow keys, align edges or centers, and distribute spacing. Configure grid snapping and alignment guides. Double-click text to type directly on the diagram; double-click other elements for properties. Ctrl+Z, Ctrl+Shift+Z and Undo all apply to project changes. Alt-drag selects native panel details.
-- Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a spectrum, numeric color formats, presets and saved swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet.
-- Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port detail tables support numeric order, consecutive grouping and optional empty-record filtering.
+- Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a visual selector, HEX field and standard swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet. Automatic cables and their color keys use a consistent standard thickness; exported Visio line widths are explicit and editable.
+- Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port maps use consistent port-number boxes and a shared assignment matrix with one port column per switch. Expanded tables, individual rows and optional empty-record filtering remain available.
 - Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
 - Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and handoff cards. Configure page-number visibility, starting values, padding and format.
 
@@ -36,7 +36,7 @@ Network engineers can use the Windows application or the offline browser edition
 
 **Visual line color picker**
 
-<p align="center"><img src="docs/images/line-colors.png" width="700" alt="Interactive spectrum, hue and opacity sliders, numeric color formats and saved swatches"></p>
+<p align="center"><img src="docs/images/line-colors.png" width="700" alt="Compact visual color selector, HEX field, standard swatches and line opacity, with all actions visible"></p>
 
 ## Download
 
@@ -78,11 +78,11 @@ Enable **Edit drawing**, then drag an item to move it. Shift-click adds or remov
 
 In **Hardware**, choose **Map ports**. Drag a rectangle over sockets to select them, or select ports in the list. Shift adds ports and Ctrl toggles them. Drag a selected marker to move the group. Use **Align row**, **Align column** or equal spacing relative to the current port. Select one row or column when distributing sockets. Zoom with the wheel or the zoom buttons, choose **Fit device**, and hold Space or the middle mouse button to pan. Arrow keys move the selected ports one screen pixel, Shift moves ten and Ctrl moves one tenth. **Undo port change** or Ctrl+Z restores the previous mapping. Use **Place port** to add a socket at a clicked position.
 
-Select **Port map options** while viewing a port-map sheet to choose compact or expanded tables, one row per interface or consecutive matching groups, and whether to repeat the faceplate on continued pages. Compact tables and first-page-only faceplates reduce the page count by default. Tables use numeric member/slot/port order and wrap long details. Choose all records, hide records without assignment details, or show only records with a peer/description. The table filter leaves the physical faceplate intact.
+Port-map sheets follow a shared layout: nearby device names and model/state summaries, wide faceplates with consistent port-number boxes, a role/state key and an assignment matrix. The default compact grouped matrix compares switches side by side and retains their ports and connection details. Select **Port map options** to choose expanded tables, one row per interface, and whether to repeat faceplates on continued pages. First-page-only faceplates reduce the page count. Port lists use numeric member/slot/port order and wrap long details. Choose all records, hide records without assignment details, or show only records with a peer/description. The table filter leaves the physical faceplate intact.
 
-Double-click text to edit it directly on the diagram. Enter saves and Escape cancels. Double-click other elements to open their properties. In **Edit drawing**, drag a rectangle around items; Shift adds items and Ctrl toggles them. Drag the selected group or nudge it with arrow keys. Shift multiplies the configured step by ten; Ctrl divides it by ten.
+Double-click text to edit it directly on the diagram. Enter saves and Escape cancels. A rejected edit stays visible with an explanation so it can be corrected or cancelled. Double-click other elements to open their properties. In **Edit drawing**, drag a rectangle around items; Shift adds items and Ctrl toggles them. Drag the selected group or nudge it with arrow keys. Shift multiplies the configured step by ten; Ctrl divides it by ten.
 
-The inline text editor includes a color chooser. **Text options** opens the full visual picker, text content, size, weight and alignment. Text colors apply to titles, port labels, legends and editable native stencil text, and are retained in projects, SVG and Visio exports.
+The inline text editor includes a color chooser. **Text options** opens the compact color selector alongside text content, size, weight and alignment. Text colors apply to titles, port labels, legends and editable native stencil text, and are retained in projects, SVG and Visio exports.
 
 **Snapping** configures grid spacing, alignment distance and alignment targets. Snapping starts off. Enable grid snapping, alignment guides, or both, and choose device edges/centers, other object edges or cable points. Press Alt after starting a drag to bypass snapping. Arrow-key nudges always use their exact step.
 
@@ -90,7 +90,7 @@ The inline text editor includes a color chooser. **Text options** opens the full
 
 In **Edit drawing**, select a cable. Drag a square handle to move a bend, click a plus control to add a detour, or select a bend and choose **Remove point** or press Delete. **Edit bend points** offers numeric coordinates and add/remove controls. Arrow keys also nudge a selected bend; Shift moves farther and Ctrl uses a fine step. **Connect endpoints** selects a device and physical port for each end and recalculates the route. It retains the cable's styling and checks occupied sockets.
 
-**Edit selected** opens the line color spectrum, hue slider, HEX/RGB/HSL values, opacity, network presets, colors in the drawing, recent colors and named swatches. The system color picker is also available; supported browsers can sample the screen. The legend reflects only the link styles used on that sheet. Crossings show arc hops with clearance, and the native Visio export includes arc-jump settings.
+**Edit selected** opens a visual color selector, HEX field, eleven standard colors and line opacity. Line, legend and text dialogs keep their default controls and save actions visible without scrolling at 1366 by 768 and larger. The legend reflects only the link styles used on that sheet. Crossings show arc hops with clearance, and the native Visio export includes arc-jump settings.
 
 **Link styles** configures colors, opacity and separate titles/descriptions for connection captions and legend entries. Editing a cable color or a legend swatch updates all cables of that link type and their legends throughout the drawing. Double-click a legend title to rename it directly. Text color is independent of cable color. Wireless connection captions show the port and speed without evidence-status wording.
 
@@ -106,6 +106,7 @@ Windows stores its WebView profile, release cache, staged update and retained ro
 
 ## Troubleshooting
 
+- **Editing appears locked in preview.9.** Use Tab or Shift+Tab to focus **Save project**, then Enter to save accepted edits. Confirm the file exists before restarting with a newer build. Preview.10 fixes the detached text editor that could block selection after a rejected edit.
 - **Missing ports or uncertain topology.** Import the corresponding device configurations and interface reports. Correct conflicting neighbors or unknown port mappings under **Review links** or **Hardware**.
 - **Complex or legacy artwork.** Use the included PowerShell converter with installed desktop Visio. Use **-List** to see master names. Use **-HardwarePack** and **-MasterNames** to render selected masters to a local hardware pack, including vector-only artwork the browser cannot import directly. Select a new output path, import the JSON under **Hardware**, then map its ports.
 - **No update offered for a manually supplied build.** A candidate is available through the updater only after it is published in the release feed. Compare the installed and latest published versions in **Update details**. A failed connection can be retried with **Check updates**.
@@ -128,4 +129,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.9.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.10.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
