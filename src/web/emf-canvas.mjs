@@ -61,6 +61,7 @@ export function drawEmf(bytes){
     }
     if(item)state[item.kind]=item;
   }
+  const mapped=(m,x,y)=>m?[m.a*x+m.c*y+m.e,m.b*x+m.d*y+m.f]:[x,y];
   let foundEnd=false;
   for(let off=0;off+8<=bytes.length;){
     const type=head.getUint32(off,true),len=head.getUint32(off+4,true);
@@ -89,21 +90,22 @@ export function drawEmf(bytes){
     if(type===59){path=new Path2D();active=true;continue;}
     if(type===60){active=false;continue;}
     if(type===61){path.closePath();continue;}
-    if(type===62||type===63||type===64){paint(path,type!==64,type!==62);path=new Path2D();continue;}
-    if(type===67){if(i(8)!==1)fail();transform();ctx.clip(path,state.fill);path=new Path2D();continue;}
+    if(type===62||type===63||type===64){const local=new Path2D();local.addPath(path,transform().inverse());paint(local,type!==64,type!==62);path=new Path2D();continue;}
+    if(type===67){if(i(8)!==1)fail();ctx.resetTransform();ctx.clip(path,state.fill);path=new Path2D();continue;}
     if(type===30){transform();ctx.beginPath();ctx.rect(i(8),i(12),i(16)-i(8),i(20)-i(12));ctx.clip();continue;}
-    if(type===27||type===54){const x=i(8),y=i(12);if(active){if(type===27)path.moveTo(x,y);else path.lineTo(x,y);}else if(type===54){const p=new Path2D();p.moveTo(...state.pos);p.lineTo(x,y);paint(p,false,true);}state.pos=[x,y];continue;}
-    if(type===42||type===43){const x=i(8),y=i(12),ww=i(16)-x,hh=i(20)-y,p=active?path:new Path2D();if(type===42)p.ellipse(x+ww/2,y+hh/2,Math.abs(ww/2),Math.abs(hh/2),0,0,Math.PI*2);else p.rect(x,y,ww,hh);if(!active)paint(p,true,true);continue;}
+    if(type===27||type===54){const x=i(8),y=i(12);if(active){const pt=mapped(transform(),x,y);if(type===27)path.moveTo(...pt);else path.lineTo(...pt);}else if(type===54){const p=new Path2D();p.moveTo(...state.pos);p.lineTo(x,y);paint(p,false,true);}state.pos=[x,y];continue;}
+    if(type===42||type===43){const x=i(8),y=i(12),ww=i(16)-x,hh=i(20)-y,p=new Path2D();if(type===42)p.ellipse(x+ww/2,y+hh/2,Math.abs(ww/2),Math.abs(hh/2),0,0,Math.PI*2);else p.rect(x,y,ww,hh);if(active)path.addPath(p,transform());else paint(p,true,true);continue;}
     if((type>=2&&type<=8)||(type>=85&&type<=91)){
       const k=type>=85?type-83:type,sz=type>=85?4:8,poly=k===7||k===8,bezier=k===2||k===5,chain=k===5||k===6,closed=k===3||k===8;
       const cnt=u(24);if(cnt>200000)fail();const n=poly?u(28):cnt;let at=poly?32+cnt*4:28;if(n>200000||at+n*sz>len)fail();
-      const pt=()=>{const v=sz===4?[r.getInt16(at,true),r.getInt16(at+2,true)]:[i(at),i(at+4)];at+=sz;return v;};
+      const matrix=active?transform():null;let rawPoint=state.pos;
+      const pt=()=>{const v=sz===4?[r.getInt16(at,true),r.getInt16(at+2,true)]:[i(at),i(at+4)];at+=sz;rawPoint=v;return mapped(matrix,...v);};
       const p=active?path:new Path2D();
       for(let block=0;block<(poly?cnt:1);block++){
         let available=poly?u(32+block*4):n;if(available>n)fail();if(!available)continue;
         if(!chain){const a=pt();p.moveTo(...a);available--;}else if(!active)p.moveTo(...state.pos);
-        if(bezier){if(available%3)fail();for(let j=0;j<available;j+=3){const a=pt(),b=pt(),c=pt();p.bezierCurveTo(...a,...b,...c);if(chain)state.pos=c;}}
-        else for(let j=0;j<available;j++){const a=pt();p.lineTo(...a);if(chain)state.pos=a;}
+        if(bezier){if(available%3)fail();for(let j=0;j<available;j+=3){const a=pt(),b=pt(),c=pt();p.bezierCurveTo(...a,...b,...c);if(chain)state.pos=rawPoint;}}
+        else for(let j=0;j<available;j++){const a=pt();p.lineTo(...a);if(chain)state.pos=rawPoint;}
         if(closed)p.closePath();
       }
       if(!active)paint(p,closed,true);continue;
