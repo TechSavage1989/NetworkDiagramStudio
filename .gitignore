@@ -1,0 +1,12 @@
+dist/
+node_modules/
+bin/
+obj/
+.artifacts/
+*.user
+*.suo
+*.nds.json
+*.vss
+*.vssx
+*.vsdx
+*.xlsx
