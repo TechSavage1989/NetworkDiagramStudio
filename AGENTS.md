@@ -51,7 +51,7 @@ Diagram captions retain complete values. Shared textLayout measures SVG tspans a
 
 Retain bounded lazy modern archive loading and eligible picture-only legacy CFB masters; unsupported visible artwork requires installed Visio instead of partial rendering. The converter runs a copied file in a separate STA process before the UI mutex. Disable macros, events, refresh and workspace restoration. Keep client data and OEM collections outside the repository.
 
-Do not change the release destination, automatic check cadence, or consent boundaries as an incidental refactor. Manual checks bypass automatic cooldown, show progress and a result, and can retry transient failures while respecting persisted GitHub rate-limit pauses. A lookup, a download, and an install are different operations. The desktop must see the initialized editor and a visible window before confirming an installed update. The test-only update feed and failure injector must remain absent from production builds.
+Do not change the release destination, automatic check cadence, or consent boundaries as an incidental refactor. Manual checks bypass automatic cooldown, show progress and a result, and can retry transient failures while respecting persisted GitHub rate-limit pauses. A lookup, a download, and an install are different operations. The desktop must see the initialized editor and a visible window before confirming an installed update. Native readiness failures need bounded host/navigation/resource/JavaScript diagnostics, never a weaker health predicate. The test-only update feed, diagnostic listeners and failure injector must remain absent from production builds.
 
 ## Build and verify
 

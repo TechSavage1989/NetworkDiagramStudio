@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.IO.Compression;
 using System.Xml.Linq;
+using Microsoft.Web.WebView2.Core;
 
 namespace NetworkDiagramStudio;
 internal static class NativeSmoke
@@ -47,7 +48,7 @@ internal static class NativeSmoke
                 // The first eligible activation is >= two minutes after startup;
                 // a second immediate activation must not trigger a new request.
                 for (int i=0; i<60 && !ui.IsEditorHealthy; i++) await Task.Delay(500);
-                if(!ui.IsEditorHealthy) throw new Exception("WebView did not initialize.");
+                if(!ui.IsEditorHealthy) throw new Exception("WebView did not initialize.\n"+await ui.EditorStartupDiagnostics());
                 await ui.ExportAndPrint(Path.GetDirectoryName(result)!);
                 var pause=fixture.Checks[0].AddSeconds(125)-DateTimeOffset.UtcNow;
                 if(pause>TimeSpan.Zero) await Task.Delay(pause);
@@ -70,6 +71,32 @@ internal static class NativeSmoke
 
 internal sealed partial class Studio
 {
+    readonly List<string> editorStartupEvents=[];
+    readonly List<CoreWebView2DevToolsProtocolEventReceiver> editorStartupReceivers=[];
+    void RecordEditorStartup(string message)
+    {
+        if(editorStartupEvents.Count>=24)return;
+        var entry=DateTimeOffset.UtcNow.ToString("O")+" "+message[..Math.Min(message.Length,2500)];
+        editorStartupEvents.Add(entry);
+        try{var path=Environment.GetEnvironmentVariable("NDS_TEST_ERROR_LOG");if(!string.IsNullOrEmpty(path))File.AppendAllText(path,entry+Environment.NewLine);}catch{ }
+    }
+    async Task CaptureEditorStartupDiagnostics(CoreWebView2 core)
+    {
+        try{
+            foreach(var name in new[]{"Runtime.exceptionThrown","Log.entryAdded"}){var receiver=core.GetDevToolsProtocolEventReceiver(name);editorStartupReceivers.Add(receiver);receiver.DevToolsProtocolEventReceived+=(_,e)=>RecordEditorStartup(name+" "+e.ParameterObjectAsJson);}
+            core.NavigationCompleted+=(_,e)=>RecordEditorStartup($"Navigation completed: success={e.IsSuccess}, error={e.WebErrorStatus}, source={core.Source}");
+            core.ProcessFailed+=(_,e)=>RecordEditorStartup("WebView process failed: "+e.ProcessFailedKind);
+            core.WebResourceResponseReceived+=(_,e)=>{try{if(e.Response.StatusCode>=400)RecordEditorStartup($"Resource failed: {e.Response.StatusCode} {e.Request.Uri}");}catch(Exception error){RecordEditorStartup("Resource diagnostic: "+error.Message);}};
+            foreach(var method in new[]{"Runtime.enable","Log.enable"})try{await core.CallDevToolsProtocolMethodAsync(method,"{}").WaitAsync(TimeSpan.FromSeconds(3));}catch(Exception error){RecordEditorStartup(method+": "+error.Message);}
+        }catch(Exception error){RecordEditorStartup("Startup diagnostic setup: "+error.Message);}
+    }
+    internal async Task<string> EditorStartupDiagnostics()
+    {
+        var report=new List<string>{$"Host: status={status.Text}, loaded={loaded}, ready={ready}, healthy={healthy}, visible={Visible}, window={WindowState}"};
+        try{report.Add("Source: "+browser.Source);var core=browser.CoreWebView2;if(core==null)report.Add("CoreWebView2: unavailable");else{report.Add("Runtime: "+core.Environment.BrowserVersionString);report.Add("DOM: "+await core.ExecuteScriptAsync("JSON.stringify({state:document.readyState,url:location.href,bridge:!!window.NDSDesktop,readyFunction:typeof window.NDSDesktop?.ready,scripts:[...document.scripts].map(s=>s.src).filter(Boolean),resources:performance.getEntriesByType('resource').slice(0,100).map(r=>({url:r.name.slice(0,220),type:r.initiatorType,status:r.responseStatus}))})").WaitAsync(TimeSpan.FromSeconds(3)));}}
+        catch(Exception error){report.Add("DOM/runtime diagnostic: "+error.Message);}
+        report.AddRange(editorStartupEvents);return string.Join(Environment.NewLine,report);
+    }
     internal bool UpdateProgressIsIdle => !checking && check.Enabled && !status.Text.StartsWith("Checking for updates",StringComparison.Ordinal);
     internal async Task CheckUpdateButton()
     {

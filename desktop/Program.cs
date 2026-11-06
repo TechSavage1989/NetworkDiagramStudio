@@ -117,14 +117,24 @@ internal sealed partial class Studio : Form
     {
         try
         {
+#if NDS_TEST_HOST
+            RecordEditorStartup("InitializeBrowser started.");
+#endif
             var assemblyDir=Path.GetDirectoryName(typeof(Studio).Assembly.Location);
             if (!string.IsNullOrEmpty(assemblyDir)) {
                 var loaders=Path.Combine(assemblyDir,"runtimes","win-x64","native");
                 if (File.Exists(Path.Combine(loaders,"WebView2Loader.dll"))) CoreWebView2Environment.SetLoaderDllFolderPath(loaders);
             }
             var environment = await CoreWebView2Environment.CreateAsync(null, Path.Combine(Policy.Home, "WebView2"));
+#if NDS_TEST_HOST
+            RecordEditorStartup("WebView environment created: "+environment.BrowserVersionString);
+#endif
             await browser.EnsureCoreWebView2Async(environment);
             var core = browser.CoreWebView2; core.Settings.AreHostObjectsAllowed = false;
+#if NDS_TEST_HOST
+            RecordEditorStartup("CoreWebView2 initialized.");
+            await CaptureEditorStartupDiagnostics(core);
+#endif
             var assembly = Assembly.GetExecutingAssembly();
             var files = assembly.GetManifestResourceNames().Where(n => n.StartsWith("web/", StringComparison.Ordinal)).ToDictionary(n => n[4..].Replace('\\', '/'), n => n, StringComparer.Ordinal);
             core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
@@ -176,7 +186,11 @@ internal sealed partial class Studio : Form
             await core.AddScriptToExecuteOnDocumentCreatedAsync("(()=>{\n    const pending=new Map();\n    chrome.webview.addEventListener('message',e=>{const m=e.data;if(m?.type!=='stencilConverted')return;const entry=pending.get(m.id);if(!entry)return;pending.delete(m.id);clearTimeout(entry.timer);m.error?entry.reject(Error(m.error)):entry.resolve(m);});\n    Object.defineProperty(window,'NDSDesktop',{value:Object.freeze({\n        ready:()=>chrome.webview.postMessage('ready'),setBusy:b=>chrome.webview.postMessage(b?'busy':'idle'),print:()=>chrome.webview.postMessage('print'),\n        convertStencil:async file=>{\n            if(file.size>160*1024*1024)throw Error('Stencil exceeds 160 MB.');\n            const data=await new Promise((yes,no)=>{const reader=new FileReader();reader.onload=()=>yes(reader.result.split(',')[1]);reader.onerror=()=>no(Error('Could not read stencil.'));reader.readAsDataURL(file);});\n            return new Promise((resolve,reject)=>{const id=crypto.randomUUID();const timer=setTimeout(()=>{pending.delete(id);reject(Error('Visio conversion timed out.'));},135000);pending.set(id,{resolve,reject,timer});chrome.webview.postMessage('stencil:'+JSON.stringify({id,name:file.name,data}));});\n        }\n    })});\n})();");
             core.Navigate(Origin+"/index.html");
         }
-        catch (Exception e) { status.Text = "Could not open the editor."; MessageBox.Show(this, "The desktop editor needs the Microsoft Edge WebView2 Runtime. The portable web ZIP also opens in a browser.\n\n"+e.Message,Text); }
+        catch (Exception e) {
+#if NDS_TEST_HOST
+            RecordEditorStartup("InitializeBrowser exception: "+e);
+#endif
+            status.Text = "Could not open the editor."; MessageBox.Show(this, "The desktop editor needs the Microsoft Edge WebView2 Runtime. The portable web ZIP also opens in a browser.\n\n"+e.Message,Text); }
     }
     void ConfirmHealth() { if (!healthy && loaded && ready && Visible) { healthy=true; Installer.Healthy(token); Installer.CleanupHelper(); } }
     protected override void Dispose(bool disposing) { if (disposing) { timer.Dispose(); updater.Dispose(); } base.Dispose(disposing); }
