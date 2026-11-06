@@ -60,7 +60,7 @@ Native panels simplify artwork while preserving confirmed socket-bank arrangemen
 | FG-60F, FG-61F | Rear panel | [Reference](https://fortinetweb.s3.amazonaws.com/docs.fortinet.com/v2/attachments/333714d7-df0d-11e9-8977-00505692583a/FG-60F-QSG-Online.pdf) |
 | FG-70F, FG-71F | Rear panel | [Reference](https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/fortigate-70f-series.pdf) |
 | FG-80F, FG-81F | Rear panel | [Reference](https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/fortigate-fortiwifi-80f-series.pdf) |
-| FG-90G, FG-91G | Fixed panel | [Reference](https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/fortigate-fortiwifi-90g-series.pdf) |
+| FG-90G, FG-91G | Revision-aware shared front connectors | [Reference](https://www.fortinet.com/content/dam/fortinet/assets/data-sheets/fortigate-fortiwifi-90g-series.pdf) |
 | FPR1010-NGFW-K9, Firepower 1010 | Rear panel | [Reference](https://www.cisco.com/c/en/us/td/docs/security/firepower/1010/hw/guide/b_install_guide_1010/overview.html) |
 | FPR1120-NGFW-K9, Firepower 1120 | Rear panel | [Reference](https://www.cisco.com/c/en/us/td/docs/security/firepower/1100/hw/guide/hw-install-1100/overview.html) |
 | J4820A | Removable module | [Reference](https://ftp.hp.com/pub/networking/software/5300-Module-Install-59912130-0305.PDF) |
@@ -282,8 +282,9 @@ Native panels simplify artwork while preserving confirmed socket-bank arrangemen
 | TZ470, TZ470W | Rear panel | [Reference](https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4162.pdf) |
 | TZ500, TZ500W | Rear panel | [Reference](https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp2749.pdf) |
 | TZ570, TZ570W, TZ570P | Rear panel | [Reference](https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4162.pdf) |
+| TZ600, TZ-600 | Descending paired rear connector bank | [Quick Start Guide](https://www.sonicwall.com/techdocs/pdf/tz600-quick-start-guide.pdf) |
 | TZ670 | Rear panel | [Reference](https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4162.pdf) |
-| WS-C3560E-48PD-SF, WS-C3560E-48TD-S, WS-C3560E-48TD-E | Fixed panel | [Reference](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst3750e_3560e/hardware/install/guide/3750hig/HIGOVIEW.html) |
+| WS-C3560E-48PD, WS-C3560E-48PD-S, WS-C3560E-48PD-E, WS-C3560E-48PD-SF, WS-C3560E-48PD-EF, WS-C3560E-48TD, WS-C3560E-48TD-S, WS-C3560E-48TD-E | Fixed panel | [Reference](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst3750e_3560e/hardware/install/guide/3750hig/HIGOVIEW.html) |
 | WS-C3650-24PD, WS-C3650-24PD-L, WS-C3650-24PD-S, WS-C3650-24PD-E | Fixed panel | [Reference](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst3650/hardware/installation/guide/Cat3650hig_book/HIGOVERV.html) |
 | WS-C3650-24PDM, WS-C3650-24PDM-L, WS-C3650-24PDM-S, WS-C3650-24PDM-E | Fixed panel | [Reference](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst3650/hardware/installation/guide/Cat3650hig_book/HIGOVERV.html) |
 | WS-C3650-24PS, WS-C3650-24PS-L, WS-C3650-24PS-S, WS-C3650-24PS-E | Fixed panel | [Reference](https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst3650/hardware/installation/guide/Cat3650hig_book/HIGOVERV.html) |
@@ -308,3 +309,6 @@ Native panels simplify artwork while preserving confirmed socket-bank arrangemen
 | XGS4300, XGS4500 | Fixed panel | [Reference](https://docs.sophos.com/nsg/hardware/operatinginstructions/xgs/sophos-operating-instructions-xgs-4300-4500.pdf) |
 
 The J9850A/J9851A and J8697A/J8698A chassis use paired module bays and explicitly declared cards. Empty bays do not imply installed hardware. Every shipped switch/firewall interface-capability record has a native layout. Additional identity-only SKUs and unknown models use perimeter attachments until confirmed or mapped. Shared copper/optical interfaces show both connectors with one default anchor; a local stencil or port mapping can select the fitted connector. No manufacturer photos or stencil collections are bundled.
+
+
+Shared-media interfaces and installed module choices are described in [Hardware support](HARDWARE_SUPPORT.md#confirming-member-and-module-layouts).

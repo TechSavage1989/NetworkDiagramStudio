@@ -163,27 +163,40 @@ function asa(source,filename){
   return result(d);
 }
 
-function sonicFlat(source,filename){
-  if(!/(?:^|[\r\n&])(?:firewallName|firewallModel)=/i.test(source) ||
+// SonicWall documents EXP as Base64-wrapped settings. Decode only recognized,
+// bounded settings, never another vendor's opaque backup or arbitrary Base64.
+function sonicSettings(source){
+  if(source.length>48*1024*1024)return null;
+  const encoded=source.replace(/\s/g,'').replace(/&&$/,'');
+  if(!encoded.startsWith('Y2hlY2tzdW1WZXJzaW9uP')||!/^[A-Za-z0-9+/]*={0,2}$/.test(encoded))return null;
+  try{
+    const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
+    const decoded=new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+    return /^checksumVersion=\d+&/.test(decoded)&&/(?:^|&)shortProdName=/.test(decoded)&&/(?:^|&)iface_name_\d+=/.test(decoded)?decoded:null;
+  }catch{return null;}
+}
+function sonicFlat(input,filename){
+  const source=sonicSettings(input)||input;
+  if(!/(?:^|[\r\n&])(?:firewallName|firewallModel|shortProdName)=/i.test(source) ||
      !/(?:^|[\r\n&])(?:iface_(?:name|ifnum|zone|static_ip)_\d+|firewallModel)=/i.test(source))return null;
   const system=new Map(),ports=new Map(),routes=new Map();
   const decode=v=>{try{return decodeURIComponent(v.replace(/\+/g,' '));}catch{return v;}};
   for(const part of source.split(/[\r\n&]+/)){
     const m=/^\s*([a-zA-Z][\w]*)=(.*)$/.exec(part);if(!m)continue;
     const k=m[1].toLowerCase(),v=decode(m[2].trim());
-    if(k==='firewallname'||k==='firewallmodel'){system.set(k,v);continue;}
-    const pi=/^iface_(name|ifnum|zone|comment|vlan_tag|vlan_parent|parent_ifnum|static_ip|static_mask|static_netmask|lan_ip|lan_mask|port_disabled)_(\d+)$/.exec(k);
+    if(k==='firewallname'||k==='firewallmodel'||k==='shortprodname'){system.set(k,v);continue;}
+    const pi=/^iface_(name|ifnum|zone|comment|vlan_tag|vlan_parent|parent_ifnum|static_ip|static_mask|static_netmask|lan_ip|lan_mask|mgmt_ip|mgmt_netmask|port_disabled)_(\d+)$/.exec(k);
     const policy=/^routepolicy(dstnet|dst|mask|gw|gateway|iface|metric|enabled|srcnet|src|svc)_?(\d+)$/.exec(k);
     const rt=/^staticroute(dest|mask|gateway|interface|metric|enabled)_?(\d+)$/.exec(k);
     const key=pi||rt||policy;
     if(key){const map=pi?ports:routes;let index=policy?'policy-'+key[2]:key[2];let record=map.get(index);if(!record){record={};map.set(index,record);}if(policy)record.type='policy';record[key[1]]=v;}
   }
-  const d=host(system.get('firewallname')||fallback(filename),'SonicWall',system.get('firewallmodel')||'');
+  const d=host(system.get('firewallname')||fallback(filename),'SonicWall',system.get('shortprodname')||system.get('firewallmodel')||'');
   const ifnames=new Map();
   for(const [id,row] of ports)if(row.name){ifnames.set(id,row.name);if(row.ifnum)ifnames.set(row.ifnum,row.name);}
   for(const row of ports.values()){
     if(!row.name)continue;const p=ensurePort(d,row.name);if(row.comment)p.description=row.comment;if(row.zone)p.zone=row.zone;
-    const ip=row.static_ip||row.lan_ip;if(supportedIPv4(ip))p.ip=cidr(ip,row.static_mask||row.static_netmask||row.lan_mask);
+    const ip=[[row.static_ip,row.static_mask||row.static_netmask],[row.lan_ip,row.lan_mask],[row.mgmt_ip,row.mgmt_netmask]].find(([ip])=>supportedIPv4(ip)&&ip!=='0.0.0.0');if(ip)p.ip=cidr(...ip);
     if(row.port_disabled !== undefined)p.admin=/^(?:1|on|true)$/i.test(row.port_disabled)?'down':'up';
     const numbered=/^(X\d+):V(\d+)$/i.exec(row.name);
     const parent=row.vlan_parent||row.parent_ifnum;

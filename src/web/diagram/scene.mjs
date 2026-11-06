@@ -80,8 +80,9 @@ export function fitRatio(r,x,y,w,h){
 export function portNumber(s){return String(s??'').match(/(\d+)(?:[^\d]*)$/)?.[1]||String(s??'');}
 export function portList(d){return list(d.ports).filter(p=>p?.name!=null);}
 export function physicalPorts(d){
-  return portList(d).filter(p=>!['virtual','logical','loopback','aggregate','link aggregation','vlan','softwareloopback','l3ipvlans','tunnel'].includes(String(p.type||'').toLowerCase()) &&
-    !/^(?:vlan(?:if|[-. ]?\d)|loopback|lo\d+$|lag[- ]?\d|port-channel|po\d+$|ae\d+$|bridge-aggregation|route-aggregation|eth-trunk|bond\d+|null\d+|bridge[- ]?\d)/i.test(String(p.name)) &&
+  const virtual=['virtual','logical','loopback','aggregate','link aggregation','vlan','softwareloopback','l3ipvlans','tunnel','hard-switch','switch','vap-switch','vdom-link','redundant'];
+  return portList(d).filter(p=>!p.parent&&!p.members?.length&&!virtual.includes(String(p.type||'').toLowerCase())&&!virtual.includes(String(p.configuredType||'').toLowerCase())&&
+    !/^(?:vlan(?:if|[-. ]?\d)|loopback|lo\d+$|lag[- ]?\d|trk\d+$|port-channel|po\d+$|ae\d+$|bridge-aggregation|route-aggregation|eth-trunk|bond\d+|null\d+|bridge[- ]?\d)/i.test(String(p.name)) &&
     !/\.\d+$/.test(String(p.name)));
 }
 export function state(v){return /^(up|connected|online|active|operational)$/i.test(value(v))?'up':/down|disabled|offline|disconnected|inactive/i.test(value(v))?'down':'unknown';}
@@ -94,7 +95,7 @@ export function addDevice(page,project,d,bounds,key,opts={}){
   if(asset){
     for(const [k,v] of Object.entries(asset.anchors||{}))addAnchor(k,Array.isArray(v)?v:[v?.x,v?.y]);
   } else if(panel){
-    Object.assign(g.ports,panel.ports);g.children=panel.children;g.physicalLayout=panel.verified;g.layoutSource=panel.source;
+    Object.assign(g.ports,panel.ports);g.children=panel.children;g.panelRegions=panel.regions;g.physicalLayout=panel.verified;g.layoutSource=panel.source;
   } else if(d.kind==='handoff'){
     rect(g.children,0,0,1,1,'#EDF3F5','#A8BAC1',1);rect(g.children,0,0,.012,1,C.ink);g.ports.handoff=[.5,1];
   } else if(ap){
@@ -121,6 +122,13 @@ export function getAnchor(g,raw,sideHint,unique){
     g.ports[id]=[frac,sideHint==='top'?0:1];
   }
   const [nx,ny]=g.ports[id];
+  const regions=g.panelRegions||[],region=regions.find(r=>ny>=r.y-1e-8&&ny<=r.y+r.h+1e-8);
+  if(region&&regions.length>1){
+    const top=ny<=region.y+region.h/2,side=top?'top':'bottom',edge=top?region.y:region.y+region.h;
+    const adjacent=regions.filter(r=>r!==region&&(top?r.y+r.h<=region.y+1e-8:r.y>=edge-1e-8));
+    if(adjacent.length){const other=top?Math.max(...adjacent.map(r=>r.y+r.h)):Math.min(...adjacent.map(r=>r.y));return {device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+edge*g.h,escapeY:g.y+(edge+other)/2*g.h,escapeRange:[g.y+Math.min(edge,other)*g.h,g.y+Math.max(edge,other)*g.h]};}
+    return {device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+edge*g.h};
+  }
   return {device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side:ny<=.5?'top':'bottom',edge:g.y+(ny<=.5?0:g.h)};
 }
 export function optic(page,project,device,body,anchor,info){

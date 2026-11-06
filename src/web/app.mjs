@@ -12,6 +12,7 @@ import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
 import {cleanPageNumbers,pageNumber} from './page-options.mjs';
 import {connectionPorts,checkConnection,sameConnection} from './connection-edit.mjs';
+import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog} from './imports/index.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
@@ -325,6 +326,18 @@ function editDevice(current){
  const options=[['','Schematic front'],...Object.values(project.stencils).filter(a=>a.view!=='rear').map(s=>[s.id,s.name])];
  const shape=field(body,'Front-panel stencil',d.stencilId||'',options);
  const scale=field(body,'Core faceplate scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=30;scale.max=100;scale.step=5;
+ const hardware=el('details');hardware.append(el('summary','Stack members and installed modules'));body.append(hardware);
+ hardware.append(el('p','Confirm each member model and installed card. For 2920 rear bays A/B use J9731A (SFP+) or J9732A (copper). For 3560-E uplink slots X2-1/X2-2 use CVR-X2-SFP or the installed X2 transceiver model. Leave unknown cards unassigned.','hint'));
+ const memberRows=[],moduleRows=[],memberList=el('div'),moduleList=el('div');hardware.append(memberList);
+ const hardwareRow=(parent,rows,values,columns)=>{
+  const box=el('div','','hardware-row'),row={box};
+  for(const [key,title] of columns){const cell=el('div','','hardware-field');box.append(cell);row[key]=field(cell,title,values[key]||'');if(key==='model')row[key].setAttribute('list',models.id);}
+  button(box,'Remove',()=>{row.removed=true;box.remove();});parent.append(box);rows.push(row);
+ };
+ const memberRow=m=>hardwareRow(memberList,memberRows,m,[['id','Member number'],['model','Member model']]);
+ for(const m of d.stackMembers||[])memberRow(m);button(hardware,'Add stack member',()=>memberRow({}));hardware.append(moduleList);
+ const moduleRow=m=>hardwareRow(moduleList,moduleRows,m,[['member','Module member (blank for chassis)'],['slot','Module slot'],['model','Module model']]);
+ for(const m of d.modules||[])moduleRow(m);button(hardware,'Add module',()=>moduleRow({}));
  let ports,vlans,routes,bridges;
  const details=el('details');details.append(el('summary','Edit ports, VLANs and routing'));body.append(details);
  ports=field(details,'Ports (JSON array)',JSON.stringify(d.ports||[],null,2),'multiline');vlans=field(details,'VLANs',JSON.stringify(d.vlans||[],null,2),'multiline');
@@ -335,7 +348,10 @@ function editDevice(current){
   let data;try{data=[ports,vlans,routes,bridges].map(input=>JSON.parse(input.value));}catch{throw Error('Port, VLAN and route data must be valid JSON.');}
   if(data.some(arr=>!Array.isArray(arr)||arr.some(x=>!object(x)))||data[0].some(p=>typeof p.name!=='string'||!p.name.trim()))throw Error('Use arrays of objects. Each port needs a name.');
   if(!(Number(scale.value)>=30&&Number(scale.value)<=100))throw Error('Use a faceplate scale from 30 to 100 percent.');
+  const composition=hardwareComposition(memberRows.filter(r=>!r.removed).map(r=>({id:r.id.value,model:r.model.value})),moduleRows.filter(r=>!r.removed).map(r=>({member:r.member.value,slot:r.slot.value,model:r.model.value})));
+  if(model.value.trim()!==d.model)delete d.sku;
   Object.assign(d,{id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),ip:ip.value.trim(),stencilId:shape.value,scale:Number(scale.value)/100,ports:data[0],vlans:data[1],routes:data[2],bridges:data[3]});
+  Object.assign(d,composition);
   if(!current){d.scopeOverride=true;project.devices.push(d);}
   const key=modelKey(d.vendor,d.model);if(key&&shape.value){for(const s of Object.values(project.stencils))s.models=(s.models||[]).filter(k=>k!==key);project.stencils[shape.value].models.push(key);assignMatching(project.stencils[shape.value]);}
   close();perform();say('Device saved.');

@@ -1,18 +1,35 @@
 import {faceplates} from '../imports/faceplates.mjs';
 const normalize=v=>String(v||'').toUpperCase().replace(/[\s_]/g,'').replace(/^(?:FORTINET|SONICWALL|SOPHOS|CISCO(?:CATALYST)?|JUNIPER(?:NETWORKS)?|PALOALTO(?:NETWORKS)?)/,'').replace(/^(?:FORTIGATE|FGT?)-?(\d+[A-Z])$/,'FG-$1');
 const profiles=new Map();for(const p of faceplates)for(const m of p.models)profiles.set(normalize(m),p);
-export function faceplateProfile(d){return profiles.get(normalize(d.sku))||profiles.get(normalize(d.model));}
+export function faceplateProfile(d){
+ let p=profiles.get(normalize(d.sku))||profiles.get(normalize(d.model));
+ // Fortinet's Rev2 shared interfaces are named x1/x2, in the same physical bay.
+ if(p?.models.some(m=>/^FG-9[01]G$/.test(m))&&(d.ports||[]).some(o=>/^x[12]$/i.test(o.name)&&!o.parent))
+  return {...p,banks:p.banks.map(b=>({...b,names:b.names.map(n=>n.replace(/^wan([12])$/,'x$1'))}))};
+ if(p?.unconfirmedUplinkModules){
+  const banks=[...p.banks],confirmed=[];
+  for(const [slot,y] of [['X2-1',.32],['X2-2',.70]]){
+   const card=d.modules?.find(m=>m.slot?.toUpperCase()===slot&&!m.member);if(!card)continue;
+   const number=slot.endsWith('1')?1:2;
+   if(/^CVR-X2-SFP$/i.test(card.model)){const first=number===1?49:51;banks.push({names:[String(first),String(first+1)],form:'SFP',rows:1,positions:[[.89,y],[.94,y]],socketWidth:.028});confirmed.push(number);}
+   else if(/^X2-10GB-(?:SR|LR|ER|CX4|LX4|LRM|ZR)$/i.test(card.model)){banks.push({names:['uplink'+number],form:'X2',rows:1,positions:[[.915,y]],socketWidth:.036});confirmed.push(number);}
+  }
+  p={...p,banks,confirmedUplinkSlots:confirmed};
+ }
+ return p;
+}
 const canon=v=>String(v).toLowerCase().replace(/^gigabitethernet/,'gi').replace(/^tengigabitethernet/,'te').replace(/^management$/,'mgmt');
 const rectangle=(a,x,y,w,h,fill,stroke='none',weight=.5)=>a.push({type:'rect',x,y,w,h,fill,stroke,weight});
 const text=(a,x,y,w,h,value,size=5,color='#33434A',bold=false)=>a.push({type:'text',x,y,w,h,value,size,color,bold,align:'left'});
-function socket(a,ports,name,x,y,form,view='front',w=.024,h=.23,primary=true){
+function socket(a,ports,name,x,y,form,view='front',w=.024,h=.23,primary=true,orientation='down'){
  const first=a.length;
  const rj=/RJ|copper/i.test(form),wide=/QSFP|CX4|X2/.test(form),width=w*(wide?1.45:1),height=h*(rj?1:.86);
  rectangle(a,x-width/2,y-height/2,width,height,rj?'#1D282D':'#6F777B',rj?'#66757B':'#39484F',.5);
  if(rj){rectangle(a,x-width*.36,y-height*.28,width*.72,height*.49,'#101A1E');rectangle(a,x-width*.18,y+height*.13,width*.36,height*.30,'#879296');for(let j=0;j<4;j++)rectangle(a,x-width*.29+j*width*.17,y-height*.3,width*.05,height*.13,'#D3B266');}
  else {rectangle(a,x-width*.4,y-height*.35,width*.8,height*.7,'#182D36');rectangle(a,x-width*.3,y+height*.23,width*.6,height*.05,'#D7DCDE');}
+ if(orientation==='up')for(let i=first;i<a.length;i++)a[i].y=2*y-a[i].y-a[i].h;
  for(let i=first;i<a.length;i++)a[i].name='Port '+name+' '+form;
- if(primary){ports[name]=[x,y];Object.assign(a[first],{anchorName:name,anchorOrigin:[x,y]});}return {name,x,y,form,view};
+ if(primary){ports[name]=[x,y];Object.assign(a[first],{anchorName:name,anchorOrigin:[x,y]});}return {name,x,y,form,view,orientation,primary};
 }
 function banksFor(p){return p.banks?.filter(b=>!b.optional)||[];}
 function baseLayout(p){
@@ -28,15 +45,16 @@ function baseLayout(p){
   const max=Math.max(p.module?1:29,...p.sockets.map(s=>s[1]));
   for(const [n,col,row,form,suffix] of p.sockets){let x=.052+col*(.91/(max+1)),y=row===0?.32:.70;
    if(p.models.some(m=>['JL675A','JL676A','R9Y04A'].includes(m))){if(n>=49)x=n<=50?.03386:.08466;else x=.138056+Math.floor((n-1)/2)*(.770069/23);y=n>=49?(row===0?.33153:.70476):(row===0?.34575:.69055);}
-   const name=String(n);add(name,x,y,form,'front',p.module?.05:.022,.25,!suffix);
+   if(p.models.some(m=>/^J973[12]A$/.test(m))){x=.33+(Number(n)-1)*.137;y=.58;}
+   const name=String(n);add(name,x,y,form,'front',p.models.some(m=>/^J973[12]A$/.test(m))?.11:p.module?.05:.022,.25,suffix!=='M',row===0?'up':'down');
   }
   if(!p.module){rectangle(children,.937,.2,.033,.53,'#ECEFEE','#8B979D',.6);for(let n=0;n<4;n++)rectangle(children,.944,.27+n*.1,.007,.04,n===0?'#699B58':'#899799');}
  }else if(forti&&p.models.some(m=>/^FG-12[01]G$/.test(m))){
   text(children,.035,.22,.23,.32,'FORTINET',7,'#59716C',true);rectangle(children,.27,.23,.022,.15,'#16272D');rectangle(children,.296,.26,.022,.24,'#26383F');
-  add('ha',.339,.36,'RJ45');add('mgmt',.339,.69,'RJ45');
-  for(let n=1;n<=16;n++)add('port'+n,.385+Math.floor((n-1)/2)*.0334,n%2?.36:.69,'RJ45');
-  for(let n=1;n<=4;n++)add('x'+n,.6648+Math.floor((n-1)/2)*.0308,n%2?.36:.69,'SFP+');
-  for(let n=17;n<=24;n++)add('port'+n,.7339+Math.floor((n-17)/2)*.0300,n%2?.36:.69,'SFP');
+  add('ha',.339,.36,'RJ45','front',.024,.23,true,'up');add('mgmt',.339,.69,'RJ45');
+  for(let n=1;n<=16;n++)add('port'+n,.385+Math.floor((n-1)/2)*.0334,n%2?.36:.69,'RJ45','front',.024,.23,true,n%2?'up':'down');
+  for(let n=1;n<=4;n++)add('x'+n,.6648+Math.floor((n-1)/2)*.0308,n%2?.36:.69,'SFP+','front',.024,.23,true,n%2?'up':'down');
+  for(let n=17;n<=24;n++)add('port'+n,.7339+Math.floor((n-17)/2)*.0300,n%2?.36:.69,'SFP','front',.024,.23,true,n%2?'up':'down');
  }else if(forti&&p.models.some(m=>/^FG-20[01]G$/.test(m))){
   ratio=9.8;text(children,.025,.17,.15,.30,'FORTINET',7,'#59716C',true);rectangle(children,.14,.40,.025,.27,'#203139');rectangle(children,.14,.76,.025,.09,'#17262D');
   add('ha',.203,.43,'RJ45');add('mgmt',.203,.71,'RJ45');
@@ -57,23 +75,24 @@ function baseLayout(p){
    let at=left;
    pane.forEach((b,bi)=>{
     const step=(right-left)/Math.max(8,total),w=step*.74;
-    b.names.forEach((n,i)=>{const row=i%b.rows+(b.rowOffset||0),pos=b.positions?.[i],y=Array.isArray(pos)?pos[1]:(b.rows===1&&!b.rowOffset?.5:(p.rowsY||[.32,.70])[row]),x=Array.isArray(pos)?pos[0]:pos??at+step*(Math.floor(i/b.rows)+.5);add(n,x,paneY+y*paneH,b.displayForm||b.form,b.side,b.positions?(b.socketWidth||.026):w,(p.rowsY?.[0]>.5?.15:.25)*paneH,!b.mirror);});
+    b.names.forEach((n,i)=>{const row=i%b.rows+(b.rowOffset||0),pos=b.positions?.[i],y=Array.isArray(pos)?pos[1]:(b.rows===1&&!b.rowOffset?.5:(p.rowsY||[.32,.70])[row]),x=Array.isArray(pos)?pos[0]:pos??at+step*(Math.floor(i/b.rows)+.5);add(n,x,paneY+y*paneH,b.displayForm||b.form,b.side,b.positions?(b.socketWidth||.026):w,(p.rowsY?.[0]>.5?.15:.25)*paneH,!b.mirror,b.orientation||(b.rows===2&&row===0?'up':'down'));});
     if(!b.positions)at+=step*(widths[bi]+.7);
    });
   });
   if(forti)text(children,.025,.30,.17,.32,'FORTINET',7,'#59716C',true);
   if(views.length===1&&views[0]==='rear')text(children,.025,.03,.16,.18,'Rear',5);
-  if(p.unconfirmedUplinkModules){for(const y of [.21,.60])rectangle(children,.87,y,.08,.29,'#A5ADB1','#596B73',.5);}
+  if(p.unconfirmedUplinkModules){for(const [i,y] of [.21,.60].entries())if(!p.confirmedUplinkSlots?.includes(i+1))rectangle(children,.87,y,.08,.29,'#A5ADB1','#596B73',.5);}
  }
- return {ratio,ports,children,sockets,verified:true,source:p.source,profile:p};
+ return {ratio,ports,children,sockets,regions:[{y:0,h:1}],verified:true,source:p.source,profile:p};
 }
 function localName(p,name){
  let s=canon(name),m;
  if(p.aliases?.[s])s=canon(p.aliases[s]);
  if(p.naming==='cx')return s.match(/^\d+\/\d+\/(\d+)$/)?.[1]||s;
- if(p.naming==='classic')return s.match(/^\d+\/(\d+)$/)?.[1]||s;
+ if(p.naming==='classic')return s.match(/^\d+\/([ab]?\d+)$/)?.[1]||s;
  if(p.naming==='cisco'){
   if((m=/^(gi|te|twentyfivegige|tw|fortygigabitethernet|fo|hundredgige|hu|eth|ethernet)(\d+)\/(\d+)\/(\d+)$/i.exec(s)))return (m[3]==='1'&&!/C9500/.test(p.models[0])?'uplink':'')+m[4];
+  if(p.unconfirmedUplinkModules&&(m=/^te\d+\/(\d+)$/.exec(s)))return 'uplink'+m[1];
   return s.match(/^(?:gi|te|eth|ethernet)\d+\/(\d+)$/)?.[1]||s;
  }
  if(p.naming==='junos'&&(m=/^(?:ge|xe|et)-(\d+)\/(\d+)\/(\d+)$/.exec(s)))return (m[2]==='1'?'uplink':m[2]==='2'?'vcp':'')+m[3];
@@ -81,8 +100,37 @@ function localName(p,name){
 }
 function mapObserved(layout,p,device){
  const points=new Map(Object.entries(layout.ports).map(([k,v])=>[canon(k),v]));
- for(const port of device.ports||[]){const point=points.get(canon(localName(p,port.name)));if(point)layout.ports[port.name]=[...point];}
+ for(const port of device.ports||[]){
+  const name=canon(localName(p,port.name)),shared=layout.sockets.filter(s=>canon(s.name)===name);
+  const media=String(port.configuredMedia||port.media||'');
+  const selected=/copper|rj.?45|base-t|sgmii/i.test(media)?shared.find(s=>/RJ|copper/i.test(s.form)):/fiber|sfp|^(sr|lr|er|dac)$/i.test(media)?shared.find(s=>!/RJ|copper/i.test(s.form)):null;
+  const point=selected?[selected.x,selected.y]:points.get(name);if(point){layout.ports[port.name]=[...point];if(selected){
+   layout.ports[shared[0].name]=[...point];
+   for(const s of shared)s.primary=s===selected;
+   for(const c of layout.children)if(c.anchorName&&canon(c.anchorName)===name){delete c.anchorName;delete c.anchorOrigin;}
+   const c=layout.children.find(c=>c.type==='rect'&&Math.abs(c.x+c.w/2-selected.x)<1e-8&&Math.abs(c.y+c.h/2-selected.y)<1e-8);
+   if(c)Object.assign(c,{anchorName:shared[0].name,anchorOrigin:[...point]});
+  }}
+ }
  return layout;
+}
+function rearExpansion(panel,p,device){
+ if(!p.models.some(m=>/^J(?:972[6-9]|9836)A$/.test(m)))return panel;
+ const cards=(device.modules||[]).filter(m=>/^[AB]$/i.test(m.slot)),present=new Set((device.ports||[]).map(o=>String(o.name).match(/(?:^|\/)([AB])[12]$/i)?.[1]?.toUpperCase()).filter(Boolean));
+ if(!cards.length&&!present.size)return panel;
+ for(const c of panel.children){c.y*=.44;c.h*=.44;if(c.anchorOrigin)c.anchorOrigin=[c.anchorOrigin[0],c.anchorOrigin[1]*.44];}
+ for(const pt of Object.values(panel.ports))pt[1]*=.44;
+ for(const s of panel.sockets)s.y*=.44;
+ rectangle(panel.children,0,.54,1,.44,'#D8DDDE','#5D7079',1);text(panel.children,.015,.55,.1,.08,'Rear',5);
+ for(const [slot,x] of [['A',.11],['B',.34]]){
+  const card=cards.find(c=>c.slot.toUpperCase()===slot),form=/^J9731A$/i.test(card?.model)?'SFP+':/^J9732A$/i.test(card?.model)?'RJ45':null;
+  rectangle(panel.children,x,.59,.225,.33,'#BAC4C8','#71828A',.6);
+  text(panel.children,x+.01,.60,.2,.07,slot+' '+(form?card.model:present.has(slot)?'module unspecified':'empty bay'),5);
+  if(!form)continue;
+  for(let n=1;n<=2;n++)panel.sockets.push(socket(panel.children,panel.ports,slot+n,x+(.33+(n-1)*.137)*.225,.805,form,'rear',.025,.12,true,form==='RJ45'?'up':'down'));
+ }
+ rectangle(panel.children,.58,.61,.13,.27,'#BAC4C8','#71828A',.6);text(panel.children,.59,.69,.11,.07,'Stacking bay',4);
+ panel.regions=[{y:0,h:.44},{y:.54,h:.44}];panel.ratio/=2.15;return panel;
 }
 export function deviceFaceplate(device){
  const p=faceplateProfile(device),members=device.stackMembers||[],modules=device.modules||[];
@@ -98,17 +146,27 @@ export function deviceFaceplate(device){
   return {ratio:count===12?1.15:2.25,ports,children,sockets,verified:true,source:p?.source};
  }
  if(members.length>1){
-  const children=[],ports=Object.create(null),sockets=[];let verified=true;
+  const children=[],ports=Object.create(null),sockets=[],regions=[];let verified=true;
   const list=[...members].sort((a,b)=>Number(a.id)-Number(b.id));
-  for(const [i,member] of list.entries()){
-   const profile=faceplateProfile({model:member.model}),panel=baseLayout(profile),top=i/list.length,height=.93/list.length;
+  const panels=list.map(member=>{
+   const profile=faceplateProfile({model:member.model}),localPorts=(device.ports||[]).filter(o=>{const m=String(o.name).match(/^(?:(?:Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i);return m&&m[1]===String(member.id);});
+   let panel=baseLayout(profile);if(panel)panel=rearExpansion(panel,profile,{ports:localPorts,modules:modules.filter(m=>String(m.member)===String(member.id))});
+   return {member,profile,panel,localPorts,units:1/(panel?.ratio||10.2)};
+  });
+  const total=panels.reduce((n,p)=>n+p.units,0)+.035*(panels.length-1);let cursor=0;
+  for(const {member,profile,panel,localPorts,units} of panels){
+   const top=cursor/total,height=units/total;cursor+=units+.035;
    if(!panel){verified=false;rectangle(children,0,top,1,height,'#E4E8EA','#819198',1);continue;}
-   const localPorts=(device.ports||[]).filter(o=>{const m=String(o.name).match(/^(?:(?:Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i);return m&&m[1]===String(member.id);});
    mapObserved(panel,profile,{ports:localPorts});
+   for(const region of panel.regions)regions.push({y:top+region.y*height,h:region.h*height});
    for(const c of panel.children)children.push({...c,name:'Member '+member.id+': '+(c.name||c.type),x:c.x,y:top+c.y*height,w:c.w,h:c.h*height,...(c.anchorOrigin?{anchorOrigin:[c.anchorOrigin[0],top+c.anchorOrigin[1]*height]}:{})});
    for(const port of localPorts){const pt=panel.ports[port.name];if(pt)ports[port.name]=[pt[0],top+pt[1]*height];}
+   if(['cx','classic'].includes(profile.naming))for(const s of panel.sockets.filter(s=>s.primary)){
+    const name=member.id+(profile.naming==='cx'?'/1/':'/')+s.name;
+    ports[name]=[s.x,top+s.y*height];sockets.push({...s,name,y:top+s.y*height});
+   }
   }
-  return {ratio:10.2/list.length,children,ports,sockets,verified,source:p?.source};
+  return {ratio:1/total,children,ports,sockets,regions,verified,source:p?.source};
  }
- const result=baseLayout(p);return result?mapObserved(result,p,device):null;
+ const result=baseLayout(p);return result?mapObserved(rearExpansion(result,p,device),p,device):null;
 }

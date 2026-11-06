@@ -16,6 +16,7 @@ Read this file, the current development handoff, and the shared standards before
 | src/web/history.mjs, src/web/inline-text.mjs, src/web/snapping.mjs | Project deltas, atomic undo/redo, direct text editing, selection geometry and configurable snapping. |
 | src/web/link-styles.mjs, src/web/page-options.mjs | Shared cable/legend styling and captions, validated page-number settings and format tokens. |
 | src/web/connection-edit.mjs, src/web/point-tools.mjs, src/web/color-picker.mjs, src/web/port-table.mjs | Port selection/conflicts, normalized box/group movement, solid-color formats/palettes and port table rules. |
+| src/web/hardware-composition.mjs | Validated user confirmation of stack members and installed chassis/rear/uplink modules. |
 | src/web/assets/app-icon.svg, desktop/Assets/app.ico | Authored editable vector icon and its multi-size Windows build resource. |
 | desktop | Windows Forms/WebView2 host, release policy, verified download and rollback helper. |
 | scripts | Browser and Windows builds, release packaging, publishing, root guard and optional Visio conversion. |
@@ -29,6 +30,8 @@ Read this file, the current development handoff, and the shared standards before
 Use synthetic inputs in tests, screenshots and releases. Real customer configs, reports, diagrams, credentials and unrestricted third-party stencil collections must stay outside this repository. The preview works locally. Keep import processing and layout independent of the update feed.
 
 A site scope is based on configured devices and their linked APs, with explicit inclusion overrides. Hardware packs retain model assignments and optic choices. Keep hardware-stencil export tied to the active drawing. Device identities and SFP form factors are separate from physical proof. Preserve provenance and warnings when two records disagree. For artwork without a mapped jack, retain the schematic or boundary behavior and provide a manual mapping path.
+
+Expand full-prefix ranges into individual ports before storing interface/VLAN state. Never turn unsupported ranges into fictional jacks. SonicWall EXP decoding is bounded and requires its settings header; only normalized topology fields are retained. Shared-media capabilities alone must not infer copper. For 90G/91G, explicit x1/x2 physical names select revision 2. Combo sockets retain one logical interface at the selected connector. Confirm 2920 rear cards and Cisco 3560-E X2/TwinGig adapters before assigning exact module jacks. Two-part Te uplinks must never alias copper access ports. Stack panel regions and escape lanes prevent leads from traversing another member; keep lane assignments separate within the available gap.
 
 Preserve file and category selection when importing supplemental observations. Store normalized network records only, never raw command captures or configurations. Capture manual changes before recomposing evidence, and refresh the comparison snapshot after scope and hardware matching. Disabled sources must not leave stale observed fields, links or ghost peers. Preserve their known layout IDs across save/reopen. Configuration intent and current operational state remain distinct.
 

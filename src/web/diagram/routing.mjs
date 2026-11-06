@@ -28,10 +28,11 @@ function score(routes,nodes,obstacles){
  return [blocked,shared,crossed,bends,length];
 }
 function better(a,b){for(let i=0;i<a.length;i++){if(Math.abs(a[i]-b[i])>.001)return a[i]<b[i];}return false;}
-function lead(v){const start=[v.anchor.x,v.anchor.y];return v.exitX===v.anchor.x?[start,[v.exitX,v.ay]]:[start,[start[0],start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,v.ay]];}
+function lead(v){const start=[v.anchor.x,v.anchor.y];if(v.anchor.escapeY!=null)return [start,[start[0],v.ay],[v.exitX,v.ay]];return v.exitX===v.anchor.x?[start,[v.exitX,v.ay]]:[start,[start[0],start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,v.ay]];}
 function turnsClear(v,y){return (v.anchor.side==='top'?-1:1)*(y-v.anchor.edge)>=8;}
 function minimalCandidate(route,nodes,obstacles,others){
  const {a,b}=route,ax=a.anchor.x,bx=b.anchor.x,candidates=[route];
+ if(a.anchor.escapeY!=null||b.anchor.escapeY!=null)return route;
  const ys=[(a.ay+b.ay)/2,a.ay,b.ay];
  for(const y of ys)if(turnsClear(a,y)&&turnsClear(b,y))candidates.push({...route,a:{...a,ay:y},b:{...b,ay:y},points:clean([[ax,a.anchor.y],[ax,y],[bx,y],[bx,b.anchor.y]])});
  if(ax===bx&&((a.anchor.side==='bottom'&&b.anchor.side==='top'&&a.anchor.y<b.anchor.y)||(a.anchor.side==='top'&&b.anchor.side==='bottom'&&a.anchor.y>b.anchor.y)))candidates.push({...route,points:[[ax,a.anchor.y],[bx,b.anchor.y]]});
@@ -57,7 +58,8 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    }),exits=[];
    sorted.forEach((v,i)=>{
     const side=sides.get(v.e.idx)||'left',dir=side==='right'?1:-1;
-    let escapeX=v.anchor.x;if(sorted.some(o=>o!==v&&Math.abs(o.anchor.x-v.anchor.x)<4))while(exits.some(o=>Math.abs(o-escapeX)<4))escapeX+=dir*6;let x=escapeX,ay=v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?50+pitch*i:18+pitch*i)*scale;
+    let escapeX=v.anchor.x;if(sorted.some(o=>o!==v&&Math.abs(o.anchor.x-v.anchor.x)<4))while(exits.some(o=>Math.abs(o-escapeX)<4))escapeX+=dir*6;let x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?50+pitch*i:18+pitch*i)*scale;
+    if(v.anchor.escapeRange){const matching=sorted.filter(o=>o.anchor.escapeRange&&near(o.anchor.escapeRange[0],v.anchor.escapeRange[0])&&near(o.anchor.escapeRange[1],v.anchor.escapeRange[1])),[lo,hi]=v.anchor.escapeRange;ay=lo+(hi-lo)*(matching.indexOf(v)+1)/(matching.length+1);}
     // Text explicitly positioned by the user remains an obstacle. Automatic
     // device titles are fitted after routing instead of forcing cable doglegs.
     let detour=false;for(const box of obstacles)if(crossesText([[x,v.anchor.y],[x,ay]],box,3)){x=dir>0?Math.max(x,box.x+box.w+7):Math.min(x,box.x-7);detour=true;}

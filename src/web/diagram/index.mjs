@@ -251,7 +251,9 @@ function wireless(project,db){
           notes.forEach((text,n)=>{label(a,center-lw/2,(top?286:833)+shift+n*14,lw,14,text,12,false,C.muted,'center');a.at(-1).full=true;});
           const track=order.indexOf(i),lane=top?switchY-21-13*track:switchY+135+13*track;
           const info=mediaInfo(e.media,true);
-          route(p,start,end,[[start.x,start.y],[start.x,lane],[end.x,lane],[end.x,end.y]],info.color,'AP link '+(e.idx+1),info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp});
+          const rail=center<start.x?swg.x-18-13*track:swg.x+swg.w+18+13*track,escape=start.escapeRange?start.escapeRange[0]+(start.escapeRange[1]-start.escapeRange[0])*(i+1)/(rs.length+1):null;
+          const points=escape==null?[[start.x,start.y],[start.x,lane],[end.x,lane],[end.x,end.y]]:[[start.x,start.y],[start.x,escape],[rail,escape],[rail,lane],[end.x,lane],[end.x,end.y]];
+          route(p,start,end,points,info.color,'AP link '+(e.idx+1),info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp});
         });
       }
       out.push(p);

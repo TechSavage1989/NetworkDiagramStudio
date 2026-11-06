@@ -25,7 +25,7 @@ function handoffs(db){
  }
  return {devices,links};
 }
-function bounds(d,y=0,width=WIDTH){const scale=Math.max(.3,Math.min(1,d.scale||1));return d.kind==='ap'?[LEFT+(width-72*scale)/2,y,72*scale,72*scale]:d.kind==='handoff'?[LEFT+(width-170)/2,y,170,29]:[LEFT+(width-width*scale)/2,y,width*scale,124];}
+function bounds(d,y=0,width=WIDTH){const scale=Math.max(.3,Math.min(1,d.scale||1));return d.kind==='ap'?[LEFT+(width-72*scale)/2,y,72*scale,72*scale]:d.kind==='handoff'?[LEFT+(width-170)/2,y,170,29]:[LEFT+(width-width*scale)/2,y,width*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
 function probe(project,d){return addDevice({items:[]},project,d,bounds(d),'probe');}
 function measurement(project,d,edges,positions,handoffs=0){
  const g=probe(project,d),counts={top:0,bottom:0};

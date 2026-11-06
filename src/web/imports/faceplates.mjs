@@ -67,4 +67,14 @@ for(const n of [740,750,2750,3850]){
  const names=span('',0,count-1).reverse(),aliases=Object.fromEntries(names.flatMap(i=>[['igc'+i,'igb'+i],['port'+i,'igb'+i]]));
  add(['DEC'+n],'Deciso',n===3850?'https://shop.opnsense.com/wp-content/uploads/2023/09/DEC3840_50_60_V2.pdf':n===2750?'https://shop.opnsense.com/wp-content/uploads/2021/11/Brochure-DEC2750.pdf':'https://shop.opnsense.com/wp-content/uploads/2023/09/Brochure_DEC700_V2.pdf',[bank(['ax1','ax0'],'SFP+',1,'front',{positions:[start,start+pitch]}),bank(names.map(i=>'igb'+i),'RJ45',1,'front',{positions:names.map((_,i)=>rjStart+i*rjPitch)})],{ratio:rack?10.8:6.8,bodyFill:rack?'#C3C7C9':'#DF6827',aliases});
 }
+// TZ600 connector bank is on the rear, in descending paired columns, not the LED front.
+add(['TZ600','TZ-600'],'SonicWall','https://www.sonicwall.com/techdocs/pdf/tz600-quick-start-guide.pdf',[bank(['x8','x9','x6','x7','x4','x5','x2','x3','x0','x1'],'RJ45',2,'rear')],{ratio:5.1,left:.43,right:.94});
+const fg90=extra.find(p=>p.models.includes('FG-90G'));
+const c3560e=extra.find(p=>p.models.includes('WS-C3560E-48PD-SF'));
+c3560e.models.push('WS-C3560E-48PD','WS-C3560E-48PD-S','WS-C3560E-48PD-E','WS-C3560E-48PD-EF','WS-C3560E-48TD');
+Object.assign(fg90,{ratio:5.15,rowsY:[.35,.70],banks:[
+ bank(['wan1','wan2'],'SFP+',2,'front',{positions:[.325,.325],socketWidth:.061}),
+ bank(['wan1','wan2'],'RJ45',2,'front',{positions:[.438,.438],socketWidth:.063,mirror:true}),
+ bank(['port1','port2','port3','port4','port5','port6','a','b'],'RJ45',2,'front',{positions:[.563,.563,.628,.628,.693,.693,.758,.758],socketWidth:.060})
+]});
 export const faceplates=[...inheritedFaceplates.filter(p=>!extra.some(q=>q.models.some(m=>p.models.includes(m)))),...extra];

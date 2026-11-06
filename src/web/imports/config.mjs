@@ -55,17 +55,22 @@ function fortios(text, filename) {
   d.fromConfig=true;output.devices.push(d);return output;
 }
 
-function interfaceNames(value) {
+function interfaceNames(value,warn=()=>{}) {
   const names=[];
   for(const item of value.replace(/\s+(?:to|-)\s+/ig,'-').split(',')){
-    const part=item.trim(), m=/^(.*?)(\d+)\s*-\s*(\d+)$/.exec(part);
-    if(m && +m[3]>=+m[2] && +m[3]-+m[2]<256) for(let n=+m[2];n<=+m[3];n++) names.push(m[1]+n);
+    const part=item.trim(), m=/^(.*?)(\d+)\s*-\s*(.*?)(\d+)$/.exec(part);
+    if(m){
+      if((m[3]&&portName(m[3]).toLowerCase()!==portName(m[1]).toLowerCase())||+m[4]<+m[2]||+m[4]-+m[2]>=256){warn(part);continue;}
+      for(let n=+m[2];n<=+m[4];n++)names.push(m[1]+n);
+    }
     else if(part) names.push(part);
+    if(names.length>1024){warn(value);return [];}
   }
   return names;
 }
 function switchCLI(text,filename) {
   const out=empty(); let hostname=/^(?:hostname|sysname)\s+(.+)$/im.exec(text)?.[1];
+  const ranges=value=>interfaceNames(value,part=>{const note=filename+': unsupported interface range '+part+'. Review its individual ports.';if(!out.warnings.includes(note))out.warnings.push(note);});
   const aruba=/AOS-CX|ArubaOS-CX|^(?:vsf member|interface lag|\s*vlan trunk (?:native|allowed))\b/im.test(text);
   const classic=/ProCurve|ArubaOS-Switch|hpStack_|^;\s*[A-Z]+\d+[A-Z]\s+Configuration|^\s*(?:untagged|tagged)\s+\d/im.test(text);
   const huawei=/^sysname\s+/im.test(text);
@@ -92,8 +97,12 @@ function switchCLI(text,filename) {
     if((m=/^interface\s+(range\s+)?(.+)$/i.exec(s))){section='port';ports=[];vids=[];
       const label=m[2];const svi=/^(?:vlan(?:-interface|if)?\s*)(\d+)$/i.exec(label);
       if(svi){section='svi';vids=[Number(svi[1])];ensureVlan(d,svi[1]);}
-      else for(const n of (m[1]?interfaceNames(label):[label])) ports.push(ensurePort(d,n));
+      else for(const n of ranges(label)) ports.push(ensurePort(d,n));
       continue;
+    }
+    if((m=/^trunk\s+(.+?)\s+(trk\d+)\s+(lacp|trunk)$/i.exec(s))){
+      const members=ranges(m[1]);for(const n of members)ensurePort(d,n).lag=m[2];
+      Object.assign(ensurePort(d,m[2]),{role:'aggregate',type:'aggregate',members});continue;
     }
     if(!/^\s/.test(raw) && (m=/^vlan\s+([\d, -]+)$/i.exec(s))){section='vlan';ports=[];vids=vlans(m[1]);vids.forEach(id=>ensureVlan(d,id));continue;}
     if((m=/^ip route(?:-static)?\s+(\S+)\s+(.+)$/i.exec(s))){let tail=words(m[2]),dst=m[1];if(!dst.includes('/')&&/^\d+\.\d+\.\d+\.\d+$/.test(tail[0]) && tail.length>1)dst=cidr(dst,tail.shift());
@@ -103,7 +112,7 @@ function switchCLI(text,filename) {
     if(section==='vlan' || section==='svi'){
       if((m=/^(?:name|description)\s+(.+)$/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).name=scalar(m[1]);});
       if((m=/^ip address\s+(\d[\d./]*)(?:\s+(\d[\d.]*))?/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).ip=cidr(m[1],m[2]);});
-      if((m=/^(tagged|untagged)\s+(.+)$/i.exec(s)))for(const n of interfaceNames(m[2])){const p=ensurePort(d,n);if(m[1]==='untagged')p.native=vids[0];else p.tagged=[...new Set([...(p.tagged||[]),...vids])];}
+      if((m=/^(tagged|untagged)\s+(.+)$/i.exec(s)))for(const n of ranges(m[2])){const p=ensurePort(d,n);if(m[1]==='untagged')p.native=vids[0];else p.tagged=[...new Set([...(p.tagged||[]),...vids])];}
     }
     if(section!=='port')continue;
     for(const p of ports){
