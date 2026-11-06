@@ -1,3 +1,4 @@
+import {recordArtwork} from './native-art.mjs';
 // Visio shapes use local inches with a bottom-left origin. Keep artwork and
 // connection points in that same space until the final image is flattened.
 export const identity=[1,0,0,1,0,0];
@@ -45,7 +46,7 @@ export function masterBounds(root){
 export async function renderMaster(root,decode,namedAnchors){
  const bounds=masterBounds(root),{w,h}=bounds;
  const scale=Math.min(2400/w,1600/h),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
- const ctx=canvas.getContext('2d'),anchors=Object.create(null),unsupported=new Set();let drawn=0;
+ const recorder=recordArtwork(canvas.getContext('2d'),canvas.width,canvas.height),ctx=recorder.ctx,anchors=Object.create(null),unsupported=new Set();let drawn=0;
  ctx.setTransform(canvas.width/w,0,0,-canvas.height/h,-bounds.x*canvas.width/w,(bounds.y+h)*canvas.height/h);
  async function walk(shape,matrix,depth){
   if(depth>24)throw Error('Stencil group is too deeply nested.');
@@ -98,5 +99,5 @@ export async function renderMaster(root,decode,namedAnchors){
  }
  await walk(root,identity,0);
  if(!drawn||unsupported.size)throw Error(unsupported.size?'Unsupported vector geometry ('+[...unsupported].join(', ')+'). Convert this master with desktop Visio or import its PNG faceplate.':'No supported artwork in this master.');
- return {dataUrl:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,anchors};
+ return {dataUrl:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,anchors,native:recorder.result()};
 }

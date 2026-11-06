@@ -29,6 +29,41 @@ async function inflate(data, size) {
   if (offset !== size) throw new Error('Truncated ZIP entry.');
   return bytes;
 }
+// A stencil collection can have hundreds of megabytes of uncompressed masters
+// and pictures. Index it first and inflate only the selected master's parts.
+export async function openZip(input,{maxFileBytes=256*1024*1024,maxExpandedBytes=4*1024*1024*1024,maxEntryBytes=64*1024*1024,maxEntries=40000,maxCacheBytes=64*1024*1024}={}){
+ if((input.size??input.byteLength)>maxFileBytes)throw Error('Stencil package exceeds 256 MB.');
+ const bytes=input instanceof Uint8Array?input:new Uint8Array(input.arrayBuffer?await input.arrayBuffer():input);
+ if(bytes.length<22||bytes.length>maxFileBytes)throw Error('Invalid ZIP size.');
+ const v=view(bytes),u16=n=>v.getUint16(n,true),u32=n=>v.getUint32(n,true);
+ let end=bytes.length-22;const floor=Math.max(0,end-65535);
+ while(end>=floor&&!(u32(end)===0x06054b50&&end+22+u16(end+20)===bytes.length))end--;
+ if(end<floor||u16(end+4)||u16(end+6))throw Error('Unsupported or incomplete ZIP archive.');
+ const count=u16(end+10),directory=u32(end+16);let pos=directory,total=0,cached=0;
+ if(count!==u16(end+8)||count>maxEntries||directory+u32(end+12)!==end)throw Error('Invalid ZIP directory.');
+ const entries=new Map(),cache=new Map();
+ for(let i=0;i<count;i++){
+  if(pos+46>end||u32(pos)!==0x02014b50)throw Error('Malformed ZIP entry.');
+  const flags=u16(pos+8),method=u16(pos+10),crc=u32(pos+16),packed=u32(pos+20),size=u32(pos+24),length=u16(pos+28),local=u32(pos+42),next=pos+46+length+u16(pos+30)+u16(pos+32);
+  if(next>end||local+30>bytes.length||u32(local)!==0x04034b50||(flags&1)||![0,8].includes(method)||u16(local+8)!==method)throw Error('Unsupported ZIP entry.');
+  const name=utf8.decode(bytes.subarray(pos+46,pos+46+length));
+  if(!name||/^[\\/]|^[a-z]:/i.test(name)||/[\\\x00-\x1f]/.test(name)||name.split('/').some(s=>s==='.'||s==='..')||entries.has(name))throw Error('Unsafe or duplicate ZIP path.');
+  const data=local+30+u16(local+26)+u16(local+28);total+=size;
+  if(total>maxExpandedBytes||data+packed>directory)throw Error('Stencil package has invalid or excessive expanded contents.');
+  entries.set(name,{data,packed,size,method,crc});pos=next;
+ }
+ if(pos!==end)throw Error('Unexpected ZIP directory data.');
+ return {has:name=>entries.has(name),names:()=>entries.keys(),expandedBytes:total,get cachedBytes(){return cached;},async get(name){
+  if(cache.has(name)){const value=cache.get(name);cache.delete(name);cache.set(name,value);return value;}
+  const e=entries.get(name);if(!e)return undefined;
+  if(e.size>maxEntryBytes)throw Error('Selected stencil part exceeds 64 MB: '+name);
+  const block=bytes.subarray(e.data,e.data+e.packed),content=e.method===0?block:await inflate(block,e.size);
+  if(content.length!==e.size||crc32(content)!==e.crc)throw Error('ZIP integrity check failed for '+name);
+  while(cache.size&&cached+content.length>maxCacheBytes){const key=cache.keys().next().value;cached-=cache.get(key).length;cache.delete(key);}
+  if(content.length<=maxCacheBytes){cache.set(name,content);cached+=content.length;}
+  return content;
+ }};
+}
 export async function unzip(input, { maxBytes = 160 * 1024 * 1024, maxEntries = 5000 } = {}) {
   if ((input.size ?? input.byteLength) > maxBytes) throw new Error('ZIP file exceeds the import limit.');
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input.arrayBuffer ? await input.arrayBuffer() : input);

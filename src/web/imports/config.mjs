@@ -67,14 +67,24 @@ function interfaceNames(value) {
 function switchCLI(text,filename) {
   const out=empty(); let hostname=/^(?:hostname|sysname)\s+(.+)$/im.exec(text)?.[1];
   const aruba=/AOS-CX|ArubaOS-CX|^(?:vsf member|interface lag|\s*vlan trunk (?:native|allowed))\b/im.test(text);
-  const classic=/ProCurve|ArubaOS-Switch|^\s*(?:untagged|tagged)\s+\d/im.test(text);
+  const classic=/ProCurve|ArubaOS-Switch|hpStack_|^;\s*[A-Z]+\d+[A-Z]\s+Configuration|^\s*(?:untagged|tagged)\s+\d/im.test(text);
   const huawei=/^sysname\s+/im.test(text);
   const cisco=/^\s*(?:switchport|channel-group)|^version\s+\d|^!\s*(?:Cisco|IOS)|IOS[- ](?:XE|XR)|NX-OS/im.test(text);
   if(!hostname && !aruba && !classic && !huawei && !cisco) return null;
-  const modelMatch=/\bPID:\s*([\w-]+)|^\s*(?:type|switch\s+\d+\s+provision|member\s+\d+\s+type)\s+([\w-]+)|^;\s*([A-Z]+\d+[A-Z])\s+Configuration/im.exec(text);
+  const modelMatch=/\bPID:\s*([\w-]+)|^\s*(?:type|switch\s+\d+\s+provision|member\s+\d+\s+type)\s+"?([\w-]+)|^;\s*([A-Z]+\d+[A-Z])\s+Configuration/im.exec(text);
   const model=identify(modelMatch?.slice(1).find(Boolean)||'');const vendor=aruba||classic?'HPE Aruba':huawei?(/Comware/i.test(text)?'HPE':'Huawei'):cisco?(/Arista|EOS version/i.test(text)?'Arista':'Cisco'):'';
   const kind=aruba||classic||model.kind==='switch'||/^\s*(?:switchport|port (?:link-type|access vlan|trunk pvid)|vlan batch)\b/im.test(text)?'switch':'unknown';
   const d=device(hostname?scalar(hostname):cleanBase(filename),{kind,vendor,model:model.model});
+  const stackMembers=new Map(),modules=[];let member='';
+  for(const raw of text.split(/\r?\n/)){
+    const s=raw.trim();let m;
+    if((m=/^(?:vsf\s+)?member\s+(\d+)(?:\s+type\s+"?([\w-]+))?/i.exec(s))){member=m[1];if(m[2])stackMembers.set(member,{id:member,model:identify(m[2]).model});}
+    else if(member&&(m=/^type\s+"?([\w-]+)/i.exec(s)))stackMembers.set(member,{id:member,model:identify(m[1]).model});
+    else if((m=/^switch\s+(\d+)\s+provision\s+(\S+)/i.exec(s)))stackMembers.set(m[1],{id:m[1],model:identify(m[2]).model});
+    else if((m=/^module\s+(?:(\d+)\/)?([A-Z])\s+type\s+"?([\w-]+)/i.exec(s)))modules.push({member:m[1]||'',slot:m[2].toUpperCase(),model:identify(m[3]).model});
+    if(/^(?:exit|!|interface\b)/i.test(s))member='';
+  }
+  if(stackMembers.size)d.stackMembers=[...stackMembers.values()];if(modules.length)d.modules=modules;
   let ports=[],section='', vids=[];
   for(const raw of text.split(/\r?\n/)){
     const s=raw.trim();let m;

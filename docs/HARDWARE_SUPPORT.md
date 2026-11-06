@@ -50,3 +50,11 @@ Run the importer tests with Node.js 22 or later from the repository root.
     node --test tests/imports.test.mjs tests/imports-firewalls.test.mjs
 
 The tests exercise fictional configurations, cross-source matching, contradictory port observations, configuration-only admin state, and a generated compressed XLSX workbook. Report data stays in memory. Importers do not issue network requests or run configuration commands.
+
+## Native physical drawings and editable stencils
+
+The catalog contains 406 exact identity/interface records and 302 confirmed bank profiles covering 403 identifiers. Simplified native panels preserve documented port order, rows, connector form and panel side. The CX 6100 optical cages are on the left; CX 6200 cages are on the right. FortiGate 120G and 200G/201G use separately calibrated layouts. Declared mixed stack members and chassis cards retain their identities. Other identity-only SKUs require a confirmed model or mapped stencil. [Layout catalog and manufacturer sources](HARDWARE_LAYOUTS.md)
+
+The catalog incorporates the owner’s Switchport Diagram Builder hardware facts at 85a4673a5a08c45d1f0e65218b4865d25ea4ecfc and Configuration Inspector bank facts at 675a806eeb893a55b2272be9fb7e914bac06ee03. Manufacturer publications correct the extra ASA5505 interface in the original snapshot and the multi-rate SFP/SFP+ cages on NSa 3700 X24-X27. Socket form does not establish fitted optics or negotiated speed. Native artwork is simplified; exact manufacturer artwork can be imported locally.
+
+Folder import exhausts directory batches and recognizes VSS/VST/VSD, VSX/VTX/VDX and the six modern macro-free/macro-enabled packages. Master search is case-insensitive and accepts model/SKU separators. Selection survives filtering. Modern archives index parts and decompress selected content under bounded limits; binary picture-only masters use a bounded CFB reader. Unsupported vector wrappers, text programs or rotations require desktop Visio. Original manufacturer collections and private site files are never bundled.

@@ -8,7 +8,7 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $source = (Resolve-Path -LiteralPath $Path).Path
-if ([IO.Path]::GetExtension($source) -notin ".vss", ".vssx", ".vsdx") { throw "Choose a Visio stencil or drawing." }
+if ([IO.Path]::GetExtension($source) -notin ".vss", ".vssx", ".vssm", ".vsx", ".vst", ".vstx", ".vstm", ".vtx", ".vsd", ".vsdx", ".vsdm", ".vdx") { throw "Choose a Visio stencil or drawing." }
 if (!$List) {
     $ext = if ($HardwarePack) { ".json" } else { ".vssx" }
     if (!$Destination) { $Destination = [IO.Path]::ChangeExtension($source, $ext) }

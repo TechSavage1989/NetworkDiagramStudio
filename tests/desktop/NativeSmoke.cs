@@ -54,8 +54,11 @@ internal static class NativeSmoke
                 if (fixture.Checks.Count != 2) throw new Exception("Returning to focus did not check.");
                 other.Activate(); await Task.Delay(500); ui.Activate(); await Task.Delay(500);
                 if (fixture.Checks.Count != 2) throw new Exception("Focus cooldown failed.");
+                if (!ui.UpdateProgressIsIdle) throw new Exception("A skipped focus check left stale update progress.");
                 await Task.Delay(183000);
                 if(fixture.Checks.Count!=3 || (fixture.Checks[2]-fixture.Checks[0]).TotalSeconds < 294) throw new Exception("Five-minute WinForms timer failed.");
+                await ui.CheckUpdateButton();
+                if(fixture.Checks.Count!=4) throw new Exception("The manual update button did not request a fresh check.");
                 File.WriteAllText(result,"Native window, local editor, startup, focus, cooldown and five-minute timer passed."); exit=0;
             } catch(Exception e){File.WriteAllText(result,e.ToString());} finally{ui.Close();}
         };
@@ -65,6 +68,13 @@ internal static class NativeSmoke
 
 internal sealed partial class Studio
 {
+    internal bool UpdateProgressIsIdle => !checking && check.Enabled && !status.Text.StartsWith("Checking for updates",StringComparison.Ordinal);
+    internal async Task CheckUpdateButton()
+    {
+        check.PerformClick();
+        for(int i=0;i<100&&checking;i++)await Task.Delay(50);
+        if(checking||!check.Enabled||!status.Text.Contains("No newer release"))throw new Exception("Manual update progress or result was not displayed.");
+    }
     internal string? TestOutputFolder;
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string cls,string caption);
     [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);

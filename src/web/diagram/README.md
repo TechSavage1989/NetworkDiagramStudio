@@ -21,3 +21,21 @@ Every used front becomes a named, reusable Visio group master. The master and pa
 The core view uses exterior orthogonal rails, independent evenly spaced departures at equipment boundaries, and arc bridges at perpendicular crossings. Disjoint link intervals may reuse a rail without sharing a segment. Aligned jacks receive short socket doglegs before separate exit leads. Cross-page links end at native continuation markers with the remote sheet in the register. The layout does not automatically recalculate after editing a resulting drawing outside the application.
 
 The stencil renderer preserves the master coordinate system, picture bounds, child transforms, rotation and mirroring. Near-zero-height manufacturer wrappers use the visible child bounds for both artwork and jacks. It supports line, relative line, ellipse, circular and elliptical arcs, and relative Bezier geometry with cached coordinates and basic text. Named points receive the same transforms as artwork. Unsupported geometry is rejected with the conversion path rather than silently producing partial artwork. Legacy binary VSS, complex ShapeSheet programs, and unsupported geometry still require the desktop converter. Exported masters retain mapped jacks, not OEM automation.
+
+## Direct editing and simpler routes
+
+Core route scoring now considers bend count before distance, after chassis/shared-segment/crossing checks. Automatic titles are placed after the cables; pinned title groups remain routing obstacles. Core and wireless legends share the media palette. Scene simplification keeps reversals intact so aligned same-side ports cannot collapse into a path through their chassis.
+
+Drawing overrides live under layout.drawingEdits. Device groups keep port glue, and normalized native details remain separately editable. Continued hardware sheets have individual edit scopes. The editor supports direct drag, multiple selection, alignment/distribution and bounded undo histories. Native artwork text keeps weight and alignment in SVG/Visio. Rectangles, connector names and native path names retain their object names in Visio. Source artwork and private site examples stay outside the repository.
+
+
+Manual cable controls operate on orthogonal point arrays and preserve both port endpoints. Reconnection edits normalized inventory endpoints, resolves an available physical socket, rebuilds the route and migrates style without keeping obsolete bends. Per-sheet legends are derived after cable style patches and contain only the styles in use.
+
+SVG hops have a local white clearance stroke. Core label placement includes hop envelopes. Native Visio exports the underlying orthogonal geometry with LineJumpCode=4 and LineJumpStyle=1 at page level; connectors inherit the page jump rule. This avoids a stale baked ArcTo after a connector is edited. Native Visio rendering remains a separate Windows validation step.
+
+Port table filtering, grouping and numeric order are independent of the hardware faceplate. Mapper box selection, dragging and arrow nudges use normalized coordinates; zoom changes only the viewport. At an edge the selected group clamps as one unit.
+
+
+The editor retains the source pointer target for double-clicks because pointer capture retargets events to the canvas. Inline text commits before file downloads or other pointer actions. Session history applies validated project deltas, including endpoint and port changes, with scope boundaries for an open mapper. It is not exported in a saved project.
+
+Drag snapping is optional and stored in layout.snapping. It can use a grid or object/device/bend alignment targets; transient guide marks do not enter exports. Keyboard nudges are exact steps. Diagram rectangles select enclosed top-level objects in page coordinates, independent of zoom.
