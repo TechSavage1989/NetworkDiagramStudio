@@ -8,6 +8,7 @@ export const W = 1200, H = 975;
 export const C = {ink:'#16364A',muted:'#536779',teal:'#166574',rule:'#CEDCE0',pale:'#F0F5F6',white:'#FFFFFF',up:'#D8F0DE',down:'#E2E7EA',amber:'#805400'};
 export const xml = s => String(s ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
 export const round = n => Math.round(n*1e5)/1e5;
+export const cableWeight = 3;
 export function rect(box,x,y,w,h,fill,stroke='none',weight=1){box.push({type:'rect',x,y,w,h,fill,stroke,weight});}
 export function label(box,x,y,w,h,value,size=15,bold=false,color=C.ink,align='left'){
   box.push({type:'text',x,y,w,h,value:String(value ?? ''),size,bold,color,align});
@@ -39,7 +40,7 @@ export function linkLegend(page){
   label(page.items,38,147,244,26,'CONNECTION TYPES',16,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=198;
   const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
   for(const {name,color,opacity,style} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style),title=(style?.title||name)+(opacity<1?' ('+Math.round(opacity*100)+'%)':''),lines=wrapPortText(title,176,14),description=style?.description?wrapPortText(style.description,176,12):[];
-   rect(page.items,38,y+11,52,3,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
+   rect(page.items,38,y+11,52,cableWeight,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
    lines.forEach((text,n)=>{label(page.items,102,y+n*18,176,18,text,14,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
    description.forEach((text,n)=>{label(page.items,102,y+lines.length*18+n*15,176,15,text,12,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44,lines.length*18+description.length*15+12);
   }page.legendBottom=y;return;
@@ -49,7 +50,7 @@ export function linkLegend(page){
  for(let i=0;i<entriesWithText.length;i+=cols)rows.push(Math.max(...entriesWithText.slice(i,i+cols).map(e=>Math.max(22,e.lines.length*15+e.description.length*14+5))));
  label(page.items,38,148,1120,15,'LINK COLORS',11,true,C.muted);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});
  entriesWithText.forEach(({name,color,opacity,style,lines,description},i)=>{const x=38+(i%cols)*1128/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style);
-  rect(page.items,x,y+6,22,3,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
+  rect(page.items,x,y+6,22,cableWeight,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
   lines.forEach((text,n)=>{label(page.items,x+30,y+n*15,width,15,text,size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
   description.forEach((text,n)=>{label(page.items,x+30,y+lines.length*15+n*14,width,14,text,11,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});
  });page.legendBottom=167+rows.reduce((a,b)=>a+b,0);
@@ -156,7 +157,7 @@ export function optic(page,project,device,body,anchor,info){
 export function route(page,from,to,points,color,name,linkType='Link',sourceLink=null,generatedDevice=null){
   const pts=simplifyRoute(points);
   if(pts.length<2)return;
-  page.items.push({type:'path',from,to,points:pts,color,name,linkType,sourceLink,generatedDevice,weight:2.2});
+  page.items.push({type:'path',from,to,points:pts,color,name,linkType,sourceLink,generatedDevice,weight:cableWeight});
 }
 export function bridge(page){
   const routes=page.items.filter(i=>i.type==='path'), prior=[];
@@ -170,7 +171,7 @@ export function bridge(page){
         const x=h?s.a[0]:a[0],y=h?a[1]:s.a[1],p=[x,y];
         const margin=Math.min(Math.abs(p[axis]-a[axis]),Math.abs(p[axis]-b[axis]),Math.abs(p[1-axis]-s.a[1-axis]),Math.abs(p[1-axis]-s.b[1-axis]));
         const between=(v,c,d)=>v>Math.min(c,d)&&v<Math.max(c,d);
-        if(margin>2 && between(p[axis],a[axis],b[axis])&&between(p[1-axis],s.a[1-axis],s.b[1-axis]))marks.push({p,rad:Math.min(Math.max(7,(r.weight||2.2)*2+2),margin*.40)});
+        if(margin>2 && between(p[axis],a[axis],b[axis])&&between(p[1-axis],s.a[1-axis],s.b[1-axis]))marks.push({p,rad:Math.min(Math.max(7,(r.weight||cableWeight)*2+2),margin*.40)});
       }
       marks.sort((m,n)=>dir*(m.p[axis]-n.p[axis]));
       let end=a[axis];
@@ -212,7 +213,7 @@ export function svgPage(p){
       }
       last=[x,y];return t+' '+round(x)+' '+round(y);
     }).join(' ');
-    return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||2.2)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+'<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+i.weight+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
+    return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||cableWeight)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+'<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+(i.weight||cableWeight)+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
   };
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title><rect width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
 }
