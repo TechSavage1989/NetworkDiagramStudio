@@ -1,11 +1,11 @@
 import {parseHex} from './color-picker.mjs';
 export const linkDefaults=[['SR fiber','#FF0000'],['LR fiber','#00B0F0'],['DAC','#000000'],['Copper','#FFD965'],['AP copper','#00B050'],['Fiber / media unspecified','#707A83']];
-const goodKey=s=>typeof s==='string'&&s.length>0&&s.length<=100&&!['__proto__','constructor','prototype'].includes(s);
+const goodKey=s=>typeof s==='string'&&s.length>0&&s.length<=160&&!['__proto__','constructor','prototype'].includes(s);
 export function linkTypeIndex(name){return name==='Media unspecified'?5:linkDefaults.findIndex(([n])=>n===name);}
 export function cleanLinkStyles(raw){
  const result=Object.create(null);if(!raw||typeof raw!=='object'||Array.isArray(raw))return result;
  for(const [type,value] of Object.entries(raw).slice(0,100)){if(!goodKey(type)||!value||typeof value!=='object'||Array.isArray(value))continue;const s={};
-  for(const key of ['title','description','lineTitle','lineDescription'])if(typeof value[key]==='string')s[key]=value[key].slice(0,key.includes('Description')||key==='description'?240:120);
+  for(const key of ['title','description','lineTitle','lineDescription'])if(typeof value[key]==='string')s[key]=value[key].slice(0,key.includes('Description')||key==='description'?240:160);
   const color=parseHex(value.color);if(color)s.color=color;
   if(Number.isFinite(value.opacity)&&value.opacity>=0&&value.opacity<=1)s.opacity=value.opacity;
   if(Object.keys(s).length)result[type]=s;

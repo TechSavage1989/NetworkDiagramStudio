@@ -1,6 +1,7 @@
 import {unzip} from '../zip.mjs';
 import {device, deviceId, empty, ensurePort, ensureVlan, portName, rate} from './model.mjs';
 import {identify} from './hardware.mjs';
+import {classifyDeviceKind} from '../device-types.mjs';
 
 const missing = v => ['','0','n/a','unknown','none','-'].includes(String(v??'').trim().toLowerCase());
 const split = v => String(v||'').split(/[,;\n]/).map(t=>t.trim()).filter(t=>!missing(t));
@@ -71,10 +72,6 @@ export async function workbookTables(file) {
   return tables;
 }
 
-function inventoryKind(type) {
-  const t=type.toLowerCase();
-  return /access point|wireless ap/.test(t)?'ap':/firewall/.test(t)?'firewall':/switch/.test(t)?'switch':'unknown';
-}
 export function parseTable(rows, filename='report.csv') {
   const out=empty(), map=new Map();let headers=[],i=0,type='';
   for(;i<Math.min(rows.length,32);i++){
@@ -93,7 +90,7 @@ export function parseTable(rows, filename='report.csv') {
     if(missing(name))continue; const d=get(name);
     if(type==='devices'){
       const spec=identify(val('make & model'),val('description')); Object.assign(d,spec);
-      const kind=inventoryKind(val('type')); if(kind!=='unknown')d.kind=kind;
+      const kind=classifyDeviceKind(val('type')); if(kind!=='unknown')d.kind=kind;
       const ips=split(val('ip address(es)'));if(ips.length) d.ips=ips;
       const single=ips.filter(ip=>ipCount.get(ip)===1);
       if(ips.length===1)d.ip=ips[0];else if(single.length===1)d.ip=single[0];

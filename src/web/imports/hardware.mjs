@@ -2,6 +2,8 @@ import {profiles} from './profiles.mjs';
 import {firewallProfiles} from './firewall-profiles.mjs';
 import {switchIdentities} from './switch-identities.mjs';
 import {faceplates} from './faceplates.mjs';
+import {matchEndpointHardware} from './endpoint-hardware.mjs';
+export {endpointHardwareCatalog,matchEndpointHardware} from './endpoint-hardware.mjs';
 
 function physicalInterfaces(p){
   const records=p.sockets?p.sockets.map(s=>[(p.naming==='cx'?'1/1/':'')+s[0],s[3]]):p.banks.filter(b=>!b.optional).flatMap(b=>b.names.map(n=>[n,b.form])),groups=new Map();
@@ -33,6 +35,8 @@ export function identify(label='',description=''){
   }
   const forti=/^(?:FortiGate\s*|FGT?-?)(\d+[A-Z](?:-[A-Z0-9]+)?)$/i.exec(label);
   if(forti)return {kind:'firewall',vendor:'Fortinet',model:'FortiGate '+forti[1].toUpperCase()};
+  const endpoint=matchEndpointHardware(label,description);
+  if(endpoint)return {kind:endpoint.kind,vendor:endpoint.vendor,model:label.trim()||endpoint.family,family:endpoint.family,technology:endpoint.technology,hardwareFamily:endpoint.id};
   const vendor=/\b(?:Aruba|ProCurve|HP|HPE)\b/i.test(label)?'HPE Aruba':/\bCisco\b/i.test(label)?'Cisco':/\bArista\b/i.test(label)?'Arista':/\bJuniper\b/i.test(label)?'Juniper':'';
   return {kind:'unknown',vendor,model:label.trim()};
 }

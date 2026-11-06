@@ -9,15 +9,18 @@
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
 
 - Import supported configurations, Base64 SonicWall EXP settings, Auvik XLSX/CSV reports and show-command captures. Enable each file and choose identity, ports, links, VLANs, routes and bridges separately.
+- Add 21 device roles, including servers, hypervisor hosts, virtual machines, HCI nodes, storage, phones, workstations, printers, cameras and controllers. Recognize 43 common server/storage/platform families; retain custom models, actual interface records and user stencils.
 - Generate core topology with documented WAN handoffs, switch port maps, wireless connections, VLAN and routing records, and a site-specific trunk matrix showing native, tagged and excluded VLANs. Port maps separate the endpoint assignment from configured mode and operational state.
-- Order devices with Up/Down buttons or drag and drop. Choose equipment for named Core Network pages or let the app fit the selected hardware automatically, including APs.
+- Order devices with Up/Down buttons or drag and drop. Choose equipment for named Core Network pages or let the app fit the selected hardware automatically, including APs. Crowded automatic core pages continue without dropping devices or links. Failed rebuilds retain the last valid drawing; rejected device edits leave inventory unchanged.
 - Prefer straight or simple orthogonal core cables, with consistent exterior lanes when needed and jumps at crossings. Nearby device titles move to accommodate clearer routes. Core and wireless sheets include an editable link-color legend. Cross-page links identify the other sheet.
 - Import supported picture and vector Visio masters from files or recursively scanned folders. Search master names directly in the picker, or click a device to search local stencils. Artwork and mapped jacks retain matching transforms.
 - Drag mapped port markers; align a selected row or column and distribute ports evenly. The sourced native hardware catalog includes model-specific faceplates, declared stack members and chassis modules. Confirm member and module models directly in Device details.
 - Zoom, pan and Fit page. In Edit drawing, box-select or Shift/Ctrl-click items, move them with the mouse or arrow keys, align edges or centers, and distribute spacing. Configure grid snapping and alignment guides. Double-click text to type directly on the diagram; double-click other elements for properties. Ctrl+Z, Ctrl+Shift+Z and Undo all apply to project changes. Alt-drag selects native panel details.
+- Select cable type and link speed directly in line properties or the connection editor. Choose Copper, generic/MMF/SMF fiber, SR/LR/ER/ZR, DAC variants, AOC/AEC, coaxial or serial; use speed presets or enter custom values. Captions and active legends follow the selected type.
 - Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a visual selector, HEX field and standard swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet. Automatic cables and their color keys use a consistent standard thickness; exported Visio line widths are explicit and editable.
 - Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port maps use consistent port-number boxes and a shared assignment matrix with one port column per switch. Expanded tables, individual rows and optional empty-record filtering remain available.
 - Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
+- Keep complete diagram captions with measured wrapping in both SVG and Visio. Module keys expand or continue onto a module sheet; duplicate wording such as Port port1 is avoided.
 - Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and handoff cards. Configure page-number visibility, starting values, padding and format.
 
 ## Screenshots
@@ -30,13 +33,13 @@ Network engineers can use the Windows application or the offline browser edition
 
 <p align="center"><img src="docs/images/wireless.png" width="900" alt="Sample wireless access points and their physical switch uplinks"></p>
 
-**Physical port layouts and stack modules**
+**Device roles, hardware families and host platforms**
 
-<p align="center"><img src="docs/images/hardware-layouts.png" width="900" alt="Fictional FortiGate 91G revision 2 and Aruba 2920 stack with a confirmed rear module and attached cable"></p>
+<p align="center"><img src="docs/images/device-types.png" width="900" alt="Fictional hypervisor host with an editable hardware model and platform in the device form"></p>
 
-**Visual line color picker**
+**Cable types, speeds and line appearance**
 
-<p align="center"><img src="docs/images/line-colors.png" width="700" alt="Compact visual color selector, HEX field, standard swatches and line opacity, with all actions visible"></p>
+<p align="center"><img src="docs/images/connection-properties.png" width="900" alt="Cable-type and speed selectors beside compact color and line-width controls, with all actions visible"></p>
 
 ## Download
 
@@ -66,11 +69,12 @@ The releases index includes published previews. A pull request or local build ma
 - **Device scope.** **Site scope** selects devices with imported configurations and their directly linked APs. An inventory without configurations starts with all devices included. Filter by hostname or model, choose **Use matches only** or **Include all**, or set individual checkboxes. Select a device to edit its details and ports.
 - **Order and pages.** Use **Up** and **Down**, or drag a device row above another device. **Device order / Core pages** creates named core sheets and assigns devices, leaves them on automatic sheets, or excludes them from the core. Equipment continues onto additional sheets when faceplates and cable clearances do not fit. Disabling **Include access points on automatic core pages** keeps automatic sheets focused on infrastructure. Choices are saved with the project.
 - **Supplemental data.** **Imported data** lists imported configurations, Auvik files and show-command captures. Toggle the file or its categories. Assign a command capture to its local device if its prompt or filename does not identify it correctly. Changing included observations preserves manual corrections. Drop supported site-data files anywhere in the app. Captures are parsed locally and commands are never executed.
+- **Inventory roles and platforms.** **Add device** includes servers, hypervisor hosts, VMs, HCI, storage, phones and other endpoints. Model suggestions include common Dell, HPE, Lenovo, Cisco, Supermicro, storage and virtualization families. A recognized model can suggest a new device role and vendor; an explicitly selected role remains authoritative. **Platform / technology** records ESXi, Hyper-V, Proxmox, AHV, HyperCore or a custom platform independently of the physical model.
 - **Physical links.** Review both endpoint ports, speed and media. A port's SFP capability alone does not establish whether an SR, LR or DAC module is installed.
 - **Hardware.** Open **Hardware** and select **Manage** to import supported VSSX/VSDX masters, a front-view image, or a saved hardware pack. Recognized front views can match a model or SKU. Assign a front to a device to reuse it on matching models. **Map ports** shows existing jack markers and allows point placement or numeric coordinates. **Core faceplate scale** in device details adjusts size while retaining proportions. Save a hardware pack to carry artwork, model assignments and optic choices to another project. Use only artwork you are authorized to use and share.
 - **Deliverables.** Use **Export Visio** for an editable drawing, **Save page SVG** for a single page, and **Print / PDF** for the entire set. For a reusable Visio stencil containing the hardware used in the current drawing, select **Hardware**, **Manage**, then **Export Visio stencil**. **Open project** restores a saved project for further changes.
 
-The hardware reference lists the supported syntax, report types and layout limits. [Hardware and configuration support](docs/HARDWARE_SUPPORT.md)
+The hardware reference lists the supported syntax, report types and layout limits. [Hardware and configuration support](docs/HARDWARE_SUPPORT.md) · [Server, storage and virtualization catalogue with official references](docs/ENDPOINT_HARDWARE.md). Endpoint family recognition does not establish installed NIC/HBA sockets. Map the actual adapters with interface inventory and a verified stencil. Unknown models remain editable.
 
 ## Drawing and port alignment
 
@@ -88,7 +92,9 @@ The inline text editor includes a color chooser. **Text options** opens the comp
 
 **Undo**, **Redo** and **Undo all** operate on the current project's available session history, including endpoint changes and port mappings. Ctrl+Z and Ctrl+Shift+Z work outside typing fields; typing fields retain their normal text undo. Up to 200 actions are retained. Undo all returns through the available actions, and Redo reapplies them in order. Loading a project starts a new history. Port mapping also has scoped **Redo port change** and **Undo all port changes**.
 
-In **Edit drawing**, select a cable. Drag a square handle to move a bend, click a plus control to add a detour, or select a bend and choose **Remove point** or press Delete. **Edit bend points** offers numeric coordinates and add/remove controls. Arrow keys also nudge a selected bend; Shift moves farther and Ctrl uses a fine step. **Connect endpoints** selects a device and physical port for each end and recalculates the route. It retains the cable's styling and checks occupied sockets.
+In **Edit drawing**, select a cable. Drag a square handle to move a bend, click a plus control to add a detour, or select a bend and choose **Remove point** or press Delete. **Edit bend points** offers numeric coordinates and add/remove controls. Arrow keys also nudge a selected bend; Shift moves farther and Ctrl uses a fine step. **Connect endpoints** selects a device and physical port for each end and recalculates the route. It retains the cable's styling and checks occupied sockets. Devices without a supplied port list offer **Custom port** so you can enter an actual interface name and connect at the device boundary.
+
+**Edit selected** also includes **Cable type** and **Link speed**. Both offer presets and **Custom** fields; an imported value remains selectable without changing its spelling or units. Saving a type/speed edit updates the connection record, relevant core/wireless captions and used legend categories, with one undoable action. Manually edited bends, names and widths are retained when the endpoints stay the same. The selected type uses its configured shared style, while other link types remain independent.
 
 **Edit selected** opens a visual color selector, HEX field, eleven standard colors and line opacity. Line, legend and text dialogs keep their default controls and save actions visible without scrolling at 1366 by 768 and larger. The legend reflects only the link styles used on that sheet. Crossings show arc hops with clearance, and the native Visio export includes arc-jump settings.
 
@@ -106,6 +112,8 @@ Windows stores its WebView profile, release cache, staged update and retained ro
 
 ## Troubleshooting
 
+- **A drawing disappears after adding equipment in an older build.** Ctrl+Z can restore the prior inventory/layout. New builds automatically continue crowded core sheets and retain the last valid drawing if a rebuild fails. A rejected device save leaves the form open and preserves the accepted project.
+- **Text needs more room.** Generated captions wrap instead of using ellipses. Increase an edited text box when its full contents cannot fit at a readable size.
 - **Editing appears locked in preview.9.** Use Tab or Shift+Tab to focus **Save project**, then Enter to save accepted edits. Confirm the file exists before restarting with a newer build. Preview.10 fixes the detached text editor that could block selection after a rejected edit.
 - **Missing ports or uncertain topology.** Import the corresponding device configurations and interface reports. Correct conflicting neighbors or unknown port mappings under **Review links** or **Hardware**.
 - **Complex or legacy artwork.** Use the included PowerShell converter with installed desktop Visio. Use **-List** to see master names. Use **-HardwarePack** and **-MasterNames** to render selected masters to a local hardware pack, including vector-only artwork the browser cannot import directly. Select a new output path, import the JSON under **Hardware**, then map its ports.
@@ -129,4 +137,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.10.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.11.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)

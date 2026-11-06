@@ -49,7 +49,7 @@ test('long matrix records continue without losing content and every cell remains
 });
 
 test('assignment cells and uniform number labels retain stable edits in SVG and native Visio',async()=>{
- const site=fixture(),before=maps(site)[0],number=before.items.find(item=>item.portNumberRole==='text'&&item.value==='49'),assignment=before.items.find(item=>item.portAssignmentRole==='assignment');site.layout={drawingEdits:{[number.editKey]:{value:'WAN',color:'#AA2200'},[assignment.editKey]:{value:'Edited assignment',x:70}}};const pages=buildPages(site),after=pages.find(page=>page.portMap);
+ const site=fixture(),before=maps(site)[0],number=before.items.find(item=>item.portNumberRole==='text'&&item.value==='49'),assignment=before.items.find(item=>item.portAssignmentRole==='assignment');site.layout={drawingEdits:{[number.editKey]:{value:'WAN',color:'#AA2200',w:32,x:number.x+(number.w-32)/2},[assignment.editKey]:{value:'Edited assignment',x:70}}};const pages=buildPages(site),after=pages.find(page=>page.portMap);
  assert.equal(after.items.find(item=>item.editKey===number.editKey).value,'WAN');assert.equal(after.items.find(item=>item.editKey===assignment.editKey).x,70);assert.ok(after.svg.includes('Edited assignment'));
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>new TextDecoder().decode(bytes)).join('');assert.ok(xml.includes('Edited assignment'));assert.ok(xml.includes('WAN'));assert.ok(xml.includes('#AA2200'));
 });
