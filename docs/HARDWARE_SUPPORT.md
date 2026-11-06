@@ -8,6 +8,7 @@ Import Auvik XLSX or CSV device, interface and route reports with saved configur
 | --- | --- |
 | Auvik site or per-device XLSX | Devices, Interfaces and Routes worksheets. The importer follows workbook relationships and supports shared strings, inline strings and sparse rows. |
 | Auvik CSV | A Devices, Interfaces or Routes table with its original column headers. Quoted and multiline fields are supported. |
+| Operational CLI captures | Prompted show/get/diagnose/display captures are detected separately from configurations. Common IOS/AOS-CX interface-status rows, Junos physical state, PAN-OS interface-state rows, FortiOS NIC state/speed, detailed LLDP/CDP and supported summary tables, explicit transceiver media, VLAN brief names, and common IOS/FortiOS/AOS-CX/Junos IPv4 route rows supply observations. Preserve command headings and prompts. Multiple device prompts are separated. Other output formats require review. |
 | Aruba AOS-CX text | Hostname, VSF model declaration, VLAN IDs and names, access and trunk membership, native VLAN, allowed list, LAG assignments, VLAN interfaces, addresses and IPv4 static routes. |
 | ArubaOS-Switch / ProCurve text | Hostname, VLAN blocks, tagged and untagged numeric port ranges, VLAN interface addresses and explicit static routes. |
 | Cisco IOS / IOS-XE / NX-OS-style text | Hostname, model declarations, individual interfaces and same-prefix numeric ranges, access/voice/native VLANs, trunk lists, channel groups, SVIs, interface addresses and IPv4 static routes. Arista EOS can use the common switchport syntax. |

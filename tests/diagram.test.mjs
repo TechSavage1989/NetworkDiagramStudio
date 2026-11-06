@@ -51,7 +51,8 @@ test('pagination and unresolved peer handling keep user interface names',()=>{
   const d={id:'s',name:'Edge',kind:'switch',ports:Array.from({length:96},(_,i)=>({name:'1/1/'+(i+1),state:'up',description:'Test assignment '+i}))};
   const p={name:'Scale',devices:[d],links:Array.from({length:24},(_,i)=>({a:'s',ap:'1/1/'+(i+1),b:'Other '+i,bp:'U',media:'unknown'}))};
   const pages=buildPages(p),core=pages.filter(p=>p.name.startsWith('Core Network'));
-  assert.equal(core.flatMap(p=>p.items).filter(i=>i.type==='path').length,24);
+  // A cross-page connection has a continuation at both ends.
+  assert.equal(new Set(core.flatMap(p=>p.items).filter(i=>i.type==='path').map(i=>i.name.match(/^L\d+/)?.[0])).size,24);
   assert.equal(core.flatMap(p=>p.items).filter(i=>i.kind==='plug').length,0);
   assert.ok(pages.filter(p=>p.name.startsWith('MDF Port Map')).length>=7);
   assert.equal(new Set(pages.map(p=>p.name)).size,pages.length);

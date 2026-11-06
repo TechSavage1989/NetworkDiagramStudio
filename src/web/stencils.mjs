@@ -1,5 +1,6 @@
 import { unzip } from './zip.mjs';
 import {drawEmf} from './emf-canvas.mjs';
+import {renderMaster} from './visio-art.mjs';
 
 const REL='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const text=new TextDecoder();
@@ -77,7 +78,9 @@ function namedAnchors(master,name,bounds){
     if(row.getAttribute('Del')==='1')continue;
     const i=Number(row.getAttribute('IX')),r=cellValues(row);
     const x=(Number(r.X)-bounds.x)/bounds.w,y=1-(Number(r.Y)-bounds.y)/bounds.h;
-    if(!Number.isFinite(x+y)||x<0||x>1||y<0||y>1)continue;
+    // A one-dimensional wrapper may have a near-zero Height while artwork and
+    // jacks extend outside it. Clip only after the shared world transform.
+    if(!Number.isFinite(x+y))continue;
     const coord=[x,y], prompt=r.Prompt||cellValues(controls.find(c=>c.getAttribute('N')==='Row_'+(i+1))).Prompt||'';
     if(/JL675A/i.test(name) && ports.length>=60){
       if(i>=12&&i<60)add('1/1/'+(i-11),coord);
@@ -108,25 +111,11 @@ export async function openVisioCatalog(file){
     const item=items.find(m=>m.key===key);if(!item)throw Error('Choose a master.');
     const doc=xml(zip.get(item.path));const root=children(children(doc,'Shapes')[0],'Shape')[0];
     if(!root)throw Error('Empty master.');
-    const pictureRefs=rels(zip,item.path),pictures=[];
-    function walk(shape,ox,oy,depth){
-      if(depth>24)throw Error('Stencil group is too deeply nested.');
-      const c=cellValues(shape),w=Number(c.Width)||0,h=Number(c.Height)||0;
-      const x=ox+(Number(c.PinX)||0)-Number(c.LocPinX??w/2), y=oy+(Number(c.PinY)||0)-Number(c.LocPinY??h/2);
-      const fd=children(shape,'ForeignData')[0],relation=fd&&children(fd,'Rel')[0];
-      const path=relation&&pictureRefs.get(relation.getAttributeNS(REL,'id'));
-      if(path && w>0 && h>0)pictures.push({path,x:depth?x:0,y:depth?y:0,w,h});
-      for(const s of children(children(shape,'Shapes')[0],'Shape'))walk(s,depth?x:0,depth?y:0,depth+1);
-    }
-    walk(root,0,0,0);
-    if(!pictures.length||pictures.length>64)throw Error('No supported front-panel picture in this master. Import a PNG or JPEG faceplate for this model.');
-    const x=Math.min(...pictures.map(p=>p.x)),y=Math.min(...pictures.map(p=>p.y));
-    const w=Math.max(...pictures.map(p=>p.x+p.w))-x,h=Math.max(...pictures.map(p=>p.y+p.h))-y;
-    const scale=2400/Math.max(w,h),canvas=document.createElement('canvas');
-    canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
-    const ctx=canvas.getContext('2d');
-    for(const p of pictures){const bytes=zip.get(p.path);if(!bytes)throw Error('Picture missing from stencil.');
-      const img=await decodeArt(bytes,p.path);ctx.drawImage(img,(p.x-x)*scale,(y+h-p.y-p.h)*scale,p.w*scale,p.h*scale);}
-    return {id:newId(),name:item.name,view:/\b(back|rear)\b/i.test(item.name)?'rear':'front',dataUrl:canvas.toDataURL('image/png'),width:canvas.width,height:canvas.height,anchors:namedAnchors(root,item.name,{x,y,w,h})};
+    const pictureRefs=rels(zip,item.path);
+    const artwork=await renderMaster(root,async foreign=>{
+      const relation=children(foreign,'Rel')[0],path=relation&&pictureRefs.get(relation.getAttributeNS(REL,'id'));
+      const bytes=path&&zip.get(path);if(!bytes)throw Error('Picture missing from stencil.');return decodeArt(bytes,path);
+    },(shape,n,bounds)=>namedAnchors(shape,n===undefined?item.name:n,bounds));
+    return {id:newId(),name:item.name,view:/\b(back|rear)\b/i.test(item.name)?'rear':'front',...artwork};
   }};
 }

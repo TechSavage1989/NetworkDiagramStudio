@@ -7,9 +7,11 @@
 
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
 
-- Import supported configuration text and Auvik XLSX or CSV reports. Review the device inventory, select the site scope, and correct links before export.
+- Import supported configurations, Auvik XLSX/CSV reports and show-command captures. Enable each file and choose identity, ports, links, VLANs, routes and bridges separately.
 - Generate core topology with documented WAN handoffs, switch port maps, wireless connections, VLAN and routing records, and a site-specific trunk matrix showing native, tagged and excluded VLANs. Port maps separate the endpoint assignment from configured mode and operational state.
-- Use schematic devices or import compatible front-panel artwork, map physical jacks, and assign optics to documented links.
+- Order devices with Up/Down buttons or drag and drop. Choose equipment for named Core Network pages or let the app fit the selected hardware automatically, including APs.
+- Route core cables through evenly spaced exterior lanes with separate port departures and jumps at crossings. Cross-page links identify the other sheet.
+- Import supported picture and vector Visio masters. Artwork keeps its aspect ratio; mapped jacks follow the same nested rotations and mirroring. Adjust mappings with visible markers or numeric coordinates.
 - Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
 
 ## Screenshots
@@ -24,7 +26,7 @@ Network engineers can use the Windows application or the offline browser edition
 
 ## Download
 
-The releases index includes previews. If the first preview is still being validated, build it with the commands under Development. [GitHub releases](https://github.com/TechSavage1989/NetworkDiagramStudio/releases)
+The releases index includes published previews. A pull request or local build may contain changes awaiting release validation. [GitHub releases](https://github.com/TechSavage1989/NetworkDiagramStudio/releases)
 
 | Asset | Use |
 | --- | --- |
@@ -42,14 +44,16 @@ The releases index includes previews. If the first preview is still being valida
 
 1. Launch the Windows executable or open the extracted HTML file.
 2. Select **Open sample site** to explore the fictional Harbor Workshop network. Select a drawing tab to inspect its contents.
-3. Select **New project** for your site. Enter the site name, then select **Import files** or **Paste configuration**. Supply Auvik interface reports when you need observed neighbors and link speeds.
+3. Select **New project** for your site. Enter the site name, then select **Import files** or **Paste configuration / commands**. Supply Auvik interface reports or supported operational captures for observed neighbors and link speeds.
 4. Open **Review links** and resolve warnings. Select **Save project** to download the working project, then **Export Visio** to create the drawing set.
 
 ## How to use
 
 - **Device scope.** **Site scope** selects devices with imported configurations and their directly linked APs. An inventory without configurations starts with all devices included. Filter by hostname or model, choose **Use matches only** or **Include all**, or set individual checkboxes. Select a device to edit its details and ports.
+- **Order and pages.** Use **Up** and **Down**, or drag a device row above another device. **Device order / Core pages** creates named core sheets and assigns devices, leaves them on automatic sheets, or excludes them from the core. Equipment continues onto additional sheets when faceplates and cable clearances do not fit. Disabling **Include access points on automatic core pages** keeps automatic sheets focused on infrastructure. Choices are saved with the project.
+- **Supplemental data.** **Imported data** lists imported configurations, Auvik files and show-command captures. Toggle the file or its categories. Assign a command capture to its local device if its prompt or filename does not identify it correctly. Changing included observations preserves manual corrections. Drop supported site-data files anywhere in the app. Captures are parsed locally and commands are never executed.
 - **Physical links.** Review both endpoint ports, speed and media. A port's SFP capability alone does not establish whether an SR, LR or DAC module is installed.
-- **Hardware.** Open **Hardware** and select **Manage** to import compatible VSSX/VSDX masters, a front-view image, or a saved hardware pack. Recognized front views can match a device model or SKU. Assign a front to a device to reuse it on matching models. Use **Map ports** to line up each connector with the correct jack. Save a hardware pack to carry artwork, model assignments and optic choices to another project. Use only artwork you are authorized to use and share.
+- **Hardware.** Open **Hardware** and select **Manage** to import supported VSSX/VSDX masters, a front-view image, or a saved hardware pack. Recognized front views can match a model or SKU. Assign a front to a device to reuse it on matching models. **Map ports** shows existing jack markers and allows point placement or numeric coordinates. **Core faceplate scale** in device details adjusts size while retaining proportions. Save a hardware pack to carry artwork, model assignments and optic choices to another project. Use only artwork you are authorized to use and share.
 - **Deliverables.** Use **Export Visio** for an editable drawing, **Save page SVG** for a single page, and **Print / PDF** for the entire set. For a reusable Visio stencil containing the hardware used in the current drawing, select **Hardware**, **Manage**, then **Export Visio stencil**. **Open project** restores a saved project for further changes.
 
 The hardware reference lists the supported syntax, report types and layout limits. [Hardware and configuration support](docs/HARDWARE_SUPPORT.md)
