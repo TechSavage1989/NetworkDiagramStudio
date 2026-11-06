@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
-import {changeLinkStyle,cleanLinkStyles} from '../src/web/link-styles.mjs';
+import {changeLinkStyle,cleanLinkStyles,legendStyleId} from '../src/web/link-styles.mjs';
 import {pageNumber,cleanPageNumbers} from '../src/web/page-options.mjs';
 import {cleanLayout} from '../src/web/layout.mjs';
 import {unzip} from '../src/web/zip.mjs';
@@ -23,6 +23,11 @@ test('link and legend edits share one undoable style and preserve moved or renam
  assert.ok(pages[0].items.filter(i=>i.labelRole==='media'&&i.value.includes('Optical')).every(i=>i.color==='#006775'));
  const restored=history.travel(site);assert.equal(restored.layout.linkStyles,undefined);const redone=history.travel(restored,{redo:true});assert.equal(redone.layout.linkStyles['SR fiber'].color,'#006775');
  assert.equal(cleanLinkStyles(JSON.parse('{"__proto__":{"color":"#ff0000"}}')).__proto__,undefined);
+});
+test('different unspecified media types retain independent legend bindings even when their colors match',()=>{
+ const site=sampleSite();site.links[0].media='SFP';site.links[1].media='fiber';site.devices[0].ports[0].media='unknown';const pages=buildPages(site),entries=pages[0].items.filter(i=>i.legendEntry&&i.type==='rect');assert.equal(new Set(entries.map(i=>i.editKey)).size,entries.length);
+ const original=pages[0].items.find(i=>i.type==='path'&&i.linkType==='Fiber, reach unspecified').color;site.layout=changeLinkStyle(site,pages,'SFP, media unspecified',{color:'#815AC0'});const next=buildPages(site)[0];assert.equal(next.items.find(i=>i.type==='path'&&i.linkType==='SFP, media unspecified').color,'#815AC0');assert.equal(next.items.find(i=>i.type==='path'&&i.linkType==='Fiber, reach unspecified').color,original);
+ assert.equal(legendStyleId('Fiber, reach unspecified','#707A83',1,true),legendStyleId('Fiber, reach unspecified','#006775',.5,true));
 });
 test('page numbering supports visibility, a starting number, padding and custom templates in both exports',async()=>{
  const site=sampleSite(),count=buildPages(site).length;site.layout={pageNumbers:{show:true,start:17,pad:3,format:'Sheet {page} of {last} ({total} sheets)'}};site.layout=cleanLayout(site.layout,site.devices.map(d=>d.id));

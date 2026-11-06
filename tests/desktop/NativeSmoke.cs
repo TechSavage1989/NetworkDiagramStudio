@@ -80,25 +80,36 @@ internal sealed partial class Studio
     internal string? TestOutputFolder;
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string cls,string caption);
     [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
+    async Task ClickEditorButton(string id)
+    {
+        var key=JsonSerializer.Serialize(id);
+        var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const b=document.getElementById({key}); if(!b || b.disabled) return null; const r=b.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
+        using var doc=JsonDocument.Parse(raw);
+        if(doc.RootElement.ValueKind!=JsonValueKind.Object)throw new Exception("Native export button is unavailable: "+id);
+        var x=doc.RootElement.GetProperty("x").GetDouble();var y=doc.RootElement.GetProperty("y").GetDouble();
+        // Real input supplies the user gesture required for repeated downloads.
+        foreach(var type in new[]{"mousePressed","mouseReleased"})await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=1}));
+    }
     internal async Task ExportAndPrint(string folder)
     {
         TestOutputFolder=folder;
-        Task ChooseExport() => Task.Run(async()=>{
+        Task ChooseExport(string format) => Task.Run(async()=>{
             for(int attempt=0; attempt<100; attempt++) {
                 var hwnd=FindWindow("#32770","Save exported file");
                 if(hwnd!=IntPtr.Zero) { await Task.Delay(400); PostMessage(hwnd,0x0111,(IntPtr)1,IntPtr.Zero); return; }
                 await Task.Delay(100);
             }
-            throw new Exception("The real Save As dialog was not displayed.");
+            throw new Exception("The real Save As dialog was not displayed for "+format+".");
         });
-        var chooser=ChooseExport();
-        await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('sample').click();document.getElementById('svg').click()");
+        var chooser=ChooseExport("SVG");
+        await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('sample').click()");
+        await ClickEditorButton("svg");
         await chooser;
         string? saved=null;
         for(int i=0;i<80;i++) { saved=Directory.EnumerateFiles(folder,"*.svg").FirstOrDefault(); if(saved!=null) break; await Task.Delay(125); }
         if(saved==null || !File.ReadAllText(saved).Contains("<svg")) throw new Exception("The selected sample SVG page was not saved.");
-        chooser=ChooseExport();
-        await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('export').click()");
+        chooser=ChooseExport("Visio");
+        await ClickEditorButton("export");
         await chooser;
         string? drawing=null;
         for(int i=0;i<80;i++){drawing=Directory.EnumerateFiles(folder,"*.vsdx").FirstOrDefault();if(drawing!=null)break;await Task.Delay(125);}
