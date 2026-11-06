@@ -18,5 +18,5 @@ export function cleanLayout(raw,ids){
   pages.push({id:v.id.slice(0,120),name:String(v.name||'Core Network').slice(0,80),devices:[...new Set((Array.isArray(v.devices)?v.devices:[]).filter(id=>known.has(id)))]});
  }
  return {order:[...new Set((Array.isArray(p.order)?p.order:[]).filter(id=>known.has(id)))],corePages:pages,
-  coreExclude:[...new Set((Array.isArray(p.coreExclude)?p.coreExclude:[]).filter(id=>known.has(id)))],includeAPs:p.includeAPs!==false};
+  coreExclude:[...new Set((Array.isArray(p.coreExclude)?p.coreExclude:[]).filter(id=>known.has(id)))],includeAPs:p.includeAPs===true};
 }

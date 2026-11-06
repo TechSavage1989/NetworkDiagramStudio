@@ -8,7 +8,7 @@ import {categories,readSources,ensureEvidence,captureEdits,composeEvidence} from
 
 const $=id=>document.getElementById(id);
 const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
-const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:true}});
+const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false}});
 let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null;
 const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:project.links,warnings:project.warnings}));
 const modelKinds=['switch','firewall','ap','unknown'];
@@ -70,7 +70,7 @@ function addOrderControls(row,d,after=()=>{}){
 }
 function arrange(){
  const body=modal('Device order and core pages');project.layout||=cleanLayout({},project.devices.map(d=>d.id));const layout=project.layout;
- const check=el('input');check.type='checkbox';check.checked=layout.includeAPs!==false;check.id='core-aps';const title=el('label','Include access points on automatic core pages');title.htmlFor=check.id;line(body,check,title);
+ const check=el('input');check.type='checkbox';check.checked=layout.includeAPs===true;check.id='core-aps';const title=el('label','Include access points on automatic core pages');title.htmlFor=check.id;line(body,check,title);
  check.onchange=()=>{layout.includeAPs=check.checked;perform();};
  const bar=actions(body);button(bar,'Add core page',()=>{layout.corePages||=[];layout.corePages.push({id:crypto.randomUUID(),name:'Core Network '+(layout.corePages.length+1),devices:[]});perform();arrange();});
  button(bar,'Use automatic pages',()=>{layout.corePages=[];layout.coreExclude=[];perform();arrange();});

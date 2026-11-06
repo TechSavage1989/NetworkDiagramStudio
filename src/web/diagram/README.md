@@ -4,7 +4,7 @@ The browser entry point is index.mjs. buildPages(project) returns page records w
 
 The five views cover core equipment and links, physical switch port maps, switch-to-AP links, VLANs and routing, and trunk membership. Core sheets pack measured faceplates plus cable clearance; inventory views paginate by device and table size. Equal interface configurations collapse into port ranges. Long tables continue onto extra sheets. Headings and footers are date-free.
 
-project.layout.order supplies the saved device order. corePages is an array of {id,name,devices} assignments; unassigned equipment uses automatic sheets. coreExclude omits specific IDs from the core only. includeAPs defaults to true for automatic sheets. Hand-offs follow their owner's page assignment. Overflow retains page references. Page assignment and order are independent of site-wide inclusion.
+project.layout.order supplies the saved device order. corePages is an array of {id,name,devices} assignments; unassigned equipment uses automatic sheets. coreExclude omits specific IDs from the core only. includeAPs is opt-in for automatic sheets; explicit core-page assignments can include APs independently. Hand-offs follow their owner's page assignment. Overflow retains page references. Page assignment and order are independent of site-wide inclusion.
 
 ## Local front artwork
 

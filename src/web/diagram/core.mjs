@@ -31,7 +31,7 @@ function measurement(project,d,edges,positions){
 export function corePages(project,inventory){
  const db=handoffs(inventory),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];
  const explicit=new Set(custom.flatMap(p=>p.devices));
- const eligible=[...db.devices.keys()].filter(id=>!excluded.has(id)&&(db.devices.get(id).kind!=='ap'||layout.includeAPs!==false||explicit.has(id)));
+ const eligible=[...db.devices.keys()].filter(id=>!excluded.has(id)&&(db.devices.get(id).kind!=='ap'||layout.includeAPs===true||explicit.has(id)));
  const allowed=new Set(eligible),edges=db.links.filter(e=>allowed.has(e.a)&&allowed.has(e.b));
  const positions=new Map(eligible.map((id,i)=>[id,i]));
  const sizes=new Map(eligible.map(id=>[id,measurement(project,db.devices.get(id),edges.filter(e=>e.a===id||e.b===id),positions)]));
@@ -115,8 +115,9 @@ export function corePages(project,inventory){
     const y=TOP+i*rh,info=mediaInfo(e.media,db.devices.get(e.a).kind==='ap'||db.devices.get(e.b).kind==='ap');
     rect(items,916,y+5,12,3,info.color);
     label(items,934,y-2,226,15,'L'+(e.idx+1)+'  '+info.name+'  '+rate(e.speed),11,true);
-    label(items,916,y+13,248,14,name(db.devices.get(e.a))+' '+e.ap,10,false,C.muted);
-    if(rh>=40)label(items,916,y+27,248,14,name(db.devices.get(e.b))+' '+e.bp,10,false,C.muted);
+    const compact=rh<40,remotePage=(!members.has(e.a)||!members.has(e.b))?locations.get(members.has(e.a)?e.b:e.a):'';
+    label(items,916,y+(compact?11:13),248,compact?11:14,name(db.devices.get(e.a))+' '+e.ap,compact?9:10,false,C.muted);
+    label(items,916,y+(compact?22:27),248,compact?11:14,name(db.devices.get(e.b))+' '+e.bp+(compact&&remotePage?' / '+remotePage:''),compact?9:10,false,C.muted);
     if(rh>=53&&(!members.has(e.a)||!members.has(e.b)))label(items,916,y+40,248,12,locations.get(members.has(e.a)?e.b:e.a)||'Core Network',9,true,C.teal);
    });
   }

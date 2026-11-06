@@ -45,7 +45,7 @@ test('saved order controls all inventory pages and chosen core pages survive a r
  assert.ok(rack.items.some(i=>i.type==='path'&&i.name.includes('Rack B')));assert.ok((await exportVisio(p,pages).arrayBuffer()).byteLength>0);
 });
 test('core paths are orthogonal, stay outside unrelated chassis, and have no shared parallel segments',()=>{
- const pages=buildPages(sampleSite()).filter(p=>p.title.startsWith('Core Network'));
+ const site=sampleSite();site.layout={includeAPs:true};const pages=buildPages(site).filter(p=>p.title.startsWith('Core Network'));
  for(const page of pages){
   const paths=page.items.filter(i=>i.type==='path'),devices=page.items.filter(i=>i.type==='device'&&!['plug','handoff'].includes(i.kind)),segments=[];
   for(const path of paths)for(let i=1;i<path.points.length;i++){
