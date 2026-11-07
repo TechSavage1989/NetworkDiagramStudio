@@ -1,6 +1,7 @@
 import {cidr, device, empty, ensurePort, ensureVlan, portName, vlans} from './model.mjs';
 import {identify} from './hardware.mjs';
 import {parseFirewall} from './firewalls.mjs';
+import {completeConfigHardware} from './config-hardware.mjs';
 
 const words = s => [...String(s).matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2] ?? m[3]);
 const scalar = s => words(s).join(' ');
@@ -135,6 +136,7 @@ function switchCLI(text,filename) {
     }
   }
   for(const p of d.ports)if(p.allowed) p.tagged=p.allowed.filter(n=>p.nativeTagged||n!==p.native);
+  completeConfigHardware(d,text,filename,out.warnings);
   d.fromConfig=true;out.devices.push(d);return out;
 }
 
@@ -196,6 +198,7 @@ function routerOS(text,filename){
 
 export function parseConfig(text,filename='configuration.txt') {
   const s=String(text).replace(/^\uFEFF/,'');
+  if(s.includes('\0'))return {devices:[],links:[],warnings:[filename+': '+(/r5\/version|net\/devices/.test(s.slice(0,65536))?'MikroTik binary backup detected. In RouterOS, run /export file=diagram and import diagram.rsc. Keep sensitive-data export disabled.':'Binary configuration detected. Export a readable text configuration instead of a device restore backup.')]};
   if(/^#config-version=/im.test(s) && !/^\s*config (?:system |vdom|global)/im.test(s))
     return {devices:[],links:[],warnings:[filename+': FortiOS header without clear-text configuration blocks. Supply an unencrypted export, Auvik report, or manual device.']};
   if(/^#config-version=|^config system (?:global|interface|virtual-wire-pair)\s*$/im.test(s))return fortios(s,filename);

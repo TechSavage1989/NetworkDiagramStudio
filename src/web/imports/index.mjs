@@ -20,7 +20,7 @@ export async function importFiles(files){
         if(!tables.length)errors.warnings.push(name+': no Devices, Interfaces or Routes worksheets found.');
         for(const table of tables)reports.push(parseTable(table.rows,name+' / '+table.name));
       }else if(/\.csv$/i.test(name))reports.push(parseTable(readCSV(await file.text()),name));
-      else if(/\.(txt|cfg|conf|config|log|rsc|cli|xml|exp)$/i.test(name)||!name.includes('.')){
+      else if(/\.(txt|cfg|conf|config|log|rsc|cli|xml|exp|backup)$/i.test(name)||!name.includes('.')){
         const text=await file.text();configs.push(isOperational(text)?parseOperational(text,name):parseConfig(text,name));
       }
       else errors.warnings.push(name+': unsupported format. Use a text configuration, Auvik XLSX or CSV.');

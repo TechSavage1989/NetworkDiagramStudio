@@ -1,3 +1,4 @@
+import {refineFaceplates} from './researched-layouts.mjs';
 // Port banks and socket positions adapted from the owner's hardware catalogs.
 // Primary manufacturer references are retained with each profile. Research-pending
 // identities do not acquire port coordinates. See docs/HARDWARE_SUPPORT.md.
@@ -109,4 +110,4 @@ Object.assign(fg90,{ratio:5.15,rowsY:[.35,.70],banks:[
  bank(['wan1','wan2'],'RJ45',2,'front',{positions:[.438,.438],socketWidth:.063,mirror:true}),
  bank(['port1','port2','port3','port4','port5','port6','a','b'],'RJ45',2,'front',{positions:[.563,.563,.628,.628,.693,.693,.758,.758],socketWidth:.060})
 ]});
-export const faceplates=[...inheritedFaceplates.filter(p=>!extra.some(q=>q.models.some(m=>p.models.includes(m)))),...extra];
+export const faceplates=refineFaceplates([...inheritedFaceplates.filter(p=>!extra.some(q=>q.models.some(m=>p.models.includes(m)))),...extra]);

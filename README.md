@@ -8,6 +8,7 @@
 
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
 
+- Recognize shared Cisco 9500/3560-E and Aruba 6000/6100 family layouts when a complete configuration identifies the geometry but omits its SKU. Confirm exact models and removable modules in Device details. See the [hardware research and coverage notes](docs/HARDWARE_RESEARCH_22.md).
 - Import supported configurations, Base64 SonicWall EXP settings, Auvik XLSX/CSV reports and show-command captures. Enable each file and choose identity, ports, links, VLANs, routes and bridges separately.
 - Add 21 device roles, including servers, hypervisor hosts, virtual machines, HCI nodes, storage, phones, workstations, printers, cameras and controllers. Recognize 43 common server/storage/platform families; retain custom models, actual interface records and user stencils.
 - Generate core topology with documented WAN handoffs, switch port maps, wireless connections, VLAN and routing records, and a site-specific trunk matrix showing native, tagged and excluded VLANs. Trunk matrices measure headings and rows to fit more columns and VLANs before continuing onto another page. Port maps separate the endpoint assignment from configured mode and operational state.
@@ -26,6 +27,16 @@ Network engineers can use the Windows application or the offline browser edition
 - Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and compact WAN/circuit cards. Circuit cards fit the actual stack width, use extra rows on narrow devices and retain complete provider/gateway text. Routes use available space inside the stack width when port orientation and clearances permit. Configure page-number visibility, starting values, padding and format.
 
 ## Screenshots
+
+Shared family drawings retain actual port names and explicitly identify an unconfirmed SKU.
+
+<p align="center"><img src="docs/images/hardware-families.png" width="900" alt="Fictional FortiGate 201G, Cisco 9500 family and compact Aruba family with mapped links"></p>
+
+<p align="center"><img src="docs/images/hardware-confirmation.png" width="750" alt="Device details explaining the family evidence and model confirmation"></p>
+
+Modular chassis keep their proportions, slot identities and editable physical sockets.
+
+<p align="center"><img src="docs/images/modular-port-map.png" width="900" alt="Fictional Aruba 5406R chassis with installed optical and copper cards and grouped port details"></p>
 
 **Paper sizes and orientation**
 
@@ -158,4 +169,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.21.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.22.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)

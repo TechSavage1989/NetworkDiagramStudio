@@ -1,5 +1,16 @@
 # Development handoff
 
+## Preview.22 configuration recognition and physical layouts
+
+Prepares 0.1.0-preview.22 / file version 0.1.0.22 from published preview.21 at 02fdc97b8b0b354b968841061680e25c6addb574. Preview.21 passed PR #17 exact-head Windows run 42405022809 and merged-main release run 42405681501 after isolating the rollback fixture's feed cache. Its public assets, PE version/icon and offline modules were verified and both existing downloads refreshed. Standing build/release authorization continues. Require green exact-head Windows validation, merged-main publication and public asset/feed verification before announcing preview.22.
+
+completeConfigHardware separates family inference from exact identity. Full interface signatures plus platform evidence produce family-layout metadata and a visible Model hint; declared identities supersede family records regardless of import order. A partial or conflicting signature does not assign a layout. researched-layouts.mjs refines geometry without rewriting inherited source snapshots. PL-family optical cages do not claim an SFP speed. Confirm 2920 rear cards and Cisco X2/TwinGig adapters before assigning their exact sockets.
+
+Corrected compact Aruba and full-size bank spacing, 6200F management placement, FortiGate 201G top/bottom orientation, 5400R proportions and module anchor namespaces. Unknown members use an editable labeled role symbol and retain panel boundaries. Chassis/module details remain native geometry in SVG/Visio. Native data-port drawings do not claim calibrated rear management, modem or USB anchors where unavailable. Family inference does not upgrade existing saved sources until reimported; selecting a known model manually also resolves it.
+
+All 32 readable private configurations built and rendered. A README and a renamed MikroTik binary backup were rejected with guidance. Raw inputs and private captures are outside git. Public screenshots and regression tests are fictional. Local checks cover 187 Node tests, seven Python tests, five independently checked Visio packages and actual-browser import/edit/undo/redo/save/reopen/export. Direct Microsoft Visio rendering remains unavailable. See docs/HARDWARE_RESEARCH_22.md for manufacturer references and remaining model/module limits.
+
+
 ## Preview.21 shared hardware scale and measured port-map pages
 
 PR #16 passed Windows run 42403548422 and merged at 2b63304b7d6933a360e7b0a64c67935d7f6e0419. Its main release run 42404254805 passed native UI/print/timer checks and unhealthy-update rollback, then failed before the final simulated install obtained an offer. The restored real window can save a live-feed retry/rate-limit pause into the disposable profile, which the deterministic fixture then reused. Run-Install now removes only that unrelated feed cache. The final test deliberately seeds a future rate-limit pause first, proving isolation; NativeSmoke requires exactly one fixture check and reports full diagnostics if no offer exists. Settings, release policy, real automatic timings, verified download, readiness and rollback remain unchanged. No preview.21 tag or release was published. This follow-up renews the same unpublished intent and still requires exact-head PR and merged-main Windows success before publication.
