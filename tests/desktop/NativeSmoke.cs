@@ -120,7 +120,7 @@ internal sealed partial class Studio
     async Task ClickEditorTarget(string selector,int clicks=1)
     {
         var query=JsonSerializer.Serialize(selector);
-        var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const n=document.querySelector({query}); if(!n) return null; const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
+        var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
         using var doc=JsonDocument.Parse(raw);
         if(doc.RootElement.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector);
         var x=doc.RootElement.GetProperty("x").GetDouble();var y=doc.RootElement.GetProperty("y").GetDouble();
@@ -173,7 +173,7 @@ internal sealed partial class Studio
         await ClickEditorTarget("[data-native-add-device='save']");
         await RequireEditor("if(document.getElementById('dialog').open) throw Error('Add device did not close'); const row=[...document.querySelectorAll('#devices .device-row')].find(row=>row.textContent.includes('LAB-HYPERVISOR-NODE-01')); if(!row?.textContent.includes('Hypervisor host')||!row.textContent.includes('Dell PowerEdge R750')||!row.querySelector('input[type=checkbox]')?.checked) throw Error('Added hypervisor lost its type, model or scope'); if(!document.querySelector('#canvas>svg')||!document.querySelector('#tabs button')||document.querySelector('#welcome')) throw Error('Add device lost the diagram'); row.querySelector('button[title]').dataset.nativeAddDevice='open'","save added hypervisor");
         await ClickEditorTarget("[data-native-add-device='open']");
-        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Device type')?.value!=='hypervisor'||field('Model')?.value!=='Dell PowerEdge R750'||field('Platform / technology')?.value!=='Proxmox VE') throw Error('Added device details were not retained')","reopen added hypervisor");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Device details') throw Error('Device editor did not reopen'); const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Device type')?.value!=='hypervisor'||field('Model')?.value!=='Dell PowerEdge R750'||field('Platform / technology')?.value!=='Proxmox VE') throw Error('Added device details were not retained')","reopen added hypervisor");
         await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Core page')?.selectedOptions[0]?.textContent!=='LAB-HYPERVISOR-NODE-01') throw Error('Dedicated page was not retained'); if(field('Port name')?.value!=='eth0'||field('Description')?.value!=='Management'||field('Native VLAN')?.value!=='8'||field('Tagged VLANs')?.value!=='20, 34') throw Error('Port form values were not retained')","retained ports and dedicated page");
         await ClickEditorTarget("#close");
         await ClickEditorTarget("#drawing-undo");
