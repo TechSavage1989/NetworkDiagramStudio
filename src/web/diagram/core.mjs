@@ -34,7 +34,7 @@ function handoffs(db){
  }
  return {devices,links};
 }
-function bounds(d,y=0,width=WIDTH,left=LEFT){const scale=Math.max(.3,Math.min(1,d.scale||1)),compact=!['switch','firewall','unknown','handoff','ap'].includes(d.kind),bodyWidth=Math.min(width,compact?300:WIDTH);return d.kind==='ap'?[left+(width-72*scale)/2,y,72*scale,72*scale]:d.kind==='handoff'?[left+(width-170)/2,y,170,29]:[left+(width-bodyWidth*scale)/2,y,bodyWidth*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
+function bounds(d,y=0,width=WIDTH,left=LEFT){const scale=Math.max(.3,Math.min(1,d.scale||1)),compact=!['switch','firewall','unknown','handoff','ap'].includes(d.kind),bodyWidth=width*(compact?300/WIDTH:1);return d.kind==='ap'?[left+(width-72*scale*width/WIDTH)/2,y,72*scale*width/WIDTH,72*scale*width/WIDTH]:d.kind==='handoff'?[left+(width-170)/2,y,170,29]:[left+(width-bodyWidth*scale)/2,y,bodyWidth*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
 function probe(project,d,width=WIDTH,padding=1){return addDevice({items:[]},project,d,bounds(d,0,width),'probe',{fitWidth:d.kind!=='handoff',padding});}
 function handoffCard(d,width){const textSpan=(width-24)/1.12,detail=[d.ownerPort&&displayPortCaption(d.ownerPort),d.ip||d.model].filter(Boolean).join(' | '),titleHeight=Math.max(25,wrapPortText(d.name,textSpan,18,true).length*22),detailHeight=Math.max(20,wrapPortText(detail,textSpan,12).length*15);return {detail,titleHeight,detailHeight,height:Math.max(64,titleHeight+detailHeight+12)};}
 function handoffRows(devices,span,spread=false){
