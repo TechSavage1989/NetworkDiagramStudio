@@ -132,7 +132,7 @@ function rearExpansion(panel,p,device){
  rectangle(panel.children,.58,.61,.13,.27,'#BAC4C8','#71828A',.6);text(panel.children,.59,.69,.11,.07,'Stacking bay',4);
  panel.regions=[{y:0,h:.44},{y:.54,h:.44}];panel.ratio/=2.15;return panel;
 }
-export function deviceFaceplate(device){
+export function deviceFaceplate(device,options={}){
  const p=faceplateProfile(device),members=device.stackMembers||[],modules=device.modules||[];
  if(/^J985[01]A$/i.test(device.model||'')||/^J869[78]A$/i.test(device.model||'')){
   const count=/J9851|J8698/i.test(device.model)?12:6,rows=count/2,children=[],ports=Object.create(null),sockets=[];
@@ -145,7 +145,7 @@ export function deviceFaceplate(device){
   }
   return {ratio:count===12?1.15:2.25,ports,children,sockets,verified:true,source:p?.source};
  }
- if(members.length>1){
+ if(members.length>1||device.stackContinuation){
   const children=[],ports=Object.create(null),sockets=[],regions=[];let verified=true;
   const list=[...members].sort((a,b)=>Number(a.id)-Number(b.id));
   const panels=list.map(member=>{
@@ -153,9 +153,9 @@ export function deviceFaceplate(device){
    let panel=baseLayout(profile);if(panel)panel=rearExpansion(panel,profile,{ports:localPorts,modules:modules.filter(m=>String(m.member)===String(member.id))});
    return {member,profile,panel,localPorts,units:1/(panel?.ratio||10.2)};
   });
-  const total=panels.reduce((n,p)=>n+p.units,0)+.035*(panels.length-1);let cursor=0;
+  const gap=.035*Math.max(.49,Math.min(1,options.padding??1))**2,total=panels.reduce((n,p)=>n+p.units,0)+gap*(panels.length-1);let cursor=0;
   for(const {member,profile,panel,localPorts,units} of panels){
-   const top=cursor/total,height=units/total;cursor+=units+.035;
+   const top=cursor/total,height=units/total;cursor+=units+gap;
    if(!panel){verified=false;rectangle(children,0,top,1,height,'#E4E8EA','#819198',1);continue;}
    mapObserved(panel,profile,{ports:localPorts});
    for(const region of panel.regions)regions.push({y:top+region.y*height,h:region.h*height});

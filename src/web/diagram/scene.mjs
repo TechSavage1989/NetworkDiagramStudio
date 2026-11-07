@@ -1,3 +1,4 @@
+import {pageGeometry,pageFamily} from '../page-options.mjs';
 // Geometry is stored in page pixels with a top-left origin. Both exporters consume the same scene.
 import {coreSidebar} from './sidebar.mjs';
 import {deviceFaceplate} from './faceplate.mjs';
@@ -56,24 +57,24 @@ export function linkLegend(page){
    description.forEach((text,n)=>{label(page.items,textX,y+lines.length*lineHeight+n*detailHeight,textSpan,detailHeight,text,detailSize,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44*s,lines.length*lineHeight+description.length*detailHeight+12*s);
   }page.legendBottom=y;return;
  }
- const cols=values.length<=6?3:6,size=12,width=1128/cols-38,rows=[];
+ const span=(page.width||W)-72,cols=Math.min(values.length<=6?3:6,Math.max(1,Math.floor(span/240))),size=12,width=span/cols-38,rows=[];
  const entriesWithText=values.map(entry=>({...entry,lines:wrapPortText(titleOf(entry),width,size),description:entry.style?.description?wrapPortText(entry.style.description,width,11):[]}));
  for(let i=0;i<entriesWithText.length;i+=cols)rows.push(Math.max(...entriesWithText.slice(i,i+cols).map(e=>Math.max(22,e.lines.length*15+e.description.length*14+5))));
- label(page.items,38,148,1120,15,'LINK COLORS',11,true,C.muted);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});
- entriesWithText.forEach(({name,color,opacity,weight,style,lines,description},i)=>{const x=38+(i%cols)*1128/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight);
+ label(page.items,38,148,(page.width||W)-80,15,'LINK COLORS',11,true,C.muted);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});
+ entriesWithText.forEach(({name,color,opacity,weight,style,lines,description},i)=>{const x=38+(i%cols)*span/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight);
   rect(page.items,x,y+6,22,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
   lines.forEach((text,n)=>{label(page.items,x+30,y+n*15,width,15,text,size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
   description.forEach((text,n)=>{label(page.items,x+30,y+lines.length*15+n*14,width,14,text,11,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});
  });page.legendBottom=167+rows.reduce((a,b)=>a+b,0);
 }
 export function fresh(name,title,subtitle,project){
-  const p={name,title,width:W,height:H,items:[]}, a=p.items;
-  const projectName=project.name||'Network project',nameHeight=Math.max(23,wrapPortText(projectName,820,15,true).length*18);
-  label(a,36,Math.max(0,39-nameHeight),820,Math.min(39,nameHeight),projectName,15,true,C.teal);
-  label(a,900,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');
-  label(a,36,43,1128,48,title,33,true);
-  label(a,36,99,1128,36,subtitle,16,false,C.muted);
-  rect(a,36,138,1128,2,C.rule);
+  const geometry=pageGeometry(project,pageFamily(name)),p={name,title,...geometry,items:[]}, a=p.items,span=p.width-72,nameWidth=Math.max(180,span-308);
+  const projectName=project.name||'Network project',nameHeight=Math.max(23,wrapPortText(projectName,nameWidth,15,true).length*18);
+  label(a,36,Math.max(0,39-nameHeight),nameWidth,Math.min(39,nameHeight),projectName,15,true,C.teal);
+  label(a,p.width-300,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');
+  label(a,36,43,span,48,title,33,true);
+  label(a,36,99,span,36,subtitle,16,false,C.muted);
+  rect(a,36,138,span,2,C.rule);
   return p;
 }
 export function actualAsset(project,d){
@@ -100,11 +101,12 @@ export function physicalPorts(d){
 }
 export function state(v){return /^(up|connected|online|active|operational)$/i.test(value(v))?'up':/down|disabled|offline|disconnected|inactive/i.test(value(v))?'down':'unknown';}
 export function addDevice(page,project,d,bounds,key,opts={}){
-  const asset=actualAsset(project,d), ports=physicalPorts(d), ap=d.kind==='ap',panel=!asset&&!ap?deviceFaceplate(d):null,symbol=!asset&&!panel?genericDeviceSymbol(d.kind):null;
+  const asset=actualAsset(project,d), ports=physicalPorts(d), ap=d.kind==='ap',panel=!asset&&!ap?deviceFaceplate(d,opts):null,symbol=!asset&&!panel?genericDeviceSymbol(d.kind):null;
   const ratio=asset?+asset.width/+asset.height:panel?.ratio||symbol?.ratio|| (ap?1:d.kind==='handoff'?6:d.kind==='unknown'?3:9);
   const placement=opts.fillBounds?Object.fromEntries(['x','y','w','h'].map((key,n)=>[key,bounds[n]])):opts.fitWidth?{x:bounds[0],y:bounds[1],w:bounds[2],h:bounds[2]/ratio}:fitRatio(ratio,...bounds);
   const g={type:'device',key,sourceId:d.id,instanceKey:opts.instanceKey,name:d.name||d.id,kind:d.kind,model:d.model||'',...placement,asset,
     masterKey:asset?'asset:'+String(asset.id??d.stencilId??d.id):'device:'+d.id,ports:Object.create(null),children:[],fallback:!asset};
+  if(!asset&&d.stackMembers?.length)g.masterKey+=':members:'+d.stackMembers.map(m=>m.id).join(',')+':gap:'+(opts.padding??1);
   const addAnchor=(k,p)=>{if(Array.isArray(p)&&p.length===2&&p.every(n=>Number.isFinite(n)&&n>=0&&n<=1))g.ports[String(k)]=[...p];};
   if(asset){
     for(const [k,v] of Object.entries(asset.anchors||{}))addAnchor(k,Array.isArray(v)?v:[v?.x,v?.y]);
@@ -212,6 +214,7 @@ function svgText(i){
   return '<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
 }
 export function svgPage(p){
+  const W=p.width||1200,H=p.height||975;
   const draw=(i)=>{
     if(i.type==='rect')return '<rect'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></rect>':'/>');
     if(i.type==='text')return svgText(i);

@@ -40,12 +40,12 @@ export function placeDeviceTitles(page,project,nodes){
   // Reserving the complete string's unwrapped width would make a valid box
   // impossible to place, even when it fits by itself on an otherwise empty page.
   const x0=group[0].x,y0=group[0].y,w=Math.max(...group.map(i=>i.x-x0+i.w)),h=Math.max(...group.map(i=>i.y-y0+i.h)),candidates=[];
-  const xs=visibleOffsets(node.x,1,8,Math.max(0,node.w-w),page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38,1162-w).map(p=>p.x);
+  const xs=visibleOffsets(node.x,1,8,Math.max(0,node.w-w),page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38,((page.width||1200)-38)-w).map(p=>p.x);
   if(slot==='detail')for(const x of xs)candidates.push({x,y:node.y+node.h+5,w,h});
   for(const gap of [5,9,14,20,28,38,50,64])for(const x of xs)candidates.push({x,y:node.y-h-gap,w,h});
   for(const gap of [7,12,18,26,36,48])for(const x of xs)candidates.push({x,y:node.y+node.h+gap,w,h});
   candidates.push({x:node.x-w-12,y:node.y,w,h},{x:node.x+node.w+12,y:node.y,w,h});
-  const fit=candidates.find(b=>b.x>=(page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38)&&b.x+b.w<=1162&&b.y>=151&&b.y+b.h<906&&!bodies.some(n=>intersects(b,n,3))&&!occupied.some(t=>intersects(b,t,3))&&!paths.some(p=>pathCrossesText(p,b,3)));
+  const fit=candidates.find(b=>b.x>=(page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38)&&b.x+b.w<=((page.width||1200)-38)&&b.y>=151&&b.y+b.h<((page.height||975)-69)&&!bodies.some(n=>intersects(b,n,3))&&!occupied.some(t=>intersects(b,t,3))&&!paths.some(p=>pathCrossesText(p,b,3)));
   if(!fit){const error=Error('This page needs more space for a device title. Move a device to another core page.');Object.assign(error,{code:'CORE_LAYOUT_CAPACITY',role:'title',owner:node.sourceId,page:page.name,slot});throw error;}
   for(const t of group){t.x+=fit.x-x0;t.y+=fit.y-y0;occupied.push({...t});}
  }
@@ -82,7 +82,7 @@ export function placeCableLabels(page,requests,edits={}){
    if(req.role==='media')segments.sort(([a,b],[c,d])=>Math.hypot(d[0]-c[0],d[1]-c[1])-Math.hypot(b[0]-a[0],b[1]-a[1]));
    for(const [a,b] of segments){
     const vertical=a[0]===b[0],axis=vertical?1:0;
-    const lo=Math.max(vertical?158:sidebar?contentLeft:306,Math.min(a[axis],b[axis])+4),hi=Math.min((vertical?906:1162)-w,Math.max(a[axis],b[axis])-w-4);
+    const lo=Math.max(vertical?158:sidebar?contentLeft:306,Math.min(a[axis],b[axis])+4),hi=Math.min((vertical?((page.height||975)-69):((page.width||1200)-38))-w,Math.max(a[axis],b[axis])-w-4);
     const preferred=req.role==='media'?(lo+hi)/2:a[axis]<b[axis]?lo:hi;
     const positions=[...visibleOffsets(preferred,1,8,1200,lo,hi),...visibleOffsets(preferred,-1,8,1200,lo,hi)].sort((a,b)=>a.offset-b.offset);
     for(const {x:along} of positions)for(const offset of [-h-5,5]){
@@ -107,7 +107,7 @@ export function placeCableLabels(page,requests,edits={}){
   if(req.near)candidates.push({x:req.near.x,y:req.near.y-h/2,w,h},{x:req.near.x-w-18,y:req.near.y-h/2,w,h});
   if(req.segment){const [a,b]=req.segment,lo=Math.min(a[0],b[0])+5,hi=Math.max(a[0],b[0])-w-5;
    const desired=req.side==='right'?lo+6:Math.max(lo,hi-6);
-   const visibleLo=Math.max(lo,contentLeft),visibleHi=Math.min(hi,1162-w),limit=Math.max(0,hi-lo)+12;
+   const visibleLo=Math.max(lo,contentLeft),visibleHi=Math.min(hi,((page.width||1200)-38)-w),limit=Math.max(0,hi-lo)+12;
    const positions=[...visibleOffsets(desired,1,10,limit,visibleLo,visibleHi),...visibleOffsets(desired,-1,10,limit,visibleLo,visibleHi)].sort((a,b)=>a.offset-b.offset||b.direction-a.direction);
    for(const dy of [-h-4,4])for(const {x} of positions)candidates.push({x,y:a[1]+dy,w,h});
   }
@@ -117,7 +117,7 @@ export function placeCableLabels(page,requests,edits={}){
   let box;
   for(const candidate of candidates){
    const b=textFootprint(candidate);
-   if(b.x<(contentLeft)||b.x+b.w>1162||b.y<158||b.y+b.h>906||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>pathCrossesText(p,b,2)))continue;
+   if(b.x<(contentLeft)||b.x+b.w>((page.width||1200)-38)||b.y<158||b.y+b.h>((page.height||975)-69)||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>pathCrossesText(p,b,2)))continue;
    const leader=owner&&!candidate.attached?cableLeader(b,owner,paths,[...occupied,...bodies]):null;
    if(owner&&req.role!=='reference'&&!candidate.attached&&!leader)continue;
    box={...candidate,leader};break;

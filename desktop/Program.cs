@@ -57,6 +57,7 @@ internal sealed partial class Studio : Form
     readonly Updater updater;
     readonly string? token;
     bool loaded, busy, fetching, checking, ready, healthy;
+    int downloadProgress;
     internal bool IsEditorHealthy => healthy;
     static Button ButtonOf(string text) => new() { Text = text, AutoSize = true, FlatStyle = FlatStyle.System };
     public Studio(string? nonce, Updater? client = null)
@@ -72,11 +73,17 @@ internal sealed partial class Studio : Form
         Activated += async (_, _) => { if (loaded && NetworkInterface.GetIsNetworkAvailable()) await Check(TimeSpan.FromMinutes(2)); };
         timer.Tick += async (_, _) => { if (NetworkInterface.GetIsNetworkAvailable()) await Check(TimeSpan.FromSeconds(30)); };
         check.Click += async (_, _) => await Check(TimeSpan.Zero, true);
-        download.Click += async (_, _) => { fetching = true; RefreshButtons(); try { await updater.Download(new Progress<int>(p => {status.Text = $"Downloading {p}%"; PublishUpdateState();})); status.Text = "Verified and ready to install."; } catch (Exception e) { status.Text = e.Message; } finally { fetching = false; RefreshButtons(); } };
-        install.Click += (_, _) => { if (busy || fetching || !updater.Downloaded || updater.Offered == null) return;
-            if (MessageBox.Show(this, "Save your project before restarting. Install the downloaded update?", Text, MessageBoxButtons.OKCancel) != DialogResult.OK) return;
-            try { Installer.Begin(updater.Offered); Close(); } catch (Exception e) { status.Text = "Install failed. " + e.Message; PublishUpdateState(); } };
+        download.Click += async (_, _) => await DownloadUpdate();
+        install.Click += (_, _) => InstallUpdate();
         notes.Click += (_, _) => { var release = updater.Offered; if (release != null) MessageBox.Show(this, string.IsNullOrWhiteSpace(release.Notes) ? "No release notes were provided." : release.Notes[..Math.Min(4000,release.Notes.Length)], "What's new in " + release.Tag); };
+    }
+    async Task DownloadUpdate()
+    { if(fetching || checking || updater.Offered == null)return; fetching = true; downloadProgress=0; RefreshButtons(); try { await updater.Download(new Progress<int>(p => {downloadProgress=p; status.Text = p>=100?"Verifying download...":$"Downloading {p}%"; PublishUpdateState();})); status.Text = "Verified and ready to install."; } catch (Exception e) { status.Text = e.Message; } finally { fetching = false; RefreshButtons(); }
+    }
+    void InstallUpdate()
+    { if (busy || fetching || !updater.Downloaded || updater.Offered == null) return;
+            if (MessageBox.Show(this, "Save your project before restarting. Install the downloaded update?", Text, MessageBoxButtons.OKCancel) != DialogResult.OK) return;
+            try { Installer.Begin(updater.Offered); Close(); } catch (Exception e) { status.Text = "Install failed. " + e.Message; PublishUpdateState(); }
     }
     void ShowUpdateDetails()
     {
@@ -96,7 +103,7 @@ internal sealed partial class Studio : Form
     void PublishUpdateState()
     {
         if (!ready || IsDisposed || browser.CoreWebView2 == null) return;
-        browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {type="updateState",version=Policy.Current,message=status.Text,checking,fetching,available=updater.Offered!=null}));
+        browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {type="updateState",version=Policy.Current,message=status.Text,checking,fetching,available=updater.Offered!=null,releaseVersion=updater.Offered?.Tag,notes=updater.Offered?.Notes,size=updater.Offered?.Size??0,progress=downloadProgress,downloaded=updater.Downloaded,busy}));
     }
     async Task Check(TimeSpan cooldown, bool manual = false)
     {
@@ -111,7 +118,7 @@ internal sealed partial class Studio : Form
     }
     void RefreshButtons()
     {
-        strip.Visible = updater.Offered != null;
+        strip.Visible = false; // The editor hosts the compact update notice and details panel.
         download.Visible = updater.Offered != null && !updater.Downloaded; install.Visible = updater.Downloaded;
         install.Enabled = !busy && ready && !fetching && !checking; check.Enabled = download.Enabled = !fetching && !checking;
         check.Text = checking ? "Checking..." : "Check updates";
@@ -188,6 +195,8 @@ internal sealed partial class Studio : Form
                 }
                 switch(msg) { case "ready": ready=true; ConfirmHealth(); break; case "busy": busy=true; break; case "idle": busy=false; break;
                     case "checkUpdates": await Check(TimeSpan.Zero,true); break;
+                    case "downloadUpdate": if(!fetching&&!checking&&updater.Offered!=null)await DownloadUpdate(); break;
+                    case "installUpdate": if(!busy&&!fetching&&!checking&&ready&&updater.Downloaded)InstallUpdate(); break;
                     case "updateDetails": BeginInvoke((Action)ShowUpdateDetails); break;
                     case "notices": BeginInvoke((Action)ShowNotices); break;
                     case "print":
@@ -198,7 +207,7 @@ internal sealed partial class Studio : Form
                 if (!IsDisposed) RefreshButtons();
             };
             core.NavigationCompleted += (_, e) => { loaded=e.IsSuccess; ConfirmHealth(); };
-            await core.AddScriptToExecuteOnDocumentCreatedAsync("(()=>{\n    const pending=new Map();let updateState={};\n    chrome.webview.addEventListener('message',e=>{const m=e.data;if(m?.type==='updateState'){updateState=Object.freeze(m);window.dispatchEvent(new Event('nds-update-state'));return;}if(m?.type!=='stencilConverted')return;const entry=pending.get(m.id);if(!entry)return;pending.delete(m.id);clearTimeout(entry.timer);m.error?entry.reject(Error(m.error)):entry.resolve(m);});\n    Object.defineProperty(window,'NDSDesktop',{value:Object.freeze({\n        get updateState(){return updateState;},checkUpdates:()=>chrome.webview.postMessage('checkUpdates'),updateDetails:()=>chrome.webview.postMessage('updateDetails'),notices:()=>chrome.webview.postMessage('notices'),\n        ready:()=>chrome.webview.postMessage('ready'),setBusy:b=>chrome.webview.postMessage(b?'busy':'idle'),print:()=>chrome.webview.postMessage('print'),\n        convertStencil:async file=>{\n            if(file.size>160*1024*1024)throw Error('Stencil exceeds 160 MB.');\n            const data=await new Promise((yes,no)=>{const reader=new FileReader();reader.onload=()=>yes(reader.result.split(',')[1]);reader.onerror=()=>no(Error('Could not read stencil.'));reader.readAsDataURL(file);});\n            return new Promise((resolve,reject)=>{const id=crypto.randomUUID();const timer=setTimeout(()=>{pending.delete(id);reject(Error('Visio conversion timed out.'));},135000);pending.set(id,{resolve,reject,timer});chrome.webview.postMessage('stencil:'+JSON.stringify({id,name:file.name,data}));});\n        }\n    })});\n})();");
+            await core.AddScriptToExecuteOnDocumentCreatedAsync("(()=>{\n    const pending=new Map();let updateState={};\n    chrome.webview.addEventListener('message',e=>{const m=e.data;if(m?.type==='updateState'){updateState=Object.freeze(m);window.dispatchEvent(new Event('nds-update-state'));return;}if(m?.type!=='stencilConverted')return;const entry=pending.get(m.id);if(!entry)return;pending.delete(m.id);clearTimeout(entry.timer);m.error?entry.reject(Error(m.error)):entry.resolve(m);});\n    Object.defineProperty(window,'NDSDesktop',{value:Object.freeze({\n        get updateState(){return updateState;},checkUpdates:()=>chrome.webview.postMessage('checkUpdates'),downloadUpdate:()=>chrome.webview.postMessage('downloadUpdate'),installUpdate:()=>chrome.webview.postMessage('installUpdate'),updateDetails:()=>chrome.webview.postMessage('updateDetails'),notices:()=>chrome.webview.postMessage('notices'),\n        ready:()=>chrome.webview.postMessage('ready'),setBusy:b=>chrome.webview.postMessage(b?'busy':'idle'),print:()=>chrome.webview.postMessage('print'),\n        convertStencil:async file=>{\n            if(file.size>160*1024*1024)throw Error('Stencil exceeds 160 MB.');\n            const data=await new Promise((yes,no)=>{const reader=new FileReader();reader.onload=()=>yes(reader.result.split(',')[1]);reader.onerror=()=>no(Error('Could not read stencil.'));reader.readAsDataURL(file);});\n            return new Promise((resolve,reject)=>{const id=crypto.randomUUID();const timer=setTimeout(()=>{pending.delete(id);reject(Error('Visio conversion timed out.'));},135000);pending.set(id,{resolve,reject,timer});chrome.webview.postMessage('stencil:'+JSON.stringify({id,name:file.name,data}));});\n        }\n    })});\n})();");
             core.Navigate(Origin+"/index.html");
         }
         catch (Exception e) {

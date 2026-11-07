@@ -1,9 +1,9 @@
+import {pageGeometry,fitColumns} from '../page-options.mjs';
 import {C,fresh,label,rect} from './scene.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
 
-const COLS=[['Record',156],['Name / destination',364],['Address / next hop / type',340],['Egress / members',268]];
-const TOP=160,BOTTOM=906,NAME='VLANs and Routing';
+const TOP=160,NAME='VLANs and Routing';
 const hash=value=>{let n=14695981039346656037n;for(const c of value)n=BigInt.asUintN(64,(n^BigInt(c.codePointAt(0)))*1099511628211n);return n.toString(36);};
 function legacyChanges(project,sections){
  const edits=project.layout?.drawingEdits||{},result=new Map();
@@ -23,6 +23,7 @@ function legacyChanges(project,sections){
  return result;
 }
 export function logicalPages(project,sections){
+ const {width:W,height:H}=pageGeometry(project,'logical'),COLS=fitColumns([['Record',156],['Name / destination',364],['Address / next hop / type',340],['Egress / members',268]],W-72),BOTTOM=H-69;
  const pages=[],edits=project.layout?.drawingEdits||{},legacy=legacyChanges(project,sections);let page,y;
  const next=()=>{page=fresh(NAME,NAME,'Configured VLANs, interface addresses and routing entries',project);page.logicalSections=[];pages.push(page);y=TOP;};
  next();
@@ -35,7 +36,7 @@ export function logicalPages(project,sections){
    const lineHeight=Math.max(...cells.map(c=>c.size*1.25)),lines=Math.max(...cells.map(c=>c.lines.length));
    return {cells,lineHeight,lines,height:Math.max(28,lines*lineHeight+12,...cells.map(c=>c.height+12))};
   });
-  const headingHeight=part=>{const key=prefix+'|heading|'+part,patch=edits[key]||{},value=patch.value??(section.name+(part?' (continued)':'')),size=patch.size||18,w=patch.w||1128;return {key,value,size,w,height:Math.max(32,patch.h||0,wrapPortText(value,w,size,true).length*size*1.25+10)};};
+  const headingHeight=part=>{const key=prefix+'|heading|'+part,patch=edits[key]||{},value=patch.value??(section.name+(part?' (continued)':'')),size=patch.size||18,w=patch.w||W-72;return {key,value,size,w,height:Math.max(32,patch.h||0,wrapPortText(value,w,size,true).length*size*1.25+10)};};
   let part=0,at=0,offset=0;
   const full=headingHeight(0).height+32+rows.reduce((n,r)=>n+r.height,0);
   if(y>TOP&&y+full>BOTTOM&&full<=BOTTOM-TOP)next();
@@ -45,14 +46,14 @@ export function logicalPages(project,sections){
    if(y+minimum>BOTTOM)next();
    const start=y;
    label(page.items,36,y,head.w,head.height-8,head.value,head.size,true,C.teal);Object.assign(page.items.at(-1),{editKey:head.key,logicalDeviceId:section.id,logicalHeading:true,full:true});y+=head.height;
-   rect(page.items,36,y,1128,32,C.ink);let x=36;
+   rect(page.items,36,y,W-72,32,C.ink);let x=36;
    COLS.forEach(([name,width],i)=>{label(page.items,x+8,y,width-16,32,name,14,true,C.white);page.items.at(-1).editKey=prefix+'|columns|'+part+'|'+i;x+=width;});y+=32;
    let painted=0;
    while(at<rows.length){
     const row=rows[at],remaining=row.lines-offset,whole=offset===0&&row.height<=BOTTOM-y;
     if(!whole&&offset===0&&row.height<=BOTTOM-TOP-head.height-32)break;
     const take=whole?remaining:Math.min(remaining,Math.floor((BOTTOM-y-12)/row.lineHeight));if(take<1)break;
-    const height=whole?row.height:take*row.lineHeight+12;rect(page.items,36,y,1128,height,at%2?C.pale:C.white);x=36;
+    const height=whole?row.height:take*row.lineHeight+12;rect(page.items,36,y,W-72,height,at%2?C.pale:C.white);x=36;
     row.cells.forEach((cell,i)=>{const text=whole?cell.value:cell.lines.slice(offset,offset+take).join('\n'),editKey=cell.editKey+(!whole?'|continued|'+offset:'');label(page.items,x+8,y+6,cell.w,height-12,text,cell.size,cell.bold);const style={...cell.patch};delete style.value;delete style.h;if(!whole){delete style.x;delete style.y;}Object.assign(page.items.at(-1),style,{editKey,logicalDeviceId:section.id,logicalRecord:at,logicalColumn:i,full:true});x+=COLS[i][1];});
     y+=height;painted++;offset+=take;if(offset>=row.lines){at++;offset=0;}
    }
@@ -61,6 +62,6 @@ export function logicalPages(project,sections){
    if(!painted)throw Error('This VLAN or route record needs more room on its page.');
   }
  }
- if(!sections.length){rect(page.items,36,168,1128,88,C.pale);label(page.items,57,187,1082,48,'No VLAN or route records were supplied.',18,false,C.muted);}
+ if(!sections.length){rect(page.items,36,168,W-72,88,C.pale);label(page.items,57,187,W-118,48,'No VLAN or route records were supplied.',18,false,C.muted);}
  return pages;
 }

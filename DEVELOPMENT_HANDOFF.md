@@ -1,5 +1,19 @@
 # Development handoff
 
+## Preview.20 paper-aware layout, stack continuation and update review
+
+Prepares 0.1.0-preview.20 / file version 0.1.0.20 from published preview.19 at 31671881d45c0b0f035023b313569cbbcc54c235. Standing authorization covers build and release. Require green exact-head hosted Windows checks, merge, merged-main publication, public feed/asset verification and refreshing both existing downloads before announcing publication.
+
+The reported failure contained an eight-member imported stack. Core packing previously treated it as indivisible at default member spacing. Bounded padding retries now tighten only gaps; larger native stacks can continue by member range at a common paper-dependent hardware width. Member-local endpoint filtering and remote reference lookup retain the original inventory identity. Master keys include member subsets and gap geometry to avoid conflicting Visio masters. Imported single-image stacks remain indivisible and can require larger paper.
+
+Page options stores default paper and per-family overrides in layout.pageSetup. Presets cover Letter, Legal, Tabloid and A5-A1, plus custom 148-1500 mm dimensions. Scene units remain 96 dpi, not a final bitmap scaling operation. Core/sidebar/label bounds, tables, wireless banks, trunk matrices, headers and footers use page geometry. Text wraps before pagination. SVG viewBox and size, named print pages and native Visio drawing dimensions agree. Standard PaperKind and PrintPageOrientation cells follow Microsoft documentation; custom printer forms remain printer-dependent. Existing explicit edits and original-size projects are retained. Small faceplate overlays below eight scene units are omitted; complete table records remain.
+
+Updater review uses safe DOM text for remote release notes, version cards, progress, verification and ready-to-install states. A compact conditional editor banner replaces the old native strip. New bridge commands call guarded native download/install methods. Existing final save/restart confirmation, automatic check cadence, readiness predicate, checksum/PE verification and rollback are unchanged. Reference implementations reviewed: Configuration-Inspector webview/updates.js and network-toolkit web/assets/app-updater.js.
+
+Local checks: 176 Node tests, seven Python tests, four synthetic VSDX/VSSX package checks, real browser paper selection, mixed page families, invalid-input rejection, save/reopen, undo/redo, 1366x768 dialog fitting, updater actions/progress/busy guard and the private reported stack import. A seven-sheet mixed-size PDF was measured: A3 landscape plus Letter portrait sheets match requested dimensions within one PDF point. README screenshots contain fictional sample/release data. NativeSmoke checks paper setting round trips and conditional HTML updater notices on Windows. Final-head hosted Windows validation remains required. Direct Microsoft Visio rendering and physical custom printer forms remain unverified.
+
+Microsoft print references: https://learn.microsoft.com/en-us/office/client-developer/visio/printpageorientation-cell-print-properties-section and https://learn.microsoft.com/en-us/office/client-developer/visio/paperkind-cell-print-properties-section .
+
 ## Preview.19 device identity, consistent scale and local search feedback
 
 Prepares 0.1.0-preview.19 / file version 0.1.0.19 from verified published preview.18 at 86d54dfe3851b2b14a5546db4b3c9158afa156cf. Standing authorization covers the build and publication. Require green exact-head hosted Windows validation, merge, merged-main publication and verified public feed/assets before reporting release completion. Publication and required-input notices must be bold and obvious.
