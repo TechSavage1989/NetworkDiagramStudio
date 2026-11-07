@@ -2,6 +2,7 @@ import {cleanSnap} from './snapping.mjs';
 import {cleanDrawingEdits} from './drawing-edits.mjs';
 import {cleanLinkStyles} from './link-styles.mjs';
 import {cleanPageNumbers} from './page-options.mjs';
+export const coreLinkKey=link=>[link.a+'/'+link.ap,link.b+'/'+link.bp].sort().join('|');
 export function orderedDevices(project){
  const order=new Map((project.layout?.order||[]).map((id,i)=>[id,i]));
  return (project.devices||[]).slice().sort((a,b)=>(order.get(a.id)??1e6)-(order.get(b.id)??1e6));
@@ -19,7 +20,7 @@ export function cleanLayout(raw,ids){
  const p=raw&&typeof raw==='object'?raw:{},known=new Set(ids),used=new Set(),pages=[];
  for(const v of Array.isArray(p.corePages)?p.corePages.slice(0,100):[]){
   if(!v||typeof v.id!=='string'||used.has(v.id))continue;used.add(v.id);
-  pages.push({id:v.id.slice(0,120),name:String(v.name||'Core Network').slice(0,80),devices:[...new Set((Array.isArray(v.devices)?v.devices:[]).filter(id=>known.has(id)))]});
+  pages.push({id:v.id.slice(0,120),showReferences:v.showReferences!==false,hiddenReferences:[...new Set((Array.isArray(v.hiddenReferences)?v.hiddenReferences:[]).filter(key=>typeof key==='string'&&key.length<=500).slice(0,10000))],name:String(v.name||'Core Network').slice(0,80),devices:[...new Set((Array.isArray(v.devices)?v.devices:[]).filter(id=>known.has(id)))]});
  }
  return {linkStyles:cleanLinkStyles(p.linkStyles),pageNumbers:cleanPageNumbers(p.pageNumbers),snapping:cleanSnap(p.snapping),drawingEdits:cleanDrawingEdits(p.drawingEdits),order:[...new Set((Array.isArray(p.order)?p.order:[]).filter(id=>known.has(id)))],corePages:pages,
   coreExclude:[...new Set((Array.isArray(p.coreExclude)?p.coreExclude:[]).filter(id=>known.has(id)))],includeAPs:p.includeAPs===true,

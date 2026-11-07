@@ -11,7 +11,7 @@ export const W = 1200, H = 975;
 export const C = {ink:'#16364A',muted:'#536779',teal:'#166574',rule:'#CEDCE0',pale:'#F0F5F6',white:'#FFFFFF',up:'#D8F0DE',down:'#E2E7EA',amber:'#805400'};
 export const xml = s => String(s ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
 export const round = n => Math.round(n*1e5)/1e5;
-export const cableWeight = 3;
+export const cableWeight = 4;
 export function rect(box,x,y,w,h,fill,stroke='none',weight=1){box.push({type:'rect',x,y,w,h,fill,stroke,weight});}
 export function label(box,x,y,w,h,value,size=15,bold=false,color=C.ink,align='left'){
   box.push({type:'text',x,y,w,h,value:String(value ?? ''),size,bold,color,align});
@@ -41,14 +41,14 @@ export function mediaInfo(v,access=false){
 }
 export function linkLegend(page){
  const defaults=linkDefaults,scope=page.editScope||page.name,entries=new Map();
- for(const path of page.items.filter(i=>i.type==='path')){const name=path.linkType||'Link',color=path.color.toUpperCase(),opacity=path.opacity??1,key=JSON.stringify([name,color,opacity]);if(!entries.has(key))entries.set(key,{name,color,opacity,style:path.linkStyle});}
+ for(const path of page.items.filter(i=>i.type==='path')){const name=path.linkType||'Link',color=path.color.toUpperCase(),opacity=path.opacity??1,weight=path.weight||cableWeight,key=JSON.stringify([name,color,opacity,weight]);if(!entries.has(key))entries.set(key,{name,color,opacity,weight,style:path.linkStyle});}
  const values=[...entries.values()].sort((a,b)=>{const rank=n=>defaults.findIndex(([name])=>name===n||name.startsWith('Fiber')&&/unspecified|Fiber/.test(n));return (rank(a.name)<0?9:rank(a.name))-(rank(b.name)<0?9:rank(b.name))||a.color.localeCompare(b.color)||a.opacity-b.opacity;});
  if(!values.length)return;
  if(page.legendLayout==='sidebar'){
   label(page.items,38,147,244,26,'CONNECTION TYPES',16,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=198;
   const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
-  for(const {name,color,opacity,style} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style),title=(style?.title||name)+(opacity<1?' ('+Math.round(opacity*100)+'%)':''),lines=wrapPortText(title,176,14),description=style?.description?wrapPortText(style.description,176,12):[];
-   rect(page.items,38,y+11,52,cableWeight,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
+  for(const {name,color,opacity,weight,style} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight),title=(style?.title||name)+(opacity<1?' ('+Math.round(opacity*100)+'%)':''),lines=wrapPortText(title,176,14),description=style?.description?wrapPortText(style.description,176,12):[];
+   rect(page.items,38,y+11,52,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
    lines.forEach((text,n)=>{label(page.items,102,y+n*18,176,18,text,14,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
    description.forEach((text,n)=>{label(page.items,102,y+lines.length*18+n*15,176,15,text,12,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44,lines.length*18+description.length*15+12);
   }page.legendBottom=y;return;
@@ -57,8 +57,8 @@ export function linkLegend(page){
  const entriesWithText=values.map(entry=>({...entry,lines:wrapPortText((entry.style?.title||entry.name)+(entry.opacity<1?' ('+Math.round(entry.opacity*100)+'%)':''),width,size),description:entry.style?.description?wrapPortText(entry.style.description,width,11):[]}));
  for(let i=0;i<entriesWithText.length;i+=cols)rows.push(Math.max(...entriesWithText.slice(i,i+cols).map(e=>Math.max(22,e.lines.length*15+e.description.length*14+5))));
  label(page.items,38,148,1120,15,'LINK COLORS',11,true,C.muted);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});
- entriesWithText.forEach(({name,color,opacity,style,lines,description},i)=>{const x=38+(i%cols)*1128/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style);
-  rect(page.items,x,y+6,22,cableWeight,color);Object.assign(page.items.at(-1),{opacity,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
+ entriesWithText.forEach(({name,color,opacity,weight,style,lines,description},i)=>{const x=38+(i%cols)*1128/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight);
+  rect(page.items,x,y+6,22,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
   lines.forEach((text,n)=>{label(page.items,x+30,y+n*15,width,15,text,size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
   description.forEach((text,n)=>{label(page.items,x+30,y+lines.length*15+n*14,width,14,text,11,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});
  });page.legendBottom=167+rows.reduce((a,b)=>a+b,0);

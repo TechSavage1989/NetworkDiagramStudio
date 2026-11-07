@@ -11,7 +11,7 @@ function segments(points){return points.slice(1).map((b,i)=>({a:points[i],b,h:po
 import {crossesText} from './labels.mjs';
 function score(routes,nodes,obstacles){
  const seen=[];let blocked=0,shared=0,crossed=0,length=0,bends=0;
- for(const r of routes)bends+=Math.max(0,clean(r.points).length-2);
+ for(const r of routes){if(r.points.some(([x])=>x<306||x>1162))blocked++;bends+=Math.max(0,clean(r.points).length-2);}
  for(const r of routes)for(const s of segments(r.points)){
   const {a,b,h}=s;length+=Math.abs(b[0]-a[0])+Math.abs(b[1]-a[1]);
   for(const n of nodes.values())if(!r.hosts.includes(n.key)){
@@ -72,7 +72,16 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   for(const e of order){
    const a=ends.get(e.idx+'/a'),b=ends.get(e.idx+'/b'),side=sides.get(e.idx),lo=Math.min(a.ay,b.ay)-7,hi=Math.max(a.ay,b.ay)+7;
    let lane=0;while(tracks.some(t=>t.side===side&&t.lane===lane&&Math.min(hi,t.hi)>Math.max(lo,t.lo)))lane++;
-   tracks.push({side,lane,lo,hi});const rail=side==='left'?left-18-railPitch*lane:right+18+railPitch*lane;
+   let rail=side==='left'?left-18-railPitch*lane:right+18+railPitch*lane;
+   const blockers=[...nodes.values()].filter(n=>n!==a.node&&n!==b.node&&n.y<hi&&n.y+n.h>lo);
+   const direction=side==='left'?-1:1;
+   for(let attempt=0;attempt<=blockers.length+tracks.length;attempt++){
+    const block=blockers.find(n=>rail>n.x-5&&rail<n.x+n.w+5);
+    if(block){rail=direction<0?block.x-6:block.x+block.w+6;continue;}
+    if(tracks.some(t=>Math.abs(t.rail-rail)<6&&Math.min(hi,t.hi)>Math.max(lo,t.lo))){rail+=direction*6;continue;}
+    break;
+   }
+   tracks.push({side,lane,lo,hi,rail});
    routes.push({e,a,b,side,rail,hosts:[a.node.key,b.node.key],points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});
   }
   for(const e of external){const which=nodes.has(e.a)?'a':'b',v=ends.get(e.idx+'/'+which),x=left-10;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
