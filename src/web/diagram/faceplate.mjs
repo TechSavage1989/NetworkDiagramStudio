@@ -1,4 +1,5 @@
 import {faceplates} from '../imports/faceplates.mjs';
+import {genericDeviceSymbol} from '../device-symbols.mjs';
 const normalize=v=>String(v||'').toUpperCase().replace(/[\s_]/g,'').replace(/^(?:FORTINET|SONICWALL|SOPHOS|CISCO(?:CATALYST)?|JUNIPER(?:NETWORKS)?|PALOALTO(?:NETWORKS)?)/,'').replace(/^(?:FORTIGATE|FGT?)-?(\d+[A-Z])$/,'FG-$1');
 const profiles=new Map();for(const p of faceplates)for(const m of p.models)profiles.set(normalize(m),p);
 export function faceplateProfile(d){
@@ -6,7 +7,7 @@ export function faceplateProfile(d){
  // Fortinet's Rev2 shared interfaces are named x1/x2, in the same physical bay.
  if(p?.models.some(m=>/^FG-9[01]G$/.test(m))&&(d.ports||[]).some(o=>/^x[12]$/i.test(o.name)&&!o.parent))
   return {...p,banks:p.banks.map(b=>({...b,names:b.names.map(n=>n.replace(/^wan([12])$/,'x$1'))}))};
- if(p?.unconfirmedUplinkModules){
+ if(p?.unconfirmedUplinkModules&&!p.unknownUplinkType){
   const banks=[...p.banks],confirmed=[];
   for(const [slot,y] of [['X2-1',.32],['X2-2',.70]]){
    const card=d.modules?.find(m=>m.slot?.toUpperCase()===slot&&!m.member);if(!card)continue;
@@ -36,7 +37,7 @@ function baseLayout(p){
  if(!p?.verified)return null;
  const ports=Object.create(null),children=[],sockets=[];let ratio=p.ratio||(p.module?5:10.2);
  const forti=p.vendor==='Fortinet',desktop=/FG-60F|FG-61F|XGS1\d\d|PA-4[1456]0/.test(p.models.join(' '));
- if(desktop&&!p.ratio)ratio=5.2;if(p.models.includes('JL679A'))ratio=5.8;
+ if(desktop&&!p.ratio)ratio=5.2;
  rectangle(children,0,0,1,1,p.bodyFill||(forti?'#F3F3F0':p.vendor==='SonicWall'?'#D8DADD':'#D9DDDF'),'#52636B',1);
  rectangle(children,.008,.07,.006,.86,'#899397');rectangle(children,.985,.07,.006,.86,'#899397');
  if(p.vents)for(let x=.025;x<.97;x+=.018)for(let y=.06;y<.45;y+=.09)rectangle(children,x,y,.011,.045,'#303A3F');
@@ -46,9 +47,11 @@ function baseLayout(p){
   for(const [n,col,row,form,suffix] of p.sockets){let x=.052+col*(.91/(max+1)),y=row===0?.32:.70;
    if(p.models.some(m=>['JL675A','JL676A','R9Y04A'].includes(m))){if(n>=49)x=n<=50?.03386:.08466;else x=.138056+Math.floor((n-1)/2)*(.770069/23);y=n>=49?(row===0?.33153:.70476):(row===0?.34575:.69055);}
    if(p.models.some(m=>/^J973[12]A$/.test(m))){x=.33+(Number(n)-1)*.137;y=.58;}
-   const name=String(n);add(name,x,y,form,'front',p.models.some(m=>/^J973[12]A$/.test(m))?.11:p.module?.05:.022,.25,suffix!=='M',row===0?'up':'down');
+   const measured=p.socketPoints?.[n];if(measured)[x,y]=measured;
+   const name=String(n);add(name,x,y,form,'front',measured?.[2]||p.socketWidth||(p.models.some(m=>/^J973[12]A$/.test(m))?.11:p.module?.05:.022),.25,suffix!=='M',row===0?'up':'down');
   }
-  if(!p.module){rectangle(children,.937,.2,.033,.53,'#ECEFEE','#8B979D',.6);for(let n=0;n<4;n++)rectangle(children,.944,.27+n*.1,.007,.04,n===0?'#699B58':'#899799');}
+  if(p.frontManagement){add('mgmt',.935,.34,'RJ45','front',.022,.25,true,'up');rectangle(children,.925,.66,.022,.09,'#A2B1B8');rectangle(children,.970,.30,.012,.30,'#111A20');}
+  else if(!p.module){rectangle(children,.937,.2,.033,.53,'#ECEFEE','#8B979D',.6);for(let n=0;n<4;n++)rectangle(children,.944,.27+n*.1,.007,.04,n===0?'#699B58':'#899799');}
  }else if(forti&&p.models.some(m=>/^FG-12[01]G$/.test(m))){
   text(children,.035,.22,.23,.32,'FORTINET',7,'#59716C',true);rectangle(children,.27,.23,.022,.15,'#16272D');rectangle(children,.296,.26,.022,.24,'#26383F');
   add('ha',.339,.36,'RJ45','front',.024,.23,true,'up');add('mgmt',.339,.69,'RJ45');
@@ -57,11 +60,11 @@ function baseLayout(p){
   for(let n=17;n<=24;n++)add('port'+n,.7339+Math.floor((n-17)/2)*.0300,n%2?.36:.69,'SFP','front',.024,.23,true,n%2?'up':'down');
  }else if(forti&&p.models.some(m=>/^FG-20[01]G$/.test(m))){
   ratio=9.8;text(children,.025,.17,.15,.30,'FORTINET',7,'#59716C',true);rectangle(children,.14,.40,.025,.27,'#203139');rectangle(children,.14,.76,.025,.09,'#17262D');
-  add('ha',.203,.43,'RJ45');add('mgmt',.203,.71,'RJ45');
-  for(let n=1;n<=8;n++)add('port'+n,.324+Math.floor((n-1)/2)*.0335,n%2?.42:.70,'RJ45');
-  for(let n=9;n<=16;n++)add('port'+n,.477+Math.floor((n-9)/2)*.0335,n%2?.42:.70,'RJ45');
-  for(let n=1;n<=8;n++)add('x'+n,.670+Math.floor((n-1)/2)*.0338,n%2?.42:.70,'SFP+');
-  for(let n=17;n<=20;n++)add('port'+n,.821+Math.floor((n-17)/2)*.034,n%2?.42:.70,'SFP');
+  add('ha',.203,.43,'RJ45','front',.024,.23,true,'up');add('mgmt',.203,.71,'RJ45');
+  for(let n=1;n<=8;n++)add('port'+n,.324+Math.floor((n-1)/2)*.0335,n%2?.42:.70,'RJ45','front',.024,.23,true,n%2?'up':'down');
+  for(let n=9;n<=16;n++)add('port'+n,.477+Math.floor((n-9)/2)*.0335,n%2?.42:.70,'RJ45','front',.024,.23,true,n%2?'up':'down');
+  for(let n=1;n<=8;n++)add('x'+n,.670+Math.floor((n-1)/2)*.0338,n%2?.42:.70,'SFP+','front',.024,.23,true,n%2?'up':'down');
+  for(let n=17;n<=20;n++)add('port'+n,.821+Math.floor((n-17)/2)*.034,n%2?.42:.70,'SFP','front',.024,.23,true,n%2?'up':'down');
   for(const x of [.243,.261,.279,.613,.628])for(let y=.28;y<.8;y+=.1)rectangle(children,x,y,.01,.035,'#34464F');
  }else{
   const banks=banksFor(p),views=[...new Set(banks.map(b=>b.side||'front'))],front=banks.filter(b=>b.side!=='rear'),rear=banks.filter(b=>b.side==='rear');
@@ -81,8 +84,10 @@ function baseLayout(p){
   });
   if(forti)text(children,.025,.30,.17,.32,'FORTINET',7,'#59716C',true);
   if(views.length===1&&views[0]==='rear')text(children,.025,.03,.16,.18,'Rear',5);
-  if(p.unconfirmedUplinkModules){for(const [i,y] of [.21,.60].entries())if(!p.confirmedUplinkSlots?.includes(i+1))rectangle(children,.87,y,.08,.29,'#A5ADB1','#596B73',.5);}
+  if(p.unknownUplinkType){rectangle(children,.87,.21,.08,.67,'#A5ADB1','#596B73',.5);}
+  else if(p.unconfirmedUplinkModules){for(const [i,y] of [.21,.60].entries())if(!p.confirmedUplinkSlots?.includes(i+1))rectangle(children,.87,y,.08,.29,'#A5ADB1','#596B73',.5);}
  }
+ if(p.panelBrand)text(children,.935,.04,.044,.12,p.panelBrand,4,'#F3C46F',true);
  return {ratio,ports,children,sockets,regions:[{y:0,h:1}],verified:true,source:p.source,profile:p};
 }
 function localName(p,name){
@@ -135,33 +140,39 @@ function rearExpansion(panel,p,device){
 export function deviceFaceplate(device,options={}){
  const p=faceplateProfile(device),members=device.stackMembers||[],modules=device.modules||[];
  if(/^J985[01]A$/i.test(device.model||'')||/^J869[78]A$/i.test(device.model||'')){
-  const count=/J9851|J8698/i.test(device.model)?12:6,rows=count/2,children=[],ports=Object.create(null),sockets=[];
-  rectangle(children,0,0,1,1,'#D8DDDE','#5D7079',1);text(children,.05,.025,.8,.07,device.model,6);
+  const count=/J9851|J8698/i.test(device.model)?12:6,rows=count/2,children=[],ports=Object.create(null),sockets=[],unit=.94/(rows+1),firstRow=.04+unit;
+  const modern=/^J985[01]A$/i.test(device.model),ratio=modern?44.45/(count===12?30.73:17.53):count===12?1.15:2.25;
+  rectangle(children,0,0,1,1,'#D8DDDE','#5D7079',1);text(children,.05,.015,.20,.045,device.model,6);
+  if(modern){for(const x of [.055,.525]){rectangle(children,x,.06,.445,unit*.72,'#C5CED1','#7A8B92',.7);text(children,x+.012,.07,.25,.04,x<.1?'Management module':'Optional management bay',5);}
+  for(let row=0;row<2;row++)for(let j=0;j<7;j++)rectangle(children,.075+j*.032,.09+unit*(.18+row*.17),.012,unit*.075,j%3?'#8D9DA3':'#6C925E');
+  const managementY=.06+unit*.43;socket(children,ports,'oobm',.355,managementY,'RJ45','front',.027,unit*.30);socket(children,ports,'console',.43,managementY,'RJ45','front',.027,unit*.30,false);rectangle(children,.481,.06+unit*.23,.009,unit*.32,'#20313A');
+  rectangle(children,.012,.10,.018,.72,'#8D9C9F');}
   for(let i=0;i<count;i++){
-   const slot=String.fromCharCode(65+i),x=.04+(i%2)*.48,y=.16+Math.floor(i/2)*(.8/rows),w=.45,h=.72/rows;
+   const slot=String.fromCharCode(65+i),x=.04+(i%2)*.48,y=modern?firstRow+Math.floor(i/2)*unit:.16+Math.floor(i/2)*(.8/rows),w=.45,h=modern?unit*.91:.72/rows;
    rectangle(children,x,y,w,h,'#C2CCCF','#7A8B92',.7);text(children,x+.004,y+.004,.04,.05,slot,5);
    const module=modules.find(m=>m.slot===slot&&!m.member),profile=module&&faceplateProfile({model:module.model}),panel=baseLayout(profile);
-   if(panel){for(const c of panel.children)children.push({...c,name:'Slot '+slot+': '+(c.name||c.type),x:x+c.x*w,y:y+c.y*h,w:c.w*w,h:c.h*h,...(c.anchorOrigin?{anchorOrigin:[x+c.anchorOrigin[0]*w,y+c.anchorOrigin[1]*h]}:{})});for(const [n,pt] of Object.entries(panel.ports))ports[slot+n]=[x+pt[0]*w,y+pt[1]*h];}
+   if(panel){for(const c of panel.children)children.push({...c,name:'Slot '+slot+': '+(c.name||c.type),x:x+c.x*w,y:y+c.y*h,w:c.w*w,h:c.h*h,...(c.anchorOrigin?{anchorName:slot+c.anchorName,anchorOrigin:[x+c.anchorOrigin[0]*w,y+c.anchorOrigin[1]*h]}:{})});for(const [n,pt] of Object.entries(panel.ports))ports[slot+n]=[x+pt[0]*w,y+pt[1]*h];for(const socket of panel.sockets)sockets.push({...socket,name:slot+socket.name,x:x+socket.x*w,y:y+socket.y*h});}
+   else if(module)text(children,x+.055,y+h*.3,w-.075,h*.4,module.model+' / layout unconfirmed',6);
   }
-  return {ratio:count===12?1.15:2.25,ports,children,sockets,verified:true,source:p?.source};
+  return {ratio,ports,children,sockets,regions:[{y:0,h:1}],verified:true,source:modern?'https://support.hpe.com/hpesc/public/api/document/emr_na-c04655001?docLocale=en_US':p?.source};
  }
  if(members.length>1||device.stackContinuation){
   const children=[],ports=Object.create(null),sockets=[],regions=[];let verified=true;
   const list=[...members].sort((a,b)=>Number(a.id)-Number(b.id));
   const panels=list.map(member=>{
-   const profile=faceplateProfile({model:member.model}),localPorts=(device.ports||[]).filter(o=>{const m=String(o.name).match(/^(?:(?:Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i);return m&&m[1]===String(member.id);});
+   const profile=faceplateProfile({model:member.model}),localPorts=(device.ports||[]).filter(o=>{const m=String(o.name).match(/^(?:(?:GigabitEthernet|TenGigabitEthernet|Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i);return m&&m[1]===String(member.id);});
    let panel=baseLayout(profile);if(panel)panel=rearExpansion(panel,profile,{ports:localPorts,modules:modules.filter(m=>String(m.member)===String(member.id))});
    return {member,profile,panel,localPorts,units:1/(panel?.ratio||10.2)};
   });
   const gap=.035*Math.max(.49,Math.min(1,options.padding??1))**2,total=panels.reduce((n,p)=>n+p.units,0)+gap*(panels.length-1);let cursor=0;
   for(const {member,profile,panel,localPorts,units} of panels){
    const top=cursor/total,height=units/total;cursor+=units+gap;
-   if(!panel){verified=false;rectangle(children,0,top,1,height,'#E4E8EA','#819198',1);continue;}
+   if(!panel){verified=false;regions.push({y:top,h:height});for(const c of genericDeviceSymbol('switch').children)children.push({...c,name:'Member '+member.id+': '+c.name,y:top+c.y*height,h:c.h*height});text(children,.24,top+height*.12,.67,height*.18,[device.vendor,member.model].filter(Boolean).join(' ')+' / layout unconfirmed',6);continue;}
    mapObserved(panel,profile,{ports:localPorts});
    for(const region of panel.regions)regions.push({y:top+region.y*height,h:region.h*height});
    for(const c of panel.children)children.push({...c,name:'Member '+member.id+': '+(c.name||c.type),x:c.x,y:top+c.y*height,w:c.w,h:c.h*height,...(c.anchorOrigin?{anchorOrigin:[c.anchorOrigin[0],top+c.anchorOrigin[1]*height]}:{})});
    for(const port of localPorts){const pt=panel.ports[port.name];if(pt)ports[port.name]=[pt[0],top+pt[1]*height];}
-   if(['cx','classic'].includes(profile.naming))for(const s of panel.sockets.filter(s=>s.primary)){
+   if(['cx','classic'].includes(profile.naming))for(const s of panel.sockets.filter(s=>s.primary&&/^(?:[AB])?\d+$/.test(s.name))){
     const name=member.id+(profile.naming==='cx'?'/1/':'/')+s.name;
     ports[name]=[s.x,top+s.y*height];sockets.push({...s,name,y:top+s.y*height});
    }

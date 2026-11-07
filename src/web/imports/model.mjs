@@ -90,7 +90,11 @@ export function mergeModels(...models) {
       const id = deviceId(input.id);
       if (!devices.has(id)) devices.set(id, device(input.name,{id}));
       const d = devices.get(id);
-      assign(d,input,['id','ports','vlans','routes','bridges','ips'],warnings,d.name);
+      const inferred=v=>v.hardwareEvidence?.kind==='family-layout'&&v.hardwareEvidence.model===v.model;
+      const declared=v=>meaningful(v.model)&&!/^unknown$/i.test(v.model)&&!inferred(v);
+      if(inferred(d)&&declared(input)){d.model=input.model;delete d.hardwareEvidence;delete d.sku;}
+      const ignore=['id','ports','vlans','routes','bridges','ips',...(declared(d)&&inferred(input)?['model','sku','hardwareEvidence']:[])];
+      assign(d,input,ignore,warnings,d.name);
       for (const entry of input.ports || []) {
         const p = ensurePort(d,entry.name);
         assign(p,entry,['name'],warnings,d.name + ' ' + p.name);

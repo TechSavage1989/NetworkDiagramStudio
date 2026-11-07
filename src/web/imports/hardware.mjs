@@ -6,14 +6,14 @@ import {matchEndpointHardware} from './endpoint-hardware.mjs';
 export {endpointHardwareCatalog,matchEndpointHardware} from './endpoint-hardware.mjs';
 
 function physicalInterfaces(p){
-  const records=p.sockets?p.sockets.map(s=>[(p.naming==='cx'?'1/1/':'')+s[0],s[3]]):p.banks.filter(b=>!b.optional).flatMap(b=>b.names.map(n=>[n,b.form])),groups=new Map();
+  const records=p.sockets?p.sockets.map(s=>[(p.naming==='cx'&&/^\d+$/.test(s[0])?'1/1/':'')+s[0],s[3]]):p.banks.filter(b=>!b.optional).flatMap(b=>b.names.map(n=>[n,b.form])),groups=new Map();
   for(const [name,form] of records){if(!groups.has(name))groups.set(name,new Set());groups.get(name).add(form);}
   return [...groups].map(([name,forms])=>[name,forms.size>1?'shared '+[...forms].join('/'):[...forms][0]]);
 }
-const physicalProfiles=faceplates.flatMap(p=>p.models.map(model=>({model:p.vendor==='Fortinet'?model.replace('FG-','FortiGate '):model,sku:model,vendor:p.vendor,kind:/Fortinet|SonicWall|Sophos|Palo Alto|Netgate|Deciso/.test(p.vendor)||/^(?:SRX|ASA|FPR|Firepower)/i.test(model)?'firewall':'switch',source:p.source,interfaces:physicalInterfaces(p)})));
+const physicalProfiles=faceplates.flatMap(p=>p.models.map(model=>({model:p.vendor==='Fortinet'?model.replace('FG-','FortiGate '):model,sku:p.familyOnly?'':model,familyOnly:!!p.familyOnly,vendor:p.vendor,kind:/Fortinet|SonicWall|Sophos|Palo Alto|Netgate|Deciso/.test(p.vendor)||/^(?:SRX|ASA|FPR|Firepower)/i.test(model)?'firewall':'switch',source:p.source,interfaces:physicalInterfaces(p)})));
 // Manufacturer guides correct imported capability records without rewriting their snapshot.
 const correctedFirewalls=firewallProfiles.map(p=>p.sku==='PA-415'?{...p,manufacturerReference:'https://docs.paloaltonetworks.com/hardware/pa-400-hardware-reference/pa-400-firewall-overview/pa-400-front-panel',interfaces:p.interfaces.map(([name,form])=>[name,['management','ethernet1/1'].includes(name)?'shared RJ45/SFP':form])}:p.sku==='ASA5505'?{...p,manufacturerReference:'https://andovercg.com/datasheets/cisco-asa5505guide-ASA5505HIG.pdf',interfaces:p.interfaces.filter(([name])=>name!=='Ethernet1/0')}:p.sku==='NSA3700'?{...p,manufacturerReference:'https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4162.pdf',interfaces:p.interfaces.map(([name,form])=>[name,/^X2[4-7]$/.test(name)?'5gbase-x-sfpp':form])}:p);
-export const hardwareCatalog=[...physicalProfiles.filter(p=>![...profiles,...correctedFirewalls].some(q=>q.sku===p.sku||q.model===p.model)),...profiles,...correctedFirewalls];
+export const hardwareCatalog=[...physicalProfiles.filter(p=>![...profiles,...correctedFirewalls].some(q=>(p.sku&&q.sku===p.sku)||q.model===p.model)),...profiles,...correctedFirewalls];
 const exact = new Map();
 const normalize = x => String(x||'').trim().toUpperCase().replace(/[^A-Z0-9+]/g,'');
 for(const [family,os,skus] of switchIdentities)for(const sku of skus.split(' ')){

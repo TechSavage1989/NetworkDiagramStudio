@@ -2,6 +2,8 @@
 
 Import Auvik XLSX or CSV device, interface and route reports with saved configurations from the same site. A configuration supplies intended settings. Auvik supplies the port state, negotiated speed and reported neighbor at collection time. Check warnings and correct uncertain connections before exporting.
 
+See [configuration-driven hardware coverage](HARDWARE_RESEARCH_22.md) for family recognition, confirmed card selection, the supplied-format validation and binary RouterOS export guidance.
+
 ## Input coverage
 
 | Input | Supported evidence |

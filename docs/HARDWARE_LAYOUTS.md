@@ -2,6 +2,8 @@
 
 Native panels simplify artwork while preserving confirmed socket-bank arrangements, connector forms and panel sides. Model aliases and module variants share their manufacturer reference. These facts do not establish installed optics or negotiated link speed.
 
+The [November hardware review](HARDWARE_RESEARCH_22.md) documents shared family layouts, calibrated geometry, model-confirmation limits and the manufacturer sources used for the latest corrections.
+
 | Model identifiers | Native bank layout | Manufacturer reference |
 | --- | --- | --- |
 | 1100 Security Gateway, Netgate 1100, SG-1100 | Fixed panel | [Reference](https://docs.netgate.com/pfsense/en/latest/solutions/sg-1100/io-ports.html) |
