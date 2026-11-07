@@ -34,8 +34,8 @@ Network engineers can use the Windows application or the offline browser edition
 **Drawing size and print paper are separate choices.**
 <p align="center"><img src="docs/images/page-options.png" width="900" alt="Dynamic Fit all canvas with independent printing controls"></p>
 
-**Delete devices from the list, or clear the inventory with Undo available.**
-<p align="center"><img src="docs/images/device-controls.png" width="900" alt="Device inventory with per-row Delete and a clear-all confirmation"></p>
+**Drag to reorder, use Up / Down, or delete devices directly in the sidebar.**
+<p align="center"><img src="docs/images/device-controls.png" width="284" alt="Device inventory with drag ordering, Up and Down buttons, Delete, Clear all and Undo"></p>
 
 ## Download
 
@@ -107,7 +107,7 @@ In **Edit drawing**, select a cable. Drag a square handle to move a bend, click 
 
 **Page options** separates **Canvas size** from **Print paper**. Dynamic / Fit all is the default for new drawings; existing explicit paper choices are retained. Choose **Match drawing (full-size PDF)** for the full canvas, or Letter, Legal, Tabloid, A5 through A1, or custom print dimensions (148 to 1500 mm) to fit each drawing page onto a printed sheet. Other documentation views retain their logical sections and connection banks.
 
-The device list shows each name, model/type and management IP, with a **Delete** button beside each device. The checkbox includes or excludes a device from the drawing. **Clear all** confirms the total inventory, including filtered or excluded devices; **Undo** restores devices and their connections.
+The device list shows each name, model/type and management IP, with a **Delete** button beside each device. Drag a row onto another device to place it before that device, or use **Up / Down** to change its position. The order is saved with the project and can be undone. The checkbox includes or excludes a device from the drawing. **Clear all** confirms the total inventory, including filtered or excluded devices; **Undo** restores devices and their connections.
 
 **Page options** also shows or hides page numbers, chooses their starting number and padding, and sets a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. The default is a two-digit number such as 01 / 07. These settings persist in the project.
 
