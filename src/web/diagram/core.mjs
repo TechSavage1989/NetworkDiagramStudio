@@ -10,6 +10,10 @@ import {C,addDevice,bridge,displayPortCaption,fresh,getAnchor,label,linkLegend,m
 const name=d=>d?.name||d?.id||'Device';
 
 const TOP=164,BOTTOM=901,GAP=24,LEFT=430,WIDTH=700;
+// Try readable layouts before continuing a page. Extra rail clearance resolves
+// labels trapped between parallel cables; tighter padding recovers unused space.
+const FITS=[1,.85,.7].flatMap(padding=>[12,60].map(railPitch=>({padding,railPitch})));
+const spacing=padding=>({pitch:GAP*padding,topClearance:38+12*padding,bottomClearance:14+4*padding});
 function handoffs(db){
  const devices=new Map(),links=[...db.links];
  for(const d of db.devices.values()){
@@ -41,12 +45,13 @@ function handoffRows(devices,span,spread=false){
  if(spread&&cols>1)gap=(available-cols*width)/(cols-1);
  return {width,cols,gap,rows,height:rows.reduce((a,b)=>a+b,0)};
 }
-function measurement(project,d,edges,positions,handoffs=[],width=WIDTH){
+function measurement(project,d,edges,positions,handoffs=[],width=WIDTH,padding=1){
  const g=probe(project,d,width),counts={top:0,bottom:0};
  edges.forEach((e,i)=>{const port=e.a===d.id?e.ap:e.bp,other=e.a===d.id?e.b:e.a,prefer=positions.get(other)<positions.get(d.id)?'top':'bottom';counts[d.kind==='ap'?prefer:getAnchor(g,port,prefer,i).side]++;});
  // This space is allocated before packing, so cable tracks cannot enter the next row.
- const top=d.kind==='handoff'?23:Math.max(46,counts.top?64+GAP*(counts.top-1):0,handoffs.length?handoffRows(handoffs,g.w).height+112:0),bottom=d.kind==='handoff'?20:counts.bottom?44+GAP*(counts.bottom-1):28;
- return {body:g.h,top,height:d.kind==='handoff'&&d.owner?0:g.h+top+bottom+10};
+ const {pitch,topClearance,bottomClearance}=spacing(padding);
+ const top=d.kind==='handoff'?23:Math.max(40+6*padding,counts.top?topClearance+14*padding+pitch*(counts.top-1):0,handoffs.length?handoffRows(handoffs,g.w).height+72+40*padding:0),bottom=d.kind==='handoff'?20:counts.bottom?bottomClearance+26*padding+pitch*(counts.bottom-1):Math.max(24,28*padding);
+ return {body:g.h,top,height:d.kind==='handoff'&&d.owner?0:g.h+top+bottom+10*padding};
 }
 function moduleLegend(page,project){
  const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
@@ -82,7 +87,10 @@ export function corePages(project,inventory){
  const allowed=new Set(eligible),edges=db.links.filter(e=>allowed.has(e.a)&&allowed.has(e.b));
  const positions=new Map(eligible.map((id,i)=>[id,i]));
  const attachments=new Map();for(const id of eligible){const d=db.devices.get(id);if(d.owner&&allowed.has(d.owner)){const a=attachments.get(d.owner)||[];a.push(id);attachments.set(d.owner,a);}}
- const sizes=new Map(eligible.map(id=>[id,measurement(project,db.devices.get(id),edges.filter(e=>e.a===id||e.b===id).slice(0,8),positions,(attachments.get(id)||[]).map(id=>db.devices.get(id)))]));
+ // This is only an optimistic lower bound, using the narrowest supported body
+ // and minimum padding with no cable/card reserves. It cannot prematurely split
+ // a group that the actual layout can fit, and bounds work for large inventories.
+ const minimums=new Map(eligible.map(id=>[id,measurement(project,db.devices.get(id),[],positions,[],240,FITS.at(-1).padding).height]));
  const assigned=new Set(),groups=[];
  for(const p of custom){
   const wanted=new Set(p.devices),ids=eligible.filter(id=>wanted.has(id)||wanted.has(db.devices.get(id).owner));
@@ -91,16 +99,18 @@ export function corePages(project,inventory){
  const rest=eligible.filter(id=>!assigned.has(id));if(rest.length)groups.push({name:'Core Network',ids:rest});
  const packed=[];
  for(const group of groups){
-  let ids=[],height=0;
-  const flush=()=>{if(ids.length)packed.push({name:group.name,baseName:group.name,custom:group.custom,showReferences:group.showReferences,hiddenReferences:group.hiddenReferences,ids});ids=[];height=0;};
+  let ids=[],minimumHeight=0;
+  const flush=()=>{if(ids.length)packed.push({name:group.name,baseName:group.name,custom:group.custom,showReferences:group.showReferences,hiddenReferences:group.hiddenReferences,ids});ids=[];minimumHeight=0;};
   for(const id of group.ids.filter(id=>!db.devices.get(id).owner||!group.ids.includes(db.devices.get(id).owner))){
    const incident=edges.filter(e=>e.a===id||e.b===id);
    if(incident.length>8){flush();for(let i=0;i<incident.length;i+=8)packed.push({name:group.name,baseName:group.name,custom:group.custom,showReferences:group.showReferences,hiddenReferences:group.hiddenReferences,ids:[id],linkIds:new Set(incident.slice(i,i+8).map(e=>e.idx))});continue;}
-   const h=sizes.get(id).height;if(!group.custom&&ids.length&&height+h>(BOTTOM-TOP)/.65)flush();ids.push(...(attachments.get(id)||[]).filter(id=>group.ids.includes(id)),id);height+=h;
+   const minimum=minimums.get(id);if(!group.custom&&ids.length&&minimumHeight+minimum>(BOTTOM-TOP)/.65)flush();
+   ids.push(...(attachments.get(id)||[]).filter(id=>group.ids.includes(id)),id);minimumHeight+=minimum;
   }flush();
  }
  if(!packed.length){const page=fresh('Core Network','Core Network','Site equipment and physical connections',project);label(page.items,38,191,1100,36,'No equipment selected for the core pages.',18);return [page];}
- for(let attempt=0;attempt<=eligible.length*2;attempt++){
+ const rendered=new Map();
+ for(let attempt=0;attempt<=eligible.length*2*FITS.length*2;attempt++){
  try{
  for(const sheet of packed)sheet.name=sheet.baseName;
  const totals=new Map(),seen=new Map(),names=new Set();
@@ -114,8 +124,11 @@ export function corePages(project,inventory){
   const hiddenReferences=new Set(sheet.hiddenReferences||[]);
   const used=edges.filter(e=>(members.has(e.a)&&members.has(e.b)||sheet.showReferences!==false&&!hiddenReferences.has(linkKey(e))&&(members.has(e.a)||members.has(e.b)))&&(!sheet.linkIds||sheet.linkIds.has(e.idx)));
   const internal=used.filter(e=>members.has(e.a)&&members.has(e.b)),external=used.filter(e=>!members.has(e.a)||!members.has(e.b));
+  const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.fit,sheet.spreadHandoffs,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
+  if(cached?.signature===signature)return cached.pages;
+  const fit=FITS[sheet.fit||0];
   const width=Math.min(WIDTH,Math.max(240,WIDTH-12*Math.max(0,internal.length-1)));
-  const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,db.devices.get(id),used.filter(e=>e.a===id||e.b===id).slice(0,8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width)]));
+  const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,db.devices.get(id),used.filter(e=>e.a===id||e.b===id).slice(0,8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding)]));
   const height=sheet.ids.reduce((n,id)=>n+pageSizes.get(id).height,0),scale=Math.min(1,(BOTTOM-TOP)/height);
   if(scale<.65)throw Object.assign(Error('This core page needs more room to keep the equipment readable.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   let row=TOP+(BOTTOM-TOP-height*scale)/2;
@@ -159,7 +172,7 @@ export function corePages(project,inventory){
   const obstacles=[...items.filter(i=>i.type==='text'&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>b.x<b.owner.x||b.y<b.owner.y||b.x+b.w>b.owner.x+b.owner.w||b.y+b.h>b.owner.y+b.owner.h)];
   const stack=[...nodes.values()].filter(n=>n.kind!=='handoff'),withinPage=stack.length&&stack.every(n=>n.x>=324&&n.x+n.w<=1144);
   const routingBounds=withinPage?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:LEFT,right:LEFT+width};
-  const planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,pitch:GAP,scale,obstacles});
+  const planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,...spacing(fit.padding),railPitch:fit.railPitch,scale,obstacles});
   if(planned.cost[0]&&[...nodes.values()].every(n=>n.x>=306&&n.x+n.w<=1162&&n.y>=145&&n.y+n.h<=906))throw Object.assign(Error('This core page needs more room to route cables around the equipment.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   const outer={left:Math.min(routingBounds.left-18,...planned.routes.filter(r=>r.side==='left').map(r=>r.rail)),right:Math.max(routingBounds.right+18,...planned.routes.filter(r=>r.side==='right').map(r=>r.rail))},requests=[];
   for(const r of planned.routes.filter(r=>!r.v)){
@@ -192,7 +205,7 @@ export function corePages(project,inventory){
   bridge(page);placeDeviceTitles(page,pageProject,nodes);
   const placed=placeCableLabels(page,requests,pageProject.layout?.drawingEdits);
   if(!placed.ok)throw Object.assign(Error('This core page needs more room for the '+placed.failed.role+' label '+JSON.stringify(placed.failed.value)+'. Move devices to another core page under Device order / Core pages.'),{code:'CORE_LAYOUT_CAPACITY',role:placed.failed.role,page:page.name});
-  return [page,...modulePages];
+  const pages=[page,...modulePages];rendered.set(sheet,{signature,pages});return pages;
  });
  }catch(error){
   const index=packed.findIndex(sheet=>sheet.name===error.page),sheet=packed[index];
@@ -200,11 +213,16 @@ export function corePages(project,inventory){
   // Keep the cards compact; use more of the same stack width only when their
   // cable labels or routes cannot fit safely in the tighter arrangement.
   if(!sheet.spreadHandoffs&&sheet.ids.some(id=>attachments.get(id)?.length>1)){sheet.spreadHandoffs=true;continue;}
+  if((sheet.fit||0)<FITS.length-1){sheet.fit=(sheet.fit||0)+1;sheet.spreadHandoffs=false;continue;}
   if(sheet.custom)throw error;
   const owners=sheet.ids.filter(id=>!db.devices.get(id).owner||!sheet.ids.includes(db.devices.get(id).owner));
   if(owners.length<2)throw error;
   const left=new Set(owners.slice(0,-1)),groups=[sheet.ids.filter(id=>left.has(id)||left.has(db.devices.get(id).owner)),sheet.ids.filter(id=>!left.has(id)&&!left.has(db.devices.get(id).owner))];
-  packed.splice(index,1,...groups.map(ids=>({...sheet,name:sheet.baseName,ids,spreadHandoffs:false})));
+  // Keep the overflowing tail with the next automatic sheet, so one failed
+  // arrangement cannot strand a single device on its own intermediate page.
+  const next=packed[index+1],continuing=next&&!next.custom&&!next.linkIds&&!sheet.linkIds&&next.baseName===sheet.baseName;
+  if(continuing){next.ids=[...groups[1],...next.ids];next.fit=0;next.spreadHandoffs=false;groups.pop();}
+  packed.splice(index,1,...groups.map(ids=>({...sheet,name:sheet.baseName,ids,fit:0,spreadHandoffs:false})));
  }
  }
  throw Error('This core layout needs more space. Assign devices to additional core pages.');

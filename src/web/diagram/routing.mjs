@@ -58,7 +58,7 @@ function minimalCandidate(route,nodes,obstacles,others){
  }
  return best;
 }
-export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,scale=1,obstacles=[]}){
+export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[]}){
  const sides=new Map();
  for(const e of internal){const a=endData.get(e.idx+'/a').anchor,b=endData.get(e.idx+'/b').anchor;sides.set(e.idx,a.x+b.x>left+right?'right':'left');}
  function build(){
@@ -70,7 +70,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    }),exits=[];
    sorted.forEach((v,i)=>{
     const side=sides.get(v.e.idx)||'left',dir=side==='right'?1:-1;
-    let escapeX=v.anchor.x;if(sorted.some(o=>o!==v&&Math.abs(o.anchor.x-v.anchor.x)<4))while(exits.some(o=>Math.abs(o-escapeX)<4))escapeX+=dir*6;let x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?50+pitch*i:18+pitch*i)*scale;
+    let escapeX=v.anchor.x;if(sorted.some(o=>o!==v&&Math.abs(o.anchor.x-v.anchor.x)<4))while(exits.some(o=>Math.abs(o-escapeX)<4))escapeX+=dir*6;let x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?topClearance+pitch*i:bottomClearance+pitch*i)*scale;
     if(v.anchor.escapeRange){const matching=sorted.filter(o=>o.anchor.escapeRange&&near(o.anchor.escapeRange[0],v.anchor.escapeRange[0])&&near(o.anchor.escapeRange[1],v.anchor.escapeRange[1])),[lo,hi]=v.anchor.escapeRange;ay=lo+(hi-lo)*(matching.indexOf(v)+1)/(matching.length+1);}
     // Text explicitly positioned by the user remains an obstacle. Automatic
     // device titles are fitted after routing instead of forcing cable doglegs.
@@ -96,7 +96,10 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    tracks.push({side,lane,lo,hi,rail});
    routes.push({e,a,b,side,rail,hosts:[a.node.key,b.node.key],points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});
   }
-  for(const e of external){const which=nodes.has(e.a)?'a':'b',v=ends.get(e.idx+'/'+which),x=left-10;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
+  // Continuation badges sit outside the cable rails, not across a passing link.
+  // Retain the existing boundary behavior for deliberately off-page edits.
+  const referenceX=[...nodes.values()].every(n=>n.x>=306&&n.x+n.w<=1162)?Math.min(left-10,...tracks.filter(t=>t.side==='left').map(t=>t.rail-12)):left-10;
+  for(const e of external){const which=nodes.has(e.a)?'a':'b',v=ends.get(e.idx+'/'+which),x=referenceX;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
   for(let i=0;i<routes.length;i++)if(!routes[i].v){routes[i]=minimalCandidate(routes[i],nodes,obstacles,routes.filter((_,j)=>j!==i));for(const v of [routes[i].a,routes[i].b])ends.set(v.e.idx+'/'+v.which,v);}
   return {routes,references,ends};
  }
