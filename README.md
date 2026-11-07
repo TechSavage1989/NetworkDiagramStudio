@@ -20,7 +20,7 @@ Network engineers can use the Windows application or the offline browser edition
 - Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a visual selector, HEX field and standard swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet. Automatic cables and their color keys use a consistent standard thickness; exported Visio line widths are explicit and editable.
 - Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port maps use consistent port-number boxes and a shared assignment matrix with one port column per switch. Expanded tables, individual rows and optional empty-record filtering remain available.
 - Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
-- Keep complete diagram captions with measured wrapping in both SVG and Visio. Module keys expand or continue onto a module sheet; duplicate wording such as Port port1 is avoided.
+- Keep complete diagram captions with measured wrapping in both SVG and Visio. Port modules use editable gray optic faces with dark sockets and dark DAC ends with a horizontal insert, matching the Configuration Inspector style. Framed module keys expand or continue onto a module sheet; duplicate wording such as Port port1 is avoided.
 - Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and compact WAN/circuit cards. Circuit cards fit the actual stack width, use extra rows on narrow devices and retain complete provider/gateway text. Routes use available space inside the stack width when port orientation and clearances permit. Configure page-number visibility, starting values, padding and format.
 
 ## Screenshots
@@ -143,4 +143,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.15.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.16.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)

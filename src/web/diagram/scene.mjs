@@ -2,7 +2,7 @@
 import {deviceFaceplate} from './faceplate.mjs';
 import {editDeviceShape} from '../drawing-edits.mjs';
 import {simplifyRoute} from './routing.mjs';
-import {linkDefaults,legendStyleId} from '../link-styles.mjs';
+import {linkDefaults,legendStyleId,cleanLinkStyles} from '../link-styles.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {connectionMediaInfo} from '../connection-types.mjs';
 import {genericDeviceSymbol} from '../device-symbols.mjs';
@@ -152,20 +152,24 @@ export function optic(page,project,device,body,anchor,info){
   const optics=project.optics||{}, forti=/forti/i.test([device.vendor,device.model].join(' '));
   const selection=info.slot==='sr' && forti ? optics.fg_sr||optics.sr : optics[info.slot];
   const asset=actualAsset(project,typeof selection==='object'&&selection?{stencil:selection}:{stencilId:selection});
-  const ratio=asset?asset.width/asset.height:1.58;
+  const ratio=asset?asset.width/asset.height:2;
   const bounds=fitRatio(ratio,0,0,Math.max(4,body.w*.028),Math.max(3,body.h*.20));
   const w=bounds.w,h=bounds.h,key='plug-'+page.items.length;
   const assigned=asset?.anchors?.cable;
   const port=Array.isArray(assigned)&&assigned.length===2&&assigned.every(n=>Number.isFinite(n)&&n>=0&&n<=1)?assigned:[.5,.5];
   const g={type:'device',key,sourceId:device.id,name:info.name+' '+(info.plug==='DAC'?'cable end':'optic'),kind:'plug',model:'',x:anchor.x-w/2,y:anchor.y-h/2,w,h,asset,
-    masterKey:'plug:'+(asset?.id||info.plug),ports:{cable:port},children:[],fallback:!asset};
+    masterKey:'plug:'+(asset?.id||(info.plug==='SFP'&&info.slot!=='sr'?'SFP:'+(info.slot||'fiber'):info.plug==='DAC'&&info.name!=='DAC'?'DAC:'+info.name:info.plug)),legacyMasterKey:'plug:'+info.plug,ports:{cable:port},children:[],fallback:!asset};
   if(!asset){
-    rect(g.children,0,0,1,1,'#CCD4D7','#263D49',.8);
-    if(info.plug==='DAC')rect(g.children,.28,.20,.44,.60,'#334753');
-    else for(const x of [.11,.55])rect(g.children,x,.20,.34,.60,'#335B70');
+    // The same native geometry is used at the socket and in the module key.
+    // Keep the body/socket child indices so existing detail edits still apply.
+    const color=cleanLinkStyles(project.layout?.linkStyles)[info.name]?.color||info.color;
+    rect(g.children,0,0,1,1,info.plug==='DAC'?'#2D3748':'#D5DBE3',color,1);
+    g.children.at(-1).name='Module face';
+    if(info.plug==='DAC'){rect(g.children,.2,.4375,.6,.125,'#9AA9C0');g.children.at(-1).name='Cable insert';}
+    else for(const [i,x] of [.14,.59].entries()){rect(g.children,x,.25,.27,.5,'#2D3748');g.children.at(-1).name='Optical receptacle '+(i+1);}
   }
   g.host={device:anchor.device,port:anchor.port};
-  editDeviceShape(page,project,g);page.items.push(g);return {...anchor,device:g.key,port:'cable',x:g.x+g.w*port[0],y:g.y+g.h*port[1]};
+  const master=g.masterKey;editDeviceShape(page,project,g);if(!asset)g.legacyMasterKey+=g.masterKey.slice(master.length);page.items.push(g);return {...anchor,device:g.key,port:'cable',x:g.x+g.w*port[0],y:g.y+g.h*port[1]};
 }
 export function route(page,from,to,points,color,name,linkType='Link',sourceLink=null,generatedDevice=null){
   const pts=simplifyRoute(points);

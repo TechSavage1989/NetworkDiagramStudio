@@ -25,7 +25,7 @@ export function editDeviceShape(page,project,g){
  const key=deviceEditKey(page,g),legacy=deviceEditKey({name:page.name},g),edits=project.layout?.drawingEdits||{},patch=s=>edits[key+s]??edits[legacy+s],change=patch('');g.editKey=key;g.legacyEditKey=legacy;
  if(change)for(const k of ['x','y','w','h'])if(Number.isFinite(change[k]))g[k]=change[k];
  if(typeof change?.name==='string')g.name=change.name;
- g.children.forEach((c,i)=>{c.editKey=key+'|child|'+i;c.legacyEditKey=legacy+'|child|'+i;const change=patch('|child|'+i);if(change){Object.assign(c,change);if(c.anchorName){const [x,y]=c.anchorOrigin;for(const [port,point] of Object.entries(g.ports))if(Math.abs(point[0]-x)<1e-8&&Math.abs(point[1]-y)<1e-8)g.ports[port]=[c.x+c.w/2,c.y+c.h/2];}}});
+ g.children.forEach((c,i)=>{const slot=c.editSlot??i;c.editKey=key+'|child|'+slot;c.legacyEditKey=legacy+'|child|'+slot;const change=patch('|child|'+slot);if(change){Object.assign(c,change);if(c.anchorName){const [x,y]=c.anchorOrigin;for(const [port,point] of Object.entries(g.ports))if(Math.abs(point[0]-x)<1e-8&&Math.abs(point[1]-y)<1e-8)g.ports[port]=[c.x+c.w/2,c.y+c.h/2];}}});
  if(g.asset?.native){
   g.asset={...g.asset,native:{paths:g.asset.native.paths.map((p,i)=>({...p,...patch('|vector|'+i)})),texts:g.asset.native.texts.map((t,i)=>{const change=patch('|arttext|'+i);return {...t,...change,...(change?.value!=null?{text:change.value}:{})};})}};
  }

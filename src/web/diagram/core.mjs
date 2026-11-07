@@ -50,18 +50,30 @@ function measurement(project,d,edges,positions,handoffs=[],width=WIDTH){
 }
 function moduleLegend(page,project){
  const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
- if(!modules.size)return [];const extra=[],scope=page.name,edits=project.layout?.drawingEdits||{};let target=page,y=Math.max(410,(page.legendBottom||320)+38),heading=false;
+ if(!modules.size)return [];
+ // Older drawings shared one SFP legend across reaches. Keep its saved edits
+ // on the original category, or the first remaining category when it is absent.
+ const inherited={},claimed=new Set(modules.keys()),prior=project.layout?.drawingEdits||{};
+ for(const [key,{plug}] of modules){const legacy=plug.legacyMasterKey;if(plug.asset||!legacy||key===legacy||claimed.has(legacy))continue;claimed.add(legacy);
+  for(const prefix of ['module-legend|','device|module-legend-']){const old=page.name+'|'+prefix+legacy,next=page.name+'|'+prefix+key;for(const [id,value] of Object.entries(prior))if((id===old||id.startsWith(old+'|'))&&!Object.hasOwn(prior,next+id.slice(old.length)))inherited[next+id.slice(old.length)]=value;}
+ }
+ if(Object.keys(inherited).length)project={...project,layout:{...project.layout,drawingEdits:{...inherited,...prior}}};
+ const extra=[],scope=page.name,edits=project.layout?.drawingEdits||{};let target=page,y=Math.max(410,(page.legendBottom||320)+38),heading=false;
  const caption=(key,value,size,width,bold)=>{const patch=edits[key]||{},font=patch.size||size,w=patch.w||width,full=patch.value??value;return {value:full,size:font,w,h:Math.max(patch.h||0,wrapPortText(full,w,font,patch.bold??bold).length*font*1.2),bold:patch.bold??bold};};
  for(const [key,{plug,ports}] of modules){
   const titleKey=scope+'|module-legend|'+key+'|title',portsKey=scope+'|module-legend|'+key+'|ports',description=[...new Set(ports)].join(' / ');
-  let title=caption(titleKey,plug.asset?.name||plug.name,13,target===page?166:1048,true),detail=caption(portsKey,description,11,target===page?244:1120,false),top=Math.max(36,title.h),height=top+8+detail.h+20;
-  if(y+(heading?0:48)+height>900){target=fresh(scope+' Port Modules'+(extra.length?' '+(extra.length+1):''),'Port modules',scope+' - physical interface assignments',project);extra.push(target);y=174;heading=false;title=caption(titleKey,plug.asset?.name||plug.name,13,1048,true);detail=caption(portsKey,description,11,1120,false);top=Math.max(36,title.h);height=top+8+detail.h+20;}
+  let title=caption(titleKey,plug.asset?.name||plug.name,13,target===page?166:1048,true),detail=caption(portsKey,description,11,target===page?244:1120,false),top=Math.max(42,title.h),height=top+8+detail.h+20;
+  if(y+(heading?0:48)+height>900){target=fresh(scope+' Port Modules'+(extra.length?' '+(extra.length+1):''),'Port modules',scope+' - physical interface assignments',project);extra.push(target);y=174;heading=false;title=caption(titleKey,plug.asset?.name||plug.name,13,1048,true);detail=caption(portsKey,description,11,1120,false);top=Math.max(42,title.h);height=top+8+detail.h+20;}
   if(y+(heading?0:48)+height>900)throw Error('This port module description needs more space. Enlarge its text box or reduce the module assignments on this core page.');
   if(!heading){label(target.items,38,y,target===page?244:1120,26,'PORT MODULES',16,true,C.teal);target.items.at(-1).editKey=scope+'|module-legend|heading'+(target===page?'':'|continued'+extra.length);y+=48;heading=true;}
-  const ratio=plug.w/plug.h,w=Math.min(64,44*ratio),h=w/ratio,copy={...plug,key:'module-legend-'+key,sourceId:'module-legend-'+key,x:47,y:y+(top-h)/2,w,h,host:null,instanceKey:'module-legend',ports:JSON.parse(JSON.stringify(plug.ports)),children:JSON.parse(JSON.stringify(plug.children))};delete copy.editKey;delete copy.legacyEditKey;for(const child of copy.children){delete child.editKey;delete child.legacyEditKey;}editDeviceShape(target,project,copy);target.items.push(copy);
+  const ratio=plug.w/plug.h,w=plug.asset?Math.min(64,44*ratio):64,h=plug.asset?w/ratio:42,copy={...plug,key:'module-legend-'+key,sourceId:'module-legend-'+key,x:38,y:y+(top-h)/2,w,h,host:null,instanceKey:'module-legend',ports:JSON.parse(JSON.stringify(plug.ports)),children:JSON.parse(JSON.stringify(plug.children))};if(!plug.asset){
+   const face=copy.children.map((child,i)=>({...child,editSlot:i,x:9/64+child.x*46/64,y:9.5/42+child.y*23/42,w:child.w*46/64,h:child.h*23/42}));
+   copy.children=[];rect(copy.children,0,0,1,1,'#EEF2F7','#9AA9C0',1);Object.assign(copy.children[0],{name:'Module frame',editSlot:'frame'});copy.children.push(...face);copy.masterKey+=':legend-frame';
+  }
+  delete copy.editKey;delete copy.legacyEditKey;for(const child of copy.children){delete child.editKey;delete child.legacyEditKey;}editDeviceShape(target,project,copy);target.items.push(copy);
   label(target.items,116,y,title.w,title.h,title.value,title.size,title.bold,C.ink);Object.assign(target.items.at(-1),{editKey:titleKey,moduleLegend:true,full:true});
   label(target.items,38,y+top+8,detail.w,detail.h,detail.value,detail.size,detail.bold,C.muted);Object.assign(target.items.at(-1),{editKey:portsKey,moduleLegend:true,full:true});y+=height;
- }return extra;
+ }if(Object.keys(inherited).length)for(const target of [page,...extra])applyDrawingEdits(target,project);return extra;
 }
 export function corePages(project,inventory){
  const db=handoffs(inventory),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];
