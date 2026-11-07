@@ -56,6 +56,7 @@ test('page aliases preserve edit keys, appear in native Visio and hidden tabs us
  const pages=buildPages(site);assert.equal(pages.length,before.length-1);assert.equal(pages[0].name,first.name);assert.equal(pages[0].displayName,'Campus network');near(pages[0].items.find(i=>i.editKey===body.editKey).x,body.x+90);
  pages.forEach((p,i)=>assert.equal(p.items.find(t=>t.pageFrame==='footer-number').value,String(i+1).padStart(2,'0')+' / '+String(pages.length).padStart(2,'0')));
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer());assert.match(new TextDecoder().decode(parts.get('visio/pages/pages.xml')),/Name="Campus network"/);
+ const heading=pages[0].items.find(i=>i.pageTitle);site.layout.drawingEdits[heading.editKey]={value:'Custom drawing heading'};const edited=core(site);assert.equal(edited.displayName,'Campus network');assert.equal(edited.items.find(i=>i.pageTitle).value,'Custom drawing heading');
 });
 
 test('selected report devices and edits remain independent of the automatic report',()=>{
