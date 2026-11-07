@@ -1,3 +1,5 @@
+import {informationPanel} from './information-panel.mjs';
+import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
@@ -35,7 +37,7 @@ function handoffs(db,suppressed=[]){
  }
  return {devices,links};
 }
-function bounds(d,y=0,width=WIDTH,left=LEFT){const scale=Math.max(.3,Math.min(1,d.scale||1)),compact=!['switch','firewall','unknown','handoff','ap'].includes(d.kind),bodyWidth=width*(compact?300/WIDTH:1);return d.kind==='ap'?[left+(width-72*scale*width/WIDTH)/2,y,72*scale*width/WIDTH,72*scale*width/WIDTH]:d.kind==='handoff'?[left+(width-170)/2,y,170,29]:[left+(width-bodyWidth*scale)/2,y,bodyWidth*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
+function bounds(d,y=0,width=WIDTH,left=LEFT){const scale=1,compact=!['switch','firewall','unknown','handoff','ap'].includes(d.kind),bodyWidth=width*(compact?300/WIDTH:1);return d.kind==='ap'?[left+(width-72*scale*width/WIDTH)/2,y,72*scale*width/WIDTH,72*scale*width/WIDTH]:d.kind==='handoff'?[left+(width-170)/2,y,170,29]:[left+(width-bodyWidth*scale)/2,y,bodyWidth*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
 function probe(project,d,width=WIDTH,padding=1){return addDevice({items:[]},project,d,bounds(d,0,width),'probe',{fitWidth:d.kind!=='handoff',padding});}
 function handoffCard(d,width){const textSpan=(width-24)/1.12,detail=[d.ownerPort&&displayPortCaption(d.ownerPort),d.ip||d.model].filter(Boolean).join(' | '),titleHeight=Math.max(25,wrapPortText(d.name,textSpan,18,true).length*22),detailHeight=Math.max(20,wrapPortText(detail,textSpan,12).length*15);return {detail,titleHeight,detailHeight,height:Math.max(64,titleHeight+detailHeight+12)};}
 function handoffRows(devices,span,spread=false){
@@ -69,13 +71,13 @@ function moduleLegend(page,project){
  }
  if(Object.keys(inherited).length)project={...project,layout:{...project.layout,drawingEdits:{...inherited,...prior}}};
  const side=page.sidebar||coreSidebar(),s=side.scale,extra=[],scope=page.name,edits=project.layout?.drawingEdits||{};let target=page,y=Math.max(147+263*s,(page.legendBottom||320)+38*s),heading=false;
- const caption=(key,value,size,width,bold)=>{const patch=edits[key]||{},font=patch.size||size,w=patch.w||width,full=patch.value??value;return {value:full,size:font,w,h:Math.max(patch.h||0,wrapPortText(full,w,font,patch.bold??bold).length*font*1.2),bold:patch.bold??bold};};
+ const caption=(key,value,size,width,bold)=>{const patch=edits[key]||{},font=patch.size||size*(side.textScale||1),w=patch.w||width,full=patch.value??value;return {value:full,size:font,w,h:Math.max(patch.h||0,wrapPortText(full,w,font,patch.bold??bold).length*font*1.2),bold:patch.bold??bold};};
  for(const [key,{plug,ports}] of modules){
   const titleKey=scope+'|module-legend|'+key+'|title',portsKey=scope+'|module-legend|'+key+'|ports',description=[...new Set(ports)].join(' / ');
   let iconScale=target===page?s:1,title=caption(titleKey,plug.asset?.name||plug.name,Math.max(12,13*iconScale),target===page?side.width-78*iconScale:target.width-152,true),detail=caption(portsKey,description,11,target===page?side.width:target.width-80,false),top=Math.max(42*iconScale,title.h),height=top+8*iconScale+detail.h+20*iconScale;
-  if(y+(heading?0:48*iconScale)+height>target.height-75){target=fresh(scope+' Port Modules'+(extra.length?' '+(extra.length+1):''),'Port modules',scope+' - physical interface assignments',project);extra.push(target);y=174;heading=false;iconScale=1;title=caption(titleKey,plug.asset?.name||plug.name,13,target.width-152,true);detail=caption(portsKey,description,11,target.width-80,false);top=Math.max(42,title.h);height=top+8+detail.h+20;}
-  if(y+(heading?0:48*iconScale)+height>target.height-75)throw Error('This port module description needs more space. Enlarge its text box or reduce the module assignments on this core page.');
-  if(!heading){label(target.items,38,y,target===page?side.width:target.width-80,26*iconScale,'PORT MODULES',16*iconScale,true,C.teal);target.items.at(-1).editKey=scope+'|module-legend|heading'+(target===page?'':'|continued'+extra.length);y+=48*iconScale;heading=true;}
+  if(!target.dynamic&&y+(heading?0:48*iconScale)+height>target.height-75){target=fresh(scope+' Port Modules'+(extra.length?' '+(extra.length+1):''),'Port modules',scope+' - physical interface assignments',project);extra.push(target);y=174;heading=false;iconScale=1;title=caption(titleKey,plug.asset?.name||plug.name,13,target.width-152,true);detail=caption(portsKey,description,11,target.width-80,false);top=Math.max(42,title.h);height=top+8+detail.h+20;}
+  if(!target.dynamic&&y+(heading?0:48*iconScale)+height>target.height-75)throw Error('This port module description needs more space. Enlarge its text box or reduce the module assignments on this core page.');
+  if(!heading){label(target.items,38,y,target===page?side.width:target.width-80,26*iconScale*(side.textScale||1),'PORT MODULES',16*iconScale*(side.textScale||1),true,C.teal);target.items.at(-1).editKey=scope+'|module-legend|heading'+(target===page?'':'|continued'+extra.length);y+=48*iconScale*(side.textScale||1);heading=true;}
   const ratio=plug.w/plug.h,w=(plug.asset?Math.min(64,44*ratio):64)*iconScale,h=plug.asset?w/ratio:42*iconScale,copy={...plug,key:'module-legend-'+key,sourceId:'module-legend-'+key,x:38,y:y+(top-h)/2,w,h,host:null,instanceKey:'module-legend',ports:JSON.parse(JSON.stringify(plug.ports)),children:JSON.parse(JSON.stringify(plug.children))};if(!plug.asset){
    const face=copy.children.map((child,i)=>({...child,editSlot:i,x:9/64+child.x*46/64,y:9.5/42+child.y*23/42,w:child.w*46/64,h:child.h*23/42}));
    copy.children=[];rect(copy.children,0,0,1,1,'#EEF2F7','#9AA9C0',1);Object.assign(copy.children[0],{name:'Module frame',editSlot:'frame'});copy.children.push(...face);copy.masterKey+=':legend-frame';
@@ -102,7 +104,7 @@ export function corePages(project,inventory){
   const wanted=new Set(p.devices),ids=eligible.filter(id=>wanted.has(id)||wanted.has(db.devices.get(id).owner));
   ids.forEach(id=>assigned.add(id));if(ids.length)groups.push({name:p.name||'Core Network',ids,custom:true,corePageId:p.id,showReferences:p.showReferences!==false,hiddenReferences:p.hiddenReferences});
  }
- const rest=eligible.filter(id=>!assigned.has(id));if(rest.length)groups.push({name:'Core Network',ids:rest});
+ const rest=eligible.filter(id=>!assigned.has(id));if(rest.length)groups.push({name:custom.some(p=>p.name==='Core Network')?'Unassigned devices':'Core Network',ids:rest});
  const packed=[];
  for(const group of groups){
   let ids=[],minimumHeight=0;
@@ -129,9 +131,12 @@ export function corePages(project,inventory){
   const priorEdits=project.layout?.drawingEdits||{},aliases=sheet.name!==sheet.baseName?Object.fromEntries(Object.entries(priorEdits).filter(([key])=>key.startsWith(sheet.baseName+'|')).map(([key,value])=>[sheet.name+key.slice(sheet.baseName.length),value])):{},aliasProject=Object.keys(aliases).length?{...project,layout:{...project.layout,drawingEdits:{...aliases,...priorEdits}}}:project;
   const expansion=sheet.expansion||0;
   const measuredHeight=dynamic?sheet.ids.reduce((sum,id)=>sum+measurement(aliasProject,viewDevice(sheet,id),edges.filter(e=>e.a===id||e.b===id),positions,(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH).height+expansion,0):0;
-  const W=dynamic?baseW+expansion+Math.max(0,edges.length-8)*48:baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110,520+edges.length*110):baseH,BOTTOM=H-74;
+  const W=dynamic?baseW+expansion+Math.max(0,edges.length-8)*48+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110,520+edges.length*110):baseH,BOTTOM=H-74;
   const pageProject=dynamic?{...aliasProject,_pageGeometry:{...aliasProject._pageGeometry,core:{width:W,height:H}}}:aliasProject;
   const fit=FITS[sheet.fit||0],fixedSidebar=Object.entries(pageProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|')&&/(?:module-legend|\|legend\|)/.test(key)&&['x','y','w','h'].some(k=>Number.isFinite(patch[k]))),sidebar=coreSidebar(fixedSidebar?244:Math.min(fit.sidebarWidth,W<1000?176:244));
+  const panelOptions=presentation(pageProject,sheet.name).panel;
+  if(panelOptions.width!==244||panelOptions.scale!==1||!panelOptions.visible||panelOptions.position!=='left'){const reserve=panelOptions.visible&&panelOptions.position==='left'?panelOptions.width*panelOptions.scale:0;sidebar.width=panelOptions.width;sidebar.contentLeft=reserve?62+reserve:38;sidebar.divider=reserve?56+reserve:38;sidebar.bodyLeft=sidebar.contentLeft+124;}
+  sidebar.textScale=panelOptions.textScale*presentation(pageProject,sheet.name).textScale;
   if(dynamic)sidebar.bodyLeft+=Math.max(0,edges.length-8)*24;
   if(W<1200)sidebar.bodyLeft=Math.max(sidebar.contentLeft+38,Math.min(sidebar.bodyLeft,W-738));
   const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;page.corePageId=sheet.corePageId;
@@ -199,7 +204,7 @@ export function corePages(project,inventory){
   }
   for(const r of planned.references){
    const {e,v,which:local}=r,remote=local==='a'?e.b:e.a,port=local==='a'?e.bp:e.ap;
-   const ref=edgeLocations.get(remote+'/'+e.idx)||locations.get(remote)||'Core Network',stub={id:'continuation-'+pi+'-'+e.idx,name:ref,kind:'handoff',ports:[{name:'handoff'}]};
+   const destination=edgeLocations.get(remote+'/'+e.idx)||locations.get(remote)||'Core Network',ref=presentation(project,destination).name||destination,stub={id:'continuation-'+pi+'-'+e.idx,name:ref,kind:'handoff',ports:[{name:'handoff'}]};
    const code='L'+(e.idx+1),badgeWidth=textWidth(code,9,true)+4;
    const n=addDevice(page,project,stub,[r.x-badgeWidth,r.y-7,badgeWidth,14],'reference-'+e.idx,{fillBounds:true});n.ports.handoff=[1,.5];
    label(n.children,0,0,1,1,code,9,true,C.teal,'center');
@@ -216,7 +221,8 @@ export function corePages(project,inventory){
   applyDrawingEdits(page,pageProject);
   for(const req of requests.filter(r=>r.role==='media')){const path=page.items.find(i=>i.type==='path'&&i.sourceLink&&linkKey(i.sourceLink)===req.editKey.split('|media|')[1]);if(path){const h=path.color.replace('#',''),v=[0,2,4].map(n=>parseInt(h.slice(n,n+2),16));req.color=(v[0]*.299+v[1]*.587+v[2]*.114)>180?C.ink:path.color;}}
   linkLegend(page);const modulePages=moduleLegend(page,pageProject);applyDrawingEdits(page,pageProject);for(const continued of modulePages)applyDrawingEdits(continued,pageProject);
-  bridge(page);fitDynamicPage(page,pageProject);placeDeviceTitles(page,pageProject,nodes);
+  informationPanel(page,pageProject);scaleText(page,pageProject);bridge(page);fitDynamicPage(page,pageProject);placeDeviceTitles(page,pageProject,nodes);fitDynamicPage(page,pageProject);
+  const fontFactor=presentation(pageProject,page).textScale;for(const request of requests){request.size=12*fontFactor;request.minSize=Math.min(12,request.size);request.fontFactor=fontFactor;}
   const placed=placeCableLabels(page,requests,pageProject.layout?.drawingEdits);
   if(!placed.ok)throw Object.assign(Error('This core page needs more room for the '+placed.failed.role+' label '+JSON.stringify(placed.failed.value)+'. Move devices to another core page under Device order / Core pages.'),{code:'CORE_LAYOUT_CAPACITY',role:placed.failed.role,page:page.name});
   const pages=[page,...modulePages];rendered.set(sheet,{signature,pages});return pages;

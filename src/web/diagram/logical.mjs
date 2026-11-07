@@ -28,7 +28,7 @@ export function logicalPages(project,sections){
  const next=()=>{page=fresh(NAME,NAME,'Configured VLANs, interface addresses and routing entries',project);page.logicalSections=[];pages.push(page);y=TOP;};
  next();
  for(const section of sections){
-  const prefix=NAME+'|device|'+hash(String(section.id)),seen=new Map();
+  const prefix=(project._reportPrefix?project._reportPrefix+'|':'')+NAME+'|device|'+hash(String(section.id)),seen=new Map();
   const rows=section.rows.map((values,record)=>{
    const identity=JSON.stringify(values.slice(0,2)),count=seen.get(identity)||0;seen.set(identity,count+1);
    const key=prefix+'|record|'+hash(identity)+'|'+count;

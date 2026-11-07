@@ -26,7 +26,7 @@ test('port module legends show complete assignments in measured rows without ove
 });
 
 test('edited module descriptions retain one full-value edit key and continue when the sidebar is full',async()=>{
- const site=moduleFixture(),original=buildPages(site).flatMap(page=>page.items).find(item=>item.moduleLegend&&item.editKey.endsWith('|ports')),value=Array.from({length:180},(_,i)=>'Interface'+i).join(' ');site.layout={drawingEdits:{[original.editKey]:{value,color:'#224466'}}};
+ const site=moduleFixture();site.layout={pageSetup:{default:{preset:'original'}}};const original=buildPages(site).flatMap(page=>page.items).find(item=>item.moduleLegend&&item.editKey.endsWith('|ports')),value=Array.from({length:180},(_,i)=>'Interface'+i).join(' ');site.layout={pageSetup:{default:{preset:'original'}},drawingEdits:{[original.editKey]:{value,color:'#224466'}}};
  const pages=buildPages(site),matches=pages.flatMap(page=>page.items).filter(item=>item.editKey===original.editKey);assert.equal(matches.length,1);assert.equal(matches[0].value,value);assert.equal(matches[0].color,'#224466');assert.equal(textLayout(matches[0]).size,11);assert.ok(pages.some(page=>page.title==='Port modules'));
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>decode.decode(bytes)).join('');for(const word of value.split(' '))assert.ok(xml.includes(word));assert.ok(!xml.includes('…'));
 });

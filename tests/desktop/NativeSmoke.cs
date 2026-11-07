@@ -144,6 +144,16 @@ internal sealed partial class Studio
         await RequireUpdateBar(available);
         await ClickEditorTarget("#close");
     }
+    async Task CheckFlexibleLayout()
+    {
+        await ClickEditorTarget("#page-layout");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('Page name').value='Native campus';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Apply layout').click();if(document.getElementById('dialog').open||![...document.querySelectorAll('#tabs button')].some(b=>b.textContent==='Native campus'))throw Error('Page rename failed')","page rename");
+        await ClickEditorTarget("#page-layout");
+        await RequireEditor("const target=[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent==='Edit page').control;target.value='*';target.dispatchEvent(new Event('change'));const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('Drawing scale (%)').value='120';field('Text scale (%)').value='110';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Apply layout').click();if(document.getElementById('dialog').open||document.getElementById('feedback').textContent.includes('could not'))throw Error('Layout scale failed')","drawing and text scale");
+        await ClickEditorTarget("#undo-devices");
+        await ClickEditorTarget("#undo-devices");
+        await RequireEditor("if([...document.querySelectorAll('#tabs button')].some(b=>b.textContent==='Native campus'))throw Error('Layout undo failed')","page layout undo");
+    }
     async Task CheckPageSetup()
     {
         await ClickEditorTarget("#page-options");
@@ -276,6 +286,7 @@ internal sealed partial class Studio
             foreach(var required in new[]{"[Content_Types].xml","visio/document.xml","visio/pages/pages.xml","visio/windows.xml"})if(package.GetEntry(required)==null)throw new Exception("Native Visio export is missing "+required);
             foreach(var part in package.Entries.Where(p=>p.FullName.EndsWith(".xml")||p.FullName.EndsWith(".rels"))){using var stream=part.Open();XDocument.Load(stream);}
         }
+        await CheckFlexibleLayout();
         await CheckPageSetup();
         await CheckEditRecovery();
         await CheckLegendConnections();

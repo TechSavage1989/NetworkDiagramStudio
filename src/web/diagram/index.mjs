@@ -1,3 +1,5 @@
+import {informationPanel} from './information-panel.mjs';
+import {presentation,scaleText,scalePage,displayPageName,cleanReportPages,deviceScale} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {deviceModel,deviceDetails,macCaption} from '../device-details.mjs';
 import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,canContinueEquipment} from './equipment-layout.mjs';
@@ -8,6 +10,7 @@ import {pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles} from '../
 import {applyLinkStyles} from '../link-styles.mjs';
 import {orderedDevices} from '../layout.mjs';
 import {comparePorts,hasPortDetails,consecutivePorts,wrapPortText,portColumnPrefix,portRanges,portNumberBox} from '../port-table.mjs';
+import {textWidth} from './labels.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
 import {C,addDevice,bridge,fresh,getAnchor,label,linkLegend,list,mediaInfo,optic,physicalPorts,portList,portNumber,rate,rect,route,split,state,svgPage,value,xml} from './scene.mjs';
 export {exportVisio,exportStencil} from './visio.mjs';
@@ -167,8 +170,8 @@ function portEquipmentPlan(project,switches,requestedWidth){
  const {width:W,height:H}=pageGeometry(project,'ports'),span=W-82,budget=Math.max(120,H-420),indivisible=switches.filter(d=>!canContinueEquipment(project,d));
  // Prefer room for details beside the overview. A bounded common reduction is
  // shared by every device, including devices on continuation sheets.
- const ideal=Math.min(span,...indivisible.map(d=>span*Math.max(100,H-575)/equipmentSize(project,d,span).h));
- const hard=Math.min(span,...indivisible.map(d=>span*Math.max(80,H-229-portPanelCaption(d,physicalPorts(d),W).textHeight)/equipmentSize(project,d,span).h));
+ const ideal=Math.min(span,...indivisible.map(d=>span*Math.max(100,H-575)/(equipmentSize(project,d,span).h/deviceScale(project,d))));
+ const hard=Math.min(span,...indivisible.map(d=>span*Math.max(80,H-229-portPanelCaption(d,physicalPorts(d),W).textHeight)/(equipmentSize(project,d,span).h/deviceScale(project,d))));
  const width=requestedWidth??Math.min(hard,Math.max(span*.78,ideal)),views=switches.flatMap(d=>equipmentViews(project,d,width,Math.max(80,budget-portPanelCaption(d,physicalPorts(d),W).textHeight-34))),groups=[];let group=[],used=0;
  for(const d of views){const height=equipmentSize(project,d,width).h+portPanelCaption(d,physicalPorts(d),W).textHeight+26;
   if(group.length&&(group.length===2||group.some(v=>v.id===d.id)||used+height>budget)){groups.push(group);group=[];used=0;}group.push(d);used+=height;
@@ -201,10 +204,10 @@ function referencePortMaps(project,db,switches,options,plan){
    for(let from=0;from<length;from+=7){const sliced=lines.map(l=>l.slice(from,from+7));if(from){if(!sliced[0].length)sliced[0]=wrapPortText(record.title+' (continued)',columns[0][1]-24,12,true);for(let i=1;i<=devices.length;i++)if(!sliced[i].length)sliced[i]=wrapPortText(portRanges(record.ports[i-1],data[i-1].prefix),columns[i][1]-24,12);}chunks.push({...record,lines:sliced,part:from/7,height:Math.max(devices.length===2?34:20,(devices.length===2?12:6)+14*Math.max(...sliced.map(l=>l.length)))});}return chunks;
   });
   let at=0,sheet=0,repeatFits=true,legendPending=false;
-  do{const p=fresh('MDF Port Map','MDF port map','Switch front panels, configured port roles and link state'+(sheet?' | details continued':''),project),a=p.items,overview=sheet===0||repeat&&repeatFits,scope='MDF Port Map|'+devices.map(equipmentScope).join(',')+'|sheet:'+sheet;p.title='MDF Port Map';p.editScope=scope;let start=184;
+  do{const p=fresh('MDF Port Map','MDF port map','Switch front panels, configured port roles and link state'+(sheet?' | details continued':''),project),a=p.items,overview=sheet===0||repeat&&repeatFits,scope=(project._reportPrefix?project._reportPrefix+'|':'')+'MDF Port Map|'+devices.map(equipmentScope).join(',')+'|sheet:'+sheet;p.title='MDF Port Map';p.editScope=scope;let start=184;
    const used=new Set(data.flatMap(info=>info.ports.map(port=>info.assignment(port)[1])));
    if(overview){let bottom=150,nextTitle=151;data.forEach(info=>{const d=info.device,{titleLines,titleSize,titleLineHeight,summaryLines,textHeight}=portPanelCaption(d,info.ports,W);
-     p.editScope='MDF Port Map|'+equipmentScope(d)+'|sheet:'+sheet;const g=addDevice(p,project,d,[(W-plan.width)/2,nextTitle+textHeight+8,plan.width,1],'panel:'+d.id,{fitWidth:true,padding:equipmentPadding});p.editScope=scope;
+     p.editScope=(project._reportPrefix?project._reportPrefix+'|':'')+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+sheet;const g=addDevice(p,project,d,[(W-plan.width)/2,nextTitle+textHeight+8,plan.width,1],'panel:'+d.id,{fitWidth:true,padding:equipmentPadding});p.editScope=scope;
      const textTop=g.y-8-textHeight>=146?g.y-8-textHeight:g.y+g.h+8;
      titleLines.forEach((text,line)=>{label(a,41,textTop+line*titleLineHeight,(half-23),titleLineHeight,text,titleSize,true,C.ink);Object.assign(a.at(-1),{editKey:g.editKey+'|port-map-title|'+line,full:true});});
      summaryLines.forEach((text,line)=>{label(a,(41+half),textTop+line*16,half,16,text,13,false,C.muted,'right');Object.assign(a.at(-1),{editKey:g.editKey+'|port-map-summary'+(line?'|line:'+line:''),full:true});});
@@ -215,12 +218,14 @@ function referencePortMaps(project,db,switches,options,plan){
    const shown=data.reduce((sum,info)=>sum+info.shown.length,0),total=data.reduce((sum,info)=>sum+info.ports.length,0);if(shown<total&&start<H-75){label(a,38,start-20,(W-80),17,shown+' of '+total+' port records in details | '+(total-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
    const captions=columns.map(([title,w],column)=>{const info=data[column-1],caption=info?title+(info.prefix?' ('+info.prefix+')':''):title;return wrapPortText(caption,w-24,13,true);}),header=Math.max(39,9+15*Math.max(...captions.map(lines=>lines.length))),canTable=start+header+(rows[at]?.height||20)<=(H-124);if(!canTable)repeatFits=false;
    if(header+184+(rows[at]?.height||20)>(H-124))throw Error('This port-map column heading needs more space. Use a shorter device name or a wider port-map view.');
+   const tableStart=a.length;p.tableTop=start;
    if(canTable){rect(a,36,start,(W-72),header,C.ink);a.at(-1).editKey=scope+'|assignment-header';let x=36;columns.forEach(([title,w],column)=>{captions[column].forEach((text,line)=>{label(a,x+12,start+4+line*15,w-24,18,text,13,true,C.white);a.at(-1).editKey=scope+'|column|'+column+'|'+line;});x+=w;});}
    let y=start+header,count=0;const members=[];
    while(canTable&&at<rows.length&&y+rows[at].height<=(H-124)){const row=rows[at++];let hash=2166136261;for(const char of JSON.stringify([row.title,row.vlan,row.ports]))hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;const rowKey=scope+'|assignment|'+hash.toString(36)+'|part:'+row.part;members.push(...row.members);rect(a,36,y+2,(W-72),row.height-3,count%2?C.pale:C.white);a.at(-1).editKey=rowKey+'|background';rect(a,36,y+2,5,row.height-3,referencePortFills[row.role]);a.at(-1).editKey=rowKey+'|role';let x=36;
     row.lines.forEach((lines,column)=>{lines.forEach((text,line)=>{label(a,x+12,y+6+line*14,columns[column][1]-24,14,text,12,column===0,C.ink);Object.assign(a.at(-1),{editKey:rowKey+'|cell:'+column+'|line:'+line,portTableRole:column>0&&column<=devices.length?'interface':'detail',portAssignmentRole:column===0?'assignment':column<=devices.length?'ports':'details',full:true});});x+=columns[column][1];});y+=row.height;count++;
    }
    if(!rows.length&&canTable)label(a,49,start+47,(W-100),25,total?'No ports match the selected table filter. All physical ports remain on the faceplate.':'No physical switch port records were supplied.',14,false,C.muted);
+   for(const item of a.slice(tableStart))item.tableContent=true;
    const included=new Set(members.map(m=>JSON.stringify([m.device,m.name]))),portRecords=data.flatMap(info=>info.ports.filter(port=>included.has(JSON.stringify([info.device.id,port.name]))).map(port=>({device:info.device.id,name:port.name})));p.portMap={device:devices[0].id,devices:devices.map(d=>d.id),shown,total,rowNames:portRecords.map(port=>port.name),portRecords,density:'compact',overview,assignmentMatrix:true};out.push(p);sheet++;
   }while(at<rows.length||legendPending);
  }
@@ -229,7 +234,7 @@ function referencePortMaps(project,db,switches,options,plan){
 function portMaps(project,db){
  const switches=[...db.devices.values()].filter(d=>d.kind==='switch');if(!switches.length)return portMapsAtScale(project,db);
  const initial=portEquipmentPlan(project,switches);let best;
- for(const scale of [1,.9,.8]){const plan=scale===1?initial:portEquipmentPlan(project,switches,initial.width*scale),pages=portMapsAtScale(project,db,plan);
+ for(const scale of switches.some(d=>deviceScale(project,d)!==1)?[1]:[1,.9,.8]){const plan=scale===1?initial:portEquipmentPlan(project,switches,initial.width*scale),pages=portMapsAtScale(project,db,plan);
   if(!best||pages.length<best.length)best=pages;if(best.length===1)break;
  }return best;
 }
@@ -265,12 +270,14 @@ function portMapsAtScale(project,db,plan){
    if(summary<H-75)label(a,38,summary,(W-80),20,shown+' of '+ports.length+' port records in details'+(shown<ports.length?'  |  '+(ports.length-shown)+' hidden by table filter':'')+'  |  '+(group?'Consecutive matching ports grouped':'One row per interface')+(compact?'  |  N: native, T: tagged':''),11,false,C.muted);
    const header=compact?27:31,canTable=start+header+(rows[at]?.height||20)<=(H-124);
    if(!canTable)repeatFits=false;
+   const tableStart=a.length;p.tableTop=start;
    if(canTable){rect(a,36,start,(W-72),header,'#E8F1F3');rect(a,36,start,3,header,C.teal);let x=36;for(const [title,w] of columns){label(a,x+10,start,w-20,header,title,11,true,C.teal);x+=w;}}
    let y=start+header,count=0;const rowNames=[];
    while(canTable&&at<rows.length&&y+rows[at].height<=(H-124)){const row=rows[at++];rowNames.push(...row.names);rect(a,36,y,(W-72),row.height,count%2?'#F5F8FA':C.white);rect(a,36,y+row.height-1,(W-72),1,'#DCE5E9');rect(a,36,y+4,3,row.height-8,row.color);let x=36;
     row.lines.forEach((lines,j)=>{lines.forEach((text,k)=>{label(a,x+10,y+(compact?3:6)+k*lineHeight,columns[j][1]-20,lineHeight,text,12,j===0,j===0?C.teal:j===2&&k===0?stateMarks[row.linkState]:C.ink);Object.assign(a.at(-1),{portTableRole:j===0?'interface':'detail',full:true});});x+=columns[j][1];});y+=row.height;count++;
    }
    if(!rows.length&&canTable)label(a,49,start+46,(W-100),25,ports.length?'No ports match the selected table filter. All physical ports remain on the faceplate.':'No physical switch port records were supplied.',14,false,C.muted);
+   for(const item of a.slice(tableStart))item.tableContent=true;
    p.portMap={device:d.id,shown,total:ports.length,rowNames:[...new Set(rowNames)],density:compact?'compact':'expanded',overview};out.push(p);sheet++;
   }while(at<rows.length||legendPending);
  }
@@ -286,7 +293,7 @@ function wireless(project,db){
     const arr=groups.get(sw)||[];arr.push(record);groups.set(sw,arr);linked.add(record.apId);
   }
   const sourceDevices=[...groups.keys()].map(id=>db.devices.get(id)),span=W-202;
-  const width=Math.min(span,...sourceDevices.filter(d=>!canContinueEquipment(project,d)).map(d=>span*Math.max(90,H-500)/equipmentSize(project,d,span).h)),apSize=72*width/998;
+  const width=Math.min(span,...sourceDevices.filter(d=>!canContinueEquipment(project,d)).map(d=>span*Math.max(90,H-500)/(equipmentSize(project,d,span).h/deviceScale(project,d)))),apSize=72*width/998;
   const out=[],views=[];
   for(const [sw,items] of groups){const source=db.devices.get(sw),parts=equipmentViews(project,source,width,Math.max(80,width/7)),owners=parts.map(d=>new Set([...physicalPorts(d).map(p=>p.name),...Object.keys(addDevice({items:[]},project,d,[0,0,width,1],'inspect',{fitWidth:true,padding:equipmentPadding}).ports)].map(n=>n.toLowerCase()))),assigned=parts.map(()=>[]);
    for(const edge of items){const owner=owners.findIndex(ports=>ports.has(edge.sp.toLowerCase()));assigned[Math.max(0,owner)].push(edge);}
@@ -298,7 +305,7 @@ function wireless(project,db){
     // Keep at most four per bank, including arbitrary imported socket layouts.
     const temp={items:[]},panel=addDevice(temp,project,device,[(W-width)/2,412,width,1],'inspect',{fitWidth:true,padding:equipmentPadding});
     const captionFor=e=>{const name=mediaInfo(e.media,true).name,s=project.layout?.linkStyles?.[name]||{};return [s.lineTitle&&s.lineTitle!==name?s.lineTitle:'',s.lineDescription].filter(Boolean).join(' | ');};
-    const identityKey=(e,role)=>{let hash=14695981039346656037n;for(const c of JSON.stringify([e.apId,e.sw,e.sp,e.apPort]))hash=BigInt.asUintN(64,(hash^BigInt(c.codePointAt(0)))*1099511628211n);return 'Wireless Connections|'+role+'|'+hash.toString(36);};
+    const identityKey=(e,role)=>{let hash=14695981039346656037n;for(const c of JSON.stringify([e.apId,e.sw,e.sp,e.apPort]))hash=BigInt.asUintN(64,(hash^BigInt(c.codePointAt(0)))*1099511628211n);return (project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections|'+role+'|'+hash.toString(36);};
     const measured=(e,role,value,width)=>{const key=identityKey(e,role),patch=project.layout?.drawingEdits?.[key]||{},size=patch.size||12,w=patch.w||width,bold=patch.bold??false,text=patch.value??value;return {key,value:text,size,w,bold,height:patch.hidden||!text?0:Math.max(patch.h||18,wrapPortText(text,w,size,bold).length*size*1.25)};};
     const captions=(e,width)=>{
       const ap=db.devices.get(e.apId),register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · '),detail=[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · ');
@@ -450,20 +457,29 @@ function logical(project,db){
   return [...logicalPages(project,sections),
     ...(matrix.length?matrix:tablePages(project,'Trunk VLANs','Native and tagged VLAN membership on trunks and aggregates',[['Device',243],['Interface',164],['Native VLAN',145],['Tagged VLANs',235],['LAG',94],['Description',247]],trunks,'No trunk, tagged-port or aggregate records were supplied.'))];
 }
-export function buildPages(project={}){
+export function buildPages(project={},options={}){
   const db=inventory(project),pages=[...corePages(project,db),...portMaps(project,db),...wireless(project,db),...logical(project,db)];
+  for(const report of cleanReportPages(project.layout?.reportPages,(project.devices||[]).map(d=>d.id))){
+    const selected=new Set(report.devices),copy={...project,devices:(project.devices||[]).filter(d=>selected.has(d.id)),links:(project.links||[]).filter(l=>selected.has(l.a)&&selected.has(l.b)),_reportPrefix:'report:'+report.id},data=inventory(copy);
+    const generated=report.family==='ports'?portMaps(copy,data):report.family==='wireless'?wireless(copy,data):logical(copy,data).filter(p=>pageFamily(p.title)===report.family);
+    generated.forEach((p,i)=>{p.reportId=report.id;p.sourceDeviceIds=report.devices;p.displayName=report.name+(generated.length>1?' '+(i+1):'');});pages.push(...generated);
+  }
   const totals=new Map(),seen=new Map();
   for(const p of pages)totals.set(p.name,(totals.get(p.name)||0)+1);
-  pages.forEach((p,i)=>{
+  pages.forEach(p=>{
     const n=(seen.get(p.name)||0)+1;seen.set(p.name,n);
     if(totals.get(p.name)>1)p.name+=' '+n;
-    applyDrawingEdits(p,project);if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p);fitDynamicPage(p,project);
-    const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
-    rect(p.items,36,bottom-47,right-72,1,C.rule);label(p.items,36,bottom-39,right-228,21,p.name,12,false,C.muted);const number=pageNumber(project.layout?.pageNumbers,i,pages.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');p.items.at(-1).editKey=p.name+'|page-number';}
-    applyDrawingEdits(p,project);fitDynamicPage(p,project,{footer:true});p.svg=svgPage(p);
   });
-  return pages;
+  const visible=pages.filter(p=>!presentation(project,p).hidden);
+  pages.forEach(p=>{
+    applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=p.displayName;item.w=Math.max(item.w,textWidth(p.displayName,item.size,true));}
+    if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p);fitDynamicPage(p,project);
+    const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
+    rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
+    applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);p.svg=svgPage({...p,title:p.displayName});
+  });
+  return options.includeHidden?pages:visible;
 }
 export function printDocument(pages){
- return '<!doctype html><html lang="en"><meta charset="utf-8"><title>Network documentation</title><style>*{box-sizing:border-box}body{margin:0;background:#e9edef}section{background:white;margin:12px auto;break-after:page;page-break-after:always}section:last-child{break-after:auto;page-break-after:auto}svg{display:block;width:100%;height:100%}@media print{body{background:white}section{margin:0}}'+printPageStyles(pages)+'</style><body id="print-set">'+pages.map(p=>'<section aria-label="'+xml(p.name)+'">'+svgPage(p)+'</section>').join('')+'</body></html>';
+ return '<!doctype html><html lang="en"><meta charset="utf-8"><title>Network documentation</title><style>*{box-sizing:border-box}body{margin:0;background:#e9edef}section{background:white;margin:12px auto;break-after:page;page-break-after:always}section:last-child{break-after:auto;page-break-after:auto}svg{display:block;width:100%;height:100%}@media print{body{background:white}section{margin:0}}'+printPageStyles(pages)+'</style><body id="print-set">'+pages.map(p=>'<section aria-label="'+xml(p.displayName||p.name)+'">'+svgPage({...p,title:p.displayName||p.title})+'</section>').join('')+'</body></html>';
 }

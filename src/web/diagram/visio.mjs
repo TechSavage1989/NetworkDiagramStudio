@@ -172,7 +172,7 @@ function writePackage(pages,stencil){
   const drawingPages=stencil?[]:pages;
   drawingPages.forEach((source,index)=>{
     const p=normalizedPage(source);
-    const n=index+1,name=p.name;
+    const n=index+1,name=p.displayName||p.name;
     pagesXml+='<Page ID="'+index+'" Name="'+xml(name)+'" NameU="'+xml(name)+'" IsCustomName="1" IsCustomNameU="1" ViewScale="0.75" ViewCenterX="'+round(inch(p.width/2))+'" ViewCenterY="'+round(inch(p.height/2))+'">'+sheet(p.width,p.height,true,p.printPaper||p.paper,!!p.printPaper)+relation(n)+'</Page>';
     const rel=[],relKeys=new Map(),byKey=new Map(),connect=[];
     function relId(type,target){if(!relKeys.has(target)){relKeys.set(target,rel.length+1);rel.push([rel.length+1,type,target]);}return relKeys.get(target);}

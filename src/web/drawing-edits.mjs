@@ -1,5 +1,6 @@
 import {textFootprint} from './diagram/labels.mjs';
 import {applyLinkStyles} from './link-styles.mjs';
+import {unpresentPatch} from './presentation.mjs';
 const keyOk=s=>typeof s==='string'&&s.length<=500&&!/^(?:__proto__|constructor|prototype)$/.test(s);
 const colors=/^(?:#[0-9a-f]{3}|#[0-9a-f]{6}|none)$/i;
 const numbers=['x','y','w','h','size','weight','angle'];
@@ -35,7 +36,7 @@ export function applyDrawingEdits(page,project){
  const edits=project.layout?.drawingEdits||{},seen=new Map(),taken=new Set(page.items.map(i=>i.editKey).filter(Boolean));
  page.items.forEach((item,i)=>{
   if(!item.editKey){const semantic=item.semantic||JSON.stringify(item.type==='text'?[item.value,item.labelRole]:item.type==='path'?[item.name.replace(/^L\d+ /,'')]:[item.type,item.x,item.y,item.w,item.h]);let hash=0;for(const c of semantic)hash=Math.imul(hash,31)+c.charCodeAt(0)|0;const base=page.name+'|'+item.type+'|'+hash;let count=seen.get(base)||0;while(taken.has(base+'|'+count))count++;seen.set(base,count+1);item.editKey=base+'|'+count;taken.add(item.editKey);}
-  if(item.type!=='device'&&!item.labelRole&&edits[item.editKey])Object.assign(item,edits[item.editKey],{full:true});
+  if(item.type!=='device'&&!item.labelRole&&!item._panelTransform&&edits[item.editKey])Object.assign(item,edits[item.editKey],{full:true});
  if(item.type==='path'&&edits[item.editKey]?.points&&item.from&&item.to){const pts=item.points.map(p=>[...p]);for(const [end,adj,anchor] of [[0,1,item.from],[pts.length-1,pts.length-2,item.to]]){const old=pts[end];if(pts[adj][0]===old[0])pts[adj][0]=anchor.x;else pts[adj][1]=anchor.y;pts[end]=[anchor.x,anchor.y];}item.points=pts;}
  });
  page.items=page.items.filter(i=>!edits[i.editKey]?.hidden);
@@ -73,7 +74,8 @@ export function moveDrawingItems(page,edits,offsets){
    Object.assign(patch,{x:item.x+localX,y:item.y+localY});
    if(item.labelRole&&item.angle)patch.angle=item.angle;
   }
-  result[key]=patch;
+  const changed=item.type==='path'?{points:patch.points}:item.type==='vector'?{commands:patch.commands}:{x:patch.x,y:patch.y,...(item.labelRole&&item.angle?{angle:item.angle}:{})};
+  result[key]={...(result[key]||{}),...unpresentPatch(item,changed)};
  }
  return cleanDrawingEdits(result);
 }

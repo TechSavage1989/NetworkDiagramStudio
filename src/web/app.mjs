@@ -1,3 +1,5 @@
+import {pageLayoutEditor} from './page-layout-ui.mjs';
+import {displayPageName,unpresentPatch} from './presentation.mjs';
 import {withoutDevices} from './device-actions.mjs';
 import {desktopUpdates} from './desktop-updates.mjs';
 import {deviceMacs,inputMacAddresses} from './device-details.mjs';
@@ -83,7 +85,7 @@ function syncDrawingSelection(){
 }
 function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();}
 function selectedCable(){return drawingSelection.size===1?pages[active]?.items.find(i=>i.type==='path'&&drawingSelection.has(i.editKey)):null;}
-function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],points}});}
+function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...unpresentPatch(item,{points})}});}
 function cableControlClick(key,event,target=event.target){
  const add=target.closest('[data-cable-segment]'),point=target.closest('[data-cable-point]');if(!add&&!point)return false;
  const item=pages[active]?.items.find(i=>i.editKey===key&&i.type==='path');if(!item)return false;drawingSelection.clear();drawingSelection.add(key);
@@ -263,6 +265,14 @@ function linkStyleOptions(selected){
  button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1});close();});button(bar,'Cancel',close);
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
+function layoutOptions(selected=pages[active]?.name){
+ pageLayoutEditor({project,pages:buildPages(scoped(),{includeHidden:true}),selected,modal,field,button,close,apply(layout,include=[]){
+  const previous=project;project={...project,devices:project.devices.map(d=>include.includes(d.id)?{...d,hidden:false,scopeOverride:true}:d),layout:cleanLayout(layout,project.devices.map(d=>d.id))};
+  try{buildPages(scoped());}catch(error){project=previous;throw error;}
+  perform('page-layout');viewport.fit();say('Page names, device selections and layout saved. Undo is available.');
+ }});
+}
+$('page-layout').onclick=()=>task(()=>layoutOptions());
 function pageOptions(){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
  body.append(el('p','Dynamic / Fit all grows each drawing page around its contents. All devices assigned to a core page stay together at a readable size. Choose paper separately when printing.','hint'));
@@ -299,8 +309,8 @@ function pageOptions(){
 }
 $('page-options').onclick=()=>task(pageOptions);
 function corePageChoices(){
- const named=(project.layout?.corePages||[]).map(page=>[page.id,page.name]);
- const automatic=pages.filter(page=>page.coreDeviceIds).map((page,index)=>['@core:'+index,page.name+' (current layout)']);
+ const named=(project.layout?.corePages||[]).map(page=>[page.id,displayPageName(project,page)]);
+ const automatic=pages.filter(page=>page.coreDeviceIds).map((page,index)=>['@core:'+index,displayPageName(project,page)+' (current layout)']);
  return [['auto','Automatic'],['exclude','Exclude from core'],...named,...automatic,['new','New dedicated page']];
 }
 function assignedCorePage(id){
@@ -342,8 +352,8 @@ function arrange(){
  const bar=actions(body);button(bar,'Add core page',()=>{layout.corePages||=[];layout.corePages.push({id:crypto.randomUUID(),name:'Core Network '+(layout.corePages.length+1),devices:[]});perform();arrange();});
  button(bar,'Use automatic pages',()=>{layout.corePages=[];layout.coreExclude=[];perform();arrange();});
  for(const page of layout.corePages||[]){
-  const row=line(body);row.classList.add('core-page-settings');const nameCell=el('div'),referenceCell=el('div');row.append(nameCell,referenceCell);const input=field(nameCell,'Page name',page.name);input.setAttribute('aria-label','Core page name');
-  input.onchange=()=>task(()=>changeCoreLayout(next=>{next.corePages.find(p=>p.id===page.id).name=input.value.trim()||'Core Network';}));
+  const row=line(body);row.classList.add('core-page-settings');const nameCell=el('div'),referenceCell=el('div');row.append(nameCell,referenceCell);const input=field(nameCell,'Page name',displayPageName(project,page));input.setAttribute('aria-label','Core page name');
+  input.onchange=()=>task(()=>changeCoreLayout(next=>{next.presentation||={defaults:{},pages:{}};next.presentation.pages||={};next.presentation.pages[page.name]={...next.presentation.pages[page.name],name:input.value.trim()||'Core Network'};}));
   const references=field(referenceCell,'Off-page connections',page.showReferences===false?'hide':'show',[['show','Show references'],['hide','Hide references']]);references.setAttribute('aria-label','Off-page connections for '+page.name);
   references.onchange=()=>task(()=>{try{changeCoreLayout(next=>{next.corePages.find(p=>p.id===page.id).showReferences=references.value==='show';});}catch(error){references.value=page.showReferences===false?'hide':'show';throw error;}});
   const members=new Set(page.devices),connections=project.links.filter(link=>members.has(link.a)!==members.has(link.b));
@@ -407,7 +417,7 @@ function draw(){
  tabs.replaceChildren();
  $('warnings').hidden=!project.warnings.length;$('warnings').textContent='Review '+project.warnings.length+' import '+(project.warnings.length===1?'note':'notes');
  active=Math.max(0,Math.min(active,pages.length-1));
- pages.forEach((page,i)=>{const b=el('button',page.name);b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{active=i;draw();};tabs.append(b);});
+ pages.forEach((page,i)=>{const b=el('button',page.displayName||page.name);b.title='Double-click to rename or customize this page';b.ondblclick=()=>task(()=>layoutOptions(page.name));b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{active=i;draw();};tabs.append(b);});
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
   if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true));}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
@@ -512,7 +522,7 @@ function editDevice(current){
  model.onchange=()=>hardwareKnowledge(true);vendor.onchange=()=>hardwareKnowledge(false);hardwareKnowledge();
  const options=[['','Schematic front'],...Object.values(project.stencils).filter(a=>a.view!=='rear').map(s=>[s.id,s.name])];
  const shape=field(body,'Front-panel stencil',d.stencilId||'',options);
- const scale=field(body,'Core faceplate scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=30;scale.max=100;scale.step=5;
+ const scale=field(body,'Device scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=10;scale.max=400;scale.step=5;
  const hardware=el('details');hardware.append(el('summary','Stack members and installed modules'));body.append(hardware);
  hardware.append(el('p','Confirm each member model and installed card. For 2920 rear bays A/B use J9731A (SFP+) or J9732A (copper). For 3560-E uplink slots X2-1/X2-2 use CVR-X2-SFP or the installed X2 transceiver model. Leave unknown cards unassigned.','hint'));
  const memberRows=[],moduleRows=[],memberList=el('div'),moduleList=el('div');hardware.append(memberList);
@@ -536,7 +546,7 @@ function editDevice(current){
   const id=d.id||deviceId(n);if(!safeKey(id)||project.devices.some(old=>old!==current&&deviceId(old.name)===deviceId(n)))throw Error('Use a unique device name.');
   let data;try{data=[vlans,routes,bridges].map(input=>JSON.parse(input.value));}catch{throw Error('VLAN, route and bridge data must be valid JSON.');}
   if(data.some(arr=>!Array.isArray(arr)||arr.some(x=>!object(x))))throw Error('Use arrays of objects for VLANs, routes and bridges.');
-  if(!(Number(scale.value)>=30&&Number(scale.value)<=100))throw Error('Use a faceplate scale from 30 to 100 percent.');
+  if(!(Number(scale.value)>=10&&Number(scale.value)<=400))throw Error('Use a device scale from 10 to 400 percent.');
   const composition=hardwareComposition(memberRows.filter(r=>!r.removed).map(r=>({id:r.id.value,model:r.model.value})),moduleRows.filter(r=>!r.removed).map(r=>({member:r.member.value,slot:r.slot.value,model:r.model.value})));
   const macValue=inputMacAddresses(mac.value);
   const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),mac:macValue,stencilId:shape.value,scale:Number(scale.value)/100,ports:readPorts(),vlans:data[0],routes:data[1],bridges:data[2]};for(const alias of ['macs','macAddress','macAddresses','mac_address','mac_address(es)'])delete next[alias];if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareEvidence;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
@@ -716,10 +726,12 @@ function editDrawingObject(key){
  if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',item.weight||1);inputs.weight.type='number';inputs.weight.step=.1;}
  if(item.type==='vector')inputs.commands=field(body,'Vector commands (JSON, normalized coordinates)',JSON.stringify(item.commands),'multiline');
  if(item.type==='path'){const bar=actions(body);button(bar,'Edit bend points',()=>editCablePoints(item));if(item.sourceLink)button(bar,'Connect endpoints',()=>connectSelectedCable(item));}
+ const scaleObject=item.type!=='path'?field(body,'Scale this object (%)',100):null;if(scaleObject){scaleObject.type='number';scaleObject.min=10;scaleObject.max=400;}
  const bar=actions(body);button(bar,'Save object',()=>{
   const change={};for(const [k,input] of Object.entries(inputs)){if(['x','y','w','h','size','weight'].includes(k)){const n=Number(input.value)/(normalized&&(['x','y','w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||['w','h','size','weight'].includes(k)&&n<=0)throw Error('Use a valid positive size and finite position.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
   if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
-  if(item.labelRole&&change.size<12)throw Error('Link labels need a font size of at least 12.');
+  if(scaleObject){const factor=Number(scaleObject.value)/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Use an object scale from 10 to 400 percent.');for(const k of ['w','h','size'])if(Number.isFinite(change[k]))change[k]*=factor;if(item.type==='vector'&&Array.isArray(change.commands)){const bounds=drawingBounds(item),x=(bounds.x-item.parent.x)/item.parent.w,y=(bounds.y-item.parent.y)/item.parent.h;change.commands=change.commands.map(c=>c.length===3?[c[0],x+(c[1]-x)*factor,y+(c[2]-y)*factor]:c);}}
+  Object.assign(change,unpresentPatch(item,change));
   const clean=cleanDrawingEdits({[item.editKey]:change})[item.editKey];if(!clean||Object.keys(clean).length!==Object.keys(change).length)throw Error('Use hex colors, valid text settings, and finite dimensions.');
   if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];const selected=details?.value,changed=selected&&(selected.media!==String(connection.media||'unknown').trim()||selected.speed!==String(connection.speed||'').trim());if(linkedSwatch)setLegendStyle(item.linkType,legendDetails?.value||{},style,{[item.editKey]:patch});else if(changed)saveConnection(project.links.findIndex(link=>sameConnection(link,item.sourceLink)),{...connection,...selected},{drawing:item,patch,style});else setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
   else if(item.legendEntry&&item.linkType&&clean.value!==editableText(item)){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:clean.value},{[item.editKey]:patch});}
