@@ -211,27 +211,17 @@ internal sealed partial class Studio
         }
         await CheckEditRecovery();
         await CheckAddDevice();
-        var editorCheck=await browser.CoreWebView2.ExecuteScriptAsync("""
-            (() => {
-                try {
-                    document.querySelector('[aria-label="Up SW-1"]').click();
-                    if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed');
-                    document.getElementById('arrange').click();
-                    [...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Add core page').click();
-                    const name=document.querySelector('[aria-label="Core page name"]');
-                    name.value='Native test rack';name.dispatchEvent(new Event('change'));
-                    const target=document.querySelector('[aria-label="Core page for SW-1"]');
-                    target.value=[...target.options].find(option=>option.textContent==='Native test rack').value;target.dispatchEvent(new Event('change'));
-                    if(![...document.querySelectorAll('#tabs button')].some(b=>b.textContent==='Native test rack')) throw Error('Core assignment failed');
-                    document.getElementById('close').click();
-                    document.getElementById('evidence').click();
-                    if(document.getElementById('dialog-title').textContent!=='Imported data') throw Error('Import controls missing');
-                    document.getElementById('close').click();
-                    return 'ok';
-                } catch(e) { return e.message; }
-            })()
-            """);
-        if(editorCheck!="\"ok\"") throw new Exception("Native editor controls: "+editorCheck);
+        await ClickEditorTarget("[aria-label='Up SW-1']");
+        await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed')","device order");
+        await ClickEditorTarget("#arrange");
+        await RequireEditor("[...document.querySelectorAll('#dialog button')].find(button=>button.textContent==='Add core page').click()","add named page");
+        await RequireEditor("const name=[...document.querySelectorAll('[aria-label=\"Core page name\"]')].at(-1); if(!name) throw Error('New page name field missing'); name.value='Native test rack'; name.dispatchEvent(new Event('change'))","rename core page");
+        await RequireEditor("const target=document.querySelector('[aria-label=\"Core page for SW-1\"]'); const option=[...target.options].find(option=>option.textContent==='Native test rack'); if(!option) throw Error('Named page missing from choices'); target.value=option.value; target.dispatchEvent(new Event('change'))","assign named page");
+        await RequireEditor("if(![...document.querySelectorAll('#tabs button')].some(button=>button.textContent==='Native test rack')) throw Error('Core assignment failed')","verify named page");
+        await ClickEditorTarget("#close");
+        await ClickEditorTarget("#evidence");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Imported data') throw Error('Import controls missing')","import controls");
+        await ClickEditorTarget("#close");
         await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('print').click()");
         await Printed.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }
