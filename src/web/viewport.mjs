@@ -1,6 +1,6 @@
 export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,onBeforeInteraction,onMoveStart,onBoxStart,onBackground,onEdit}={}){
  const views=new Map();let current=null,svg=null,drag=null,space=false,clickTimer=null,clickTarget=null;
- const clamp=v=>Math.max(.12,Math.min(6,v)),textInput=target=>target.closest('[data-inline-editor]');
+ const clamp=v=>Math.max(.02,Math.min(6,v)),textInput=target=>target.closest('[data-inline-editor]');
  const itemKey=(target,event)=>((!event.altKey&&target.closest('[data-device-id]'))||target.closest('[data-drawing-key]'))?.getAttribute('data-drawing-key');
  const point=e=>{const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());return [p.x,p.y];};
  function apply(){if(!svg||!current)return;svg.style.transform='translate('+current.x+'px,'+current.y+'px) scale('+current.scale+')';if(percent)percent.textContent=Math.round(current.scale*100)+'%';}
