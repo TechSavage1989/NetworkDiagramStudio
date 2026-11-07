@@ -141,7 +141,7 @@ Windows stores its WebView profile, release cache, staged update and retained ro
 
 ## Troubleshooting
 
-- **A drawing disappears after adding equipment in an older build.** Ctrl+Z can restore the prior inventory/layout. New builds automatically continue crowded core sheets and retain the last valid drawing if a rebuild fails. A rejected device save leaves the form open and preserves the accepted project.
+- **A drawing disappears after adding equipment in an older build.** Ctrl+Z can restore the prior inventory/layout. Dynamic / Fit all grows around the selected equipment, reserves space between crowded cables for their captions, and expands wireless pages for complete labels. Fixed-paper core sheets can continue onto another page. A failed rebuild retains the last valid drawing; a rejected device save leaves the form open and preserves the accepted project.
 - **Text needs more room.** Generated captions wrap instead of using ellipses. Increase an edited text box when its full contents cannot fit at a readable size.
 - **Editing appears locked in preview.9.** Use Tab or Shift+Tab to focus **Save project**, then Enter to save accepted edits. Confirm the file exists before restarting with a newer build. Preview.10 fixes the detached text editor that could block selection after a rejected edit.
 - **Missing ports or uncertain topology.** Import the corresponding device configurations and interface reports. Correct conflicting neighbors or unknown port mappings under **Review links** or **Hardware**.
@@ -166,4 +166,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.22.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.27.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)

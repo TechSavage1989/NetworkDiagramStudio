@@ -135,7 +135,7 @@ export function placeCableLabels(page,requests,edits={}){
    if(owner&&req.role!=='reference'&&!candidate.attached&&!leader)continue;
    box={...candidate,leader};break;
   }
-  if(!box)return {ok:false,failed:req,placed:result};
+  if(!box)return {ok:false,failed:req,placed:result,clearance:h+12};
   occupied.push(box);if(box.leader)occupied.push(box.leader);
   result.push({...req,...box,lines,size});
  }

@@ -284,7 +284,7 @@ function portMapsAtScale(project,db,plan){
  return out;
 }
 function wireless(project,db){
-  const {width:W,height:H}=pageGeometry(project,'wireless'),short=H<850,bankStart=short?204:216,gutter=short?24:44;
+  const {width:W,height:H,dynamic}=pageGeometry(project,'wireless'),short=H<850,bankStart=short?204:216,gutter=short?24:44;
   const apIds=new Set([...db.devices.keys()].filter(id=>db.devices.get(id).kind==='ap')),linked=new Set(),groups=new Map();
   for(const e of db.links){
     const left=apIds.has(e.a),right=apIds.has(e.b);if(left===right)continue;
@@ -348,7 +348,7 @@ function wireless(project,db){
         const bankWidth=Math.min(capacity===1?680:245,(W-220)/Math.max(1,rs.length)),bankHeight=Math.max(70,...rs.map(({e})=>captions(e,bankWidth).height)),bottomY=Math.max(switchY+switchHeight+gutter+13*(rs.length-1)+35,Math.min(678,H-55-(apSize+10)-bankHeight));
         rs.forEach(({e,start},i)=>{
           const ap=db.devices.get(e.apId),center=centers[i],lw=bankWidth,caption=captions(e,lw),textY=top?bankStart+headingOffset:bottomY+apSize+10,y=top?bankStart+headingOffset+bankHeight+6:bottomY;
-          if((!top&&textY+caption.height>H-55)||(top&&switchY+switchHeight>H-55))throw Error('This wireless caption needs more space. Shorten the device name or link description.');
+          if(!dynamic&&((!top&&textY+caption.height>H-55)||(top&&switchY+switchHeight>H-55)))throw Error('This wireless caption needs more space. Shorten the device name or link description.');
           const edgeKey=top?'uplink.bottom':'uplink.top';
           const dest=addDevice(p,project,ap,[center-apSize/2,y,apSize,apSize],'ap'+side+i,{apEdge:edgeKey,instanceKey:e.sw+'/'+e.sp+'/'+e.apPort});
           const end=getAnchor(dest,edgeKey,top?'bottom':'top',i);
