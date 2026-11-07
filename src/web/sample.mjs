@@ -5,7 +5,7 @@ export function sampleSite() {
     routes:[{destination:'0.0.0.0/0',gateway:'10.24.8.254'}],
     ports:Array.from({length:28},(_,i)=>{const p=i+1;return {name:'1/1/'+p,role:p<21?'wired':p<25?'ap':'uplink',state:p===28?'down':'up',native:8,tagged:p<21?[20]:[20,34,90],speed:p>=25?'10 Gbps':'1 Gbps',...(p===27||p===28?{lag:'1'}:{})};})});
   const f={id:'edge',name:'EDGE-01',kind:'firewall',vendor:'Fortinet',model:'FortiGate 120G',ip:'10.24.8.254',vlans:[vlan(8,'Users')],routes:[],ports:[{name:'port1',role:'wan',state:'up',speed:'1 Gbps'},{name:'x1',role:'uplink',state:'up',speed:'10 Gbps'}]};
-  const aps=['Library','Studio','Workshop','Gallery'].map((name,i)=>({id:'ap-'+i,name:'AP-'+name,kind:'ap',vendor:'Aruba',model:'Access point',ip:'10.24.8.'+(41+i),ports:[{name:'eth0',state:'up'}],vlans:[],routes:[]}));
+  const aps=['Library','Studio','Workshop','Gallery'].map((name,i)=>({id:'ap-'+i,name:'AP-'+name,kind:'ap',vendor:'Aruba',model:'AP-515',mac:'02:00:00:00:01:'+String(41+i),ip:'10.24.8.'+(41+i),ports:[{name:'eth0',state:'up'}],vlans:[],routes:[]}));
   return {name:'Harbor Workshop', devices:[f,switchDevice(1),switchDevice(2),...aps],stencils:{},optics:{},warnings:[],
     links:[{a:'edge',ap:'x1',b:'sw-1',bp:'1/1/25',media:'SR',speed:'10 Gbps',status:'confirmed'},
       {a:'sw-1',ap:'1/1/27',b:'sw-2',bp:'1/1/27',media:'DAC',speed:'10 Gbps',status:'confirmed'},

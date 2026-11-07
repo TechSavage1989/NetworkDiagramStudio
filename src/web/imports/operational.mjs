@@ -1,3 +1,4 @@
+import {normalizeMac} from '../device-details.mjs';
 import {device,deviceId,empty,ensurePort,ensureVlan,portName,mergeModels} from './model.mjs';
 import {identify} from './hardware.mjs';
 
@@ -18,11 +19,11 @@ export function parseOperational(text,filename='show-commands.txt'){
  if(captures.size>1)return mergeModels([...captures].map(([name,lines])=>parseOperational(lines.join('\n'),name+'.txt')));
  const name=prompt.exec(s)?.[1]||/^\s*(?:Hostname|hostname|System Name)\s*[:=]\s*(\S+)/im.exec(s)?.[1]||filename.replace(/\.[^.]+$/,'');
  const d=device(name,{operational:true});out.devices.push(d);
- let local='',peer='',remote='',peerIP='',peerKind='unknown',p=null,command='',saw=false,pendingRoute='',neighborColumns=null;
+ let local='',peer='',remote='',peerIP='',peerKind='unknown',peerMac='',p=null,command='',saw=false,pendingRoute='',neighborColumns=null;
  const peerRecords=[];
  function neighbor(){
-  if(local&&peer&&remote){peerRecords.push({local,peer,remote,ip:peerIP,kind:peerKind});saw=true;}
-  local='';peer='';remote='';peerIP='';peerKind='unknown';
+  if(local&&peer&&remote){peerRecords.push({local,peer,remote,ip:peerIP,kind:peerKind,mac:peerMac});saw=true;}
+  local='';peer='';remote='';peerIP='';peerKind='unknown';peerMac='';
  }
  for(const raw of s.split('\n')){
   const line=raw.trim();let m;
@@ -33,6 +34,7 @@ export function parseOperational(text,filename='show-commands.txt'){
    continue;
   }
   if(/^-{4,}$/.test(line)){neighbor();continue;}
+  if(/\b(?:lldp|cdp)\b/.test(command)&&(m=/^Chassis(?:[ -]ID)?\s*:\s*(.+)$/i.exec(line))){peerMac=normalizeMac(m[1]);continue;}
   if(/\b(?:lldp|cdp)\b/.test(command)){
    const cols=line.split(/\s{2,}/),normalized=cols.map(c=>c.toLowerCase().replace(/[ -]/g,''));
    if(normalized.some(c=>/^(?:localintf|localport|localinterface)$/.test(c))&&normalized.some(c=>/^(?:systemname|sysname|deviceid)$/.test(c)))neighborColumns=normalized;
@@ -42,6 +44,11 @@ export function parseOperational(text,filename='show-commands.txt'){
    }
   }
   if((m=/^(?:Model(?: name)?|Product(?: name)?|Platform)\s*[:=]\s*(.+)$/i.exec(line))){const spec=identify(m[1]);if(spec.model){Object.assign(d,spec);saw=true;}}
+  if(!/\b(?:lldp|cdp|arp|mac.address-table)\b/.test(command)){
+   const rawMac=/^(?:Base (?:ethernet )?MAC(?: address)?|System MAC(?: address)?|MAC address)\s*[:=]\s*(\S+)/i.exec(line)?.[1];
+   const own=normalizeMac(rawMac);if(own){(p||d).mac=own;saw=true;}
+   const physical=normalizeMac(/(?:Current_HWaddr|Current address|Hardware address)\s*[:=]\s*(\S+)/i.exec(line)?.[1]||/\baddress is\s+([\da-f:.\-]+)/i.exec(line)?.[1]);if(p&&physical){p.mac=physical;saw=true;}
+  }
   if(/\broute\b/.test(command)){
    if((m=/^(?:[A-Z*+>]+(?:\s+[A-Z*+>]+)*\s+)?(\d+\.\d+\.\d+\.\d+\/\d+)\s+(.*)$/i.exec(line))){
     pendingRoute=m[1];const rest=m[2],via=/\bvia\s+(\d+\.\d+\.\d+\.\d+)(?:,\s*([\w./:-]+))?/i.exec(rest),direct=/directly connected,\s*([\w./:-]+)/i.exec(rest),columns=/^(\d+\.\d+\.\d+\.\d+)\s+([\w./:-]+)/.exec(rest);
@@ -84,7 +91,7 @@ export function parseOperational(text,filename='show-commands.txt'){
  neighbor();
  const peers=new Map();
  for(const n of peerRecords){
-  const id=deviceId(n.peer);if(!peers.has(id))peers.set(id,device(n.peer,{kind:n.kind,...(n.ip?{ip:n.ip}:{})}));
+  const id=deviceId(n.peer);if(!peers.has(id))peers.set(id,device(n.peer,{kind:n.kind,...(n.ip?{ip:n.ip}:{}),...(n.mac?{mac:n.mac}:{})}));
   ensurePort(d,n.local);ensurePort(peers.get(id),n.remote);
   out.links.push({a:d.id,ap:n.local,b:id,bp:n.remote,media:'unknown',status:'observed'});
  }

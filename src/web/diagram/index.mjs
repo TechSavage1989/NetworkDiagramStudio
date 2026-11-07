@@ -1,3 +1,4 @@
+import {deviceModel,deviceDetails,macCaption} from '../device-details.mjs';
 import {logicalPages} from './logical.mjs';
 import {corePages} from './core.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
@@ -186,7 +187,7 @@ function referencePortMaps(project,db,switches,options){
   });
   let at=0,sheet=0,repeatFits=true;
   do{const p=fresh('MDF Port Map','MDF port map','Switch front panels, configured port roles and link state'+(sheet?' | details continued':''),project),a=p.items,overview=sheet===0||repeat&&repeatFits,scope='MDF Port Map|'+devices.map(d=>d.id).join(',')+'|sheet:'+sheet;p.title='MDF Port Map';p.editScope=scope;let start=184;
-   if(overview){let bottom=150,nextTitle=151;const used=new Set();data.forEach(info=>{const d=info.device,up=info.ports.filter(port=>state(port.state)==='up').length,summary=[d.vendor,d.model,up+' of '+info.ports.length+' ports up',d.ip].filter(Boolean).join(' | ');let titleSize=21,titleLines=wrapPortText(nameOf(d),536,titleSize,true);while(titleLines.length>2&&titleSize>15)titleLines=wrapPortText(nameOf(d),536,--titleSize,true);const titleLineHeight=titleSize*1.15,summaryLines=wrapPortText(summary,559,13),textHeight=Math.max(titleLines.length*titleLineHeight,summaryLines.length*16);
+   if(overview){let bottom=150,nextTitle=151;const used=new Set();data.forEach(info=>{const d=info.device,up=info.ports.filter(port=>state(port.state)==='up').length,summary=[deviceDetails(d),up+' of '+info.ports.length+' ports up'].filter(Boolean).join(' | ');let titleSize=21,titleLines=wrapPortText(nameOf(d),536,titleSize,true);while(titleLines.length>2&&titleSize>15)titleLines=wrapPortText(nameOf(d),536,--titleSize,true);const titleLineHeight=titleSize*1.15,summaryLines=wrapPortText(summary,559,13),textHeight=Math.max(titleLines.length*titleLineHeight,summaryLines.length*16);
      p.editScope='MDF Port Map|'+d.id+'|sheet:'+sheet;const g=addDevice(p,project,d,[41,nextTitle+textHeight+8,1118,116],'panel:'+d.id);p.editScope=scope;
      const textTop=g.y-8-textHeight>=146?g.y-8-textHeight:g.y+g.h+8;
      titleLines.forEach((text,line)=>{label(a,41,textTop+line*titleLineHeight,536,titleLineHeight,text,titleSize,true,C.ink);Object.assign(a.at(-1),{editKey:g.editKey+'|port-map-title|'+line,full:true});});
@@ -229,7 +230,7 @@ function portMaps(project,db){
   });
   let at=0,sheet=0,repeatFits=true;
   do{
-   const p=fresh('MDF Port Map','MDF Port Map',nameOf(d)+'  |  '+[d.vendor,d.model,d.ip].filter(Boolean).join('  |  ')+(sheet?'  |  details continued':''),project),a=p.items,overview=sheet===0||repeat&&repeatFits;p.editScope=p.name+'|'+d.id+'|sheet:'+sheet;
+   const p=fresh('MDF Port Map','MDF Port Map',nameOf(d)+'  |  '+deviceDetails(d)+(sheet?'  |  details continued':''),project),a=p.items,overview=sheet===0||repeat&&repeatFits;p.editScope=p.name+'|'+d.id+'|sheet:'+sheet;
    let summary=156,start=190;
    if(overview){
     const g=addDevice(p,project,d,[45,159,1110,84],'panel');portNumbers(a,g,ports,{fill:port=>portFills[assignment(port)[1]],stateKey:true});
@@ -264,7 +265,13 @@ function wireless(project,db){
     // Keep at most four per bank, including arbitrary imported socket layouts.
     const temp={items:[]},panel=addDevice(temp,project,device,[101,412,998,91],'inspect');
     const captionFor=e=>{const name=mediaInfo(e.media,true).name,s=project.layout?.linkStyles?.[name]||{};return [s.lineTitle&&s.lineTitle!==name?s.lineTitle:'',s.lineDescription].filter(Boolean).join(' | ');};
-    const captions=(e,width)=>{const ap=db.devices.get(e.apId),register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · '),detail=[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · '),titleHeight=Math.max(26,wrapPortText(nameOf(ap),width,18,true).length*22),registerHeight=Math.max(21,wrapPortText(register,width,13,true).length*16),detailHeight=Math.max(18,wrapPortText(detail,width,12).length*15),notes=captionFor(e)?wrapPortText(captionFor(e),width,12):[];return {register,detail,titleHeight,registerHeight,detailHeight,notes,height:titleHeight+2+registerHeight+1+detailHeight+2+notes.length*14};};
+    const identityKey=(e,role)=>{let hash=14695981039346656037n;for(const c of JSON.stringify([e.apId,e.sw,e.sp,e.apPort]))hash=BigInt.asUintN(64,(hash^BigInt(c.codePointAt(0)))*1099511628211n);return 'Wireless Connections|'+role+'|'+hash.toString(36);};
+    const measured=(e,role,value,width)=>{const key=identityKey(e,role),patch=project.layout?.drawingEdits?.[key]||{},size=patch.size||12,w=patch.w||width,bold=patch.bold??false,text=patch.value??value;return {key,value:text,size,w,bold,height:patch.hidden||!text?0:Math.max(patch.h||18,wrapPortText(text,w,size,bold).length*size*1.25)};};
+    const captions=(e,width)=>{
+      const ap=db.devices.get(e.apId),register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · '),detail=[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · ');
+      const model=measured(e,'model',deviceModel(ap),width),mac=measured(e,'mac',macCaption(ap,e.apPort),width),titleHeight=Math.max(26,wrapPortText(nameOf(ap),width,18,true).length*22),registerHeight=Math.max(21,wrapPortText(register,width,13,true).length*16),detailHeight=Math.max(18,wrapPortText(detail,width,12).length*15),notes=captionFor(e)?wrapPortText(captionFor(e),width,12):[];
+      return {register,detail,model,mac,titleHeight,registerHeight,detailHeight,notes,height:titleHeight+2+model.height+registerHeight+1+detailHeight+mac.height+2+notes.length*14};
+    };
     const captionLines=Math.max(0,...items.map(e=>captionFor(e)?wrapPortText(captionFor(e),245,12).length:0)),longLegend=items.some(e=>(project.layout?.linkStyles?.[mediaInfo(e.media,true).name]?.description||'').length>80),longName=items.some(e=>captions(e,245).height>150),capacity=longLegend||longName?1:Math.min(4,Math.max(1,5-captionLines));
     let bucket=[],counts={top:0,bottom:0},columns=new Set();const batches=[];
     for(const e of sorted){
@@ -276,7 +283,10 @@ function wireless(project,db){
     if(bucket.length)batches.push(bucket);
     for(const batch of batches){
       const p=fresh('Wireless Connections','Wireless Connections',nameOf(device)+'  ·  access-point uplinks and physical switch ports',project),a=p.items;p.editScope=p.name+'|'+sw+'|sheet:'+batches.indexOf(batch);
-      const preview={items:batch.map(e=>({type:'path',color:mediaInfo(e.media,true).color,linkType:mediaInfo(e.media,true).name,sourceLink:e}))};applyLinkStyles(preview,project.layout?.linkStyles);linkLegend(preview);const headingOffset=Math.max(0,(preview.legendBottom||189)+10-216),maxCaptionHeight=Math.max(70,...batch.map(e=>captions(e,capacity===1?680:245).height)),switchY=Math.max(459,216+headingOffset+maxCaptionHeight+6+72+39+13*(capacity-1));
+      const preview={items:batch.map(e=>({type:'path',color:mediaInfo(e.media,true).color,linkType:mediaInfo(e.media,true).name,sourceLink:e}))};applyLinkStyles(preview,project.layout?.linkStyles);linkLegend(preview);const headingOffset=Math.max(0,(preview.legendBottom||189)+10-216);
+      const bank=side=>batch.filter(e=>getAnchor(panel,e.sp,'top',e.idx).side===side),tops=bank('top'),bottoms=bank('bottom'),bankHeight=rows=>Math.max(70,...rows.map(e=>captions(e,Math.min(capacity===1?680:245,980/Math.max(1,rows.length))).height));
+      const upper=216+headingOffset+(tops.length?bankHeight(tops)+6+72+39+13*(tops.length-1):0),lower=bottoms.length?H-55-82-bankHeight(bottoms)-170-13*(bottoms.length-1):H-170;
+      const switchY=Math.max(upper,Math.min(459,lower));
       const swg=addDevice(p,project,device,[101,switchY,998,91],'switch');
       const per={top:[],bottom:[]};
       batch.forEach((e,i)=>{const start=getAnchor(swg,e.sp,'top',e.idx);per[start.side].push({e,start});});
@@ -303,8 +313,11 @@ function wireless(project,db){
           const dest=addDevice(p,project,ap,[center-36,y,72,72],'ap'+side+i,{apEdge:edgeKey,instanceKey:e.sw+'/'+e.sp+'/'+e.apPort});
           const end=getAnchor(dest,edgeKey,top?'bottom':'top',i);
           label(a,center-lw/2,textY,lw,caption.titleHeight,nameOf(ap),18,true,C.ink,'center');
-          label(a,center-lw/2,textY+caption.titleHeight+2,lw,caption.registerHeight,caption.register,13,true,C.teal,'center');
-          label(a,center-lw/2,textY+caption.titleHeight+caption.registerHeight+3,lw,caption.detailHeight,caption.detail,12,false,C.muted,'center');
+          let captionY=textY+caption.titleHeight+2;
+          if(caption.model.height){const m=caption.model;label(a,center-m.w/2,captionY,m.w,m.height,m.value,m.size,m.bold,C.muted,'center');Object.assign(a.at(-1),{editKey:m.key,full:true,deviceInfo:'model',sourceId:ap.id});captionY+=m.height;}
+          label(a,center-lw/2,captionY,lw,caption.registerHeight,caption.register,13,true,C.teal,'center');
+          captionY+=caption.registerHeight+1;label(a,center-lw/2,captionY,lw,caption.detailHeight,caption.detail,12,false,C.muted,'center');
+          if(caption.mac.height){const m=caption.mac;label(a,center-m.w/2,captionY+caption.detailHeight,m.w,m.height,m.value,m.size,m.bold,C.muted,'center');Object.assign(a.at(-1),{editKey:m.key,full:true,deviceInfo:'mac',sourceId:ap.id});}
           caption.notes.forEach((text,n)=>{label(a,center-lw/2,textY+caption.height-caption.notes.length*14+n*14,lw,14,text,12,false,C.muted,'center');a.at(-1).full=true;});
           const track=order.indexOf(i),lane=top?switchY-21-13*track:switchY+135+13*track;
           const info=mediaInfo(e.media,true);
@@ -317,7 +330,7 @@ function wireless(project,db){
     }
   }
   const unseen=[...apIds].filter(id=>!linked.has(id)).map(id=>db.devices.get(id));
-  if(unseen.length)out.push(...tablePages(project,'Wireless Connections','Access points with no mapped switch uplink',[['Access point',390],['Model',370],['Management address',368]],unseen.map(d=>[nameOf(d),d.model,d.ip]),''));
+  if(unseen.length)out.push(...tablePages(project,'Wireless Connections','Access points with no mapped switch uplink',[['Access point',390],['Model',370],['IP / MAC address',368]],unseen.map(d=>[nameOf(d),deviceModel(d),[d.ip,macCaption(d)].filter(Boolean).join(' | ')]),''));
   if(!out.length){const p=fresh('Wireless Connections','Wireless Connections','Access-point uplinks',project);empty(p,'No access points or switch-to-AP links were supplied.');out.push(p);}
   return out;
 }

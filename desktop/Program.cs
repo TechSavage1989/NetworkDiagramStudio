@@ -141,6 +141,7 @@ internal sealed partial class Studio : Form
 #endif
             await browser.EnsureCoreWebView2Async(environment);
             var core = browser.CoreWebView2; core.Settings.AreHostObjectsAllowed = false;
+            core.Settings.AreDefaultContextMenusEnabled = false;
 #if NDS_TEST_HOST
             RecordEditorStartup("CoreWebView2 initialized.");
             await CaptureEditorStartupDiagnostics(core);
