@@ -36,6 +36,18 @@ function minimalCandidate(route,nodes,obstacles,others){
  const ys=[(a.ay+b.ay)/2,a.ay,b.ay];
  for(const y of ys)if(turnsClear(a,y)&&turnsClear(b,y))candidates.push({...route,a:{...a,ay:y},b:{...b,ay:y},points:clean([[ax,a.anchor.y],[ax,y],[bx,y],[bx,b.anchor.y]])});
  if(ax===bx&&((a.anchor.side==='bottom'&&b.anchor.side==='top'&&a.anchor.y<b.anchor.y)||(a.anchor.side==='top'&&b.anchor.side==='bottom'&&a.anchor.y>b.anchor.y)))candidates.push({...route,points:[[ax,a.anchor.y],[bx,b.anchor.y]]});
+ // Compact circuit cards can leave an open corridor inside the stack width.
+ // Consider those rails before accepting a long trip around the whole rack.
+ if(a.node.kind==='handoff'||b.node.kind==='handoff'){
+  const stack=[...nodes.values()].filter(n=>n.kind!=='handoff');
+  if(stack.length){const left=Math.min(...stack.map(n=>n.x)),right=Math.max(...stack.map(n=>n.x+n.w));
+   const rails=new Set([route.rail,left+8,right-8,ax,bx,...[...nodes.values()].flatMap(n=>[n.x-8,n.x+n.w+8])]);
+   // Two cards on one row can need the same side. Give their departure
+   // segments separate lanes instead of accepting a shared horizontal run.
+   const departures=[{a,b}];for(const offset of [-12,12]){const end=a.node.kind==='handoff'?'a':'b',v=end==='a'?a:b,y=v.ay+offset;if(turnsClear(v,y))departures.push({a,b,[end]:{...v,ay:y}});}
+   for(const {a,b} of departures)for(const rail of rails)if(rail===route.rail||rail>left&&rail<right)candidates.push({...route,a,b,rail,side:rail<(left+right)/2?'left':'right',points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});
+  }
+ }
  let best=route,cost=score([...others,route],nodes,obstacles);
  for(const r of candidates.slice(1)){
   if((a.anchor.side==='top'?-1:1)*(r.points[1][1]-r.points[0][1])<=0||(b.anchor.side==='top'?-1:1)*(r.points.at(-2)[1]-r.points.at(-1)[1])<=0)continue;
