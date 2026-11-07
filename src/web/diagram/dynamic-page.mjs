@@ -1,0 +1,31 @@
+import {drawingObjects,drawingBounds} from '../drawing-edits.mjs';
+
+// Fit scene coordinates, including negative manual positions, without moving
+// objects or rewriting their saved edits. Printing may use independent paper.
+export function fitDynamicPage(page,project,{footer=false}={}){
+ if(!page.dynamic)return page;
+ const edits=project.layout?.drawingEdits||{};
+ const boxes=drawingObjects(page).filter(i=>!i.pageFrame||edits[i.editKey]).map(drawingBounds).filter(b=>b&&[b.x,b.y,b.w,b.h].every(Number.isFinite));
+ let left=0,top=0,right=1200,bottom=300;
+ for(const b of boxes){left=Math.min(left,b.x-36);top=Math.min(top,b.y-36);right=Math.max(right,b.x+b.w+36);bottom=Math.max(bottom,b.y+b.h+(footer?36:78));}
+ page.originX=left;page.originY=top;page.width=right-left;page.height=bottom-top;
+ page.widthMm=page.width*25.4/96;page.heightMm=page.height*25.4/96;
+ for(const item of page.items.filter(i=>i.pageFrame&&!edits[i.editKey])){
+  if(item.pageFrame==='rule')item.w=right-72;
+  if(item.pageFrame==='brand')item.x=right-300;
+  if(item.pageFrame==='sidebar')item.h=Math.max(1,bottom-214);
+ }
+ return page;
+}
+
+// Visio's page origin is bottom-left; normalize only the exported copy so its
+// geometry and glued endpoints agree with an SVG with a negative viewBox.
+export function normalizedPage(page){
+ const dx=-(page.originX||0),dy=-(page.originY||0);if(!dx&&!dy)return page;
+ return {...page,originX:0,originY:0,items:page.items.map(item=>{
+  const next={...item};if(Number.isFinite(item.x))next.x+=dx;if(Number.isFinite(item.y))next.y+=dy;
+  if(item.points)next.points=item.points.map(([x,y])=>[x+dx,y+dy]);
+  for(const key of ['from','to'])if(item[key])next[key]={...item[key],x:item[key].x+dx,y:item[key].y+dy};
+  return next;
+ })};
+}

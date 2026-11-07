@@ -1,3 +1,4 @@
+import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
 import {coreLinkKey as linkKey} from '../layout.mjs';
@@ -17,7 +18,7 @@ const TOP=164,BOTTOM=901,GAP=24,LEFT=430,WIDTH=700;
 // labels trapped between parallel cables; tighter padding recovers unused space.
 const FITS=[244,208,176].flatMap(sidebarWidth=>[1,.85,.7].flatMap(padding=>[12,60].map(railPitch=>({padding,railPitch,sidebarWidth}))));
 const spacing=padding=>({pitch:GAP*padding,topClearance:38+12*padding,bottomClearance:14+4*padding});
-function handoffs(db){
+function handoffs(db,suppressed=[]){
  const devices=new Map(),links=[...db.links];
  for(const d of db.devices.values()){
   if(d.kind!=='ap')for(const port of physicalPorts(d)){
@@ -25,7 +26,7 @@ function handoffs(db){
    const children=portList(d).filter(p=>p.parent===port.name&&p.sdwanMember),uplink=port.sdwanMember||port.role==='wan'?port:children[0]||port;
    if(!(port.handoff||port.role==='handoff')&&!((uplink.role==='wan'||uplink.sdwanMember)&&(uplink.gateway||uplink.zone||uplink.ip||uplink.state==='up')))continue;
    const id='handoff:'+d.id+'/'+port.name,gateways=[...new Set([port,...children].map(p=>p.gateway).filter(Boolean))];
-   if(db.devices.has(id))continue;
+   if(db.devices.has(id)||suppressed.includes(id))continue;
    devices.set(id,{id,name:typeof port.handoff==='string'?port.handoff:uplink.description||port.description||port.name+' handoff',kind:'handoff',model:uplink.zone||'Site handoff',ip:gateways.length?'Gateway '+gateways.join(', '):'',ports:[{name:'handoff'}],owner:d.id,ownerPort:port.name});
    const capability=portCapability(hardwareProfile(d),port.name);
    links.push({a:id,ap:'handoff',b:d.id,bp:port.name,media:port.media||(/(?:base-t$|^RJ.?45$)/i.test(capability||'')?'copper':'unknown'),speed:port.speed,status:'configured',idx:links.length});
@@ -85,8 +86,8 @@ function moduleLegend(page,project){
  }if(Object.keys(inherited).length)for(const target of [page,...extra])applyDrawingEdits(target,project);return extra;
 }
 export function corePages(project,inventory){
- const {width:W,height:H}=pageGeometry(project,'core'),BOTTOM=H-74;
- const db=handoffs(inventory),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];
+ const geometry=pageGeometry(project,'core'),{width:baseW,height:baseH,dynamic}=geometry,BOTTOM=baseH-74;
+ const db=handoffs(inventory,project.layout?.suppressedHandoffs),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];
  const explicit=new Set(custom.flatMap(p=>p.devices));
  const eligible=[...db.devices.keys()].filter(id=>!excluded.has(id)&&(db.devices.get(id).kind!=='ap'||layout.includeAPs===true||explicit.has(id)));
  const allowed=new Set(eligible),edges=db.links.filter(e=>allowed.has(e.a)&&allowed.has(e.b));
@@ -108,8 +109,8 @@ export function corePages(project,inventory){
   const flush=()=>{if(ids.length)packed.push({name:group.name,baseName:group.name,custom:group.custom,corePageId:group.corePageId,showReferences:group.showReferences,hiddenReferences:group.hiddenReferences,ids});ids=[];minimumHeight=0;};
   for(const id of group.ids.filter(id=>!db.devices.get(id).owner||!group.ids.includes(db.devices.get(id).owner))){
    const incident=edges.filter(e=>e.a===id||e.b===id);
-   if(incident.length>8){flush();for(let i=0;i<incident.length;i+=8)packed.push({name:group.name,baseName:group.name,custom:group.custom,corePageId:group.corePageId,showReferences:group.showReferences,hiddenReferences:group.hiddenReferences,ids:[id],linkIds:new Set(incident.slice(i,i+8).map(e=>e.idx))});continue;}
-   const minimum=minimums.get(id);if(!group.custom&&ids.length&&minimumHeight+minimum>BOTTOM-TOP)flush();
+   if(!dynamic&&incident.length>8){flush();for(let i=0;i<incident.length;i+=8)packed.push({name:group.name,baseName:group.name,custom:group.custom,corePageId:group.corePageId,showReferences:group.showReferences,hiddenReferences:group.hiddenReferences,ids:[id],linkIds:new Set(incident.slice(i,i+8).map(e=>e.idx))});continue;}
+   const minimum=minimums.get(id);if(!dynamic&&!group.custom&&ids.length&&minimumHeight+minimum>BOTTOM-TOP)flush();
    ids.push(...(attachments.get(id)||[]).filter(id=>group.ids.includes(id)),id);minimumHeight+=minimum;
   }flush();
  }
@@ -117,7 +118,7 @@ export function corePages(project,inventory){
  const viewDevice=(sheet,id)=>sheet.views?.[id]||db.devices.get(id);
  const localPort=(sheet,id,port)=>{if(!sheet.ids.includes(id))return false;const view=sheet.views?.[id];if(!view)return true;const member=String(port||'').match(/^(?:(?:Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i)?.[1];return member?view.stackMembers.some(m=>String(m.id)===member):view.stackMembers[0].id===db.devices.get(id).stackMembers[0].id;};
  const rendered=new Map();
- for(let attempt=0;attempt<=eligible.length*2*FITS.length*2;attempt++){
+ for(let attempt=0;attempt<=(dynamic?8:1)*Math.max(1,eligible.length)*2*FITS.length*2;attempt++){
  try{
  for(const sheet of packed)sheet.name=sheet.baseName;
  const totals=new Map(),seen=new Map(),names=new Set();
@@ -125,21 +126,26 @@ export function corePages(project,inventory){
  for(const p of packed){const n=(seen.get(p.name)||0)+1;seen.set(p.name,n);let title=p.name+(totals.get(p.name)>1?' '+n:'');while(names.has(title))title+=' (continued)';names.add(title);p.name=title;}
  const locations=new Map(),edgeLocations=new Map();for(const page of packed)for(const id of page.ids){if(!locations.has(id))locations.set(id,page.name);for(const e of edges.filter(e=>(e.a===id&&localPort(page,id,e.ap)||e.b===id&&localPort(page,id,e.bp))&&(!page.linkIds||page.linkIds.has(e.idx))))edgeLocations.set(id+'/'+e.idx,page.name);}
  return packed.flatMap((sheet,pi)=>{
-  const priorEdits=project.layout?.drawingEdits||{},aliases=sheet.name!==sheet.baseName?Object.fromEntries(Object.entries(priorEdits).filter(([key])=>key.startsWith(sheet.baseName+'|')).map(([key,value])=>[sheet.name+key.slice(sheet.baseName.length),value])):{},pageProject=Object.keys(aliases).length?{...project,layout:{...project.layout,drawingEdits:{...aliases,...priorEdits}}}:project;
+  const priorEdits=project.layout?.drawingEdits||{},aliases=sheet.name!==sheet.baseName?Object.fromEntries(Object.entries(priorEdits).filter(([key])=>key.startsWith(sheet.baseName+'|')).map(([key,value])=>[sheet.name+key.slice(sheet.baseName.length),value])):{},aliasProject=Object.keys(aliases).length?{...project,layout:{...project.layout,drawingEdits:{...aliases,...priorEdits}}}:project;
+  const expansion=sheet.expansion||0;
+  const measuredHeight=dynamic?sheet.ids.reduce((sum,id)=>sum+measurement(aliasProject,viewDevice(sheet,id),edges.filter(e=>e.a===id||e.b===id),positions,(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH).height+expansion,0):0;
+  const W=dynamic?baseW+expansion+Math.max(0,edges.length-8)*48:baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110,520+edges.length*110):baseH,BOTTOM=H-74;
+  const pageProject=dynamic?{...aliasProject,_pageGeometry:{...aliasProject._pageGeometry,core:{width:W,height:H}}}:aliasProject;
   const fit=FITS[sheet.fit||0],fixedSidebar=Object.entries(pageProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|')&&/(?:module-legend|\|legend\|)/.test(key)&&['x','y','w','h'].some(k=>Number.isFinite(patch[k]))),sidebar=coreSidebar(fixedSidebar?244:Math.min(fit.sidebarWidth,W<1000?176:244));
+  if(dynamic)sidebar.bodyLeft+=Math.max(0,edges.length-8)*24;
   if(W<1200)sidebar.bodyLeft=Math.max(sidebar.contentLeft+38,Math.min(sidebar.bodyLeft,W-738));
   const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;page.corePageId=sheet.corePageId;
-  const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);rect(items,sidebar.divider,145,1,H-214,C.rule);
+  const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);rect(items,sidebar.divider,145,1,H-214,C.rule);items.at(-1).pageFrame='sidebar';
   const hiddenReferences=new Set(sheet.hiddenReferences||[]);
   const used=edges.filter(e=>(localPort(sheet,e.a,e.ap)&&localPort(sheet,e.b,e.bp)||sheet.showReferences!==false&&!hiddenReferences.has(linkKey(e))&&(localPort(sheet,e.a,e.ap)||localPort(sheet,e.b,e.bp)))&&(!sheet.linkIds||sheet.linkIds.has(e.idx)));
   const internal=used.filter(e=>localPort(sheet,e.a,e.ap)&&localPort(sheet,e.b,e.bp)),external=used.filter(e=>!localPort(sheet,e.a,e.ap)||!localPort(sheet,e.b,e.bp));
-  const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.views,sheet.fit,sheet.spreadHandoffs,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
+  const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.views,sheet.fit,sheet.spreadHandoffs,sheet.expansion,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
   if(cached?.signature===signature)return cached.pages;
   const width=Math.min(WIDTH,W-(W<1000?276:W<1200?344:430)-38);
-  const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,viewDevice(sheet,id),used.filter(e=>e.a===id&&localPort(sheet,id,e.ap)||e.b===id&&localPort(sheet,id,e.bp)).slice(0,8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding)]));
+  const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,viewDevice(sheet,id),used.filter(e=>e.a===id&&localPort(sheet,id,e.ap)||e.b===id&&localPort(sheet,id,e.bp)).slice(0,dynamic?Infinity:8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding)]));
   const height=sheet.ids.reduce((n,id)=>n+pageSizes.get(id).height,0),scale=1;
   if(height>BOTTOM-TOP)throw Object.assign(Error('This core page needs more room to keep the equipment readable.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
-  let row=TOP+(BOTTOM-TOP-height*scale)/2;
+  let row=dynamic?TOP:TOP+(BOTTOM-TOP-height*scale)/2;
   sheet.ids.filter(id=>!db.devices.get(id).owner||!members.has(db.devices.get(id).owner)).forEach((id,i)=>{
    const d=viewDevice(sheet,id),m=pageSizes.get(id),b=bounds(d,row+m.top*scale,width,sidebar.bodyLeft);b[3]=m.body*scale;
    const node=addDevice(page,pageProject,d,b,'core-'+i,{fitWidth:d.kind!=='handoff',padding:fit.padding});nodes.set(id,node);
@@ -151,7 +157,7 @@ export function corePages(project,inventory){
     label(items,node.x,node.y+node.h+5,detailWidth,detailHeight,detailValue,detailSize,detailPatch.bold??false,C.muted);Object.assign(items.at(-1),{full:true,titleOwner:id,titleSlot:'detail',editKey:detailKey});
    }
    if(d.kind==='handoff'){label(items,node.x+8,node.y,node.w-16,node.h,d.name,12,true,C.ink,'center');items.at(-1).deviceTextOwner=id;if(d.ip)label(items,node.x-20,node.y-19,node.w+40,14,d.ip,10,false,C.muted,'center');}
-   row+=m.height*scale;
+   row+=m.height*scale+expansion;
   });
   for(const [owner,attached] of attachments){const host=nodes.get(owner);if(!host)continue;const local=attached.filter(id=>members.has(id)),cards=handoffRows(local.map(id=>db.devices.get(id)),host.w/scale,sheet.spreadHandoffs),{cols}=cards,cardWidth=cards.width*scale,gap=cards.gap*scale;
    local.forEach((id,i)=>{const d=db.devices.get(id),card=handoffCard(d,cards.width),rowIds=local.slice(Math.floor(i/cols)*cols,Math.floor(i/cols)*cols+cols),rowWidth=rowIds.length*cardWidth+(rowIds.length-1)*gap;
@@ -180,7 +186,7 @@ export function corePages(project,inventory){
   const obstacles=[...items.filter(i=>i.type==='text'&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>b.x<b.owner.x||b.y<b.owner.y||b.x+b.w>b.owner.x+b.owner.w||b.y+b.h>b.owner.y+b.owner.h)];
   const stack=[...nodes.values()].filter(n=>n.kind!=='handoff'),withinPage=stack.length&&stack.every(n=>n.x>=sidebar.contentLeft+18&&n.x+n.w<=(W-56));
   const routingBounds=withinPage?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
-  const planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,...spacing(fit.padding),railPitch:fit.railPitch,scale,obstacles});
+  const planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding),railPitch:fit.railPitch,scale,obstacles});
   if(planned.cost[0]&&[...nodes.values()].every(n=>n.x>=sidebar.contentLeft&&n.x+n.w<=(W-38)&&n.y>=145&&n.y+n.h<=(H-69)))throw Object.assign(Error('This core page needs more room to route cables around the equipment.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   const outer={left:Math.min(routingBounds.left-18,...planned.routes.filter(r=>r.side==='left').map(r=>r.rail)),right:Math.max(routingBounds.right+18,...planned.routes.filter(r=>r.side==='right').map(r=>r.rail))},requests=[];
   for(const r of planned.routes.filter(r=>!r.v)){
@@ -210,7 +216,7 @@ export function corePages(project,inventory){
   applyDrawingEdits(page,pageProject);
   for(const req of requests.filter(r=>r.role==='media')){const path=page.items.find(i=>i.type==='path'&&i.sourceLink&&linkKey(i.sourceLink)===req.editKey.split('|media|')[1]);if(path){const h=path.color.replace('#',''),v=[0,2,4].map(n=>parseInt(h.slice(n,n+2),16));req.color=(v[0]*.299+v[1]*.587+v[2]*.114)>180?C.ink:path.color;}}
   linkLegend(page);const modulePages=moduleLegend(page,pageProject);applyDrawingEdits(page,pageProject);for(const continued of modulePages)applyDrawingEdits(continued,pageProject);
-  bridge(page);placeDeviceTitles(page,pageProject,nodes);
+  bridge(page);fitDynamicPage(page,pageProject);placeDeviceTitles(page,pageProject,nodes);
   const placed=placeCableLabels(page,requests,pageProject.layout?.drawingEdits);
   if(!placed.ok)throw Object.assign(Error('This core page needs more room for the '+placed.failed.role+' label '+JSON.stringify(placed.failed.value)+'. Move devices to another core page under Device order / Core pages.'),{code:'CORE_LAYOUT_CAPACITY',role:placed.failed.role,page:page.name});
   const pages=[page,...modulePages];rendered.set(sheet,{signature,pages});return pages;
@@ -221,7 +227,11 @@ export function corePages(project,inventory){
   // Keep the cards compact; use more of the same stack width only when their
   // cable labels or routes cannot fit safely in the tighter arrangement.
   if(!sheet.spreadHandoffs&&sheet.ids.some(id=>attachments.get(id)?.length>1)){sheet.spreadHandoffs=true;continue;}
-  if((sheet.fit||0)<FITS.length-1){sheet.fit=(sheet.fit||0)+1;sheet.spreadHandoffs=false;continue;}
+  if(!dynamic&&(sheet.fit||0)<FITS.length-1){sheet.fit=(sheet.fit||0)+1;sheet.spreadHandoffs=false;continue;}
+  if(dynamic){
+   if((sheet.expansion||0)>=768)throw error;
+   sheet.expansion=(sheet.expansion||0)+128;sheet.fit=0;sheet.spreadHandoffs=false;continue;
+  }
   // A named group can continue at full device scale, just like an automatic group.
   // The saved membership is unchanged; users can move devices from any visible sheet.
   const owners=sheet.ids.filter(id=>!db.devices.get(id).owner||!sheet.ids.includes(db.devices.get(id).owner));

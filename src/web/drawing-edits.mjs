@@ -7,14 +7,14 @@ export function cleanDrawingEdits(raw){
  const result=Object.create(null);if(!raw||typeof raw!=='object'||Array.isArray(raw))return result;
  for(const [key,input] of Object.entries(raw).slice(0,10000)){
   if(!keyOk(key)||!input||typeof input!=='object'||Array.isArray(input))continue;const out={};
-  for(const k of numbers)if(Number.isFinite(input[k])&&Math.abs(input[k])<=12000&&(!['w','h','size','weight'].includes(k)||input[k]>0))out[k]=input[k];
+  for(const k of numbers)if(Number.isFinite(input[k])&&Math.abs(input[k])<=(['x','y'].includes(k)?1e7:12000)&&(!['w','h','size','weight'].includes(k)||input[k]>0))out[k]=input[k];
   if(Number.isFinite(input.opacity)&&input.opacity>=0&&input.opacity<=1)out.opacity=input.opacity;
   for(const k of ['fill','stroke','color'])if(colors.test(input[k]||''))out[k]=input[k];
   if(typeof input.value==='string')out.value=input.value.slice(0,10000);
   if(typeof input.name==='string')out.name=input.name.slice(0,300);
   if(typeof input.bold==='boolean')out.bold=input.bold;if(typeof input.hidden==='boolean')out.hidden=input.hidden;
   if(['left','center','right'].includes(input.align))out.align=input.align;
-  if(Array.isArray(input.points)&&input.points.length>=2&&input.points.length<=200&&input.points.every(p=>Array.isArray(p)&&p.length===2&&p.every(v=>Number.isFinite(v)&&Math.abs(v)<=12000)))out.points=input.points.map(p=>[...p]);
+  if(Array.isArray(input.points)&&input.points.length>=2&&input.points.length<=200&&input.points.every(p=>Array.isArray(p)&&p.length===2&&p.every(v=>Number.isFinite(v)&&Math.abs(v)<=1e7)))out.points=input.points.map(p=>[...p]);
   if(Array.isArray(input.commands)&&input.commands.length<=10000&&input.commands.every(c=>Array.isArray(c)&&['M','L','Z'].includes(c[0])&&c.length===(c[0]==='Z'?1:3)&&c.slice(1).every(v=>Number.isFinite(v)&&Math.abs(v)<=10000)))out.commands=input.commands.map(c=>[...c]);
   if(Object.keys(out).length)result[key]=out;
  }

@@ -1,3 +1,4 @@
+import {fitDynamicPage} from './dynamic-page.mjs';
 import {deviceModel,deviceDetails,macCaption} from '../device-details.mjs';
 import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,canContinueEquipment} from './equipment-layout.mjs';
 import {logicalPages} from './logical.mjs';
@@ -456,8 +457,10 @@ export function buildPages(project={}){
   pages.forEach((p,i)=>{
     const n=(seen.get(p.name)||0)+1;seen.set(p.name,n);
     if(totals.get(p.name)>1)p.name+=' '+n;
-    rect(p.items,36,p.height-47,p.width-72,1,C.rule);label(p.items,36,p.height-39,p.width-228,21,p.name,12,false,C.muted);const number=pageNumber(project.layout?.pageNumbers,i,pages.length);if(number!=null){label(p.items,p.width-200,p.height-40,164,22,number,13,true,C.teal,'right');p.items.at(-1).editKey=p.name+'|page-number';}
-    applyDrawingEdits(p,project);if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p);p.svg=svgPage(p);
+    applyDrawingEdits(p,project);if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p);fitDynamicPage(p,project);
+    const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
+    rect(p.items,36,bottom-47,right-72,1,C.rule);label(p.items,36,bottom-39,right-228,21,p.name,12,false,C.muted);const number=pageNumber(project.layout?.pageNumbers,i,pages.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');p.items.at(-1).editKey=p.name+'|page-number';}
+    applyDrawingEdits(p,project);fitDynamicPage(p,project,{footer:true});p.svg=svgPage(p);
   });
   return pages;
 }

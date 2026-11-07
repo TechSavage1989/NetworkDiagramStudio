@@ -16,7 +16,7 @@ Network engineers can use the Windows application or the offline browser edition
 - Prefer straight or simple orthogonal core cables, with consistent exterior lanes when needed and jumps at crossings. Nearby device titles move to accommodate clearer routes. Core and wireless sheets include an editable link-color legend. Cross-page links identify the other sheet.
 - Import supported picture and vector Visio masters from files or recursively scanned folders. Search master names directly in the picker, or click a device to search local stencils. Embedded connection points retain their names and positions, including unnamed points and grouped/rotated artwork. Duplicate names stay as separate editable points instead of being merged.
 - Drag mapped port markers; align a selected row or column and distribute ports evenly. The sourced native hardware catalog includes model-specific faceplates, declared stack members and chassis modules. Confirm member and module models directly in Device details.
-- Choose paper size and orientation in Page options: Letter, Legal, Tabloid, A5 through A1, or custom dimensions (148 to 1500 mm). Use a drawing default or different sizes for each page type. Tables reflow, hardware keeps a common scale, and extra pages are created as needed. SVG, print/PDF and Visio preserve the selected page dimensions. Tiny faceplate number overlays are omitted when they cannot be printed legibly; complete port records remain in the tables.
+- New drawings use **Dynamic / Fit all**. Core pages grow to keep all assigned devices together at a common readable scale, including labels, cables and objects moved beyond the original edges. Choose a fixed drawing size when desired, and choose separate print paper in **Page options**. Printing fits each complete drawing page onto the chosen sheet without resizing the editable devices.
 - Zoom, pan and Fit page. In Edit drawing, box-select or Shift/Ctrl-click items, move them with the mouse or arrow keys, align edges or centers, and distribute spacing. Configure grid snapping and alignment guides. Double-click text to type directly on the diagram; double-click other elements for properties. Ctrl+Z, Ctrl+Shift+Z and Undo all apply to project changes. Alt-drag selects native panel details.
 - Select cable type and link speed in line properties, the connection editor or a legend swatch. Legend choices update associated connection records across the drawing. Choose Copper, generic/MMF/SMF fiber, SR/LR/ER/ZR, DAC variants, AOC/AEC, coaxial or serial; use speed presets or enter custom values. Captions and active legends follow the selected type.
 - Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a visual selector, HEX field and standard swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet. Automatic cables and their color keys use a consistent standard thickness; exported Visio line widths are explicit and editable.
@@ -28,23 +28,14 @@ Network engineers can use the Windows application or the offline browser edition
 
 ## Screenshots
 
-**Shared family drawings with model-confirmation guidance**
+**A dynamic canvas keeps the complete core network together.**
+<p align="center"><img src="docs/images/hero.png" width="900" alt="Fictional Harbor Workshop core network on a dynamic canvas"></p>
 
-<p align="center"><img src="docs/images/hardware-families.png" width="900" alt="Fictional FortiGate 201G, Cisco 9500 family and compact Aruba family with mapped links"></p>
+**Drawing size and print paper are separate choices.**
+<p align="center"><img src="docs/images/page-options.png" width="900" alt="Dynamic Fit all canvas with independent printing controls"></p>
 
-**Modular chassis with proportional slots and editable sockets**
-
-<p align="center"><img src="docs/images/modular-port-map.png" width="900" alt="Fictional Aruba 5406R chassis with installed optical and copper cards and grouped port details"></p>
-
-**Stack and switch port maps at a common scale**
-
-<p align="center"><img src="docs/images/port-map.png" width="900" alt="Fictional two-member stack and standalone switch with equal faceplate widths and a shared assignment table"></p>
-
-**Update review with formatted notes and fixed actions**
-
-![Polished install review with formatted release notes and fixed actions](docs/images/update-panel.png)
-
-More views: [Model confirmation](docs/images/hardware-confirmation.png), [paper size controls](docs/images/page-options.png), and [wireless model and MAC details](docs/images/wireless-models.png).
+**Delete devices from the list, or clear the inventory with Undo available.**
+<p align="center"><img src="docs/images/device-controls.png" width="900" alt="Device inventory with per-row Delete and a clear-all confirmation"></p>
 
 ## Download
 
@@ -114,7 +105,11 @@ In **Edit drawing**, select a cable. Drag a square handle to move a bend, click 
 
 **Link styles** configures colors, opacity and separate titles/descriptions for connection captions and legend entries. Editing a cable color or a legend swatch updates all cables of that link type and their legends throughout the drawing. The legend editor also offers cable-type and speed presets plus Custom fields. Saving updates the actual associated links, captions and legend speed summary in one undoable action. Mixed values stay unchanged until explicitly replaced. Existing connections already in the destination type keep their own speeds. Custom captions, positions, bends and widths remain editable. Double-click a legend title to rename it directly. Text color is independent of cable color. Wireless connection captions show the port and speed without evidence-status wording.
 
-**Page options** shows or hides page numbers, chooses their starting number and padding, and sets a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. The default is a two-digit number such as 01 / 07. These settings persist in the project.
+**Page options** separates **Canvas size** from **Print paper**. Dynamic / Fit all is the default for new drawings; existing explicit paper choices are retained. Choose **Match drawing (full-size PDF)** for the full canvas, or Letter, Legal, Tabloid, A5 through A1, or custom print dimensions (148 to 1500 mm) to fit each drawing page onto a printed sheet. Other documentation views retain their logical sections and connection banks.
+
+The device list shows each name, model/type and management IP, with a **Delete** button beside each device. The checkbox includes or excludes a device from the drawing. **Clear all** confirms the total inventory, including filtered or excluded devices; **Undo** restores devices and their connections.
+
+**Page options** also shows or hides page numbers, chooses their starting number and padding, and sets a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. The default is a two-digit number such as 01 / 07. These settings persist in the project.
 
 Use **Core page** in **Device details** or **Device order / Core pages** to assign equipment to an existing page, create a dedicated page, or return it to automatic placement. Selecting any current layout page saves that sheet's device group as a named page, including a continued sheet. Existing group connection preferences are retained. Named pages can show all, some, or none of their off-page connection references.
 

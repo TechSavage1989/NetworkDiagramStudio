@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildPaperPages,exportVisio} from '../src/web/diagram/index.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
 import {changeLinkStyle,cleanLinkStyles,legendStyleId} from '../src/web/link-styles.mjs';
 import {pageNumber,cleanPageNumbers} from '../src/web/page-options.mjs';
@@ -43,3 +43,6 @@ test('reference presentation uses Calibri, a left key, nearby labels and side-by
  assert.equal(page.width,1200);assert.equal(page.height,975);assert.match(page.svg,/font-family:Calibri/);assert.equal(page.legendLayout,'sidebar');assert.ok(page.items.some(i=>i.value==='CONNECTION TYPES'&&i.x===38));assert.equal(handoffs.length,2);assert.equal(handoffs[0].y,handoffs[1].y);assert.ok(handoffs[0].x+handoffs[0].w<handoffs[1].x);
  for(const d of devices){const title=page.items.find(i=>i.titleOwner===d.sourceId&&!i.titleSlot),detail=page.items.find(i=>i.titleOwner===d.sourceId&&i.titleSlot==='detail');assert.ok(title);assert.ok(Math.abs(title.y+title.h-d.y)<45);assert.ok(detail);assert.ok(Math.min(Math.abs(detail.y-d.y-d.h),Math.abs(detail.y+detail.h-d.y))<60);}
 });
+
+// Fixed-paper regression coverage; new projects use a dynamic canvas.
+function buildPages(project){return buildPaperPages({...project,layout:{...project.layout,pageSetup:project.layout?.pageSetup||{default:{preset:'original'}}}});}

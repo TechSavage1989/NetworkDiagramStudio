@@ -71,10 +71,10 @@ export function fresh(name,title,subtitle,project){
   const geometry=pageGeometry(project,pageFamily(name)),p={name,title,...geometry,items:[]}, a=p.items,span=p.width-72,nameWidth=Math.max(180,span-308);
   const projectName=project.name||'Network project',nameHeight=Math.max(23,wrapPortText(projectName,nameWidth,15,true).length*18);
   label(a,36,Math.max(0,39-nameHeight),nameWidth,Math.min(39,nameHeight),projectName,15,true,C.teal);
-  label(a,p.width-300,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');
+  label(a,p.width-300,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');a.at(-1).pageFrame='brand';
   label(a,36,43,span,48,title,33,true);
   label(a,36,99,span,36,subtitle,16,false,C.muted);
-  rect(a,36,138,span,2,C.rule);
+  rect(a,36,138,span,2,C.rule);a.at(-1).pageFrame='rule';
   return p;
 }
 export function actualAsset(project,d){
@@ -236,5 +236,5 @@ export function svgPage(p){
     }).join(' ');
     return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||cableWeight)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+'<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+(i.weight||cableWeight)+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
   };
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title><rect width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title><rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
 }

@@ -22,7 +22,7 @@ export function cleanLayout(raw,ids){
   if(!v||typeof v.id!=='string'||used.has(v.id))continue;used.add(v.id);
   pages.push({id:v.id.slice(0,120),showReferences:v.showReferences!==false,hiddenReferences:[...new Set((Array.isArray(v.hiddenReferences)?v.hiddenReferences:[]).filter(key=>typeof key==='string'&&key.length<=500).slice(0,10000))],name:String(v.name||'Core Network').slice(0,80),devices:[...new Set((Array.isArray(v.devices)?v.devices:[]).filter(id=>known.has(id)))]});
  }
- return {pageSetup:cleanPageSetup(p.pageSetup),linkStyles:cleanLinkStyles(p.linkStyles),pageNumbers:cleanPageNumbers(p.pageNumbers),snapping:cleanSnap(p.snapping),drawingEdits:cleanDrawingEdits(p.drawingEdits),order:[...new Set((Array.isArray(p.order)?p.order:[]).filter(id=>known.has(id)))],corePages:pages,
+ return {suppressedHandoffs:[...new Set((Array.isArray(p.suppressedHandoffs)?p.suppressedHandoffs:[]).filter(id=>typeof id==='string'&&id.startsWith('handoff:')&&id.length<=650))],pageSetup:cleanPageSetup(p.pageSetup),linkStyles:cleanLinkStyles(p.linkStyles),pageNumbers:cleanPageNumbers(p.pageNumbers),snapping:cleanSnap(p.snapping),drawingEdits:cleanDrawingEdits(p.drawingEdits),order:[...new Set((Array.isArray(p.order)?p.order:[]).filter(id=>known.has(id)))],corePages:pages,
   coreExclude:[...new Set((Array.isArray(p.coreExclude)?p.coreExclude:[]).filter(id=>known.has(id)))],includeAPs:p.includeAPs===true,
   portMap:{density:p.portMap?.density==='expanded'?'expanded':'compact',repeatFaceplate:p.portMap?.repeatFaceplate===true,detailFilter:['all','assigned','connected'].includes(p.portMap?.detailFilter)?p.portMap.detailFilter:'all',groupConsecutive:p.portMap?.groupConsecutive!==false}};
 }

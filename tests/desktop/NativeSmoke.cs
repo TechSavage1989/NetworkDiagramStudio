@@ -147,10 +147,14 @@ internal sealed partial class Studio
     async Task CheckPageSetup()
     {
         await ClickEditorTarget("#page-options");
-        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('Paper size').value='a3';field('Paper size').dispatchEvent(new Event('input'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","A3 page setup");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Canvas size').value!=='dynamic')throw Error('New drawings must default to Dynamic / Fit all');const box=document.querySelector('#canvas svg').viewBox.baseVal;window.__nativeDynamicBounds=[box.width,box.height];field('Print paper').value='letter';field('Print orientation').value='portrait';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","independent print paper");
+        await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(box.width!==window.__nativeDynamicBounds[0]||box.height!==window.__nativeDynamicBounds[1])throw Error('Print paper resized the editable drawing');delete window.__nativeDynamicBounds","print preserves dynamic canvas");
+        await ClickEditorTarget("#page-options");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Print paper').value!=='letter'||field('Print orientation').value!=='portrait')throw Error('Print setup was not retained');field('Print paper').value='drawing'","print paper persistence");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('Canvas size').value='a3';field('Canvas size').dispatchEvent(new Event('input'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","A3 page setup");
         await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(Math.abs(box.width-1587.401575)>0.01||Math.abs(box.height-1122.519685)>0.01)throw Error('Paper setup did not change the drawing bounds')","A3 scene bounds");
         await ClickEditorTarget("#page-options");
-        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Paper size').value!=='a3')throw Error('Paper setting was not retained');field('Paper size').value='original';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","restore original paper");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Canvas size').value!=='a3')throw Error('Paper setting was not retained');field('Canvas size').value='original';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","restore original paper");
         await RequireEditor("if(document.querySelector('#canvas svg').viewBox.baseVal.width!==1200)throw Error('Original page dimensions were not restored')","original scene bounds");
     }
     internal string? TestOutputFolder;
@@ -276,9 +280,9 @@ internal sealed partial class Studio
         await CheckEditRecovery();
         await CheckLegendConnections();
         await CheckAddDevice();
+        await ClickEditorTarget("#arrange");
         await ClickEditorTarget("[aria-label='Up SW-1']");
         await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed')","device order");
-        await ClickEditorTarget("#arrange");
         await RequireEditor("[...document.querySelectorAll('#dialog button')].find(button=>button.textContent==='Add core page').click()","add named page");
         await RequireEditor("const name=[...document.querySelectorAll('[aria-label=\"Core page name\"]')].at(-1); if(!name) throw Error('New page name field missing'); name.value='Native test rack'; name.dispatchEvent(new Event('change'))","rename core page");
         await RequireEditor("const target=document.querySelector('[aria-label=\"Core page for SW-1\"]'); const option=[...target.options].find(option=>option.textContent==='Native test rack'); if(!option) throw Error('Named page missing from choices'); target.value=option.value; target.dispatchEvent(new Event('change'))","assign named page");

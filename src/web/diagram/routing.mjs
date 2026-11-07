@@ -9,9 +9,9 @@ export function simplifyRoute(points){
 const clean=simplifyRoute;
 function segments(points){return points.slice(1).map((b,i)=>({a:points[i],b,h:points[i][1]===b[1]})).filter(s=>s.a[0]!==s.b[0]||s.a[1]!==s.b[1]);}
 import {crossesText} from './labels.mjs';
-function score(routes,nodes,obstacles,minX=306){
+function score(routes,nodes,obstacles,minX=306,maxX=1162){
  const seen=[];let blocked=0,shared=0,crossed=0,length=0,bends=0;
- for(const r of routes){if(r.points.some(([x])=>x<minX||x>1162))blocked++;bends+=Math.max(0,clean(r.points).length-2);}
+ for(const r of routes){if(r.points.some(([x])=>x<minX||x>maxX))blocked++;bends+=Math.max(0,clean(r.points).length-2);}
  for(const r of routes)for(const s of segments(r.points)){
   const {a,b,h}=s;length+=Math.abs(b[0]-a[0])+Math.abs(b[1]-a[1]);
   for(const n of nodes.values())if(!r.hosts.includes(n.key)){
@@ -30,7 +30,7 @@ function score(routes,nodes,obstacles,minX=306){
 function better(a,b){for(let i=0;i<a.length;i++){if(Math.abs(a[i]-b[i])>.001)return a[i]<b[i];}return false;}
 function lead(v){const start=[v.anchor.x,v.anchor.y];if(v.anchor.escapeY!=null)return [start,[start[0],v.ay],[v.exitX,v.ay]];return v.exitX===v.anchor.x?[start,[v.exitX,v.ay]]:[start,[start[0],start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,v.ay]];}
 function turnsClear(v,y){return (v.anchor.side==='top'?-1:1)*(y-v.anchor.edge)>=8;}
-function minimalCandidate(route,nodes,obstacles,others,minX){
+function minimalCandidate(route,nodes,obstacles,others,minX,maxX){
  const {a,b}=route,ax=a.anchor.x,bx=b.anchor.x,candidates=[route];
  if(a.anchor.escapeY!=null||b.anchor.escapeY!=null)return route;
  const ys=[(a.ay+b.ay)/2,a.ay,b.ay];
@@ -48,17 +48,17 @@ function minimalCandidate(route,nodes,obstacles,others,minX){
    for(const {a,b} of departures)for(const rail of rails)if(rail===route.rail||rail>left&&rail<right)candidates.push({...route,a,b,rail,side:rail<(left+right)/2?'left':'right',points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});
   }
  }
- let best=route,cost=score([...others,route],nodes,obstacles,minX);
+ let best=route,cost=score([...others,route],nodes,obstacles,minX,maxX);
  for(const r of candidates.slice(1)){
   if((a.anchor.side==='top'?-1:1)*(r.points[1][1]-r.points[0][1])<=0||(b.anchor.side==='top'?-1:1)*(r.points.at(-2)[1]-r.points.at(-1)[1])<=0)continue;
   // A short route may only leave the endpoint chassis through its selected edge.
   const interior=r.points.slice(1,-1);if(interior.some(p=>[a.node,b.node].some(n=>p[0]>n.x&&p[0]<n.x+n.w&&p[1]>n.y&&p[1]<n.y+n.h)))continue;
   let blocked=false;for(const s of segments(r.points))for(const n of nodes.values())if(n===a.node||n===b.node){const endpoint=(n===a.node?r.points[0]:r.points.at(-1)),own=s.a[0]===endpoint[0]&&s.a[1]===endpoint[1]||s.b[0]===endpoint[0]&&s.b[1]===endpoint[1];if(!own&&(s.h?between(s.a[1],n.y,n.y+n.h)&&overlap(s.a[0],s.b[0],n.x,n.x+n.w)>0:between(s.a[0],n.x,n.x+n.w)&&overlap(s.a[1],s.b[1],n.y,n.y+n.h)>0))blocked=true;}
-  if(blocked)continue;const value=score([...others,r],nodes,obstacles,minX);if(better(value,cost)){best=r;cost=value;}
+  if(blocked)continue;const value=score([...others,r],nodes,obstacles,minX,maxX);if(better(value,cost)){best=r;cost=value;}
  }
  return best;
 }
-export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306}){
+export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162}){
  const sides=new Map();
  for(const e of internal){const a=endData.get(e.idx+'/a').anchor,b=endData.get(e.idx+'/b').anchor;sides.set(e.idx,a.x+b.x>left+right?'right':'left');}
  function build(){
@@ -98,19 +98,19 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   }
   // Continuation badges sit outside the cable rails, not across a passing link.
   // Retain the existing boundary behavior for deliberately off-page edits.
-  const referenceX=[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=1162)?Math.min(left-10,...tracks.filter(t=>t.side==='left').map(t=>t.rail-12)):left-10;
+  const referenceX=[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)?Math.min(left-10,...tracks.filter(t=>t.side==='left').map(t=>t.rail-12)):left-10;
   for(const e of external){const which=ends.has(e.idx+'/a')?'a':'b',v=ends.get(e.idx+'/'+which),x=referenceX;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
-  for(let i=0;i<routes.length;i++)if(!routes[i].v){routes[i]=minimalCandidate(routes[i],nodes,obstacles,routes.filter((_,j)=>j!==i),minX);for(const v of [routes[i].a,routes[i].b])ends.set(v.e.idx+'/'+v.which,v);}
+  for(let i=0;i<routes.length;i++)if(!routes[i].v){routes[i]=minimalCandidate(routes[i],nodes,obstacles,routes.filter((_,j)=>j!==i),minX,maxX);for(const v of [routes[i].a,routes[i].b])ends.set(v.e.idx+'/'+v.which,v);}
   return {routes,references,ends};
  }
- let best=build(),cost=score(best.routes,nodes,obstacles,minX);
+ let best=build(),cost=score(best.routes,nodes,obstacles,minX,maxX);
  // Start at the nearest side, then account for the other cables and port-bank
  // ordering. The fixed order and strict improvement make regeneration stable.
- for(let pass=0;pass<4;pass++){
+ for(let pass=0;pass<(internal.length>16?1:4);pass++){
   let improved=false;
-  for(const e of internal){
+  for(const e of (internal.length>16?internal.slice(0,8):internal)){
    const before=sides.get(e.idx);sides.set(e.idx,before==='left'?'right':'left');
-   const candidate=build(),value=score(candidate.routes,nodes,obstacles,minX);
+   const candidate=build(),value=score(candidate.routes,nodes,obstacles,minX,maxX);
    if(better(value,cost)){best=candidate;cost=value;improved=true;}else sides.set(e.idx,before);
   }
   if(!improved)break;
