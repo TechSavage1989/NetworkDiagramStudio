@@ -28,6 +28,11 @@ function Close-Target {
     }
 }
 function Run-Install([string]$candidate) {
+    # A restored real window checks the public feed on startup and can persist
+    # its rate-limit/retry pause. This install uses a deterministic HTTP fixture,
+    # so discard only that unrelated feed cache in the disposable runner profile.
+    # Keep settings, candidate verification, helper readiness and rollback intact.
+    Remove-Item -LiteralPath (Join-Path $store 'release-cache.json') -ErrorAction SilentlyContinue
     # The helper and replacement window outlive the explicitly launched process.
     # Start-Process -Wait waits for descendants on Windows and would deadlock here.
     $launcher = Start-Process $target -ArgumentList @('--test-install',('"'+$candidate+'"')) -PassThru
@@ -62,6 +67,9 @@ try {
     Remove-Item Env:NDS_SIMULATE_FAILED_HEALTH
     Wait-Until { !(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $helper }) } 15 'rollback helper exit'
     Stage 'Downloading and installing the verified release candidate.'
+    # Exercise cache isolation deterministically, regardless of the runner's
+    # current public GitHub quota. Production policy still honors this pause.
+    @{ETag=$null;Body='[]';Next=[DateTimeOffset]::UtcNow.AddHours(1).ToString('O');RateLimited=$true} | ConvertTo-Json | Set-Content (Join-Path $store 'release-cache.json')
     Run-Install $binaryPath
     Wait-Until { (Test-Path "$store/updates/previous.exe") -and !(Test-Path "$store/updates/pending.json") } 125 'healthy window and rollback backup'
     if ((Get-FileHash $target).Hash -ne (Get-FileHash $binaryPath).Hash -or (Get-FileHash "$store/updates/previous.exe").Hash -ne (Get-FileHash $original).Hash) { throw 'Update target or rollback backup mismatch.' }
