@@ -53,6 +53,8 @@ Retain bounded lazy modern archive loading and eligible picture-only legacy CFB 
 
 Do not change the release destination, automatic check cadence, or consent boundaries as an incidental refactor. Manual checks bypass automatic cooldown, show progress and a result, and can retry transient failures while respecting persisted GitHub rate-limit pauses. A lookup, a download, and an install are different operations. The desktop must see the initialized editor and a visible window before confirming an installed update. Native readiness failures need bounded host/navigation/resource/JavaScript diagnostics, never a weaker health predicate. The test-only update feed, diagnostic listeners and failure injector must remain absent from production builds.
 
+For generated core layouts, preserve owner/handoff grouping and keep cable labels near their own route. Check rotated text against its rendered footprint. Visio cable legend samples are native 1D lines. Preserve shared line styles and same-page legend references when changing the exporter or the stroke validator.
+
 ## Build and verify
 
 ```sh

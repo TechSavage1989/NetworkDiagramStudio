@@ -77,24 +77,38 @@ function group(i,id,H,m,allocate,rid,asMaster=false,mount=''){
   return '<Shape ID="'+id+'" Type="Group" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',asMaster?m.title:i.name)+attr('NameU',asMaster?'Panel.'+m.id:'Device.'+id)+attr('Master',asMaster?null:m.id)+'>'+xform+cell('SelectMode',0)+cell('HideText',1)+
     connectionRows(asMaster?m.ports:i.ports,i.w,i.h,m.keys)+'<Shapes>'+children+'</Shapes></Shape>';
 }
-function connector(i,id,H,byKey,connects){
+function lineStyleKey(line){
+  return JSON.stringify([line.linkType,(line.color||line.fill).toUpperCase(),line.opacity??1,line.sampleWeight??line.weight]);
+}
+function nativeLineStyle(id,line){
+  return '<StyleSheet ID="'+id+'" NameU="CableStyle.'+id+'"'+attr('Name',line.linkType+' ('+round((line.sampleWeight??line.weight)*.75)+' pt)')+'>'+
+    cell('EnableLineProps',1)+cell('LineColor',(line.color||line.fill).toUpperCase())+cell('LineColorTrans',1-(line.opacity??1))+
+    lineWeight(line.sampleWeight??line.weight)+cell('LinePattern',1)+cell('BeginArrow',0)+cell('EndArrow',0)+'</StyleSheet>';
+}
+function connector(i,id,H,byKey,connects,styleId,sampleId){
   const [x0,y0]=i.points[0], [xn,yn]=i.points.at(-1),w=xn-x0,h=y0-yn;
   let data=cell('PinX',inch((x0+xn)/2),'(BeginX+EndX)*0.5')+cell('PinY',inch(H-(y0+yn)/2),'(BeginY+EndY)*0.5')+
     cell('Width',inch(w),'GUARD(EndX-BeginX)')+cell('Height',inch(h),'GUARD(EndY-BeginY)')+cell('LocPinX',inch(w/2),'Width*0.5')+cell('LocPinY',inch(h/2),'Height*0.5')+cell('Angle',0);
   for(const [end,a,part] of [['Begin',i.from,9],['End',i.to,12]]){
+    if(!a){data+=cell(end+'X',inch(end==='Begin'?x0:xn))+cell(end+'Y',inch(H-(end==='Begin'?y0:yn)));continue;}
     const target=byKey.get(a.device),ix=target.m.keys.indexOf(a.port);if(ix<0)throw Error('Missing Visio attachment: '+a.port);
     const ref='Sheet.'+target.id+'!Connections.',f='PAR(PNT('+ref+'X'+(ix+1)+','+ref+'Y'+(ix+1)+'))';
     data+=cell(end+'X',inch(a.x),f)+cell(end+'Y',inch(H-a.y),f)+cell(end==='Begin'?'BegTrigger':'EndTrigger',2,'_XFTRIGGER(Sheet.'+target.id+'!EventXFMod)');
     connects.push('<Connect FromSheet="'+id+'" FromCell="'+end+'X" FromPart="'+part+'" ToSheet="'+target.id+'" ToCell="Connections.X'+(ix+1)+'" ToPart="'+(100+ix)+'"/>');
   }
-  data+=cell('ObjType',2)+cell('GlueType',2)+cell('ConFixedCode',1)+cell('ShapeRouteStyle',1)+cell('ConLineJumpCode',0)+cell('ConLineJumpStyle',1)+cell('LineColor',i.color)+cell('LineColorTrans',1-(i.opacity??1))+lineWeight(i.weight)+cell('LinePattern',1)+cell('FillPattern',0)+cell('BeginArrow',0)+cell('EndArrow',0);
+  data+=cell('ObjType',2)+cell('GlueType',2)+cell('ConFixedCode',1)+cell('ShapeRouteStyle',1)+cell('ConLineJumpCode',i.legendEntry?4:0)+cell('ConLineJumpStyle',1)+cell('FillPattern',0);
+  if(sampleId){
+    const ref='Sheet.'+sampleId+'!';
+    data+=cell('LineColor',i.color.toUpperCase(),ref+'LineColor')+cell('LineColorTrans',1-(i.opacity??1),ref+'LineColorTrans')+
+      cell('LineWeight',inch(i.weight),ref+'LineWeight','PT')+cell('LinePattern',1,ref+'LinePattern');
+  }
   const commands=i.points.map((p,j)=>[j?'L':'M',...p]);
   const geom=commands.map(([t,x,y,ex,ey],j)=>{
     const pt=[x,y], ox=pt[0]-x0,oy=y0-pt[1],end=j===commands.length-1;
     const follow=(d,total,dim)=>end?dim:Math.abs(d-total)<Math.abs(d)?dim+(d>=total?'+':'')+round(inch(d-total)):undefined;
     return xyRow(j+1,t==='M'?'MoveTo':'LineTo',inch(ox),inch(oy),follow(ox,w,'Width'),follow(oy,h,'Height'));
   }).join('');
-  return '<Shape ID="'+id+'" NameU="Connector.'+id+'" Name="'+xml(i.name)+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+data+'<Section N="Geometry" IX="0">'+cell('NoFill',1)+geom+'</Section></Shape>';
+  return '<Shape ID="'+id+'" NameU="'+(i.legendEntry?'CableLegend.':'Connector.')+id+'" Name="'+xml(i.name)+'" Type="Shape" LineStyle="'+styleId+'" FillStyle="0" TextStyle="0">'+data+'<Section N="Geometry" IX="0">'+cell('NoFill',1)+geom+'</Section></Shape>';
 }
 function guid(seed){
   const chunk=n=>{let h=n;for(const c of seed)h=Math.imul(h^c.charCodeAt(0),16777619);return (h>>>0).toString(16).padStart(8,'0');};
@@ -132,7 +146,14 @@ function writePackage(pages,stencil){
   for(const m of masters)m.keys=Object.keys(m.ports);
   put('_rels/.rels',rels([[1,vr+'document','visio/document.xml'],[2,doc+'/custom-properties','docProps/custom.xml']]));
   put('docProps/custom.xml',head+'<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="RecalcDocument"><vt:bool>true</vt:bool></property></Properties>','application/vnd.openxmlformats-officedocument.custom-properties+xml');
-  put('visio/document.xml',head+'<VisioDocument'+ns+' xml:space="preserve"><DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0" DefaultGuideStyle="0"/><Colors><ColorEntry IX="0" RGB="#000000"/><ColorEntry IX="1" RGB="#FFFFFF"/></Colors><FaceNames><FaceName NameU="Calibri"/><FaceName NameU="Arial"/></FaceNames><StyleSheets><StyleSheet ID="0" Name="No Style" NameU="No Style">'+cell('LinePattern',1)+cell('LineColor','#000000')+lineWeight(1)+cell('FillPattern',0)+'<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(12))+cell('Color','#16364A')+'</Row></Section></StyleSheet></StyleSheets><DocumentSheet NameU="TheDoc" LineStyle="0" FillStyle="0" TextStyle="0"/></VisioDocument>',mime+'.main+xml');
+  const lineStyles=new Map();
+  if(!stencil)for(const page of pages)for(const item of page.items){
+    if(item.type!=='path'&&!(item.legendEntry&&item.type==='rect'))continue;
+    const key=lineStyleKey(item);
+    if(!lineStyles.has(key))lineStyles.set(key,{id:lineStyles.size+1,item});
+  }
+  const cableStyles=[...lineStyles.values()].map(({id,item})=>nativeLineStyle(id,item)).join('');
+  put('visio/document.xml',head+'<VisioDocument'+ns+' xml:space="preserve"><DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0" DefaultGuideStyle="0"/><Colors><ColorEntry IX="0" RGB="#000000"/><ColorEntry IX="1" RGB="#FFFFFF"/></Colors><FaceNames><FaceName NameU="Calibri"/><FaceName NameU="Arial"/></FaceNames><StyleSheets><StyleSheet ID="0" Name="No Style" NameU="No Style">'+cell('LinePattern',1)+cell('LineColor','#000000')+lineWeight(1)+cell('FillPattern',0)+'<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(12))+cell('Color','#16364A')+'</Row></Section></StyleSheet>'+cableStyles+'</StyleSheets><DocumentSheet NameU="TheDoc" LineStyle="0" FillStyle="0" TextStyle="0"/></VisioDocument>',mime+'.main+xml');
   put('visio/_rels/document.xml.rels',rels([[1,vr+'pages','pages/pages.xml'],...(masters.length?[[2,vr+'masters','masters/masters.xml']]:[]),...(!stencil?[[3,vr+'windows','windows.xml']]:[])]));
   if(!stencil)put('visio/windows.xml',head+'<Windows'+ns+' ClientWidth="1200" ClientHeight="975"><Window ID="0" WindowType="Drawing" WindowState="268435456" WindowLeft="0" WindowTop="0" WindowWidth="1200" WindowHeight="975" ContainerType="Page" Page="0" ViewScale="0.75" ViewCenterX="'+round(inch(pages[0].width/2))+'" ViewCenterY="'+round(inch(pages[0].height/2))+'"><ShowRulers>1</ShowRulers><ShowGrid>0</ShowGrid><ShowPageBreaks>0</ShowPageBreaks><ShowGuides>1</ShowGuides><ShowConnectionPoints>1</ShowConnectionPoints></Window></Windows>','application/vnd.ms-visio.windows+xml');
   if(masters.length){
@@ -155,10 +176,16 @@ function writePackage(pages,stencil){
     function relId(type,target){if(!relKeys.has(target)){relKeys.set(target,rel.length+1);rel.push([rel.length+1,type,target]);}return relKeys.get(target);}
     let seq=p.items.length;
     p.items.forEach((i,j)=>{if(i.type==='device'){const m=records.get(i.masterKey);byKey.set(i.key,{id:j+1,m});relId(vr+'master','../masters/master'+m.id+'.xml');}});
+    const legendIds=new Map();
+    p.items.forEach((item,j)=>{if(item.legendEntry&&item.type==='rect')legendIds.set(lineStyleKey(item),j+1);});
     const shapes=p.items.map((i,j)=>{
+      if(i.type==='rect'&&i.legendEntry){
+        const y=i.y+i.h/2,styleId=lineStyles.get(lineStyleKey(i)).id;
+        return connector({...i,points:[[i.x,y],[i.x+i.w,y]]},j+1,p.height,byKey,connect,styleId);
+      }
       if(i.type==='rect')return rectShape(i,j+1,p.height);
       if(i.type==='text')return textShape(i,j+1,p.height);
-      if(i.type==='path')return connector(i,j+1,p.height,byKey,connect);
+      if(i.type==='path'){const key=lineStyleKey(i);return connector(i,j+1,p.height,byKey,connect,lineStyles.get(key).id,legendIds.get(key));}
       const m=byKey.get(i.key).m;
       const rid=m.media?relId(doc+'/image','../media/'+m.media.file):null;
       let mount='';

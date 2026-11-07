@@ -24,7 +24,7 @@ import {openVisioCatalog,loadImageStencil} from './stencils.mjs';
 import {stencilFiles,visioFile,filePath,droppedFiles} from './stencil-files.mjs';
 import {cleanNativeArt} from './native-art.mjs';
 import {sampleSite} from './sample.mjs';
-import {orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
+import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence} from './evidence.mjs';
 
 const $=id=>document.getElementById(id);
@@ -85,7 +85,7 @@ function cableControlClick(key,event,target=event.target){
 }
 function connectSelectedCable(item=selectedCable()){if(item?.sourceLink)editLink(project.links.findIndex(l=>sameConnection(l,item.sourceLink)),item);}
 function removeSelectedCablePoint(){const item=selectedCable();if(!item||cablePoint<1)return;const points=removeCablePoint(item.points,cablePoint);cablePoint=-1;changeCablePoints(item,points);say('Bend removed and adjacent segments straightened.');}
-function validateDrawing(){for(const p of buildPages(scoped()).filter(p=>p.title.startsWith('Core Network'))){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&intersects(a,b,0))||paths.some(r=>pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}}
+function validateDrawing(){for(const p of buildPages(scoped()).filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&intersects(a,b,0))||paths.some(r=>pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}}
 function setDrawingEdits(next){
  project.layout||={};const previous=project.layout.drawingEdits||{};project.layout.drawingEdits=cleanDrawingEdits(next);
  // Validation has not changed the displayed SVG. Keep its editor and draft
@@ -238,21 +238,78 @@ function pageOptions(){
  button(actions(body),'Save page options',()=>{if(start.value===''||!Number.isInteger(+start.value)||+start.value<0||+start.value>9999)throw Error('Use a first page number from 0 to 9999.');if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');project.layout||={};project.layout.pageNumbers=cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value});perform('page-options');close();say('Page numbering saved.');},'primary');
 }
 $('page-options').onclick=()=>task(pageOptions);
+function corePageChoices(){
+ const named=(project.layout?.corePages||[]).map(page=>[page.id,page.name]);
+ const automatic=pages.filter(page=>page.automaticCore).map((page,index)=>['@core:'+index,page.name+' (current layout)']);
+ return [['auto','Automatic'],['exclude','Exclude from core'],...named,...automatic,['new','New dedicated page']];
+}
+function assignedCorePage(id){
+ return (project.layout?.coreExclude||[]).includes(id)?'exclude':project.layout?.corePages?.find(page=>page.devices.includes(id))?.id||'auto';
+}
+function assignCorePage(layout,device,choice){
+ layout.corePages||=[];layout.coreExclude||=[];
+ for(const page of layout.corePages)page.devices=page.devices.filter(id=>id!==device.id);
+ layout.coreExclude=layout.coreExclude.filter(id=>id!==device.id);
+ if(choice==='exclude'){layout.coreExclude.push(device.id);return;}
+ if(choice==='auto')return;
+ if(choice==='new'){
+  layout.corePages.push({id:crypto.randomUUID(),name:device.name.slice(0,80),devices:[device.id],showReferences:true});
+  return;
+ }
+ if(choice.startsWith('@core:')){
+  const page=pages.filter(page=>page.automaticCore)[Number(choice.slice(6))];
+  if(!page)throw Error('The selected core page is no longer available.');
+  const members=new Set(layout.corePages.flatMap(page=>page.devices));
+  layout.corePages.push({id:crypto.randomUUID(),name:page.name,devices:[...new Set([...page.coreDeviceIds.filter(id=>!members.has(id)),device.id])],showReferences:true});
+  return;
+ }
+ const target=layout.corePages.find(page=>page.id===choice);
+ if(!target)throw Error('The selected core page is no longer available.');
+ target.devices.push(device.id);
+}
+function changeCoreLayout(update){
+ const previous=project.layout,next=structuredClone(previous||{});
+ update(next);
+ project.layout=next;
+ try{buildPages(scoped());}catch(error){project.layout=previous;throw error;}
+ perform();arrange();
+}
 function arrange(){
  const body=modal('Device order and core pages');project.layout||=cleanLayout({},project.devices.map(d=>d.id));const layout=project.layout;
  const check=el('input');check.type='checkbox';check.checked=layout.includeAPs===true;check.id='core-aps';const title=el('label','Include access points on automatic core pages');title.htmlFor=check.id;line(body,check,title);
  check.onchange=()=>{layout.includeAPs=check.checked;perform();};
  const bar=actions(body);button(bar,'Add core page',()=>{layout.corePages||=[];layout.corePages.push({id:crypto.randomUUID(),name:'Core Network '+(layout.corePages.length+1),devices:[]});perform();arrange();});
  button(bar,'Use automatic pages',()=>{layout.corePages=[];layout.coreExclude=[];perform();arrange();});
- for(const page of layout.corePages||[]){const row=line(body);const input=el('input');input.value=page.name;input.setAttribute('aria-label','Core page name');row.append(input);input.onchange=()=>{page.name=input.value.trim()||'Core Network';perform();arrange();};button(row,'Remove',()=>{layout.corePages=layout.corePages.filter(x=>x!==page);perform();arrange();});}
+ for(const page of layout.corePages||[]){
+  const row=line(body);row.classList.add('core-page-settings');const nameCell=el('div'),referenceCell=el('div');row.append(nameCell,referenceCell);const input=field(nameCell,'Page name',page.name);input.setAttribute('aria-label','Core page name');
+  input.onchange=()=>task(()=>changeCoreLayout(next=>{next.corePages.find(p=>p.id===page.id).name=input.value.trim()||'Core Network';}));
+  const references=field(referenceCell,'Off-page connections',page.showReferences===false?'hide':'show',[['show','Show references'],['hide','Hide references']]);references.setAttribute('aria-label','Off-page connections for '+page.name);
+  references.onchange=()=>task(()=>{try{changeCoreLayout(next=>{next.corePages.find(p=>p.id===page.id).showReferences=references.value==='show';});}catch(error){references.value=page.showReferences===false?'hide':'show';throw error;}});
+  const members=new Set(page.devices),connections=project.links.filter(link=>members.has(link.a)!==members.has(link.b));
+  if(connections.length){
+   const detail=el('details');detail.append(el('summary','Choose off-page connections ('+connections.length+')'));body.append(detail);
+   const names=new Map(project.devices.map(device=>[device.id,device.name]));
+   for(const link of connections){
+    const key=coreLinkKey(link),checked=!(page.hiddenReferences||[]).includes(key),toggle=el('input');
+    toggle.type='checkbox';toggle.id='setting-'+(++fieldCount);toggle.checked=checked;toggle.disabled=page.showReferences===false;
+    const caption=el('label',names.get(link.a)+' '+link.ap+' / '+names.get(link.b)+' '+link.bp);caption.htmlFor=toggle.id;line(detail,toggle,caption);
+    toggle.onchange=()=>task(()=>{try{changeCoreLayout(next=>{
+     const target=next.corePages.find(p=>p.id===page.id),hidden=new Set(target.hiddenReferences||[]);
+     if(toggle.checked)hidden.delete(key);else hidden.add(key);
+     target.hiddenReferences=[...hidden];
+    });}catch(error){toggle.checked=checked;throw error;}});
+   }
+  }
+  button(row,'Remove',()=>changeCoreLayout(next=>{next.corePages=next.corePages.filter(p=>p.id!==page.id);}));
+ }
  body.append(el('h3','Devices'));
  for(const d of orderedDevices(project).filter(d=>!d.hidden)){
   const row=el('div','','arrange-row');const text=el('div',d.name,'arrange-name');text.append(el('small',d.model||d.kind));row.append(text);
   const select=el('select');select.setAttribute('aria-label','Core page for '+d.name);
-  const options=[['auto','Automatic'],['exclude','Exclude from core'],...(layout.corePages||[]).map(p=>[p.id,p.name])];
+  const options=corePageChoices();
   for(const [value,label] of options){const o=el('option',label);o.value=value;select.append(o);}
-  select.value=(layout.coreExclude||[]).includes(d.id)?'exclude':layout.corePages?.find(p=>p.devices.includes(d.id))?.id||'auto';
-  select.onchange=()=>{for(const p of layout.corePages||[])p.devices=p.devices.filter(id=>id!==d.id);layout.coreExclude=(layout.coreExclude||[]).filter(id=>id!==d.id);if(select.value==='exclude')layout.coreExclude.push(d.id);else layout.corePages?.find(p=>p.id===select.value)?.devices.push(d.id);perform();};
+  select.value=assignedCorePage(d.id);
+  select.onchange=()=>task(()=>{try{changeCoreLayout(next=>assignCorePage(next,d,select.value));}catch(error){select.value=assignedCorePage(d.id);throw error;}});
   row.append(select);addOrderControls(row,d,arrange);body.append(row);
  }
 }
@@ -327,6 +384,62 @@ async function ingest(files){
 }
 function newProject(){if(!checkDiscard())return;viewport.reset();project=emptyProject();resetDrawingHistory();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('');draw();}
 function sample(){if(!checkDiscard())return;viewport.reset();project=sampleSite();resetDrawingHistory();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('Fictional sample project opened.');draw();}
+function devicePortFields(parent,device){
+ const section=el('details'),list=el('div'),rows=[];
+ section.append(el('summary','Edit ports'),el('p','Add an interface by name, or expand a port to edit its details. Use commas to separate tagged VLAN IDs.','hint'),list);
+ parent.append(section);
+ const normalize=name=>String(name??'').trim().toLowerCase();
+ const connected=new Set(project.links.flatMap(link=>[
+  ...(link.a===device.id?[normalize(link.ap)]:[]),
+  ...(link.b===device.id?[normalize(link.bp)]:[])
+ ]));
+ function add(port,isNew=false){
+  const box=el('details','','device-port'),title=el('summary'),grid=el('div','','compact-fields');
+  const linked=connected.has(normalize(port.name));
+  box.open=isNew;
+  box.append(title,grid);list.append(box);
+  const fields={};
+  for(const [key,label] of [['name','Port name'],['description','Description'],['role','Role (e.g. access or trunk)'],['speed','Link speed (e.g. 1 Gbps)'],['native','Native VLAN'],['tagged','Tagged VLANs']]){
+   const cell=el('div','','compact-field');grid.append(cell);
+   const value=Array.isArray(port[key])?port[key].join(', '):port[key]??'';
+   const input=field(cell,label,value);
+   fields[key]={input,initial:input.value};
+  }
+  const name=fields.name.input;
+  name.readOnly=linked;
+  const refresh=()=>title.textContent=(name.value.trim()||'New port')+(fields.description.input.value.trim()?' | '+fields.description.input.value.trim():'');
+  name.oninput=fields.description.input.oninput=refresh;refresh();
+  const row={port,fields,box,isNew};rows.push(row);
+  if(linked)box.append(el('p','Edit or remove the connection before renaming or removing this port.','hint'));
+  else button(actions(box),'Remove port',()=>{rows.splice(rows.indexOf(row),1);box.remove();});
+  if(isNew)name.focus();
+ }
+ for(const port of device.ports||[])add(port);
+ button(actions(section),'Add port',()=>add({},true));
+ return ()=>{
+  const names=new Set();
+  return rows.map(({port,fields,box,isNew})=>{
+   const next={...port};
+   try{
+    for(const [key,{input,initial}] of Object.entries(fields)){
+     if(input.value===initial&&!isNew)continue;
+     const value=input.value.trim();
+     if(!value){delete next[key];continue;}
+     if(key==='native'||key==='tagged'){
+      const ids=value.split(',').map(id=>id.trim());
+      if((key==='native'&&ids.length!==1)||ids.some(id=>!/^\d+$/.test(id)||Number(id)<1||Number(id)>4094))throw Error('Enter VLAN IDs from 1 to 4094.');
+      next[key]=key==='native'?Number(ids[0]):[...new Set(ids.map(Number))];
+     }else next[key]=value;
+    }
+    const name=normalize(next.name);
+    if(!name)throw Error('Enter a name for each port.');
+    if(names.has(name))throw Error('Port names must be unique: '+next.name);
+    names.add(name);
+    return next;
+   }catch(error){box.open=true;throw error;}
+  });
+ };
+}
 function editDevice(current){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
  const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip);
@@ -350,21 +463,24 @@ function editDevice(current){
  for(const m of d.stackMembers||[])memberRow(m);button(hardware,'Add stack member',()=>memberRow({}));hardware.append(moduleList);
  const moduleRow=m=>hardwareRow(moduleList,moduleRows,m,[['member','Module member (blank for chassis)'],['slot','Module slot'],['model','Module model']]);
  for(const m of d.modules||[])moduleRow(m);button(hardware,'Add module',()=>moduleRow({}));
- let ports,vlans,routes,bridges;
- const details=el('details');details.append(el('summary','Edit ports, VLANs and routing'));body.append(details);
- ports=field(details,'Ports (JSON array)',JSON.stringify(d.ports||[],null,2),'multiline');vlans=field(details,'VLANs',JSON.stringify(d.vlans||[],null,2),'multiline');
+ const pageChoice=field(body,'Core page',assignedCorePage(d.id),corePageChoices());
+ const readPorts=devicePortFields(body,d);
+ let vlans,routes,bridges;
+ const details=el('details');details.append(el('summary','Advanced VLANs and routing'));body.append(details);
+ vlans=field(details,'VLANs',JSON.stringify(d.vlans||[],null,2),'multiline');
  routes=field(details,'Routes',JSON.stringify(d.routes||[],null,2),'multiline');bridges=field(details,'Virtual wire pairs / bridges',JSON.stringify(d.bridges||[],null,2),'multiline');
  const a=actions(body);button(a,'Save device',()=>{
   const n=name.value.trim();if(!n)throw Error('Enter a device name.');
   const id=d.id||deviceId(n);if(!safeKey(id)||project.devices.some(old=>old!==current&&deviceId(old.name)===deviceId(n)))throw Error('Use a unique device name.');
-  let data;try{data=[ports,vlans,routes,bridges].map(input=>JSON.parse(input.value));}catch{throw Error('Port, VLAN and route data must be valid JSON.');}
-  if(data.some(arr=>!Array.isArray(arr)||arr.some(x=>!object(x)))||data[0].some(p=>typeof p.name!=='string'||!p.name.trim()))throw Error('Use arrays of objects. Each port needs a name.');
+  let data;try{data=[vlans,routes,bridges].map(input=>JSON.parse(input.value));}catch{throw Error('VLAN, route and bridge data must be valid JSON.');}
+  if(data.some(arr=>!Array.isArray(arr)||arr.some(x=>!object(x))))throw Error('Use arrays of objects for VLANs, routes and bridges.');
   if(!(Number(scale.value)>=30&&Number(scale.value)<=100))throw Error('Use a faceplate scale from 30 to 100 percent.');
   const composition=hardwareComposition(memberRows.filter(r=>!r.removed).map(r=>({id:r.id.value,model:r.model.value})),moduleRows.filter(r=>!r.removed).map(r=>({member:r.member.value,slot:r.slot.value,model:r.model.value})));
-  const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),stencilId:shape.value,scale:Number(scale.value)/100,ports:data[0],vlans:data[1],routes:data[2],bridges:data[3]};if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
-  const before={devices:project.devices,stencils:project.stencils};
+  const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),stencilId:shape.value,scale:Number(scale.value)/100,ports:readPorts(),vlans:data[0],routes:data[1],bridges:data[2]};if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
+  const before={devices:project.devices,stencils:project.stencils,layout:project.layout};
   try{project.devices=project.devices.map(old=>old===current?next:{...old});if(!current)project.devices.push(next);project.stencils=Object.fromEntries(Object.entries(project.stencils).map(([id,s])=>[id,{...s,models:[...(s.models||[])]}]));
    const key=modelKey(next.vendor,next.model);if(key&&shape.value){for(const s of Object.values(project.stencils))s.models=s.models.filter(k=>k!==key);project.stencils[shape.value].models.push(key);assignMatching(project.stencils[shape.value]);}
+   if(pageChoice.value!==assignedCorePage(d.id)){project.layout=structuredClone(project.layout||{});assignCorePage(project.layout,next,pageChoice.value);}
    validateDrawing();perform();close();say('Device saved.');
   }catch(error){Object.assign(project,before);throw error;}
  },'primary');

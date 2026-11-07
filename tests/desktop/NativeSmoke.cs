@@ -120,7 +120,7 @@ internal sealed partial class Studio
     async Task ClickEditorTarget(string selector,int clicks=1)
     {
         var query=JsonSerializer.Serialize(selector);
-        var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const n=document.querySelector({query}); if(!n) return null; const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
+        var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
         using var doc=JsonDocument.Parse(raw);
         if(doc.RootElement.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector);
         var x=doc.RootElement.GetProperty("x").GetDouble();var y=doc.RootElement.GetProperty("y").GetDouble();
@@ -168,10 +168,13 @@ internal sealed partial class Studio
     {
         await ClickEditorTarget("#add-device");
         await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; const name=field('Device name'),kind=field('Device type'),model=field('Model'),platform=field('Platform / technology'); if(!name||!kind||!model||!platform) throw Error('Add device fields missing'); name.value='LAB-HYPERVISOR-NODE-01'; kind.value='hypervisor'; kind.dispatchEvent(new Event('change')); model.value='Dell PowerEdge R750'; model.dispatchEvent(new Event('change')); platform.value='Proxmox VE'; if(kind.value!=='hypervisor') throw Error('Model lookup replaced the selected device type'); const save=[...document.querySelectorAll('#dialog button')].find(button=>button.textContent==='Save device'); if(!save) throw Error('Save device missing'); save.dataset.nativeAddDevice='save'; save.scrollIntoView({block:'center'})","prepare explicit hypervisor");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; field('Core page').value='new'; const detail=[...document.querySelectorAll('#dialog details')].find(node=>node.querySelector('summary')?.textContent==='Edit ports'); if(!detail) throw Error('Port form missing'); detail.open=true; [...detail.querySelectorAll('button')].find(button=>button.textContent==='Add port').click()","add human-readable port");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; field('Port name').value='eth0'; field('Description').value='Management'; field('Native VLAN').value='8'; field('Tagged VLANs').value='20, 34'; document.querySelector('[data-native-add-device=save]').scrollIntoView({block:'center'})","fill port form and dedicated page");
         await ClickEditorTarget("[data-native-add-device='save']");
         await RequireEditor("if(document.getElementById('dialog').open) throw Error('Add device did not close'); const row=[...document.querySelectorAll('#devices .device-row')].find(row=>row.textContent.includes('LAB-HYPERVISOR-NODE-01')); if(!row?.textContent.includes('Hypervisor host')||!row.textContent.includes('Dell PowerEdge R750')||!row.querySelector('input[type=checkbox]')?.checked) throw Error('Added hypervisor lost its type, model or scope'); if(!document.querySelector('#canvas>svg')||!document.querySelector('#tabs button')||document.querySelector('#welcome')) throw Error('Add device lost the diagram'); row.querySelector('button[title]').dataset.nativeAddDevice='open'","save added hypervisor");
         await ClickEditorTarget("[data-native-add-device='open']");
-        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Device type')?.value!=='hypervisor'||field('Model')?.value!=='Dell PowerEdge R750'||field('Platform / technology')?.value!=='Proxmox VE') throw Error('Added device details were not retained')","reopen added hypervisor");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Device details') throw Error('Device editor did not reopen'); const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Device type')?.value!=='hypervisor'||field('Model')?.value!=='Dell PowerEdge R750'||field('Platform / technology')?.value!=='Proxmox VE') throw Error('Added device details were not retained')","reopen added hypervisor");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Core page')?.selectedOptions[0]?.textContent!=='LAB-HYPERVISOR-NODE-01') throw Error('Dedicated page was not retained'); if(field('Port name')?.value!=='eth0'||field('Description')?.value!=='Management'||field('Native VLAN')?.value!=='8'||field('Tagged VLANs')?.value!=='20, 34') throw Error('Port form values were not retained')","retained ports and dedicated page");
         await ClickEditorTarget("#close");
         await ClickEditorTarget("#drawing-undo");
         await RequireEditor("if(document.getElementById('devices').textContent.includes('LAB-HYPERVISOR-NODE-01')) throw Error('Undo retained the added device'); if(!document.querySelector('#canvas>svg')||!document.querySelector('#tabs button')||document.querySelector('#welcome')) throw Error('Undo lost the diagram')","undo added hypervisor");
@@ -208,27 +211,17 @@ internal sealed partial class Studio
         }
         await CheckEditRecovery();
         await CheckAddDevice();
-        var editorCheck=await browser.CoreWebView2.ExecuteScriptAsync("""
-            (() => {
-                try {
-                    document.querySelector('[aria-label="Up SW-1"]').click();
-                    if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed');
-                    document.getElementById('arrange').click();
-                    [...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Add core page').click();
-                    const name=document.querySelector('[aria-label="Core page name"]');
-                    name.value='Native test rack';name.dispatchEvent(new Event('change'));
-                    const target=document.querySelector('[aria-label="Core page for SW-1"]');
-                    target.value=target.options[target.options.length-1].value;target.dispatchEvent(new Event('change'));
-                    if(![...document.querySelectorAll('#tabs button')].some(b=>b.textContent==='Native test rack')) throw Error('Core assignment failed');
-                    document.getElementById('close').click();
-                    document.getElementById('evidence').click();
-                    if(document.getElementById('dialog-title').textContent!=='Imported data') throw Error('Import controls missing');
-                    document.getElementById('close').click();
-                    return 'ok';
-                } catch(e) { return e.message; }
-            })()
-            """);
-        if(editorCheck!="\"ok\"") throw new Exception("Native editor controls: "+editorCheck);
+        await ClickEditorTarget("[aria-label='Up SW-1']");
+        await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed')","device order");
+        await ClickEditorTarget("#arrange");
+        await RequireEditor("[...document.querySelectorAll('#dialog button')].find(button=>button.textContent==='Add core page').click()","add named page");
+        await RequireEditor("const name=[...document.querySelectorAll('[aria-label=\"Core page name\"]')].at(-1); if(!name) throw Error('New page name field missing'); name.value='Native test rack'; name.dispatchEvent(new Event('change'))","rename core page");
+        await RequireEditor("const target=document.querySelector('[aria-label=\"Core page for SW-1\"]'); const option=[...target.options].find(option=>option.textContent==='Native test rack'); if(!option) throw Error('Named page missing from choices'); target.value=option.value; target.dispatchEvent(new Event('change'))","assign named page");
+        await RequireEditor("if(![...document.querySelectorAll('#tabs button')].some(button=>button.textContent==='Native test rack')) throw Error('Core assignment failed')","verify named page");
+        await ClickEditorTarget("#close");
+        await ClickEditorTarget("#evidence");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Imported data') throw Error('Import controls missing')","import controls");
+        await ClickEditorTarget("#close");
         await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('print').click()");
         await Printed.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }

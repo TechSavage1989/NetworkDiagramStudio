@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {placeDeviceTitles,intersects,pathCrossesText,textWidth} from '../src/web/diagram/labels.mjs';
+import {placeCableLabels,placeDeviceTitles,intersects,pathCrossesText,textWidth,textFootprint} from '../src/web/diagram/labels.mjs';
 import {buildPages} from '../src/web/diagram/index.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
+import {cleanLayout,coreLinkKey} from '../src/web/layout.mjs';
 import {ProjectHistory} from '../src/web/history.mjs';
 
 const compute=()=>({id:'compute',name:'Scale Hypercore Scale Hypercore Scale Hypercore Node 01',kind:'unknown',model:'Unspecified hypervisor',ports:[]});
@@ -27,7 +28,7 @@ test('unplaceable titles expose a structured capacity failure for bounded automa
 test('adding a compute device to a crowded automatic core creates continuation sheets without dropping devices or connections',()=>{
  const project=sampleSite(),before=core(project);assert.equal(before.length,1);project.devices.splice(3,0,compute());const after=core(project);assert.ok(after.length>1&&after.length<=4);
  for(const id of ['edge','sw-1','sw-2','compute'])assert.ok(body(after,id),id);assert.equal(after.flatMap(page=>page.items).find(item=>item.titleOwner==='compute').value,compute().name);
- const original=new Set(before.flatMap(page=>page.items.filter(item=>item.type==='path').map(item=>JSON.stringify(item.sourceLink)))),kept=new Set(after.flatMap(page=>page.items.filter(item=>item.type==='path').map(item=>JSON.stringify(item.sourceLink))));assert.deepEqual(kept,original);assert.ok(after.flatMap(page=>page.items).some(item=>item.labelRole==='reference'));validateTitles(after);
+ const original=new Set(before.flatMap(page=>page.items.filter(item=>item.type==='path').map(item=>JSON.stringify(item.sourceLink)))),kept=new Set(after.flatMap(page=>page.items.filter(item=>item.type==='path').map(item=>JSON.stringify(item.sourceLink))));assert.deepEqual(kept,original);assert.ok(after.some(page=>page.coreDeviceIds.includes('compute')));validateTitles(after);
  assert.deepEqual(after.map(page=>page.svg),core(project).map(page=>page.svg));
 });
 
@@ -40,4 +41,33 @@ test('automatic continuation preserves accepted drawing edits, project state and
 test('an overfull explicit core page reports capacity clearly without mutating the accepted project',()=>{
  const project=sampleSite();project.devices.splice(3,0,compute());project.layout={corePages:[{id:'fixed',name:'Fixed core',devices:['edge','sw-1','sw-2','compute']}]};const accepted=JSON.stringify(project);
  assert.throws(()=>buildPages(project),error=>error.code==='CORE_LAYOUT_CAPACITY'&&error.page==='Fixed core'&&/needs more (?:space|room)/i.test(error.message));assert.equal(JSON.stringify(project),accepted);
+});
+
+test('a vertical label follows its own cable on the side away from a nearby parallel cable',()=>{
+ const owner={type:'path',linkId:1,points:[[500,250],[500,550]]};
+ const neighbor={type:'path',linkId:2,points:[[490,250],[490,550]]};
+ const page={items:[owner,neighbor],legendLayout:'sidebar'};
+ const result=placeCableLabels(page,[{role:'media',editKey:'media',linkId:1,value:['Fiber','10 Gbps'],y:400,side:'left',outer:500}]);
+ assert.equal(result.ok,true);
+ const texts=page.items.filter(item=>item.type==='text');
+ assert.equal(texts.length,2);
+ for(const item of texts){
+  assert.equal(item.angle,Math.PI/2);
+  assert.ok(textFootprint(item).x>=505);
+  assert.ok(!pathCrossesText(owner,item)&&!pathCrossesText(neighbor,item));
+ }
+ assert.ok(!intersects(...texts));
+});
+
+test('a dedicated page can hide one off-page connection without changing project links',()=>{
+ const project=sampleSite();
+ const link=project.links.find(link=>[link.a,link.b].includes('sw-2'));
+ assert.ok(link);
+ project.layout=cleanLayout({corePages:[{id:'dedicated',name:'Distribution',devices:['sw-2']}]},project.devices.map(device=>device.id));
+ const dedicated=()=>buildPages(project).find(page=>page.title==='Distribution');
+ assert.ok(dedicated().items.some(item=>item.labelRole==='reference'));
+ project.layout.corePages[0].hiddenReferences=[coreLinkKey(link)];
+ project.layout=cleanLayout(JSON.parse(JSON.stringify(project.layout)),project.devices.map(device=>device.id));
+ assert.ok(!dedicated().items.some(item=>item.sourceLink&&coreLinkKey(item.sourceLink)===coreLinkKey(link)));
+ assert.ok(project.links.includes(link));
 });

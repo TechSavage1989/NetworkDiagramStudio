@@ -29,13 +29,13 @@ Network engineers can use the Windows application or the offline browser edition
 
 <p align="center"><img src="docs/images/port-map.png" width="900" alt="Port map for the fictional sample switch"></p>
 
-**Wireless connections**
+**Named pages and connection visibility**
 
-<p align="center"><img src="docs/images/wireless.png" width="900" alt="Sample wireless access points and their physical switch uplinks"></p>
+<p align="center"><img src="docs/images/core-pages.png" width="900" alt="Named core pages, device assignment and off-page connection controls"></p>
 
-**Device roles, hardware families and host platforms**
+**Editable ports and device page placement**
 
-<p align="center"><img src="docs/images/device-types.png" width="900" alt="Fictional hypervisor host with an editable hardware model and platform in the device form"></p>
+<p align="center"><img src="docs/images/device-ports.png" width="900" alt="Human-readable port fields and core-page placement for a fictional device"></p>
 
 **Cable types, speeds and line appearance**
 
@@ -102,6 +102,12 @@ In **Edit drawing**, select a cable. Drag a square handle to move a bend, click 
 
 **Page options** shows or hides page numbers, chooses their starting number and padding, and sets a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. The default is a two-digit number such as 01 / 07. These settings persist in the project.
 
+Use **Core page** in **Device details** or **Device order / Core pages** to assign equipment to an existing page, create a dedicated page, or return it to automatic placement. Selecting a current automatic page saves its device group as a named page. Named pages can show all, some, or none of their off-page connection references.
+
+Visio legend samples are editable lines. Each cable follows the matching legend line's color, opacity, weight, and pattern on its page. Matching lines across pages also share a document line style. The default cable and legend stroke is 3 pt.
+
+In **Device details**, expand **Edit ports** to add a port or edit its name, description, role, link speed, and VLAN assignments. Enter tagged VLAN IDs separated by commas. To rename or remove a connected port, edit or remove its connection first.
+
 Select **Stack members and installed modules** in Device details to confirm hardware composition. Use 2920 slots A/B for J9731A or J9732A; supported 3560-E uplinks use X2-1/X2-2 with the installed X2 transceiver or TwinGig adapter. A file without an exact model declaration needs a confirmed Model selection or mapped stencil. [Hardware import coverage and manufacturer references](docs/HARDWARE_SUPPORT.md).
 
 ## Updates and settings
@@ -137,4 +143,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.11.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.12.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)

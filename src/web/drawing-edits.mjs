@@ -1,3 +1,4 @@
+import {textFootprint} from './diagram/labels.mjs';
 import {applyLinkStyles} from './link-styles.mjs';
 const keyOk=s=>typeof s==='string'&&s.length<=500&&!/^(?:__proto__|constructor|prototype)$/.test(s);
 const colors=/^(?:#[0-9a-f]{3}|#[0-9a-f]{6}|none)$/i;
@@ -50,7 +51,8 @@ export function drawingBounds(item){
   x=Math.min(...pts.map(p=>p[0]));y=Math.min(...pts.map(p=>p[1]));w=Math.max(...pts.map(p=>p[0]))-x;h=Math.max(...pts.map(p=>p[1]))-y;
  }else if(item.type==='arttext'){x=item.x-item.w/2;y=item.y-item.size*.7;h=item.size*1.4;}
  if(item.normalized){x=item.parent.x+x*item.parent.w;y=item.parent.y+y*item.parent.h;w*=item.parent.w;h*=item.parent.h;}
- return {key:item.editKey,x,y,w,h};
+ const bounds=item.type==='text'?textFootprint({x,y,w,h,angle:item.angle}):{x,y,w,h};
+ return {key:item.editKey,x:bounds.x,y:bounds.y,w:bounds.w,h:bounds.h};
 }
 function moveCable(item,dx,dy){
  const original=item.points;
@@ -67,7 +69,10 @@ export function moveDrawingItems(page,edits,offsets){
   const localX=item.normalized?dx/item.parent.w:dx,localY=item.normalized?dy/item.parent.h:dy,patch={...(result[key]||{})};
   if(item.type==='path')patch.points=moveCable(item,dx,dy);
   else if(item.type==='vector')patch.commands=item.commands.map(c=>c.length===3?[c[0],c[1]+localX,c[2]+localY]:[...c]);
-  else Object.assign(patch,{x:item.x+localX,y:item.y+localY});
+  else {
+   Object.assign(patch,{x:item.x+localX,y:item.y+localY});
+   if(item.labelRole&&item.angle)patch.angle=item.angle;
+  }
   result[key]=patch;
  }
  return cleanDrawingEdits(result);

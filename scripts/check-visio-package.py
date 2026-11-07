@@ -62,6 +62,8 @@ def check(path):
                 if cell.get('N') != 'LineWeight':
                     continue
                 require(cell.get('U') == 'PT', 'LineWeight must declare PT units in '+name)
+                if re.fullmatch(r'Sheet\.\d+!LineWeight', cell.get('F', '')) and root.tag == V+'PageContents':
+                    continue  # Resolved against the legend style below.
                 formula = re.fullmatch(r'([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?) pt', cell.get('F', ''))
                 require(formula is not None, 'LineWeight must have a numeric pt formula in '+name)
                 points = float(formula[1])
@@ -83,6 +85,7 @@ def check(path):
                 ref = master.find(V+'Rel').get(R+'id')
                 master_parts[key] = relationships['visio/masters/masters.xml'][ref][1]
         master_ids = {key: {s.get('ID') for s in xml[name].iter(V+'Shape')} for key, name in master_parts.items()}
+        styles = {style.get('ID'): style for style in xml['visio/document.xml'].iter(V+'StyleSheet')}
         font_names = {f.get('NameU') for f in xml['visio/document.xml'].iter(V+'FaceName')}
         for name, root in xml.items():
             if not name.startswith(('visio/pages/page', 'visio/masters/master')) or root.tag not in (V+'PageContents', V+'MasterContents'):
@@ -111,6 +114,19 @@ def check(path):
                 for shape in root.findall(V+'Shapes/'+V+'Shape'):
                     inheritance(shape)
                 by_id = {s.get('ID'): s for s in shapes}
+                for shape in shapes:
+                    style_id = shape.get('LineStyle')
+                    require(style_id is None or style_id in styles, 'absent line style in '+name)
+                    for cell in shape.findall(V+'Cell'):
+                        prop = cell.get('N')
+                        reference = re.fullmatch(r'Sheet\.(\d+)!(LineWeight|LinePattern|LineColor|LineColorTrans)', cell.get('F', ''))
+                        if not reference:
+                            continue
+                        target = by_id.get(reference[1])
+                        require(target is not None and target.get('NameU', '').startswith('CableLegend.'), 'line style reference must target a cable legend')
+                        require(prop == reference[2] and target.get('LineStyle') == style_id, 'line and legend must share a line style')
+                        style_cell = styles[style_id].find(V+"Cell[@N='"+prop+"']")
+                        require(style_cell is not None and cell.get('V') == style_cell.get('V'), 'line cache differs from its legend style')
                 for connect in root.iter(V+'Connect'):
                     require(connect.get('FromSheet') in ids and connect.get('ToSheet') in ids, 'connection references an absent shape')
                     match = re.fullmatch(r'Connections.X(\d+)', connect.get('ToCell', ''))

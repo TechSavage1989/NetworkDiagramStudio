@@ -23,3 +23,10 @@
 .inline-text-actions{flex-wrap:wrap}.inline-text-actions span{flex-basis:100%}
 .hardware-row{display:flex;flex-wrap:wrap;align-items:end;gap:.6rem;padding:.65rem 0;border-bottom:1px solid var(--border,#CEDCE0)}
 .hardware-field{flex:1;min-width:110px}.hardware-row label{display:block;margin:0 0 .3rem}.hardware-row input{width:100%}.hardware-row button{margin-bottom:.3rem}
+
+.device-port{padding:.6rem 0;border-bottom:1px solid var(--border,#CEDCE0)}
+.device-port>summary{overflow-wrap:anywhere}
+.device-port>.compact-fields{margin-top:.6rem}
+
+.core-page-settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:.75rem}
+.core-page-settings>div{min-width:0}
