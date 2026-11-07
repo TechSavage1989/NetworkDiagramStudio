@@ -8,6 +8,7 @@ export function cleanLinkStyles(raw){
   for(const key of ['title','description','lineTitle','lineDescription'])if(typeof value[key]==='string')s[key]=value[key].slice(0,key.includes('Description')||key==='description'?240:160);
   const color=parseHex(value.color);if(color)s.color=color;
   if(Number.isFinite(value.opacity)&&value.opacity>=0&&value.opacity<=1)s.opacity=value.opacity;
+  if(typeof value.showSpeed==='boolean')s.showSpeed=value.showSpeed;
   if(Object.keys(s).length)result[type]=s;
  }return result;
 }

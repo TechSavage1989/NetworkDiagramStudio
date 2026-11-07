@@ -164,6 +164,18 @@ internal sealed partial class Studio
         await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Page options') throw Error('A stale detached session blocked page options')","detached session recovery");
         await ClickEditorTarget("#close");
     }
+    async Task CheckLegendConnections()
+    {
+        await ClickEditorTarget("#link-styles");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; const type=field('Link type'); type.value='AP copper'; type.dispatchEvent(new Event('change'))","choose associated wireless connections");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Link speed')?.value!=='__keep_connection_value__') throw Error('Mixed speeds were not preserved'); field('Cable type').value='AOC'; field('Cable type').dispatchEvent(new Event('change')); field('Link speed').value='25 Gbps'; field('Link speed').dispatchEvent(new Event('change')); const save=[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save link style'); save.dataset.nativeLegend='save'","set shared cable type and speed");
+        await ClickEditorTarget("[data-native-legend='save']");
+        await RequireEditor("if(document.getElementById('dialog').open) throw Error('Legend metadata was not saved')","save legend metadata");
+        await ClickEditorTarget("#link-styles");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; const type=field('Link type'); const option=[...type.options].find(o=>o.value==='AOC'); if(!option) throw Error('Changed type missing'); type.value=option.value; type.dispatchEvent(new Event('change'))","reopen changed link class");
+        await RequireEditor("const field=title=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===title)?.control; if(field('Cable type')?.value!=='AOC'||field('Link speed')?.value!=='25 Gbps') throw Error('Associated connection metadata was not retained')","verify retained connection metadata");
+        await ClickEditorTarget("#close");
+    }
     async Task CheckAddDevice()
     {
         await ClickEditorTarget("#add-device");
@@ -210,6 +222,7 @@ internal sealed partial class Studio
             foreach(var part in package.Entries.Where(p=>p.FullName.EndsWith(".xml")||p.FullName.EndsWith(".rels"))){using var stream=part.Open();XDocument.Load(stream);}
         }
         await CheckEditRecovery();
+        await CheckLegendConnections();
         await CheckAddDevice();
         await ClickEditorTarget("[aria-label='Up SW-1']");
         await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed')","device order");

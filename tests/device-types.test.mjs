@@ -30,7 +30,7 @@ test('manual inventory roles persist through project data and evidence recomposi
 });
 
 test('generic endpoint symbols are editable geometry and never assert physical socket locations',()=>{
- for(const kind of deviceKinds){const symbol=genericDeviceSymbol(kind);if(['switch','firewall','ap','handoff','unknown'].includes(kind)){assert.equal(symbol,null);continue;}
+ for(const kind of deviceKinds){const symbol=genericDeviceSymbol(kind);if(['ap','handoff'].includes(kind)){assert.equal(symbol,null);continue;}
   assert.ok(symbol&&symbol.ratio>0);assert.ok(symbol.children.length>2);assert.ok(!symbol.ports&&!symbol.anchors&&!symbol.verified);
   assert.ok(symbol.children.every(child=>['rect','text'].includes(child.type)&&child.name&&['x','y','w','h'].every(key=>Number.isFinite(child[key]))&&child.x>=0&&child.y>=0&&child.x+child.w<=1.001&&child.y+child.h<=1.001));
   const again=genericDeviceSymbol(kind);symbol.children[0].x=99;assert.notEqual(again.children[0].x,99);

@@ -2,6 +2,16 @@
 // Verified hardware and user-assigned stencils take precedence over these shapes.
 const palette={body:'#E8EFF2',paper:'#FFFFFF',ink:'#536B78',dark:'#16364A',teal:'#2F7D89',pale:'#C5D8DE'};
 const builders={
+ switch(a){
+  rect(a,'Switch chassis',.02,.08,.96,.84,palette.body);
+  rect(a,'Switch status display',.06,.28,.12,.44,palette.dark);
+  rect(a,'Switch connection band',.23,.35,.69,.30,palette.pale);
+  rect(a,'Switch traffic indicator',.28,.44,.58,.08,palette.teal,'none');
+ },
+ firewall(a){
+  rect(a,'Firewall chassis',.02,.08,.96,.84,palette.body);
+  for(let row=0;row<3;row++)for(let col=0;col<4;col++)rect(a,'Firewall protection block '+row+' '+col,.13+col*.19+(row%2?.04:0),.22+row*.19,.15,.13,row===1?palette.teal:palette.ink,'none');
+ },
  router(a){
   rect(a,'Router enclosure',.02,.14,.96,.72,palette.body);
   rect(a,'Router top accent',.04,.17,.92,.08,palette.teal,'none');
@@ -120,9 +130,10 @@ const builders={
   rect(a,'Generic device center',.31,.40,.38,.32,palette.pale);
  }
 };
-const ratios={router:4,server:4.8,hypervisor:3.8,'virtual-machine':1.5,hci:3.8,phone:1.3,workstation:1.4,printer:1.6,storage:1.15,camera:2,controller:2.7,ups:.85,'patch-panel':5.8,iot:1,cloud:2,other:1.5};
+const ratios={switch:10.2,firewall:7.5,router:4,server:4.8,hypervisor:3.8,'virtual-machine':1.5,hci:3.8,phone:1.3,workstation:1.4,printer:1.6,storage:1.15,camera:2,controller:2.7,ups:.85,'patch-panel':5.8,iot:1,cloud:2,other:1.5,unknown:3};
 function rect(children,name,x,y,w,h,fill,stroke=palette.ink,weight=.8){children.push({type:'rect',name,x,y,w,h,fill,stroke,weight});}
 export function genericDeviceSymbol(kind){
- const build=Object.hasOwn(builders,kind)?builders[kind]:null;if(!build)return null;
- const children=[];build(children);return {ratio:ratios[kind],children,generic:true};
+ if(kind==='ap'||kind==='handoff')return null;
+ const build=Object.hasOwn(builders,kind)?builders[kind]:builders.other;
+ const children=[];build(children);return {ratio:ratios[kind]||ratios.unknown,children,generic:true};
 }

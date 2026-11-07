@@ -40,3 +40,14 @@ test('diagram box selection is independent of drag direction and includes only e
 test('undo and redo correctly identify the last saved project revision',()=>{
  const history=new ProjectHistory({x:0});history.record({x:1});assert.ok(history.dirty);history.markSaved();assert.ok(!history.dirty);const old=history.travel({x:1});assert.ok(history.dirty);history.travel(old,{redo:true});assert.ok(!history.dirty);history.record({x:2});history.travel({x:2},{all:true});assert.ok(history.dirty);history.reset({x:0});assert.ok(!history.dirty);
 });
+
+test('Shift dragging keeps a stable cardinal axis and snapping never shifts the locked coordinate',async()=>{
+ const {dragAxis}=await import('../src/web/snapping.mjs');
+ const settings={enabled:true,grid:true,gridSize:10,guides:true,distance:6},targets=[{axis:0,value:24},{axis:1,value:42}];
+ for(const [dx,dy,expected] of [[23,5,0],[-23,5,0],[5,23,1],[5,-23,1]]){
+  const choose=dragAxis(),axis=choose(dx,dy,true);assert.equal(axis,expected);assert.equal(choose(dy*20,dx*20,true),axis);
+  const delta=[axis===1?0:dx,axis===0?0:dy],origin=[13,37],point=snapPoint(origin.map((p,i)=>p+delta[i]),settings,targets,false,axis),box=snapBoxes([{x:13,y:37,w:20,h:11}],delta,settings,targets,false,axis);
+  assert.equal(point.point[1-axis],origin[1-axis]);assert.equal(box.delta[1-axis],0);assert.ok([...point.guides,...box.guides].every(g=>g.axis===axis));assert.deepEqual(snapBoxes([{x:13,y:37,w:20,h:11}],delta,settings,targets,true,axis).delta,delta);
+  assert.equal(choose(8,9,false),null);assert.equal(choose(axis===0?1:20,axis===0?20:1,true),1-axis);
+ }
+});

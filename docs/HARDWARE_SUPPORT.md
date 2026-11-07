@@ -53,7 +53,7 @@ The tests exercise fictional configurations, cross-source matching, contradictor
 
 ## Native physical drawings and editable stencils
 
-The catalog contains 413 exact identity/interface records and 303 confirmed bank profiles covering 410 identifiers. Simplified native panels preserve documented port order, rows, connector form and panel side. The CX 6100 optical cages are on the left; CX 6200 cages are on the right. FortiGate 120G and 200G/201G use separately calibrated layouts. Declared mixed stack members and chassis cards retain their identities. Other identity-only SKUs require a confirmed model or mapped stencil. [Layout catalog and manufacturer sources](HARDWARE_LAYOUTS.md)
+The catalog contains 426 exact identity/interface records and 314 confirmed bank profiles covering 423 identifiers. Simplified native panels preserve documented port order, rows, connector form and panel side. The CX 6100 optical cages are on the left; CX 6200 cages are on the right. FortiGate 120G and 200G/201G use separately calibrated layouts. Declared mixed stack members and chassis cards retain their identities. Other identity-only SKUs require a confirmed model or mapped stencil. [Layout catalog and manufacturer sources](HARDWARE_LAYOUTS.md)
 
 The catalog incorporates the owner’s Switchport Diagram Builder hardware facts at 85a4673a5a08c45d1f0e65218b4865d25ea4ecfc and Configuration Inspector bank facts at 675a806eeb893a55b2272be9fb7e914bac06ee03. Manufacturer publications correct the extra ASA5505 interface in the original snapshot and the multi-rate SFP/SFP+ cages on NSa 3700 X24-X27. Socket form does not establish fitted optics or negotiated speed. Native artwork is simplified; exact manufacturer artwork can be imported locally.
 
@@ -72,3 +72,11 @@ For supported 3560-E 48-port models, assign X2-1 or X2-2 to an installed X2-10GB
 SonicWall EXP decoding follows the [manufacturer procedure](https://www.sonicwall.com/support/knowledge-base/how-to-get-the-configurations-of-the-firewall-based-on-the-exporting-exp-settings-file/kA1VN0000000EXg0AM). The bounded decoder requires a recognizable settings header and named interfaces. Files remain local; only topology fields enter the normalized model. TZ600 uses the documented descending paired rear bank X8/X9 through X0/X1. [TZ600 Quick Start Guide](https://www.sonicwall.com/techdocs/pdf/tz600-quick-start-guide.pdf).
 
 A filename, hostname, software version or port count does not prove the precise chassis SKU. Configurations without a model declaration import their interface details but require a confirmed Model selection or mapped stencil for physical layout. Binary RouterOS backups require an unencrypted text export.
+
+### Additional layouts in preview.13
+
+UniFi USW-16-POE, USW-24, USW-24-POE, USW-48-POE, USW-Pro-24, USW-Pro-24-POE, USW-Pro-48 and USW-Pro-48-POE have documented paired copper rows and right-side optical banks. Netgate 2100 retains its rear WAN combo pair and four switched LAN jacks; its shared mvneta1 interface is not assigned to one arbitrary LAN jack. Netgate 4200 maps printed ports 1-4 to igc3-igc0. PA-415 management and ethernet1/1 are distinct combo pairs. PA-455 adds its own calibrated combo/data bank and separate management connector.
+
+Each model uses its manufacturer reference in the layout catalog. These are simplified editable native drawings, not manufacturer artwork. Unknown switches and firewalls now have role-specific base symbols alongside the server, hypervisor, HCI, storage, phone and other inventory symbols. No unverified physical sockets are inferred from a role or a software platform. Declared interface names can connect at the device boundary; an assigned stencil and manual port map supply exact locations. Existing verified panels and assigned stencils take priority.
+
+![Manufacturer-based panels and a generic storage symbol in the fictional lab](images/hardware-layouts.png)

@@ -208,7 +208,7 @@ Native panels simplify artwork while preserving confirmed socket-bank arrangemen
 | PA-3220 | Fixed panel | [Reference](https://docs.paloaltonetworks.com/hardware/pa-3200-hardware-reference/pa-3220-series-overview/front-panel-3200-series) |
 | PA-3410 | Fixed panel | [Reference](https://docs.paloaltonetworks.com/hardware/pa-3400-hardware-reference/pa-3400-series-overview/front-panel-3400-series) |
 | PA-410 | Fixed panel | [Reference](https://docs.paloaltonetworks.com/hardware/pa-400-hardware-reference/pa-400-firewall-overview/pa-400-front-panel) |
-| PA-415 | Fixed panel | [Reference](https://docs.paloaltonetworks.com/hardware/pa-400-hardware-reference/pa-400-firewall-overview/pa-400-front-panel) |
+| PA-415 | Separate management and ethernet1/1 combo pairs, data ports 2-9 | [Reference](https://docs.paloaltonetworks.com/hardware/pa-400-hardware-reference/pa-400-firewall-overview/pa-400-front-panel) |
 | PA-440, PA-450, PA-460 | Fixed panel | [Reference](https://docs.paloaltonetworks.com/hardware/pa-400-hardware-reference/pa-400-firewall-overview/pa-400-front-panel) |
 | PA-850 | Fixed panel | [Reference](https://docs.paloaltonetworks.com/hardware/pa-800-hardware-reference/pa-800-firewall-overview/pa-800-front-panel) |
 | R8N85A | Fixed panel | [Reference](https://arubanetworking.hpe.com/techdocs/hardware/switches/6100/IGSG/igsg_6000-6100.pdf) |
@@ -307,6 +307,18 @@ Native panels simplify artwork while preserving confirmed socket-bank arrangemen
 | XGS2100, XGS2300 | Fixed panel | [Reference](https://docs.sophos.com/nsg/hardware/operatinginstructions/xgs/sophos-operating-instructions-xgs-2100-2300-3100-3300.pdf) |
 | XGS3100, XGS3300 | Fixed panel | [Reference](https://docs.sophos.com/nsg/hardware/operatinginstructions/xgs/sophos-operating-instructions-xgs-2100-2300-3100-3300.pdf) |
 | XGS4300, XGS4500 | Fixed panel | [Reference](https://docs.sophos.com/nsg/hardware/operatinginstructions/xgs/sophos-operating-instructions-xgs-4300-4500.pdf) |
+
+| USW-16-POE | Front panel | [Reference](https://dl.ui.com/qsg/USW-16-POE/USW-16-POE_EN.html) |
+| USW-24 | Front panel | [Reference](https://dl.ui.com/qsg/USW-24/USW-24_EN.html) |
+| USW-24-POE | Front panel | [Reference](https://dl.ui.com/qsg/USW-24-POE/USW-24-POE_EN.html) |
+| USW-48-POE | Front panel | [Reference](https://dl.ui.com/qsg/USW-48-POE/USW-48-POE_EN.html) |
+| USW-Pro-24 | Front panel | [Reference](https://dl.ui.com/qsg/USW-Pro-24/USW-Pro-24_EN.html) |
+| USW-Pro-24-POE | Front panel | [Reference](https://dl.ui.com/qsg/USW-Pro-24-POE/USW-Pro-24-POE_EN.html) |
+| USW-Pro-48 | Front panel | [Reference](https://dl.ui.com/qsg/USW-Pro-48/USW-Pro-48_EN.html) |
+| USW-Pro-48-POE | Front panel | [Reference](https://dl.ui.com/qsg/USW-Pro-48-POE/USW-Pro-48-POE_EN.html) |
+| 2100 Security Gateway, Netgate 2100 | Rear panel | [Reference](https://docs.netgate.com/pfsense/en/latest/solutions/netgate-2100/io-ports.html) |
+| 4200 Security Gateway, Netgate 4200 | Rear panel | [Reference](https://docs.netgate.com/pfsense/en/latest/solutions/netgate-4200/io-ports.html) |
+| PA-455 | Front panel | [Reference](https://docs.paloaltonetworks.com/hardware/pa-400-hardware-reference/pa-400-firewall-overview/pa-400-front-panel) |
 
 The J9850A/J9851A and J8697A/J8698A chassis use paired module bays and explicitly declared cards. Empty bays do not imply installed hardware. Every shipped switch/firewall interface-capability record has a native layout. Additional identity-only SKUs and unknown models use perimeter attachments until confirmed or mapped. Shared copper/optical interfaces show both connectors with one default anchor; a local stencil or port mapping can select the fitted connector. No manufacturer photos or stencil collections are bundled.
 

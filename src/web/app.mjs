@@ -1,6 +1,6 @@
 import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
-import {cleanSnap,snapPoint,snapBoxes,boxSelected} from './snapping.mjs';
+import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
 import {diagramViewport} from './viewport.mjs';
 import {arrangeAnchors,arrangeBoxes} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
@@ -10,6 +10,7 @@ import {cableControls} from './cable-controls.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
+import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
 import {cleanPageNumbers,pageNumber} from './page-options.mjs';
 import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
 import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
@@ -97,6 +98,15 @@ function setLinkStyle(type,change,extraEdits={}){
  project.layout||={};const before=project.layout,next=changeLinkStyle(project,pages,type,change);project.layout={...before,...next,drawingEdits:cleanDrawingEdits({...next.drawingEdits,...extraEdits})};
  try{validateDrawing();}catch(error){project.layout=before;throw error;}perform('link-style');
 }
+function setLegendStyle(type,details,style,extraEdits={}){
+ const before=project,next=changeLegendConnections(project,pages,type,details,style,extraEdits,source=>buildPages(scoped(source)));
+ project=next;try{validateDrawing();}catch(error){project=before;throw error;}perform('link-style');
+}
+function legendFields(body,type){
+ const records=legendConnections(project,pages,type);if(!records.length)return null;
+ body.append(el('p',records.length+' associated connection'+(records.length===1?'':'s')+' across the drawing. Choose a cable type and speed or enter custom values.','hint'));
+ return connectionFields(body,commonConnectionDetails(records),{mixed:true});
+}
 function editableText(item){return item.legendFullText!=null&&project.layout?.drawingEdits?.[item.editKey]?.value==null?item.legendFullText:item.value;}
 function saveTextEdit(item,value,color){
  const patch={...project.layout?.drawingEdits?.[item.editKey],color};if(!item.legendEntry)patch.value=value;
@@ -132,22 +142,23 @@ function snapOptions(){
  const body=modal('Snapping and automatic alignment'),s=cleanSnap(project.layout?.snapping),fields={};
  for(const [key,name] of [['enabled','Enable snapping'],['grid','Snap to grid'],['guides','Automatic alignment guides'],['deviceEdges','Align with device edges and centers'],['objectEdges','Align with text and other object edges'],['cablePoints','Align with other cable bend points']]){const row=el('label','','check-option'),input=el('input');input.type='checkbox';input.checked=s[key];input.setAttribute('aria-label',name);row.append(input,document.createTextNode(name));body.append(row);fields[key]=input;}
  const grid=el('div','','form-grid');body.append(grid);for(const [key,name] of [['gridSize','Grid spacing (page units)'],['distance','Alignment snap distance (page units)'],['nudge','Arrow-key step (page units)']]){const input=field(grid,name,s[key]);input.type='number';input.step=key==='nudge'?.1:1;input.min=key==='nudge'?.1:1;input.max=key==='nudge'?20:key==='distance'?24:100;fields[key]=input;}
- body.append(el('p','Snapping affects dragging. Press Alt after starting a drag to bypass snapping. Arrow keys use the configured step; Shift multiplies it by 10 and Ctrl divides it by 10. Endpoint ports remain attached. Alignment buttons apply the action you select.','hint'));
+ body.append(el('p','Hold Shift while dragging a cable or bend to lock horizontal or vertical movement. Snapping affects dragging. Press Alt after starting a drag to bypass snapping. Arrow keys use the configured step; Shift multiplies it by 10 and Ctrl divides it by 10. Endpoint ports remain attached. Alignment buttons apply the action you select.','hint'));
  button(actions(body),'Save snapping options',()=>{for(const key of ['gridSize','distance','nudge'])if(fields[key].value===''||!Number.isFinite(+fields[key].value)||+fields[key].value<+fields[key].min||+fields[key].value>+fields[key].max)throw Error('Use grid spacing 1-100, snap distance 1-24, and an arrow-key step of 0.1-20.');project.layout||={};project.layout.snapping=cleanSnap(Object.fromEntries(Object.entries(fields).map(([key,input])=>[key,input.type==='checkbox'?input.checked:+input.value])));perform('snapping');close();say('Snapping options saved.');},'primary');
 }
 $('drawing-snap').onclick=()=>task(snapOptions);
 function startDrawingMove(key,event){
- if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]');
+ if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]'),axisFor=dragAxis();
  if(control){if(control.hasAttribute('data-cable-segment'))return {preview(){},commit(){},cancel(){}};
   const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),path=[...svg.children].find(n=>n.getAttribute('data-drawing-key')===key),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
   if(settings.cablePoints)for(const [i,p] of item.points.entries())if(i!==index)targets.push({axis:0,value:p[0]},{axis:1,value:p[1]});drawingSelection.clear();drawingSelection.add(key);cablePoint=index;
-  const geometry=(dx,dy,e)=>{const snapped=snapPoint([item.points[index][0]+dx,item.points[index][1]+dy],settings,targets,e?.altKey);return {...snapped,points:moveCablePoint(item.points,index,...snapped.point)};};
+  const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey),snapped=snapPoint([item.points[index][0]+(axis===1?0:dx),item.points[index][1]+(axis===0?0:dy)],settings,targets,e?.altKey,axis);return {...snapped,points:moveCablePoint(item.points,index,...snapped.point)};};
   const restore=()=>{path.setAttribute('d',before);showSnapGuides();};
   return {preview(dx,dy,e){const next=geometry(dx,dy,e);path.setAttribute('d',next.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));svg.querySelector('.cable-controls')?.remove();cableControls(svg,{...item,points:next.points},next.points.findIndex(p=>p[0]===next.point[0]&&p[1]===next.point[1]));showSnapGuides(next.guides);},commit(dx,dy,e){restore();task(()=>{cablePoint=-1;changeCablePoints(item,geometry(dx,dy,e).points);say('Cable bend moved.');});},cancel(){restore();syncDrawingSelection();}};
  }
  const keys=drawingSelection.has(key)?new Set(drawingSelection):new Set(event.shiftKey||event.ctrlKey||event.metaKey?[...drawingSelection,key]:[key]),boxes=drawingObjects(page).filter(o=>keys.has(o.editKey)&&!keys.has(o.parent?.editKey)).map(drawingBounds).filter(Boolean),targets=snapTargets(page,keys),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&keys.has(n.getAttribute('data-drawing-key'))&&!keys.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
  const restore=()=>{for(const [n,s] of original){if(s.transform==null)n.removeAttribute('transform');else n.setAttribute('transform',s.transform);if(s.d)n.setAttribute('d',s.d);}showSnapGuides();};
- const geometry=(dx,dy,e)=>snapBoxes(boxes,[dx,dy],settings,targets,e?.altKey);
+ const cableDrag=page.items.some(item=>item.editKey===key&&item.type==='path');
+ const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,cableDrag&&e?.shiftKey);return snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis);};
  return {preview(dx,dy,e){const next=geometry(dx,dy,e),[x,y]=next.delta;if(!started){drawingSelection.clear();for(const k of keys)drawingSelection.add(k);syncDrawingSelection();started=true;}
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
   for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else n.setAttribute('transform','translate('+x+' '+y+') '+(s.transform||''));}
@@ -179,16 +190,16 @@ document.addEventListener('keydown',event=>{
  if(['Delete','Backspace'].includes(event.key)&&cablePoint>0){event.preventDefault();task(removeSelectedCablePoint);}
  if((event.key==='Enter'||event.key===' ')&&event.target.closest('[data-cable-point],[data-cable-segment]')){event.preventDefault();cableControlClick(event.target.closest('[data-drawing-key]').dataset.drawingKey,event);}
 });
-function scoped(){
- const devices=project.devices.filter(d=>!d.hidden);const ids=new Set(devices.map(d=>d.id));
+function scoped(source=project){
+ const devices=source.devices.filter(d=>!d.hidden);const ids=new Set(devices.map(d=>d.id));
  const links=[],excludedPeerPorts=[];
- for(const l of project.links){
+ for(const l of source.links){
    const a=ids.has(l.a),b=ids.has(l.b);
    if(a&&b)links.push(l);
    else if(a)excludedPeerPorts.push([l.a,l.ap]);
    else if(b)excludedPeerPorts.push([l.b,l.bp]);
  }
- return {...project,devices,links,excludedPeerPorts};
+ return {...source,devices,links,excludedPeerPorts};
 }
 const matchName=d=>[d.name,d.model,d.vendor,d.kind,deviceKindLabel(d.kind),d.technology,d.ip].some(v=>String(v||'').toLowerCase().includes($('filter').value.trim().toLowerCase()));
 function deviceList(){
@@ -221,12 +232,13 @@ function linkStyleOptions(selected){
  const used=new Map();for(const p of pages)for(const line of p.items.filter(i=>i.type==='path'))if(!used.has(line.linkType))used.set(line.linkType,line);
  const types=[...new Set([...used.keys(),...linkDefaults.map(([type])=>type)])],type=types.includes(selected)?selected:types[0],line=used.get(type),current=project.layout?.linkStyles?.[type]||{},body=modal('Link styles','compact-color-dialog');
  const choice=field(body,'Link type',type,types.map(t=>[t,t+(used.has(t)?'':' (unused)')]));choice.onchange=()=>linkStyleOptions(choice.value);
+ const details=legendFields(body,type);
  const captions=el('div','','compact-fields');body.append(captions);const caption=(name,value)=>{const cell=el('div','','compact-field');captions.append(cell);return field(cell,name,value);};
  const title=caption('Legend title',current.title??type),lineTitle=caption('Line title',current.lineTitle??type),description=caption('Legend description',current.description||''),lineDescription=caption('Line description',current.lineDescription||'');
   for(const input of [title,lineTitle])input.maxLength=160;for(const input of [description,lineDescription])input.maxLength=240;
  body.append(el('p','Applies to matching lines and legends throughout the drawing.','hint'));
  const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});
- const bar=actions(body);button(bar,'Save link style',()=>{setLinkStyle(type,{title:title.value,description:description.value,lineTitle:lineTitle.value,lineDescription:lineDescription.value,color:picker.value,opacity:picker.opacity});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
+ const bar=actions(body);button(bar,'Save link style',()=>{setLegendStyle(type,details?.value||{},{title:title.value,description:description.value,lineTitle:lineTitle.value,lineDescription:lineDescription.value,color:picker.value,opacity:picker.opacity});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
  button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1});close();});button(bar,'Cancel',close);
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
@@ -491,13 +503,14 @@ function reviewLinks(){
  if(!project.links.length)body.append(el('p','No links imported. Add a connection using the local and remote interface names.','hint'));
  project.links.forEach((l,i)=>{const text=el('div');text.append(el('strong',(accounts.get(l.a)||l.a)+' '+l.ap+'  /  '+(accounts.get(l.b)||l.b)+' '+l.bp),el('div',[l.media||'Media unspecified',l.speed,l.status].filter(Boolean).join('  |  '),'asset-info'));const row=line(body,text);button(row,'Edit',()=>editLink(i));});
 }
-function connectionFields(parent,link,{onMediaChange}={}){
+function connectionFields(parent,link,{onMediaChange,mixed=false}={}){
+ const keep='__keep_connection_value__',choices=(catalog,value)=>mixed&&value===null?[[keep,'Mixed - keep existing'],...connectionChoices(catalog,'')]:connectionChoices(catalog,value),initial=(catalog,value)=>mixed&&value===null?keep:connectionValue(catalog,value);
  const grid=el('div','','compact-fields');parent.append(grid);const cell=(title,value,options)=>{const box=el('div','','compact-field');grid.append(box);return {box,input:field(box,title,value,options)};};
- const media=cell('Cable type',connectionValue(cableTypes,link.media),connectionChoices(cableTypes,link.media)),speed=cell('Link speed',connectionValue(linkSpeeds,link.speed),connectionChoices(linkSpeeds,link.speed));
+ const media=cell('Cable type',initial(cableTypes,link.media),choices(cableTypes,link.media)),speed=cell('Link speed',initial(linkSpeeds,link.speed),choices(linkSpeeds,link.speed));
  const mediaCustom=cell('Custom cable type',link.media||''),speedCustom=cell('Custom link speed',link.speed||'');mediaCustom.input.maxLength=160;speedCustom.input.maxLength=80;
  function refresh(){mediaCustom.box.hidden=media.input.value!==customConnectionValue;speedCustom.box.hidden=speed.input.value!==customConnectionValue;try{onMediaChange?.(cleanConnectionDetails({media:media.input.value,mediaCustom:mediaCustom.input.value,speed:''}).media);}catch{}}
  media.input.onchange=refresh;mediaCustom.input.oninput=refresh;speed.input.onchange=refresh;refresh();
- return {get value(){return cleanConnectionDetails({media:media.input.value,mediaCustom:mediaCustom.input.value,speed:speed.input.value,speedCustom:speedCustom.input.value});}};
+ return {get value(){const value=cleanConnectionDetails({media:media.input.value===keep?'unknown':media.input.value,mediaCustom:mediaCustom.input.value,speed:speed.input.value===keep?'':speed.input.value,speedCustom:speedCustom.input.value});if(media.input.value===keep)delete value.media;if(speed.input.value===keep)delete value.speed;return value;}};
 }
 function drawingConnection(item){return project.links.find(link=>sameConnection(link,item.sourceLink))||item.sourceLink||{};}
 function connectionType(link){const ap=[link.a,link.b].some(id=>project.devices.find(d=>d.id===id)?.kind==='ap');return connectionMediaInfo(link.media,ap);}
@@ -636,17 +649,17 @@ function editDrawingObject(key){
  const page=pages[active];if(!page)return;const objects=drawingObjects(page),item=objects.find(i=>i.editKey===key)||objects[0];if(!item)return;
  const hasPicker=['path','text','arttext'].includes(item.type)||item.legendEntry&&item.type==='rect',body=modal('Edit drawing object',hasPicker?'compact-color-dialog':''),options=objects.map((i,n)=>[i.editKey,(i.parent?'Panel detail: ':'')+(i.value||i.name||i.type+' '+(n+1)).slice(0,100)]);
  const select=field(body,'Drawing object',item.editKey,options);select.onchange=()=>editDrawingObject(select.value);
- const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);const inputs={};
+ const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields'+(item.legendEntry&&item.type==='rect'?' compact-swatch-properties':''):'form-grid');body.append(grid);const inputs={};
  const property=(where,name,value,opts)=>{if(!hasPicker)return field(where,name,value,opts);const cell=el('div','','compact-field');where.append(cell);return field(cell,name,value,opts);};
  for(const k of ['path','vector'].includes(item.type)?[]:item.type==='arttext'?['x','y','w']:['x','y','w','h']){inputs[k]=property(grid,({x:'Left',y:'Top',w:'Width',h:'Height'})[k]+(normalized?' (%)':' (page units)'),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
  if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
  let picker=null,currentType=item.linkType;
  const connection=item.type==='path'&&item.sourceLink?drawingConnection(item):null,details=connection?connectionFields(body,connection,{onMediaChange(media){const info=connectionType({...connection,media});if(info.name===currentType)return;currentType=info.name;if(picker){const style=project.layout?.linkStyles?.[info.name],existing=pages.flatMap(page=>page.items).find(path=>path.type==='path'&&path.linkType===info.name);picker.value=style?.color||existing?.color||info.color;picker.opacity=style?.opacity??existing?.opacity??1;}}}):null;
- const linkedSwatch=item.legendEntry&&item.type==='rect';
+ const linkedSwatch=item.legendEntry&&item.type==='rect',legendDetails=linkedSwatch?legendFields(body,item.linkType):null;
  for(const k of ['rect','vector'].includes(item.type)?linkedSwatch?['stroke']:['fill','stroke']:[]){inputs[k]=property(hasPicker?grid:body,k[0].toUpperCase()+k.slice(1),item[k]||'#17364A');}
  picker=['path','text','arttext'].includes(item.type)||linkedSwatch?colorPicker(body,{kind:item.type==='path'||linkedSwatch?'line':'text',color:linkedSwatch?item.fill:item.color,opacity:item.opacity??1,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
- if(item.type==='path'||linkedSwatch){body.append(el('p','Color and opacity apply to every cable of this link type and its legend entries.','hint'));button(actions(body),'Configure link titles and descriptions',()=>linkStyleOptions(item.linkType));}
+ if(item.type==='path'||linkedSwatch){body.append(el('p','Color and opacity apply to every cable of this link type and its legend entries.','hint'));button(actions(body),'Configure link type, speed and captions',()=>linkStyleOptions(item.linkType));}
  if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',item.weight||1);inputs.weight.type='number';inputs.weight.step=.1;}
  if(item.type==='vector')inputs.commands=field(body,'Vector commands (JSON, normalized coordinates)',JSON.stringify(item.commands),'multiline');
  if(item.type==='path'){const bar=actions(body);button(bar,'Edit bend points',()=>editCablePoints(item));if(item.sourceLink)button(bar,'Connect endpoints',()=>connectSelectedCable(item));}
@@ -655,7 +668,7 @@ function editDrawingObject(key){
   if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
   if(item.labelRole&&change.size<12)throw Error('Link labels need a font size of at least 12.');
   const clean=cleanDrawingEdits({[item.editKey]:change})[item.editKey];if(!clean||Object.keys(clean).length!==Object.keys(change).length)throw Error('Use hex colors, valid text settings, and finite dimensions.');
-  if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];const selected=details?.value,changed=selected&&(selected.media!==String(connection.media||'unknown').trim()||selected.speed!==String(connection.speed||'').trim());if(changed)saveConnection(project.links.findIndex(link=>sameConnection(link,item.sourceLink)),{...connection,...selected},{drawing:item,patch,style});else setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
+  if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];const selected=details?.value,changed=selected&&(selected.media!==String(connection.media||'unknown').trim()||selected.speed!==String(connection.speed||'').trim());if(linkedSwatch)setLegendStyle(item.linkType,legendDetails?.value||{},style,{[item.editKey]:patch});else if(changed)saveConnection(project.links.findIndex(link=>sameConnection(link,item.sourceLink)),{...connection,...selected},{drawing:item,patch,style});else setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
   else if(item.legendEntry&&item.linkType&&clean.value!==editableText(item)){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:clean.value},{[item.editKey]:patch});}
   else if(item.legendEntry&&item.linkType){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};if(project.layout?.drawingEdits?.[item.editKey]?.value==null)delete patch.value;setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});}
   else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}});picker?.remember();close();say('Drawing object saved.');

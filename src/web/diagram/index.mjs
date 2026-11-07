@@ -275,7 +275,7 @@ function wireless(project,db){
     if(bucket.length)batches.push(bucket);
     for(const batch of batches){
       const p=fresh('Wireless Connections','Wireless Connections',nameOf(device)+'  ·  access-point uplinks and physical switch ports',project),a=p.items;p.editScope=p.name+'|'+sw+'|sheet:'+batches.indexOf(batch);
-      const preview={items:batch.map(e=>({type:'path',color:mediaInfo(e.media,true).color,linkType:mediaInfo(e.media,true).name}))};applyLinkStyles(preview,project.layout?.linkStyles);linkLegend(preview);const headingOffset=Math.max(0,(preview.legendBottom||189)+10-216),maxCaptionHeight=Math.max(70,...batch.map(e=>captions(e,capacity===1?680:245).height)),switchY=Math.max(459,216+headingOffset+maxCaptionHeight+6+72+39+13*(capacity-1));
+      const preview={items:batch.map(e=>({type:'path',color:mediaInfo(e.media,true).color,linkType:mediaInfo(e.media,true).name,sourceLink:e}))};applyLinkStyles(preview,project.layout?.linkStyles);linkLegend(preview);const headingOffset=Math.max(0,(preview.legendBottom||189)+10-216),maxCaptionHeight=Math.max(70,...batch.map(e=>captions(e,capacity===1?680:245).height)),switchY=Math.max(459,216+headingOffset+maxCaptionHeight+6+72+39+13*(capacity-1));
       const swg=addDevice(p,project,device,[101,switchY,998,91],'switch');
       const per={top:[],bottom:[]};
       batch.forEach((e,i)=>{const start=getAnchor(swg,e.sp,'top',e.idx);per[start.side].push({e,start});});
@@ -338,11 +338,24 @@ function membershipMatrix(project,db) {
   }
   if(!groups.length||!names.size)return [];
   const pages=[],ids=[...names.keys()].sort((a,b)=>a-b);
-  for(const batch of split(groups,6)){
-    const left=303,colW=(1164-left)/batch.length,headings=batch.map(g=>({g,nameHeight:Math.max(22,wrapPortText(g.device,colW-8,14,true).length*17),portsHeight:Math.max(18,wrapPortText(interfaceList(g.ports),colW-8,12).length*15),taggedHeight:Math.max(17,wrapPortText(vlanSet(g.tagged),colW-8,11).length*14)})),headerHeight=Math.max(77,...headings.map(h=>h.nameHeight+h.portsHeight+h.taggedHeight+12)),top=188+headerHeight;
-    if(top+34>851)throw Error('This trunk-matrix heading needs more space. Reduce the number of interface groups or shorten the device name.');
-    const buckets=[];let bucket=[],height=0;
-    for(const id of ids){const rowHeight=Math.max(34,wrapPortText(id+'    '+(names.get(id)||''),250,14,true).length*17+8);if(top+rowHeight>851)throw Error('This VLAN name needs more room on the trunk matrix. Shorten the name or use fewer interface groups.');if(bucket.length&&top+height+rowHeight>851){buckets.push(bucket);bucket=[];height=0;}bucket.push({id,height:rowHeight});height+=rowHeight;}if(bucket.length)buckets.push(bucket);
+  // Measure actual headings and rows, then choose the fewest sheets across
+  // the whole matrix. A fixed six-column cap wastes space on short labels.
+  const rowSizes=ids.map(id=>({id,height:Math.max(26,wrapPortText(id+'    '+(names.get(id)||''),250,14,true).length*17+8)}));
+  const left=303,width=1164-left,limit=Math.floor(width/72),plans=new Array(groups.length+1);
+  plans[groups.length]={pages:0,splits:0,headerArea:0};
+  for(let at=groups.length-1;at>=0;at--){
+    for(let count=1;count<=Math.min(limit,groups.length-at);count++){
+      const batch=groups.slice(at,at+count),colW=width/count,headings=batch.map(g=>({g,nameHeight:Math.max(22,wrapPortText(g.device,colW-8,14,true).length*17),portsHeight:Math.max(18,wrapPortText(interfaceList(g.ports),colW-8,12).length*15),taggedHeight:Math.max(17,wrapPortText(vlanSet(g.tagged),colW-8,11).length*14)})),headerHeight=Math.max(69,...headings.map(h=>h.nameHeight+h.portsHeight+h.taggedHeight+12)),top=188+headerHeight;
+      if(rowSizes.some(row=>top+row.height>851)||!plans[at+count])continue;
+      const buckets=[];let bucket=[],height=0;
+      for(const row of rowSizes){if(bucket.length&&top+height+row.height>851){buckets.push(bucket);bucket=[];height=0;}bucket.push(row);height+=row.height;}if(bucket.length)buckets.push(bucket);
+      const tail=plans[at+count],candidate={batch,colW,headings,headerHeight,top,buckets,next:at+count,pages:buckets.length+tail.pages,splits:buckets.length-1+tail.splits,headerArea:headerHeight*buckets.length+tail.headerArea},best=plans[at];
+      if(!best||candidate.pages<best.pages||candidate.pages===best.pages&&(candidate.splits<best.splits||candidate.splits===best.splits&&candidate.headerArea<best.headerArea))plans[at]=candidate;
+    }
+  }
+  if(!plans[0])throw Error('A trunk-matrix label needs more room than one page. Shorten its device, interface or VLAN name.');
+  for(let at=0;at<groups.length;at=plans[at].next){
+    const {batch,colW,headings,headerHeight,top,buckets}=plans[at];
     for(const rows of buckets){
     const p=fresh('Trunk VLANs','Trunk VLANs','Native and tagged VLANs by configured interface group',project),a=p.items;
     label(a,36,150,1128,25,'N   Native / untagged       T   Tagged       ·   Outside configured membership',13,true,C.muted);

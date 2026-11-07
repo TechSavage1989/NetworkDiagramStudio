@@ -14,7 +14,7 @@ Read this file, the current development handoff, and the shared standards before
 | src/web/stencil-files.mjs, src/web/stencil-search.mjs, src/web/visio-binary.mjs | Recursive discovery, filtered master selection and bounded legacy picture import. |
 | src/web/vendor | Pinned local EMF renderer and its license. |
 | src/web/history.mjs, src/web/inline-text.mjs, src/web/snapping.mjs | Project deltas, atomic undo/redo, direct text editing, selection geometry and configurable snapping. |
-| src/web/link-styles.mjs, src/web/page-options.mjs | Shared cable/legend styling and captions, validated page-number settings and format tokens. |
+| src/web/link-styles.mjs, src/web/legend-connections.mjs, src/web/page-options.mjs | Shared cable/legend styling and captions, validated page-number settings and format tokens. |
 | src/web/connection-types.mjs, src/web/device-types.mjs, src/web/device-symbols.mjs | Cable/speed presets and validation, inventory roles and editable generic endpoint symbols. |
 | src/web/imports/endpoint-hardware.mjs | Sourced server/storage/HCI/platform family recognition without invented sockets; see docs/ENDPOINT_HARDWARE.md. |
 | src/web/connection-edit.mjs, src/web/point-tools.mjs, src/web/color-picker.mjs, src/web/port-table.mjs | Port selection/conflicts, normalized box/group movement, solid-color formats/palettes and port table rules. |
@@ -73,3 +73,7 @@ The icon resource is a checked-in source asset needed by the Windows compiler, d
 The root guard allows the four project guides, .gitignore, .github, desktop, docs, scripts, src and tests. Builds go under untracked dist, bin or obj directories. A new tracked root entry requires an explicit change to the guard and project guide. The dedicated root-guard test also exercises the filesystem fallback without a Git checkout.
 
 Work on short-lived branches and use a pull request into main. The normal release is an intentional change to docs/releases/intent.json. Its version, tag and notes path must agree with the desktop project. Published assets are immutable. Future pushes, PRs, merges and releases need authorization for their own scope.
+
+Shift cable/bend dragging retains a dominant axis until Shift is released; grid and guide snapping may only change the unlocked coordinate. Preserve Shift-click selection and Shift arrow nudges. Legend metadata edits prepare an immutable project, preserve mixed fields not explicitly changed, materialize inferred handoffs once and migrate cable/legend patches before a single validated history commit. Refresh directly overridden cable-detail values when metadata changes, retaining their position and text styling. Show used connection speeds in the edited legend, including mixed speeds. Never apply a selected speed to unrelated links merely because they share the destination style.
+
+Trunk matrices measure full headings and row labels and plan column batches to minimize sheet count. Keep minimum column/row dimensions, fixed readable fonts, complete membership cells and footer clearance; do not return to a fixed six-column split. Unknown switch/firewall models use generic role symbols without socket anchors. The Netgate 2100 shared mvneta1 interface is not an individual physical LAN port. PA-415 management and ethernet1/1 are separate combo pairs.
