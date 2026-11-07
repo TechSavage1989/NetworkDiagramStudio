@@ -1,5 +1,15 @@
 # Development handoff
 
+## Preview.21 shared hardware scale and measured port-map pages
+
+Prepares 0.1.0-preview.21 / file version 0.1.0.21 from published preview.20 at 6bce02b63e1afb9c684984a12cd4d6b6d9f61a05. Preview.20 passed PR #15 Windows run 42400472883 and merged-main publication run 42401174729. Its public feed, actual asset hashes, PE version/icon and offline modules were verified, and both existing downloads were refreshed. Standing build/release authorization continues. Require green exact-head Windows checks, merge, merged-main publication and public feed/asset verification before announcing this release.
+
+Port maps and wireless still fitted hardware into fixed-height boxes after core pages had adopted a shared width. equipment-layout.mjs measures complete artwork at a common width and produces member-range views for native stacks. Port maps try three bounded shared scales, select the fewest pages and prefer larger hardware on ties. Measured captions, bodies and keys precede table packing. Oversized keys and detail records continue; grouped, expanded, individual-row and repeated-panel options follow the same rules. Original inventory identity is retained, while continuation edit scopes and Visio masters identify their member range. Native physical ports plus actual panel anchors assign wireless links to members, including LLDP-only interfaces. Generic compact core symbols now follow the same paper-dependent scale as the stack.
+
+Explicit saved geometry remains authoritative. Single imported-image stacks cannot be divided into members. Table fonts keep existing readable limits; port-number overlays below eight scene units remain omitted with complete table records retained. The private reported chassis/five-member/eight-member example now uses a common 720-unit port-map width with six port-map sheets and all 397 supplied physical port records retained. Customer fixtures and captures remain outside git. Public screenshots use fictional equipment only.
+
+Local coverage: 180 Node tests, seven Python damaged-package tests, synthetic VSDX/VSSX packages, actual browser editing, undo/redo, save/reopen and a five-page downloaded VSDX. Mixed-size print PDF page boxes match requested paper within one point. Regression tests cover chassis/stack aspect ratios, shared widths through all port-table modes, reorder, Letter/A3 paper, member-local wireless endpoints, LLDP-only ports, complete records, bounded text and isolated saved edits. README screenshots were refreshed and inspected. Hosted Windows checks remain required on the final head. Direct Microsoft Visio rendering and physical custom printer forms remain unverified.
+
 ## Preview.20 paper-aware layout, stack continuation and update review
 
 Prepares 0.1.0-preview.20 / file version 0.1.0.20 from published preview.19 at 31671881d45c0b0f035023b313569cbbcc54c235. Standing authorization covers build and release. Require green exact-head hosted Windows checks, merge, merged-main publication, public feed/asset verification and refreshing both existing downloads before announcing publication.

@@ -19,7 +19,7 @@ Network engineers can use the Windows application or the offline browser edition
 - Zoom, pan and Fit page. In Edit drawing, box-select or Shift/Ctrl-click items, move them with the mouse or arrow keys, align edges or centers, and distribute spacing. Configure grid snapping and alignment guides. Double-click text to type directly on the diagram; double-click other elements for properties. Ctrl+Z, Ctrl+Shift+Z and Undo all apply to project changes. Alt-drag selects native panel details.
 - Select cable type and link speed in line properties, the connection editor or a legend swatch. Legend choices update associated connection records across the drawing. Choose Copper, generic/MMF/SMF fiber, SR/LR/ER/ZR, DAC variants, AOC/AEC, coaxial or serial; use speed presets or enter custom values. Captions and active legends follow the selected type.
 - Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a visual selector, HEX field and standard swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet. Automatic cables and their color keys use a consistent standard thickness; exported Visio line widths are explicit and editable.
-- Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port maps use consistent port-number boxes and a shared assignment matrix with one port column per switch. Expanded tables, individual rows and optional empty-record filtering remain available.
+- Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port maps keep a shared hardware scale, consistent port-number boxes and an assignment matrix with one port column per switch. Measured hardware and details share a sheet when they fit; larger stacks continue by member range. Expanded tables, individual rows and optional empty-record filtering remain available.
 - Show manufacturer/model and available MAC addresses on wireless AP captions and other device diagrams. Edit device and interface addresses through readable form fields; captions wrap in full and remain editable.
 - Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
 - Keep complete diagram captions with measured wrapping in both SVG and Visio. Port modules use editable gray optic faces with dark sockets and dark DAC ends with a horizontal insert, matching the Configuration Inspector style. Framed module keys expand or continue onto a module sheet; duplicate wording such as Port port1 is avoided.
@@ -27,25 +27,21 @@ Network engineers can use the Windows application or the offline browser edition
 
 ## Screenshots
 
+**Paper sizes and orientation**
+
 ![Paper size and orientation controls](docs/images/page-options.png)
+
+**Update review and release notes**
 
 ![Update review panel with fictional release data](docs/images/update-panel.png)
 
-**Switch port map**
+**Stack and switch port maps at a common scale**
 
-<p align="center"><img src="docs/images/port-map.png" width="900" alt="Port map for the fictional sample switch"></p>
+<p align="center"><img src="docs/images/port-map.png" width="900" alt="Fictional two-member stack and standalone switch with equal faceplate widths and a shared assignment table"></p>
 
 **Wireless model and MAC details**
 
 <p align="center"><img src="docs/images/wireless-models.png" width="900" alt="Eight fictional access points with model, MAC, interface and link details on one sheet"></p>
-
-**Editable ports and device page placement**
-
-<p align="center"><img src="docs/images/device-ports.png" width="900" alt="Human-readable port fields and core-page placement for a fictional device"></p>
-
-**VLANs and routing grouped by device**
-
-<p align="center"><img src="docs/images/logical-sections.png" width="900" alt="Three fictional switches with separate VLAN and route sections sharing one page"></p>
 
 ## Download
 
@@ -96,6 +92,8 @@ Enable **Edit drawing**, then drag an item to move it. Shift-click adds or remov
 In **Hardware**, choose **Map ports**. Drag a rectangle over sockets to select them, or select ports in the list. Shift adds ports and Ctrl toggles them. Drag a selected marker to move the group. Use **Align row**, **Align column** or equal spacing relative to the current port. Select one row or column when distributing sockets. Zoom with the wheel or the zoom buttons, choose **Fit device**, and hold Space or the middle mouse button to pan. Arrow keys move the selected ports one screen pixel, Shift moves ten and Ctrl moves one tenth. **Undo port change** or Ctrl+Z restores the previous mapping. Use **Place port** to add a socket at a clicked position. Supported Visio imports populate existing connection points automatically. Unnamed points receive neutral Connection labels; map or rename these to actual interfaces when their identities are known. Unsupported or missing cached point coordinates produce an import error instead of silently dropping the points.
 
 Port-map sheets follow a shared layout: nearby device names and model/state summaries, wide faceplates with consistent port-number boxes, a role/state key and an assignment matrix. The default compact grouped matrix compares switches side by side and retains their ports and connection details. Select **Port map options** to choose expanded tables, one row per interface, and whether to repeat faceplates on continued pages. First-page-only faceplates reduce the page count. Port lists use numeric member/slot/port order and wrap long details. Choose all records, hide records without assignment details, or show only records with a peer/description. The table filter leaves the physical faceplate intact.
+
+Port-map hardware uses one common width across its sheets, preserving each chassis and stack member's proportions. The planner measures complete panels and tries bounded shared scale adjustments to reduce page count. It favors the larger scale when both arrangements use the same number of pages. Oversized native stacks continue by member range with their local port details, and long tables can continue without repeating the artwork. Wireless sheets use the same principle and connect APs to their actual member. Change the **Port maps** or **Wireless** paper override in **Page options** to provide more space. Existing explicit size/position edits remain authoritative.
 
 Double-click text to edit it directly on the diagram. Enter saves and Escape cancels. A rejected edit stays visible with an explanation so it can be corrected or cancelled. Double-click other elements to open their properties. In **Edit drawing**, drag a rectangle around items; Shift adds items and Ctrl toggles them. Drag the selected group or nudge it with arrow keys. Shift multiplies the configured step by ten; Ctrl divides it by ten.
 
@@ -160,4 +158,4 @@ Open **dist/NetworkDiagramStudio.html** after the build. To publish the Windows 
 python scripts/package-release.py
 ```
 
-[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.20.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+[Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.21.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
