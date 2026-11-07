@@ -1,5 +1,13 @@
 # Development handoff
 
+## Preview.16 Configuration Inspector-style port modules
+
+Prepares 0.1.0-preview.16 / file version 0.1.0.16 from published preview.15 at 5166bf1d2c7dfc41b95eb810efd1be5d4fedcb32. Preview.15 passed PR #10 and merged-main Windows validation, and its public release/feed/asset hashes and both download replacements were verified. The user's standing build/release authorization continues. Require green exact-head Windows checks, merge, merged-main checks and published asset/feed verification before claiming preview.16 is published.
+
+Compared the supplied module-key screenshot with the current Configuration-Inspector webview/diagram.js drawing primitives. Built-in optic faces now use gray metal, two dark receptacles and a border matching the configured media color. DAC ends use a dark face and a horizontal insert. The legend adds a light framed surround while the physical port overlay keeps the unframed face. Both remain native editable groups. Framed legend and unframed port masters are distinct, as are optical reaches and DAC variants. Local selected artwork remains authoritative. This is a visual change, with no new hardware/media inference.
+
+Child editSlot retains the previous body/receptacle indices when the key inserts its frame. Legacy shared SFP key edits are applied as read-only aliases to the remaining relevant category. Tests cover retained edits, custom artwork/anchors, media color separation, native Visio children and glued endpoints. Browser QA double-clicks the frame, changes its name, edits text, saves/reopens and exports a native Visio file; offline loading and full captions also pass. The fictional README hero was refreshed and inspected. Windows validation is required on the final head. Direct Microsoft Visio rendering remains unverified.
+
 ## Preview.15 compact WAN/circuit layout
 
 Prepares 0.1.0-preview.15 / file version 0.1.0.15 from published preview.14 at cf51ed1f6524463b9d373519c85fb5f2cce2d8a4. Preview.14 PR #9 and merged-main Windows validation passed; the public tag, feed, EXE/ZIP hashes and embedded version/icon/source were verified. Its two existing download files were updated. The user authorized building and releasing this additional layout change. Require green exact-head Windows checks, merge, merged-main checks and public asset/feed verification before describing preview.15 as published.
