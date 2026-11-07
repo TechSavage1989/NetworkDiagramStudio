@@ -1,5 +1,6 @@
 import {faceplates} from '../imports/faceplates.mjs';
 import {genericDeviceSymbol} from '../device-symbols.mjs';
+import {consistentSockets} from './connector-geometry.mjs';
 const normalize=v=>String(v||'').toUpperCase().replace(/[\s_]/g,'').replace(/^(?:FORTINET|SONICWALL|SOPHOS|CISCO(?:CATALYST)?|JUNIPER(?:NETWORKS)?|PALOALTO(?:NETWORKS)?)/,'').replace(/^(?:FORTIGATE|FGT?)-?(\d+[A-Z])$/,'FG-$1');
 const profiles=new Map();for(const p of faceplates)for(const m of p.models)profiles.set(normalize(m),p);
 export function faceplateProfile(d){
@@ -29,7 +30,7 @@ function socket(a,ports,name,x,y,form,view='front',w=.024,h=.23,primary=true,ori
  if(rj){rectangle(a,x-width*.36,y-height*.28,width*.72,height*.49,'#101A1E');rectangle(a,x-width*.18,y+height*.13,width*.36,height*.30,'#879296');for(let j=0;j<4;j++)rectangle(a,x-width*.29+j*width*.17,y-height*.3,width*.05,height*.13,'#D3B266');}
  else {rectangle(a,x-width*.4,y-height*.35,width*.8,height*.7,'#182D36');rectangle(a,x-width*.3,y+height*.23,width*.6,height*.05,'#D7DCDE');}
  if(orientation==='up')for(let i=first;i<a.length;i++)a[i].y=2*y-a[i].y-a[i].h;
- for(let i=first;i<a.length;i++)a[i].name='Port '+name+' '+form;
+ for(let i=first;i<a.length;i++)Object.assign(a[i],{name:'Port '+name+' '+form,socketForm:form,socketPart:i-first});
  if(primary){ports[name]=[x,y];Object.assign(a[first],{anchorName:name,anchorOrigin:[x,y]});}return {name,x,y,form,view,orientation,primary};
 }
 function banksFor(p){return p.banks?.filter(b=>!b.optional)||[];}
@@ -44,7 +45,7 @@ function baseLayout(p){
  const add=(...args)=>{sockets.push(socket(children,ports,...args));};
  if(p.sockets){
   const max=Math.max(p.module?1:29,...p.sockets.map(s=>s[1]));
-  for(const [n,col,row,form,suffix] of p.sockets){let x=.052+col*(.91/(max+1)),y=row===0?.32:.70;
+  for(const [n,col,row,form,suffix] of p.sockets){const lastRow=Math.max(...p.sockets.filter(s=>s[3]===form).map(s=>s[2]));let x=.052+col*(.91/(max+1)),y=lastRow>1?.18+.62*row/lastRow:row===0?.32:.70;
    if(p.models.some(m=>['JL675A','JL676A','R9Y04A'].includes(m))){if(n>=49)x=n<=50?.03386:.08466;else x=.138056+Math.floor((n-1)/2)*(.770069/23);y=n>=49?(row===0?.33153:.70476):(row===0?.34575:.69055);}
    if(p.models.some(m=>/^J973[12]A$/.test(m))){x=.33+(Number(n)-1)*.137;y=.58;}
    const measured=p.socketPoints?.[n];if(measured)[x,y]=measured;
@@ -137,7 +138,7 @@ function rearExpansion(panel,p,device){
  rectangle(panel.children,.58,.61,.13,.27,'#BAC4C8','#71828A',.6);text(panel.children,.59,.69,.11,.07,'Stacking bay',4);
  panel.regions=[{y:0,h:.44},{y:.54,h:.44}];panel.ratio/=2.15;return panel;
 }
-export function deviceFaceplate(device,options={}){
+function buildFaceplate(device,options={}){
  const p=faceplateProfile(device),members=device.stackMembers||[],modules=device.modules||[];
  if(/^J985[01]A$/i.test(device.model||'')||/^J869[78]A$/i.test(device.model||'')){
   const count=/J9851|J8698/i.test(device.model)?12:6,rows=count/2,children=[],ports=Object.create(null),sockets=[],unit=.94/(rows+1),firstRow=.04+unit;
@@ -181,3 +182,4 @@ export function deviceFaceplate(device,options={}){
  }
  const result=baseLayout(p);return result?mapObserved(rearExpansion(result,p,device),p,device):null;
 }
+export function deviceFaceplate(device,options={}){return consistentSockets(buildFaceplate(device,options));}

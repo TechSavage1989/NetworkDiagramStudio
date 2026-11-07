@@ -26,10 +26,18 @@ Network engineers can use the Windows application or the offline browser edition
 - Keep complete diagram captions with measured wrapping in both SVG and Visio. Port modules use editable gray optic faces with dark sockets and dark DAC ends with a horizontal insert, matching the Configuration Inspector style. Framed module keys expand or continue onto a module sheet; duplicate wording such as Port port1 is avoided.
 - Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and compact WAN/circuit cards. Circuit cards fit the actual stack width, use extra rows on narrow devices and retain complete provider/gateway text. Routes use available space inside the stack width when port orientation and clearances permit. Configure page-number visibility, starting values, padding and format.
 
+- Rename tabs, choose devices for named network/report pages, scale drawings/devices/text globally or independently, and customize the information panel with VLANs, addresses, routes and notes in **Pages & layout**. Built-in connectors use shared proportions across chassis and stacks. See the [layout guide](docs/FLEXIBLE_LAYOUT.md).
+
 ## Screenshots
 
 **A dynamic canvas keeps the complete core network together.**
 <p align="center"><img src="docs/images/hero.png" width="900" alt="Fictional Harbor Workshop core network on a dynamic canvas"></p>
+
+**Name pages and choose the devices they contain.**
+<p align="center"><img src="docs/images/pages-layout.png" width="900" alt="Pages and layout controls with a named page and selected devices"></p>
+
+**Choose and resize useful information beside the drawing.**
+<p align="center"><img src="docs/images/information-panel.png" width="900" alt="Fictional network drawing with a customizable information panel"></p>
 
 **Drawing size and print paper are separate choices.**
 <p align="center"><img src="docs/images/page-options.png" width="900" alt="Dynamic Fit all canvas with independent printing controls"></p>
@@ -104,6 +112,8 @@ In **Edit drawing**, select a cable. Drag a square handle to move a bend, click 
 **Edit selected** opens a visual color selector, HEX field, eleven standard colors and line opacity. Line, legend and text dialogs keep their default controls and save actions visible without scrolling at 1366 by 768 and larger. The legend reflects only the link styles used on that sheet. Crossings show arc hops with clearance, and the native Visio export includes arc-jump settings.
 
 **Link styles** configures colors, opacity and separate titles/descriptions for connection captions and legend entries. Editing a cable color or a legend swatch updates all cables of that link type and their legends throughout the drawing. The legend editor also offers cable-type and speed presets plus Custom fields. Saving updates the actual associated links, captions and legend speed summary in one undoable action. Mixed values stay unchanged until explicitly replaced. Existing connections already in the destination type keep their own speeds. Custom captions, positions, bends and widths remain editable. Double-click a legend title to rename it directly. Text color is independent of cable color. Wireless connection captions show the port and speed without evidence-status wording.
+
+**Pages & layout** provides page names, selected-device network/report pages, visible tabs, drawing and text scales, shared device scale, and a configurable information panel. Double-click a tab to open it. Clear **Use drawing defaults** to override that page. Choose **Add a page**, its type and devices to create a custom report; hide unwanted automatic pages with **Show this page**. Open device details for individual device scale, or **Edit drawing > Edit selected** for object and font sizes. The [layout guide](docs/FLEXIBLE_LAYOUT.md) describes inheritance and stencil behavior.
 
 **Page options** separates **Canvas size** from **Print paper**. Dynamic / Fit all is the default for new drawings; existing explicit paper choices are retained. Choose **Match drawing (full-size PDF)** for the full canvas, or Letter, Legal, Tabloid, A5 through A1, or custom print dimensions (148 to 1500 mm) to fit each drawing page onto a printed sheet. Other documentation views retain their logical sections and connection banks.
 

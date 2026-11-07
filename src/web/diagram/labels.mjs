@@ -46,7 +46,18 @@ export function placeDeviceTitles(page,project,nodes){
   for(const gap of [5,9,14,20,28,38,50,64])for(const x of xs)candidates.push({x,y:node.y-h-gap,w,h});
   for(const gap of [7,12,18,26,36,48])for(const x of xs)candidates.push({x,y:node.y+node.h+gap,w,h});
   candidates.push({x:node.x-w-12,y:node.y,w,h},{x:node.x+node.w+12,y:node.y,w,h});
-  const fit=candidates.find(b=>b.x>=minX&&b.x+b.w<=maxX&&b.y>=minY&&b.y+b.h<maxY&&!bodies.some(n=>intersects(b,n,3))&&!occupied.some(t=>intersects(b,t,3))&&!paths.some(p=>pathCrossesText(p,b,3)));
+  const clear=b=>!bodies.some(n=>intersects(b,n,3))&&!occupied.some(t=>intersects(b,t,3))&&!paths.some(p=>pathCrossesText(p,b,3));
+  let fit=candidates.find(b=>b.x>=minX&&b.x+b.w<=maxX&&b.y>=minY&&b.y+b.h<maxY&&clear(b));
+  if(!fit&&page.dynamic){
+   // A growing canvas has no paper boundary. Search obstacle edges near the
+   // device, then reserve an outside column if the surrounding routes are full.
+   // Merely increasing page height cannot fix a blocked caption beside a body.
+   const obstacles=[...bodies,...occupied,...paths.flatMap(p=>p.points.map(([x,y])=>({x,y,w:0,h:0})))],preferredY=slot==='detail'?node.y+node.h+5:node.y-h-6;
+   const nearest=(values,origin)=>[...new Set(values)].sort((a,b)=>Math.abs(a-origin)-Math.abs(b-origin)).slice(0,64);
+   const xs=nearest([node.x,node.x+node.w-w,...obstacles.flatMap(b=>[b.x-w-12,b.x+b.w+12])],node.x),ys=nearest([preferredY,...obstacles.flatMap(b=>[b.y-h-9,b.y+b.h+9])],preferredY);
+   const extra=xs.flatMap(x=>ys.map(y=>({x,y,w,h}))).sort((a,b)=>Math.abs(a.x-node.x)+Math.abs(a.y-preferredY)-Math.abs(b.x-node.x)-Math.abs(b.y-preferredY));
+   fit=extra.find(clear)||{x:Math.max(...obstacles.map(b=>b.x+b.w))+24,y:preferredY,w,h};
+  }
   if(!fit){const error=Error('This page needs more space for a device title. Move a device to another core page.');Object.assign(error,{code:'CORE_LAYOUT_CAPACITY',role:'title',owner:node.sourceId,page:page.name,slot});throw error;}
   for(const t of group){t.x+=fit.x-x0;t.y+=fit.y-y0;occupied.push({...t});}
  }
@@ -74,7 +85,7 @@ export function placeCableLabels(page,requests,edits={}){
  const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path');
  const result=[];
  for(const req of requests){
-  const source=Array.isArray(req.value)?req.value:[req.value],patches=source.map((_,i)=>edits[req.editKey+'|'+i]||{}),size=Math.max(12,req.size||12,...patches.map(p=>p.size||0)),sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38,maxWidth=sidebar?96:req.side==='right'?Math.max(96,1154-Math.max(req.outer+8,984)):Math.max(100,Math.min(req.outer-46,250));
+  const source=Array.isArray(req.value)?req.value:[req.value],patches=source.map((_,i)=>edits[req.editKey+'|'+i]||{}),size=Math.max(req.minSize??12,req.size||12,...patches.map(p=>p.size||0)),sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38,maxWidth=sidebar?96:req.side==='right'?Math.max(96,1154-Math.max(req.outer+8,984)):Math.max(100,Math.min(req.outer-46,250));
   const lines=[];for(const [index,original] of source.entries()){const patch=patches[index];if(patch.hidden)continue;const value=patch.value??original;let line='',fragment=0;const push=()=>lines.push({value:line,patch,key:req.editKey+'|'+index+(fragment++?'|wrap'+fragment:'')});for(const char of String(value)){if(line&&textWidth(line+char,size,true)>maxWidth){push();line='';}line+=char;}if(line)push();}if(!lines.length)continue;
   const w=Math.max(...lines.map(s=>textWidth(s.value,size,s.patch.bold!==false))),h=lines.length*(size+4),candidates=[];
   const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);
@@ -128,6 +139,6 @@ export function placeCableLabels(page,requests,edits={}){
   occupied.push(box);if(box.leader)occupied.push(box.leader);
   result.push({...req,...box,lines,size});
  }
- for(const b of result){if(b.leader)page.items.push({type:'rect',...b.leader,fill:b.color||'#17364A',stroke:'none',weight:0,editKey:b.editKey+'|leader'});for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,linkId:b.linkId,editKey:b.lines[i].key});}
+ for(const b of result){if(b.leader)page.items.push({type:'rect',...b.leader,fill:b.color||'#17364A',stroke:'none',weight:0,editKey:b.editKey+'|leader'});for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});}
  return {ok:true,placed:result};
 }

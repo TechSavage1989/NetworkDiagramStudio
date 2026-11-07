@@ -1,4 +1,5 @@
 import {pageGeometry,pageFamily} from '../page-options.mjs';
+import {deviceScale} from '../presentation.mjs';
 // Geometry is stored in page pixels with a top-left origin. Both exporters consume the same scene.
 import {coreSidebar} from './sidebar.mjs';
 import {deviceFaceplate} from './faceplate.mjs';
@@ -48,8 +49,8 @@ export function linkLegend(page){
  const values=[...entries.values()].sort((a,b)=>{const rank=n=>defaults.findIndex(([name])=>name===n||name.startsWith('Fiber')&&/unspecified|Fiber/.test(n));return (rank(a.name)<0?9:rank(a.name))-(rank(b.name)<0?9:rank(b.name))||a.color.localeCompare(b.color)||a.opacity-b.opacity;});
  if(!values.length)return;
  if(page.legendLayout==='sidebar'){
-  const side=page.sidebar||coreSidebar(),s=side.scale,textX=38+64*s,textSpan=side.width-64*s-4,size=Math.max(12,14*s),detailSize=Math.max(11,12*s),lineHeight=Math.max(size*1.25,18*s),detailHeight=Math.max(detailSize*1.25,15*s);
-  label(page.items,38,147,side.width,26*s,'CONNECTION TYPES',16*s,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=147+51*s;
+  const side=page.sidebar||coreSidebar(),s=side.scale,tf=side.textScale||1,textX=38+64*s,textSpan=side.width-64*s-4,size=Math.max(12,14*s)*tf,detailSize=Math.max(11,12*s)*tf,lineHeight=Math.max(size*1.25,18*s),detailHeight=Math.max(detailSize*1.25,15*s);
+  label(page.items,38,147,side.width,26*s*tf,'CONNECTION TYPES',16*s*tf,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=147+51*s*tf;
   const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
   for(const {name,color,opacity,weight,style,speeds} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight),title=titleOf({name,style,speeds,opacity}),lines=wrapPortText(title,textSpan,size),description=style?.description?wrapPortText(style.description,textSpan,detailSize):[];
    rect(page.items,38,y+11*s,52*s,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
@@ -68,11 +69,12 @@ export function linkLegend(page){
  });page.legendBottom=167+rows.reduce((a,b)=>a+b,0);
 }
 export function fresh(name,title,subtitle,project){
-  const geometry=pageGeometry(project,pageFamily(name)),p={name,title,...geometry,items:[]}, a=p.items,span=p.width-72,nameWidth=Math.max(180,span-308);
+  const geometry=pageGeometry(project,pageFamily(name));if(project._reportPrefix)name=project._reportPrefix+'|'+name;
+  const p={name,title,...geometry,items:[]}, a=p.items,span=p.width-72,nameWidth=Math.max(180,span-308);
   const projectName=project.name||'Network project',nameHeight=Math.max(23,wrapPortText(projectName,nameWidth,15,true).length*18);
   label(a,36,Math.max(0,39-nameHeight),nameWidth,Math.min(39,nameHeight),projectName,15,true,C.teal);
   label(a,p.width-300,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');a.at(-1).pageFrame='brand';
-  label(a,36,43,span,48,title,33,true);
+  label(a,36,43,span,48,title,33,true);a.at(-1).pageTitle=true;
   label(a,36,99,span,36,subtitle,16,false,C.muted);
   rect(a,36,138,span,2,C.rule);a.at(-1).pageFrame='rule';
   return p;
@@ -104,6 +106,7 @@ export function addDevice(page,project,d,bounds,key,opts={}){
   const asset=actualAsset(project,d), ports=physicalPorts(d), ap=d.kind==='ap',panel=!asset&&!ap?deviceFaceplate(d,opts):null,symbol=!asset&&!panel?genericDeviceSymbol(d.kind):null;
   const ratio=asset?+asset.width/+asset.height:panel?.ratio||symbol?.ratio|| (ap?1:d.kind==='handoff'?6:d.kind==='unknown'?3:9);
   const placement=opts.fillBounds?Object.fromEntries(['x','y','w','h'].map((key,n)=>[key,bounds[n]])):opts.fitWidth?{x:bounds[0],y:bounds[1],w:bounds[2],h:bounds[2]/ratio}:fitRatio(ratio,...bounds);
+  const factor=deviceScale(project,d);if(!opts.fillBounds){placement.w*=factor;placement.h*=factor;}
   const g={type:'device',key,sourceId:d.id,instanceKey:opts.instanceKey,name:d.name||d.id,kind:d.kind,model:d.model||'',...placement,asset,
     masterKey:asset?'asset:'+String(asset.id??d.stencilId??d.id):'device:'+d.id,ports:Object.create(null),children:[],fallback:!asset};
   if(!asset&&d.stackMembers?.length)g.masterKey+=':members:'+d.stackMembers.map(m=>m.id).join(',')+':gap:'+(opts.padding??1);
@@ -127,7 +130,10 @@ export function addDevice(page,project,d,bounds,key,opts={}){
     label(g.children,.06,.15,.88,.7,'Port layout needs a model or mapped stencil',10,false,C.muted,'center');
   }
   if(opts.apEdge)g.ports[opts.apEdge]=[.5,opts.apEdge==='uplink.top'?0:1];
-  editDeviceShape(page,project,g);page.items.push(g);
+  editDeviceShape(page,project,g);
+  const artworkScale=g.w/(placement.w/(opts.fillBounds?1:factor));
+  if(artworkScale!==1)for(const child of g.children)if(child.type==='text'&&!Number.isFinite(project.layout?.drawingEdits?.[child.editKey]?.size))child.size*=artworkScale;
+  page.items.push(g);
   return g;
 }
 export function getAnchor(g,raw,sideHint,unique){
