@@ -38,9 +38,9 @@ test('automatic continuation preserves accepted drawing edits, project state and
  project=history.travel(project,{redo:true,validate:buildPages});pages=core(project);assert.ok(project.devices.some(device=>device.id==='compute'));assert.ok(pages.length>1);assert.equal(body(pages,'edge').x,442);assert.equal(JSON.stringify(project.layout.drawingEdits),patches);
 });
 
-test('an overfull explicit core page reports capacity clearly without mutating the accepted project',()=>{
+test('an overfull named core group continues without shrinking devices or mutating assignments',()=>{
  const project=sampleSite();project.devices.splice(3,0,compute());project.layout={corePages:[{id:'fixed',name:'Fixed core',devices:['edge','sw-1','sw-2','compute']}]};const accepted=JSON.stringify(project);
- assert.throws(()=>buildPages(project),error=>error.code==='CORE_LAYOUT_CAPACITY'&&error.page==='Fixed core'&&/needs more (?:space|room)/i.test(error.message));assert.equal(JSON.stringify(project),accepted);
+ const pages=buildPages(project).filter(page=>page.coreDeviceIds);assert.ok(pages.length>1);assert.ok(pages.every(page=>page.name.startsWith('Fixed core ')&&page.corePageId==='fixed'));assert.deepEqual(pages.flatMap(page=>page.coreDeviceIds),['edge','sw-1','sw-2','compute']);assert.equal(JSON.stringify(project),accepted);for(const page of pages)for(const item of page.items.filter(item=>item.type==='device'&&!['plug','handoff'].includes(item.kind)))assert.equal(item.w,700);
 });
 
 test('a vertical label follows its own cable on the side away from a nearby parallel cable',()=>{

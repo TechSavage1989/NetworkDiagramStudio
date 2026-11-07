@@ -1,3 +1,4 @@
+import {macAddresses} from '../device-details.mjs';
 import {unzip} from '../zip.mjs';
 import {device, deviceId, empty, ensurePort, ensureVlan, portName, rate} from './model.mjs';
 import {identify} from './hardware.mjs';
@@ -86,9 +87,11 @@ export function parseTable(rows, filename='report.csv') {
   if(type==='devices')for(const r of rows.slice(i+1))for(const ip of split(r[headers.indexOf('ip address(es)')]))ipCount.set(ip,(ipCount.get(ip)||0)+1);
   for(const row of rows.slice(i+1)){
     const val=k=>String(row[headers.indexOf(k)]??'').trim();
+    const mac=macAddresses(['mac address','mac address(es)','mac addresses','mac','physical address','hardware address'].flatMap(key=>macAddresses(val(key)))).join(', ');
     const name=val(type==='ports'?'parent device':'device name');
     if(missing(name))continue; const d=get(name);
     if(type==='devices'){
+      if(mac)d.mac=mac;
       const spec=identify(val('make & model'),val('description')); Object.assign(d,spec);
       const kind=classifyDeviceKind(val('type')); if(kind!=='unknown')d.kind=kind;
       const ips=split(val('ip address(es)'));if(ips.length) d.ips=ips;
@@ -98,7 +101,7 @@ export function parseTable(rows, filename='report.csv') {
       const destination=val('destination');if(destination)d.routes.push({destination,nextHop:val('next hop'),interface:val('gateway interface'),metric:val('metric'),type:'observed'});
     }else{
       const full=val('interface name');if(missing(full))continue;
-      const p=ensurePort(d,full);p.type=val('type');
+      const p=ensurePort(d,full);p.type=val('type');if(mac)p.mac=mac;
       const alias=/\s\(([^)]+)\)$/.exec(full)?.[1];if(alias)p.reportedDescription=alias;
       const oper=val('oper status').toLowerCase();if(oper==='up'||oper==='down')p.state=oper;
       const admin=val('admin status').toLowerCase();if(admin==='up'||admin==='down')p.admin=admin;

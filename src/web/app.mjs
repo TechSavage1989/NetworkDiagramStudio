@@ -1,3 +1,4 @@
+import {deviceMacs,inputMacAddresses} from './device-details.mjs';
 import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
 import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
@@ -28,6 +29,8 @@ import {sampleSite} from './sample.mjs';
 import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence} from './evidence.mjs';
 
+// Keep browser navigation/debug actions out of the drawing workspace.
+document.addEventListener('contextmenu',event=>event.preventDefault());
 const $=id=>document.getElementById(id);
 const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{if(editDrawing){if(cableControlClick(key,e,target))return true;selectDrawingItem(key,e.shiftKey||e.ctrlKey||e.metaKey);return true;}return false;},onBeforeInteraction:commitInlineEdit,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!target.closest('.cable-controls'))editOnDoubleClick(key);}});
 const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
@@ -271,7 +274,7 @@ function pageOptions(){
 $('page-options').onclick=()=>task(pageOptions);
 function corePageChoices(){
  const named=(project.layout?.corePages||[]).map(page=>[page.id,page.name]);
- const automatic=pages.filter(page=>page.automaticCore).map((page,index)=>['@core:'+index,page.name+' (current layout)']);
+ const automatic=pages.filter(page=>page.coreDeviceIds).map((page,index)=>['@core:'+index,page.name+' (current layout)']);
  return [['auto','Automatic'],['exclude','Exclude from core'],...named,...automatic,['new','New dedicated page']];
 }
 function assignedCorePage(id){
@@ -288,10 +291,11 @@ function assignCorePage(layout,device,choice){
   return;
  }
  if(choice.startsWith('@core:')){
-  const page=pages.filter(page=>page.automaticCore)[Number(choice.slice(6))];
+  const page=pages.filter(page=>page.coreDeviceIds)[Number(choice.slice(6))];
   if(!page)throw Error('The selected core page is no longer available.');
-  const members=new Set(layout.corePages.flatMap(page=>page.devices));
-  layout.corePages.push({id:crypto.randomUUID(),name:page.name,devices:[...new Set([...page.coreDeviceIds.filter(id=>!members.has(id)),device.id])],showReferences:true});
+  const members=new Set([...page.coreDeviceIds,device.id]),source=layout.corePages.find(p=>p.id===page.corePageId);
+  for(const existing of layout.corePages)existing.devices=existing.devices.filter(id=>!members.has(id));
+  layout.corePages.push({id:crypto.randomUUID(),name:page.name,devices:[...members],showReferences:source?.showReferences!==false,hiddenReferences:[...(source?.hiddenReferences||[])]});
   return;
  }
  const target=layout.corePages.find(page=>page.id===choice);
@@ -430,9 +434,9 @@ function devicePortFields(parent,device){
   box.open=isNew;
   box.append(title,grid);list.append(box);
   const fields={};
-  for(const [key,label] of [['name','Port name'],['description','Description'],['role','Role (e.g. access or trunk)'],['speed','Link speed (e.g. 1 Gbps)'],['native','Native VLAN'],['tagged','Tagged VLANs']]){
+  for(const [key,label] of [['name','Port name'],['description','Description'],['role','Role (e.g. access or trunk)'],['speed','Link speed (e.g. 1 Gbps)'],['native','Native VLAN'],['tagged','Tagged VLANs'],['mac','MAC address(es)']]){
    const cell=el('div','','compact-field');grid.append(cell);
-   const value=Array.isArray(port[key])?port[key].join(', '):port[key]??'';
+   const value=key==='mac'?deviceMacs(port).join(', '):Array.isArray(port[key])?port[key].join(', '):port[key]??'';
    const input=field(cell,label,value);
    fields[key]={input,initial:input.value};
   }
@@ -455,6 +459,7 @@ function devicePortFields(parent,device){
     for(const [key,{input,initial}] of Object.entries(fields)){
      if(input.value===initial&&!isNew)continue;
      const value=input.value.trim();
+     if(key==='mac'){next.mac=inputMacAddresses(value);for(const alias of ['macs','macAddress','macAddresses','mac_address','mac_address(es)'])delete next[alias];continue;}
      if(!value){delete next[key];continue;}
      if(key==='native'||key==='tagged'){
       const ids=value.split(',').map(id=>id.trim());
@@ -473,7 +478,7 @@ function devicePortFields(parent,device){
 }
 function editDevice(current){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
- const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip);
+ const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip),mac=field(body,'MAC address(es)',deviceMacs(d).join(', '));
  const models=el('datalist');models.id='known-hardware-models';const suggestions=new Map([...hardwareCatalog,...endpointHardwareCatalog.flatMap(entry=>entry.aliases.map(model=>({model,vendor:entry.vendor})))].map(entry=>[entry.sku||entry.model,entry]));for(const p of suggestions.values()){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
  const platform=field(body,'Platform / technology',d.technology||''),platforms=el('datalist');platforms.id='known-device-platforms';for(const technology of [...new Set(endpointHardwareCatalog.map(entry=>entry.technology).filter(value=>value!=='Physical server'))]){const option=el('option');option.value=technology;platforms.append(option);}body.append(platforms);platform.setAttribute('list',platforms.id);
  const knowledge=el('p','','hint');body.insertBefore(knowledge,ip.previousElementSibling);let kindEdited=false;kind.onchange=()=>kindEdited=true;
@@ -507,7 +512,8 @@ function editDevice(current){
   if(data.some(arr=>!Array.isArray(arr)||arr.some(x=>!object(x))))throw Error('Use arrays of objects for VLANs, routes and bridges.');
   if(!(Number(scale.value)>=30&&Number(scale.value)<=100))throw Error('Use a faceplate scale from 30 to 100 percent.');
   const composition=hardwareComposition(memberRows.filter(r=>!r.removed).map(r=>({id:r.id.value,model:r.model.value})),moduleRows.filter(r=>!r.removed).map(r=>({member:r.member.value,slot:r.slot.value,model:r.model.value})));
-  const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),stencilId:shape.value,scale:Number(scale.value)/100,ports:readPorts(),vlans:data[0],routes:data[1],bridges:data[2]};if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
+  const macValue=inputMacAddresses(mac.value);
+  const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),mac:macValue,stencilId:shape.value,scale:Number(scale.value)/100,ports:readPorts(),vlans:data[0],routes:data[1],bridges:data[2]};for(const alias of ['macs','macAddress','macAddresses','mac_address','mac_address(es)'])delete next[alias];if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
   const before={devices:project.devices,stencils:project.stencils,layout:project.layout};
   try{project.devices=project.devices.map(old=>old===current?next:{...old});if(!current)project.devices.push(next);project.stencils=Object.fromEntries(Object.entries(project.stencils).map(([id,s])=>[id,{...s,models:[...(s.models||[])]}]));
    const key=modelKey(next.vendor,next.model);if(key&&shape.value){for(const s of Object.values(project.stencils))s.models=s.models.filter(k=>k!==key);project.stencils[shape.value].models.push(key);assignMatching(project.stencils[shape.value]);}
@@ -630,23 +636,25 @@ async function stencilCatalog(file){
 async function deviceStencil(device){
  stencilDevice=device.id;const body=modal('Stencil for '+device.name),generation=modalGeneration;body.append(el('p',[device.vendor,device.model,device.sku].filter(Boolean).join('  |  '),'hint'));
  const query=field(body,'Search stencil names or model',device.sku||device.model||'');query.type='search';
- const status=el('p','','hint'),results=el('div');body.append(status,results);
+ body.append(el('p','Searches local stencil files you have selected. Vendor search matches vendor names in file or folder paths; it does not search the internet.','hint'));
+ const status=el('p','','hint'),results=el('div');status.setAttribute('role','status');body.append(status,results);
  const bar=actions(body);button(bar,'Import stencil folder',()=>$('art-folder').click());button(bar,'Import shapes',()=>$('art-file').click());button(bar,'Device details',()=>editDevice(device));
  const match=name=>{const norm=v=>String(v).toUpperCase().replace(/[^A-Z0-9]/g,'');const q=norm(query.value);return !q||norm(name).includes(q)||matchesHardware({name,view:'front'},device)&&q===norm(device.sku||device.model);};
  function assign(shape){const s=cleanStencil(shape);project.stencils[s.id]=s;device.stencilId=s.id;const key=modelKey(device.vendor,device.model);if(key&&!s.models.includes(key))s.models.push(key);assignMatching(s);perform();close();say('Assigned '+s.name+' to '+device.name+'.');}
  function render(){results.replaceChildren();let count=0;
   for(const s of Object.values(project.stencils).filter(s=>s.view!=='rear'&&match(s.name))){const info=el('div');info.append(el('strong',s.name),el('div','Loaded hardware','asset-info'));const row=line(results,info);button(row,'Preview / assign',()=>preview(s));count++;}
   outer:for(const file of discoveredStencils)for(const item of stencilIndexes.get(filePath(file))||[]){if(count>=120)break outer;if(!match(item.name)||/\b(rear|back)\b/i.test(item.name))continue;const info=el('div');info.append(el('strong',item.name),el('div',filePath(file),'asset-info'));const row=line(results,info);button(row,'Preview / assign',async()=>{status.textContent='Loading '+item.name;const cat=await stencilCatalog(file),s=await cat.load(item.key);preview(s);});count++;}
-  if(!count)results.append(el('p','No indexed match. Search stencil folders or import a stencil.','hint'));
+  if(!count)results.append(el('p',discoveredStencils.length?'No matching master is indexed. Search all selected folders or change the model search.':'No stencil folder is selected. Use Import stencil folder or Import shapes to load local files.','hint'));
  }
  function preview(shape){const p=modal('Assign '+shape.name);const img=el('img');img.className='panel-img';img.src=shape.dataUrl;img.alt=shape.name;p.append(img,el('p',Object.keys(shape.anchors).length+' mapped ports','hint'));button(actions(p),'Assign to '+device.name,()=>assign(shape),'primary');button(actions(p),'Back to search',()=>deviceStencil(device));}
  query.oninput=render;
- async function index(all=false){const vendor=(device.vendor||'').toLowerCase(),terms=/aruba|hpe|hp/.test(vendor)?['aruba','hpe']:vendor.includes('forti')?['forti']:vendor?vendor.split(/\s+/):[];
+ async function index(all=false){if(!discoveredStencils.length){status.textContent='No local stencil files to search. Choose Import stencil folder first. This search does not search the internet.';return;}const vendor=(device.vendor||'').toLowerCase(),terms=/aruba|hpe|hp/.test(vendor)?['aruba','hpe']:vendor.includes('forti')?['forti']:vendor?vendor.split(/\s+/):[];
   const files=all?discoveredStencils:discoveredStencils.filter(f=>terms.some(t=>filePath(f).toLowerCase().includes(t)));
+  if(!files.length){status.textContent='No selected stencil filenames match '+(device.vendor||'this device vendor')+'. Use Search all selected folders to search every local stencil.';return;}
   let indexed=0;for(const file of files){if(!$('dialog').open||modalGeneration!==generation)return;status.textContent='Searching '+(++indexed)+' / '+files.length+': '+filePath(file);await new Promise(r=>setTimeout(r,0));try{if(!stencilIndexes.has(filePath(file)))await stencilCatalog(file);}catch(e){stencilResults.push({path:filePath(file),message:e.message});}if(modalGeneration!==generation)return;render();}
   status.textContent='Searched '+files.length+' stencil files. '+stencilResults.length+' import results available under Hardware.';
  }
- button(bar,'Search vendor stencils',()=>index(false),'primary');button(bar,'Search all stencil folders',()=>index(true));render();
+ button(bar,'Search selected vendor files',()=>index(false),'primary');button(bar,'Search all selected folders',()=>index(true));render();
  if(discoveredStencils.length)await index(false);
 }
 function editCablePoints(item){

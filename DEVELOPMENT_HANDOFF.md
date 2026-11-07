@@ -1,5 +1,17 @@
 # Development handoff
 
+## Preview.19 device identity, consistent scale and local search feedback
+
+Prepares 0.1.0-preview.19 / file version 0.1.0.19 from verified published preview.18 at 86d54dfe3851b2b14a5546db4b3c9158afa156cf. Standing authorization covers the build and publication. Require green exact-head hosted Windows validation, merge, merged-main publication and verified public feed/assets before reporting release completion. Publication and required-input notices must be bold and obvious.
+
+The shared device-details module formats manufacturer/model, platform, IP and normalized known MAC addresses. Wireless model/MAC captions have bounded stable keys and measured full text; core and port-map summaries share the details. Device/interface forms validate readable address input and support clearing legacy aliases. Report imports retain device/interface addresses; operational parsing distinguishes local system/interface identities and LLDP chassis addresses from learned ARP/forwarding entries. No hardware identity is fabricated. Caption edits and manual data corrections survive reload and evidence recomposition.
+
+Core drawing now preserves a common 700-unit faceplate width and profile/artwork aspect ratio. It no longer fits tall devices into a fixed-height box or scales a whole sheet down to fit. Bounded padding/sidebar/rail attempts precede continuation. Explicit saved geometry remains authoritative. Named groups can continue, keep their corePageId and off-page preferences, and any rendered sheet can be a placement target. Four- and five-member stacks and a modular chassis retain equal widths on separate sheets. A device too large for a single page at its chosen size can still require an explicit user size edit.
+
+WebView2 disables its default context menus and the browser app suppresses contextmenu events. Local stencil discovery now names its selected-vendor-file scope and explains empty folders, filename filters and missing masters. No internet stencil search was added.
+
+Validation: 171 Node tests and seven Python damaged-package tests pass. Four synthetic export packages and the actual five-page browser export pass the independent Visio validator. Actual offline browser UI checks cover eight APs with model/MAC captions on one page, malformed/normalized MAC input, inline editing, undo/redo, save/reopen, Visio download, a printer with identity details, existing/new page assignment, full-size chassis pagination, context-menu suppression and local stencil feedback, with no page errors. README screenshots use fictional fixtures only. NativeSmoke adds a device-address round trip and WebView2/DOM context-menu assertions. Final-head hosted Windows checks remain required; direct Microsoft Visio rendering is unverified.
+
 ## Preview.18 adaptive keys, grouped routing and preserved stencil points
 
 Prepares 0.1.0-preview.18 / file version 0.1.0.18 from verified published preview.17 at 925cdd59fe07615d16326daf68a9974c6c25eed6. Preview.17 passed PR #12 and merged-main Windows validation; its feed, actual asset hashes and both existing downloads were verified. Standing authorization covers this build and release. Require green exact-head Windows validation, merge, merged-main publication and public feed/assets verification before claiming preview.18 is published. Make publication, waiting-on-user and required-input notices bold and prominent; the user now allows emojis for emphasis.

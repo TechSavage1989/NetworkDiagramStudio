@@ -102,7 +102,7 @@ export function state(v){return /^(up|connected|online|active|operational)$/i.te
 export function addDevice(page,project,d,bounds,key,opts={}){
   const asset=actualAsset(project,d), ports=physicalPorts(d), ap=d.kind==='ap',panel=!asset&&!ap?deviceFaceplate(d):null,symbol=!asset&&!panel?genericDeviceSymbol(d.kind):null;
   const ratio=asset?+asset.width/+asset.height:panel?.ratio||symbol?.ratio|| (ap?1:d.kind==='handoff'?6:d.kind==='unknown'?3:9);
-  const placement=opts.fillBounds?Object.fromEntries(['x','y','w','h'].map((key,n)=>[key,bounds[n]])):fitRatio(ratio,...bounds);
+  const placement=opts.fillBounds?Object.fromEntries(['x','y','w','h'].map((key,n)=>[key,bounds[n]])):opts.fitWidth?{x:bounds[0],y:bounds[1],w:bounds[2],h:bounds[2]/ratio}:fitRatio(ratio,...bounds);
   const g={type:'device',key,sourceId:d.id,instanceKey:opts.instanceKey,name:d.name||d.id,kind:d.kind,model:d.model||'',...placement,asset,
     masterKey:asset?'asset:'+String(asset.id??d.stencilId??d.id):'device:'+d.id,ports:Object.create(null),children:[],fallback:!asset};
   const addAnchor=(k,p)=>{if(Array.isArray(p)&&p.length===2&&p.every(n=>Number.isFinite(n)&&n>=0&&n<=1))g.ports[String(k)]=[...p];};
