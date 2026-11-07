@@ -1,4 +1,5 @@
 // Geometry is stored in page pixels with a top-left origin. Both exporters consume the same scene.
+import {coreSidebar} from './sidebar.mjs';
 import {deviceFaceplate} from './faceplate.mjs';
 import {editDeviceShape} from '../drawing-edits.mjs';
 import {simplifyRoute} from './routing.mjs';
@@ -46,12 +47,13 @@ export function linkLegend(page){
  const values=[...entries.values()].sort((a,b)=>{const rank=n=>defaults.findIndex(([name])=>name===n||name.startsWith('Fiber')&&/unspecified|Fiber/.test(n));return (rank(a.name)<0?9:rank(a.name))-(rank(b.name)<0?9:rank(b.name))||a.color.localeCompare(b.color)||a.opacity-b.opacity;});
  if(!values.length)return;
  if(page.legendLayout==='sidebar'){
-  label(page.items,38,147,244,26,'CONNECTION TYPES',16,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=198;
+  const side=page.sidebar||coreSidebar(),s=side.scale,textX=38+64*s,textSpan=side.width-64*s-4,size=Math.max(12,14*s),detailSize=Math.max(11,12*s),lineHeight=Math.max(size*1.25,18*s),detailHeight=Math.max(detailSize*1.25,15*s);
+  label(page.items,38,147,side.width,26*s,'CONNECTION TYPES',16*s,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=147+51*s;
   const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
-  for(const {name,color,opacity,weight,style,speeds} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight),title=titleOf({name,style,speeds,opacity}),lines=wrapPortText(title,176,14),description=style?.description?wrapPortText(style.description,176,12):[];
-   rect(page.items,38,y+11,52,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
-   lines.forEach((text,n)=>{label(page.items,102,y+n*18,176,18,text,14,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
-   description.forEach((text,n)=>{label(page.items,102,y+lines.length*18+n*15,176,15,text,12,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44,lines.length*18+description.length*15+12);
+  for(const {name,color,opacity,weight,style,speeds} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight),title=titleOf({name,style,speeds,opacity}),lines=wrapPortText(title,textSpan,size),description=style?.description?wrapPortText(style.description,textSpan,detailSize):[];
+   rect(page.items,38,y+11*s,52*s,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
+   lines.forEach((text,n)=>{label(page.items,textX,y+n*lineHeight,textSpan,lineHeight,text,size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
+   description.forEach((text,n)=>{label(page.items,textX,y+lines.length*lineHeight+n*detailHeight,textSpan,detailHeight,text,detailSize,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44*s,lines.length*lineHeight+description.length*detailHeight+12*s);
   }page.legendBottom=y;return;
  }
  const cols=values.length<=6?3:6,size=12,width=1128/cols-38,rows=[];

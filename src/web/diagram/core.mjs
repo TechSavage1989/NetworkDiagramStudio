@@ -1,4 +1,5 @@
 import {coreLinkKey as linkKey} from '../layout.mjs';
+import {coreSidebar} from './sidebar.mjs';
 import {coreRoutes} from './routing.mjs';
 import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth} from './labels.mjs';
 import {applyDrawingEdits,editDeviceShape} from '../drawing-edits.mjs';
@@ -12,7 +13,7 @@ const name=d=>d?.name||d?.id||'Device';
 const TOP=164,BOTTOM=901,GAP=24,LEFT=430,WIDTH=700;
 // Try readable layouts before continuing a page. Extra rail clearance resolves
 // labels trapped between parallel cables; tighter padding recovers unused space.
-const FITS=[1,.85,.7].flatMap(padding=>[12,60].map(railPitch=>({padding,railPitch})));
+const FITS=[244,208,176].flatMap(sidebarWidth=>[1,.85,.7].flatMap(padding=>[12,60].map(railPitch=>({padding,railPitch,sidebarWidth}))));
 const spacing=padding=>({pitch:GAP*padding,topClearance:38+12*padding,bottomClearance:14+4*padding});
 function handoffs(db){
  const devices=new Map(),links=[...db.links];
@@ -31,7 +32,7 @@ function handoffs(db){
  }
  return {devices,links};
 }
-function bounds(d,y=0,width=WIDTH){const scale=Math.max(.3,Math.min(1,d.scale||1)),compact=!['switch','firewall','unknown','handoff','ap'].includes(d.kind),bodyWidth=Math.min(width,compact?300:WIDTH);return d.kind==='ap'?[LEFT+(width-72*scale)/2,y,72*scale,72*scale]:d.kind==='handoff'?[LEFT+(width-170)/2,y,170,29]:[LEFT+(width-bodyWidth*scale)/2,y,bodyWidth*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
+function bounds(d,y=0,width=WIDTH,left=LEFT){const scale=Math.max(.3,Math.min(1,d.scale||1)),compact=!['switch','firewall','unknown','handoff','ap'].includes(d.kind),bodyWidth=Math.min(width,compact?300:WIDTH);return d.kind==='ap'?[left+(width-72*scale)/2,y,72*scale,72*scale]:d.kind==='handoff'?[left+(width-170)/2,y,170,29]:[left+(width-bodyWidth*scale)/2,y,bodyWidth*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
 function probe(project,d,width=WIDTH){return addDevice({items:[]},project,d,bounds(d,0,width),'probe');}
 function handoffCard(d,width){const textSpan=(width-24)/1.12,detail=[d.ownerPort&&displayPortCaption(d.ownerPort),d.ip||d.model].filter(Boolean).join(' | '),titleHeight=Math.max(25,wrapPortText(d.name,textSpan,18,true).length*22),detailHeight=Math.max(20,wrapPortText(detail,textSpan,12).length*15);return {detail,titleHeight,detailHeight,height:Math.max(64,titleHeight+detailHeight+12)};}
 function handoffRows(devices,span,spread=false){
@@ -63,21 +64,21 @@ function moduleLegend(page,project){
   for(const prefix of ['module-legend|','device|module-legend-']){const old=page.name+'|'+prefix+legacy,next=page.name+'|'+prefix+key;for(const [id,value] of Object.entries(prior))if((id===old||id.startsWith(old+'|'))&&!Object.hasOwn(prior,next+id.slice(old.length)))inherited[next+id.slice(old.length)]=value;}
  }
  if(Object.keys(inherited).length)project={...project,layout:{...project.layout,drawingEdits:{...inherited,...prior}}};
- const extra=[],scope=page.name,edits=project.layout?.drawingEdits||{};let target=page,y=Math.max(410,(page.legendBottom||320)+38),heading=false;
+ const side=page.sidebar||coreSidebar(),s=side.scale,extra=[],scope=page.name,edits=project.layout?.drawingEdits||{};let target=page,y=Math.max(147+263*s,(page.legendBottom||320)+38*s),heading=false;
  const caption=(key,value,size,width,bold)=>{const patch=edits[key]||{},font=patch.size||size,w=patch.w||width,full=patch.value??value;return {value:full,size:font,w,h:Math.max(patch.h||0,wrapPortText(full,w,font,patch.bold??bold).length*font*1.2),bold:patch.bold??bold};};
  for(const [key,{plug,ports}] of modules){
   const titleKey=scope+'|module-legend|'+key+'|title',portsKey=scope+'|module-legend|'+key+'|ports',description=[...new Set(ports)].join(' / ');
-  let title=caption(titleKey,plug.asset?.name||plug.name,13,target===page?166:1048,true),detail=caption(portsKey,description,11,target===page?244:1120,false),top=Math.max(42,title.h),height=top+8+detail.h+20;
-  if(y+(heading?0:48)+height>900){target=fresh(scope+' Port Modules'+(extra.length?' '+(extra.length+1):''),'Port modules',scope+' - physical interface assignments',project);extra.push(target);y=174;heading=false;title=caption(titleKey,plug.asset?.name||plug.name,13,1048,true);detail=caption(portsKey,description,11,1120,false);top=Math.max(42,title.h);height=top+8+detail.h+20;}
-  if(y+(heading?0:48)+height>900)throw Error('This port module description needs more space. Enlarge its text box or reduce the module assignments on this core page.');
-  if(!heading){label(target.items,38,y,target===page?244:1120,26,'PORT MODULES',16,true,C.teal);target.items.at(-1).editKey=scope+'|module-legend|heading'+(target===page?'':'|continued'+extra.length);y+=48;heading=true;}
-  const ratio=plug.w/plug.h,w=plug.asset?Math.min(64,44*ratio):64,h=plug.asset?w/ratio:42,copy={...plug,key:'module-legend-'+key,sourceId:'module-legend-'+key,x:38,y:y+(top-h)/2,w,h,host:null,instanceKey:'module-legend',ports:JSON.parse(JSON.stringify(plug.ports)),children:JSON.parse(JSON.stringify(plug.children))};if(!plug.asset){
+  let iconScale=target===page?s:1,title=caption(titleKey,plug.asset?.name||plug.name,Math.max(12,13*iconScale),target===page?side.width-78*iconScale:1048,true),detail=caption(portsKey,description,11,target===page?side.width:1120,false),top=Math.max(42*iconScale,title.h),height=top+8*iconScale+detail.h+20*iconScale;
+  if(y+(heading?0:48*iconScale)+height>900){target=fresh(scope+' Port Modules'+(extra.length?' '+(extra.length+1):''),'Port modules',scope+' - physical interface assignments',project);extra.push(target);y=174;heading=false;iconScale=1;title=caption(titleKey,plug.asset?.name||plug.name,13,1048,true);detail=caption(portsKey,description,11,1120,false);top=Math.max(42,title.h);height=top+8+detail.h+20;}
+  if(y+(heading?0:48*iconScale)+height>900)throw Error('This port module description needs more space. Enlarge its text box or reduce the module assignments on this core page.');
+  if(!heading){label(target.items,38,y,target===page?side.width:1120,26*iconScale,'PORT MODULES',16*iconScale,true,C.teal);target.items.at(-1).editKey=scope+'|module-legend|heading'+(target===page?'':'|continued'+extra.length);y+=48*iconScale;heading=true;}
+  const ratio=plug.w/plug.h,w=(plug.asset?Math.min(64,44*ratio):64)*iconScale,h=plug.asset?w/ratio:42*iconScale,copy={...plug,key:'module-legend-'+key,sourceId:'module-legend-'+key,x:38,y:y+(top-h)/2,w,h,host:null,instanceKey:'module-legend',ports:JSON.parse(JSON.stringify(plug.ports)),children:JSON.parse(JSON.stringify(plug.children))};if(!plug.asset){
    const face=copy.children.map((child,i)=>({...child,editSlot:i,x:9/64+child.x*46/64,y:9.5/42+child.y*23/42,w:child.w*46/64,h:child.h*23/42}));
    copy.children=[];rect(copy.children,0,0,1,1,'#EEF2F7','#9AA9C0',1);Object.assign(copy.children[0],{name:'Module frame',editSlot:'frame'});copy.children.push(...face);copy.masterKey+=':legend-frame';
   }
   delete copy.editKey;delete copy.legacyEditKey;for(const child of copy.children){delete child.editKey;delete child.legacyEditKey;}editDeviceShape(target,project,copy);target.items.push(copy);
-  label(target.items,116,y,title.w,title.h,title.value,title.size,title.bold,C.ink);Object.assign(target.items.at(-1),{editKey:titleKey,moduleLegend:true,full:true});
-  label(target.items,38,y+top+8,detail.w,detail.h,detail.value,detail.size,detail.bold,C.muted);Object.assign(target.items.at(-1),{editKey:portsKey,moduleLegend:true,full:true});y+=height;
+  label(target.items,38+78*iconScale,y,title.w,title.h,title.value,title.size,title.bold,C.ink);Object.assign(target.items.at(-1),{editKey:titleKey,moduleLegend:true,full:true});
+  label(target.items,38,y+top+8*iconScale,detail.w,detail.h,detail.value,detail.size,detail.bold,C.muted);Object.assign(target.items.at(-1),{editKey:portsKey,moduleLegend:true,full:true});y+=height;
  }if(Object.keys(inherited).length)for(const target of [page,...extra])applyDrawingEdits(target,project);return extra;
 }
 export function corePages(project,inventory){
@@ -119,21 +120,21 @@ export function corePages(project,inventory){
  const locations=new Map(),edgeLocations=new Map();for(const page of packed)for(const id of page.ids){if(!locations.has(id))locations.set(id,page.name);for(const e of edges.filter(e=>(e.a===id||e.b===id)&&(!page.linkIds||page.linkIds.has(e.idx))))edgeLocations.set(id+'/'+e.idx,page.name);}
  return packed.flatMap((sheet,pi)=>{
   const priorEdits=project.layout?.drawingEdits||{},aliases=!sheet.custom&&sheet.name!==sheet.baseName?Object.fromEntries(Object.entries(priorEdits).filter(([key])=>key.startsWith(sheet.baseName+'|')).map(([key,value])=>[sheet.name+key.slice(sheet.baseName.length),value])):{},pageProject=Object.keys(aliases).length?{...project,layout:{...project.layout,drawingEdits:{...aliases,...priorEdits}}}:project;
-  const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;
-  const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);rect(items,300,145,1,761,C.rule);
+  const fit=FITS[sheet.fit||0],fixedSidebar=Object.entries(pageProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|')&&/(?:module-legend|\|legend\|)/.test(key)&&['x','y','w','h'].some(k=>Number.isFinite(patch[k]))),sidebar=coreSidebar(fixedSidebar?244:fit.sidebarWidth);
+  const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;
+  const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);rect(items,sidebar.divider,145,1,761,C.rule);
   const hiddenReferences=new Set(sheet.hiddenReferences||[]);
   const used=edges.filter(e=>(members.has(e.a)&&members.has(e.b)||sheet.showReferences!==false&&!hiddenReferences.has(linkKey(e))&&(members.has(e.a)||members.has(e.b)))&&(!sheet.linkIds||sheet.linkIds.has(e.idx)));
   const internal=used.filter(e=>members.has(e.a)&&members.has(e.b)),external=used.filter(e=>!members.has(e.a)||!members.has(e.b));
   const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.fit,sheet.spreadHandoffs,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
   if(cached?.signature===signature)return cached.pages;
-  const fit=FITS[sheet.fit||0];
   const width=Math.min(WIDTH,Math.max(240,WIDTH-12*Math.max(0,internal.length-1)));
   const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,db.devices.get(id),used.filter(e=>e.a===id||e.b===id).slice(0,8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding)]));
   const height=sheet.ids.reduce((n,id)=>n+pageSizes.get(id).height,0),scale=Math.min(1,(BOTTOM-TOP)/height);
   if(scale<.65)throw Object.assign(Error('This core page needs more room to keep the equipment readable.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   let row=TOP+(BOTTOM-TOP-height*scale)/2;
   sheet.ids.filter(id=>!db.devices.get(id).owner||!members.has(db.devices.get(id).owner)).forEach((id,i)=>{
-   const d=db.devices.get(id),m=pageSizes.get(id),b=bounds(d,row+m.top*scale,width);b[3]=m.body*scale;
+   const d=db.devices.get(id),m=pageSizes.get(id),b=bounds(d,row+m.top*scale,width,sidebar.bodyLeft);b[3]=m.body*scale;
    const node=addDevice(page,pageProject,d,b,'core-'+i);nodes.set(id,node);
    if(d.kind!=='handoff'){
     const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleY=node.y-titleHeight-6;
@@ -170,10 +171,10 @@ export function corePages(project,inventory){
   }
   const pinnedTitles=new Set(items.filter(i=>i.titleOwner&&(Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.x)||Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.y))).map(i=>i.titleOwner));
   const obstacles=[...items.filter(i=>i.type==='text'&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>b.x<b.owner.x||b.y<b.owner.y||b.x+b.w>b.owner.x+b.owner.w||b.y+b.h>b.owner.y+b.owner.h)];
-  const stack=[...nodes.values()].filter(n=>n.kind!=='handoff'),withinPage=stack.length&&stack.every(n=>n.x>=324&&n.x+n.w<=1144);
-  const routingBounds=withinPage?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:LEFT,right:LEFT+width};
-  const planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,...spacing(fit.padding),railPitch:fit.railPitch,scale,obstacles});
-  if(planned.cost[0]&&[...nodes.values()].every(n=>n.x>=306&&n.x+n.w<=1162&&n.y>=145&&n.y+n.h<=906))throw Object.assign(Error('This core page needs more room to route cables around the equipment.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
+  const stack=[...nodes.values()].filter(n=>n.kind!=='handoff'),withinPage=stack.length&&stack.every(n=>n.x>=sidebar.contentLeft+18&&n.x+n.w<=1144);
+  const routingBounds=withinPage?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
+  const planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,...spacing(fit.padding),railPitch:fit.railPitch,scale,obstacles});
+  if(planned.cost[0]&&[...nodes.values()].every(n=>n.x>=sidebar.contentLeft&&n.x+n.w<=1162&&n.y>=145&&n.y+n.h<=906))throw Object.assign(Error('This core page needs more room to route cables around the equipment.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   const outer={left:Math.min(routingBounds.left-18,...planned.routes.filter(r=>r.side==='left').map(r=>r.rail)),right:Math.max(routingBounds.right+18,...planned.routes.filter(r=>r.side==='right').map(r=>r.rail))},requests=[];
   for(const r of planned.routes.filter(r=>!r.v)){
    const {e,a,b}=r;

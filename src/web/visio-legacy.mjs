@@ -20,7 +20,7 @@ export function legacyShape(source){
    }else if(['Connection','Control','Char','Para','User','Prop','Scratch'].includes(n)){
     const type={Char:'Character',Para:'Paragraph',Prop:'Property'}[n]||n;
     if(!groups.has(type)){const section=make('Section',{N:type});groups.set(type,section);out.append(section);}
-    const row=make('Row',{IX:e.getAttribute('IX')||0,N:e.getAttribute('NameU')||e.getAttribute('Name')});for(const c of e.children)row.append(cell(c));groups.get(type).append(row);
+    const row=make('Row',{IX:e.getAttribute('IX')||0,N:e.getAttribute('NameU')||e.getAttribute('Name'),Del:e.getAttribute('Del')});for(const c of e.children)row.append(cell(c));groups.get(type).append(row);
    }else if(e.children.length){for(const c of e.children)if(!c.children.length)out.append(cell(c));}
    else if(!['Help','Hyperlink','Event','Data1','Data2','Data3'].includes(n))out.append(cell(e));
   }
