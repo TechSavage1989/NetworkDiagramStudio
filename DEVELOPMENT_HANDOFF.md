@@ -1,5 +1,13 @@
 # Development handoff
 
+## Preview.17 core page fitting across device orders
+
+Prepares 0.1.0-preview.17 / file version 0.1.0.17 from published preview.16 at 8bcb7cd809dfe66ff825e505c64085b5359eedd8. Preview.16 passed PR #11 and merged-main Windows checks, and its public release/feed/asset hashes and both existing downloads were verified. Standing build/release authorization continues. Require green exact-head Windows checks, merge, merged-main checks and public asset/feed verification before claiming preview.17 is published.
+
+A synthetic reproduction of the reported FortiGate/two-switch/two-WAN topology split only when the downstream switches were reversed: a media label was trapped between parallel rails, although the equipment fit. Core layout now tries normal and wider rails at three bounded padding levels, including the existing compact/spread handoff alternatives, before automatic continuation. Text sizes, saved order, manual geometry and explicit page assignments remain authoritative. Coarse packing uses an optimistic minimum-body/padding bound; actual body, route and caption validation decides capacity. Overflow owner/handoff groups prepend to the next compatible automatic sheet. Successful sheets are reused only while all layout/reference inputs remain unchanged. Continuation badges now sit beyond passing rails, with existing behavior retained for deliberate off-page edits.
+
+Tests cover all six device orders on one page, denser chains, grouped continuation with all connections preserved, collision/orthogonality checks, named pages, saved edits and native Visio connections. Browser QA loads the reversed topology, verifies one core tab, edits a title, saves/reopens and exports the actual VSDX. The independent package validator accepts that five-page export; offline loading also passes. The fictional README hero is refreshed. Existing extreme-anchor memory/time protection remains tested. Direct Microsoft Visio rendering remains unverified.
+
 ## Preview.16 Configuration Inspector-style port modules
 
 Prepares 0.1.0-preview.16 / file version 0.1.0.16 from published preview.15 at 5166bf1d2c7dfc41b95eb810efd1be5d4fedcb32. Preview.15 passed PR #10 and merged-main Windows validation, and its public release/feed/asset hashes and both download replacements were verified. The user's standing build/release authorization continues. Require green exact-head Windows checks, merge, merged-main checks and published asset/feed verification before claiming preview.16 is published.
