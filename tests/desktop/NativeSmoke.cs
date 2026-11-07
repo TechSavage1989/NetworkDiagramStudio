@@ -54,7 +54,7 @@ internal static class NativeSmoke
                 // a second immediate activation must not trigger a new request.
                 for (int i=0; i<60 && !ui.IsEditorHealthy; i++) await Task.Delay(500);
                 if(!ui.IsEditorHealthy) throw new Exception("WebView did not initialize.\n"+await ui.EditorStartupDiagnostics());
-                ui.RequireUpdateBar(false);
+                await ui.RequireUpdateBar(false);
                 await ui.ExportAndPrint(Path.GetDirectoryName(result)!);
                 var pause=fixture.Checks[0].AddSeconds(125)-DateTimeOffset.UtcNow;
                 if(pause>TimeSpan.Zero) await Task.Delay(pause);
@@ -115,10 +115,10 @@ internal sealed partial class Studio
         report.AddRange(editorStartupEvents);return string.Join(Environment.NewLine,report);
     }
     internal bool UpdateProgressIsIdle => !checking && check.Enabled && !status.Text.StartsWith("Checking for updates",StringComparison.Ordinal);
-    internal void RequireUpdateBar(bool visible)
+    internal async Task RequireUpdateBar(bool visible)
     {
-        if(strip.Visible!=visible || (visible ? browser.Top!=strip.Bottom : browser.Top!=0 || browser.Height!=ClientSize.Height))
-            throw new Exception("The update bar did not reclaim or reserve the expected editor space.");
+        if(strip.Visible || browser.Top!=0 || browser.Height!=ClientSize.Height)throw new Exception("The native update strip must not consume editor space.");
+        await RequireEditor("const banner=document.getElementById('desktop-update-banner');if(!banner||banner.hidden==="+(visible?"true":"false")+")throw Error('Update banner visibility is incorrect')","update banner");
     }
     internal async Task CheckUpdateFromHelp(string expected,bool available)
     {
@@ -127,7 +127,7 @@ internal sealed partial class Studio
         await ClickEditorTarget("#desktop-check-updates");
         for(int i=0;i<50&&!checking;i++)await Task.Delay(20);
         if(!checking)throw new Exception("Help did not start an update check.");
-        RequireUpdateBar(updater.Offered!=null);
+        await RequireUpdateBar(updater.Offered!=null);
         await Task.Delay(50);
         await RequireEditor("if(!document.getElementById('desktop-check-updates').disabled||!document.getElementById('desktop-update-status').textContent.includes('Checking for updates'))throw Error('Help update progress missing')","Help update progress");
         for(int i=0;i<100;i++){
@@ -139,8 +139,17 @@ internal sealed partial class Studio
         }
         if(checking||!check.Enabled||!status.Text.Contains(expected))throw new Exception("Manual update progress did not finish: "+expected);
         await RequireEditor("if(document.getElementById('desktop-check-updates').disabled||!document.getElementById('desktop-update-status').textContent.includes("+JsonSerializer.Serialize(expected)+"))throw Error('Help update result missing')","Help update result");
-        RequireUpdateBar(available);
+        await RequireUpdateBar(available);
         await ClickEditorTarget("#close");
+    }
+    async Task CheckPageSetup()
+    {
+        await ClickEditorTarget("#page-options");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('Paper size').value='a3';field('Paper size').dispatchEvent(new Event('input'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","A3 page setup");
+        await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(Math.abs(box.width-1587.401575)>0.01||Math.abs(box.height-1122.519685)>0.01)throw Error('Paper setup did not change the drawing bounds')","A3 scene bounds");
+        await ClickEditorTarget("#page-options");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Paper size').value!=='a3')throw Error('Paper setting was not retained');field('Paper size').value='original';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","restore original paper");
+        await RequireEditor("if(document.querySelector('#canvas svg').viewBox.baseVal.width!==1200)throw Error('Original page dimensions were not restored')","original scene bounds");
     }
     internal string? TestOutputFolder;
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string cls,string caption);
@@ -261,6 +270,7 @@ internal sealed partial class Studio
             foreach(var required in new[]{"[Content_Types].xml","visio/document.xml","visio/pages/pages.xml","visio/windows.xml"})if(package.GetEntry(required)==null)throw new Exception("Native Visio export is missing "+required);
             foreach(var part in package.Entries.Where(p=>p.FullName.EndsWith(".xml")||p.FullName.EndsWith(".rels"))){using var stream=part.Open();XDocument.Load(stream);}
         }
+        await CheckPageSetup();
         await CheckEditRecovery();
         await CheckLegendConnections();
         await CheckAddDevice();

@@ -1,3 +1,4 @@
+import {desktopUpdates} from './desktop-updates.mjs';
 import {deviceMacs,inputMacAddresses} from './device-details.mjs';
 import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
@@ -12,7 +13,7 @@ import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
 import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
-import {cleanPageNumbers,pageNumber} from './page-options.mjs';
+import {cleanPageNumbers,pageNumber,cleanPageSetup,cleanPaper,paperSizes,pageFamilies,pageGeometry,printPageStyles} from './page-options.mjs';
 import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
 import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
@@ -45,25 +46,7 @@ const modelKinds=deviceKinds;
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
 const safeKey=s=>typeof s==='string'&&s.length>0&&s.length<=300&&!['__proto__','constructor','prototype'].includes(s);
 const say=message=>{$('feedback').textContent=message;};
-function syncDesktopUpdates(){
- const state=window.NDSDesktop?.updateState??{},message=$('desktop-update-status'),check=$('desktop-check-updates');
- if(message)message.textContent=state.message||'Checking for updates...';
- if(check){check.disabled=!!(state.checking||state.fetching);check.textContent=state.checking?'Checking...':'Check updates';}
-}
-if(window.NDSDesktop?.checkUpdates){
- $('desktop-help').hidden=false;
- $('desktop-help').onclick=()=>{
-  const body=modal('Help and updates');
-  const version=window.NDSDesktop.updateState?.version;
-  if(version)body.append(el('p','Installed '+version,'hint'));
-  const status=el('p');status.id='desktop-update-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');body.append(status);
-  const row=actions(body),check=button(row,'Check updates',()=>window.NDSDesktop.checkUpdates());check.id='desktop-check-updates';
-  button(row,'Update details',()=>window.NDSDesktop.updateDetails());
-  button(row,'Notices',()=>window.NDSDesktop.notices());
-  syncDesktopUpdates();
- };
- window.addEventListener('nds-update-state',syncDesktopUpdates);
-}
+desktopUpdates({help:$('desktop-help'),modal});
 function download(content,name,mime='application/json'){
   const url=URL.createObjectURL(content instanceof Blob?content:new Blob([content],{type:mime}));
   const a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);
@@ -74,7 +57,7 @@ async function task(action){if(working)return;busy(true);try{await action();}cat
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
 function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
 function commitInlineEdit(){if(!inlineSession)return true;if(!inlineSession.connected){inlineSession.cancel();return true;}return inlineSession.save();}
-function modal(title,className=''){if(!commitInlineEdit())throw Error('Finish editing the diagram text first.');modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;$('dialog').className=className;$('dialog-title').textContent=title;const body=$('dialog-body');body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
+function modal(title,className=''){if(!commitInlineEdit())throw Error('Finish editing the diagram text first.');modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;$('dialog').className=className;$('dialog-title').textContent=title;const body=$('dialog-body');body.className='';body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
 function button(parent,label,fn,cls=''){const b=el('button',label,cls);b.type='button';b.onclick=()=>task(fn);parent.append(b);return b;}
 function line(parent,...nodes){const row=el('div','','itemrow');row.append(...nodes);parent.append(row);return row;}
 function actions(parent){const n=el('div','','actions');parent.append(n);return n;}
@@ -159,7 +142,7 @@ function snapTargets(page,excluded){
   if(item.parent||item.type==='device'&&!s.deviceEdges||item.type!=='device'&&!s.objectEdges)continue;const b=drawingBounds(item);if(b)for(const axis of [0,1])for(const value of axis?[b.y,b.y+b.h/2,b.y+b.h]:[b.x,b.x+b.w/2,b.x+b.w])targets.push({axis,value});
  }return targets;
 }
-function showSnapGuides(guides=[]){const svg=$('canvas').querySelector('svg');if(!svg)return;svg.querySelectorAll('.snap-guide').forEach(n=>n.remove());for(const guide of guides){const n=document.createElementNS('http://www.w3.org/2000/svg','line');n.setAttribute('class','snap-guide');for(const [key,value] of Object.entries(guide.axis===0?{x1:guide.value,x2:guide.value,y1:145,y2:856}:{x1:36,x2:1164,y1:guide.value,y2:guide.value}))n.setAttribute(key,value);svg.append(n);}}
+function showSnapGuides(guides=[]){const svg=$('canvas').querySelector('svg');if(!svg)return;svg.querySelectorAll('.snap-guide').forEach(n=>n.remove());for(const guide of guides){const n=document.createElementNS('http://www.w3.org/2000/svg','line');n.setAttribute('class','snap-guide');for(const [key,value] of Object.entries(guide.axis===0?{x1:guide.value,x2:guide.value,y1:145,y2:(pages[active]?.height||975)-69}:{x1:36,x2:(pages[active]?.width||1200)-36,y1:guide.value,y2:guide.value}))n.setAttribute(key,value);svg.append(n);}}
 function snapOptions(){
  const body=modal('Snapping and automatic alignment'),s=cleanSnap(project.layout?.snapping),fields={};
  for(const [key,name] of [['enabled','Enable snapping'],['grid','Snap to grid'],['guides','Automatic alignment guides'],['deviceEdges','Align with device edges and centers'],['objectEdges','Align with text and other object edges'],['cablePoints','Align with other cable bend points']]){const row=el('label','','check-option'),input=el('input');input.type='checkbox';input.checked=s[key];input.setAttribute('aria-label',name);row.append(input,document.createTextNode(name));body.append(row);fields[key]=input;}
@@ -265,11 +248,30 @@ function linkStyleOptions(selected){
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
 function pageOptions(){
- const p=cleanPageNumbers(project.layout?.pageNumbers),body=modal('Page options'),row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));body.append(row);
- const start=field(body,'First page number',p.start),pad=field(body,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(body,'Page number format',p.format);start.type='number';start.min=0;start.max=9999;start.step=1;format.maxLength=100;
- body.append(el('p','Use {page} for the current number, {last} for the final number, or {total} for the number of sheets. Examples: {page} / {last}, Page {page}, Sheet {page} of {last}.','hint'));
- const preview=el('p','','page-number-preview');body.append(preview);function update(){preview.textContent=show.checked?'Preview: '+pageNumber({show:true,start:+start.value,pad:+pad.value,format:format.value},active,pages.length||1):'Page numbers hidden';}for(const input of [show,start,pad,format])input.addEventListener('input',update);update();
- button(actions(body),'Save page options',()=>{if(start.value===''||!Number.isInteger(+start.value)||+start.value<0||+start.value>9999)throw Error('Use a first page number from 0 to 9999.');if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');project.layout||={};project.layout.pageNumbers=cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value});perform('page-options');close();say('Page numbering saved.');},'primary');
+ const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
+ body.append(el('p','Choose paper for the whole drawing, or use a different size for a page type. Layout, printing, SVG and Visio use the same dimensions.','hint'));
+ const target=field(body,'Apply paper size to','default',[['default','All page types (default)'],...pageFamilies]),paperRow=el('div','','form-columns');body.append(paperRow);
+ const preset=field(paperRow,'Paper size','original',paperSizes.map(([id,title])=>[id,title])),orientation=field(paperRow,'Orientation','landscape',[['landscape','Landscape'],['portrait','Portrait']]);
+ const custom=el('div','','form-columns');body.append(custom);const width=field(custom,'Width (mm)',297),height=field(custom,'Height (mm)',420);for(const input of [width,height]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
+ const preview=el('p','','page-size-preview');body.append(preview);let selected='default';
+ function store(){const value=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});if(selected==='default')setup.default=value;else setup.overrides[selected]=value;}
+ function update(){custom.hidden=preset.value!=='custom';const paper=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value}),g=pageGeometry({layout:{pageSetup:{default:paper}}});preview.textContent=g.widthMm.toFixed(1)+' × '+g.heightMm.toFixed(1)+' mm. Devices fit at a consistent scale; readable text and automatic continuation pages are preserved.';}
+ function load(){const value=selected==='default'?setup.default:setup.overrides[selected]||setup.default;preset.value=value.preset;orientation.value=value.orientation;width.value=value.widthMm;height.value=value.heightMm;update();}
+ for(const input of [preset,orientation,width,height])input.oninput=update;
+ target.onchange=()=>{store();selected=target.value;load();};load();
+ const reset=button(body,'Use default paper for all page types',()=>{setup.overrides={};selected='default';target.value='default';load();});reset.classList.add('paper-reset');
+ body.append(el('p','Paper overrides: '+(Object.keys(setup.overrides).map(key=>pageFamilies.find(p=>p[0]===key)?.[1]).join(', ')||'None')+'. Custom dimensions may be 148 to 1500 mm. Existing manual object sizing and positions are retained.','hint'));
+ const numbering=el('details');numbering.append(el('summary','Page numbering'));body.append(numbering);
+ const row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));numbering.append(row);
+ const numberRow=el('div','','form-columns');numbering.append(numberRow);const start=field(numberRow,'First page number',p.start),pad=field(numberRow,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(numbering,'Page number format',p.format);start.type='number';start.min=0;start.max=9999;start.step=1;format.maxLength=100;
+ numbering.append(el('p','Available fields: {page}, {last}, {total}.','hint'));
+ button(actions(body),'Save page options',()=>{
+  if(preset.value==='custom'&&[width,height].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter custom dimensions from 148 to 1500 mm.');
+  if(start.value===''||!Number.isInteger(+start.value)||+start.value<0||+start.value>9999)throw Error('Use a first page number from 0 to 9999.');if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');store();
+  const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value})};
+  try{buildPages(scoped());}catch(error){project.layout=before;throw error;}
+  perform('page-options');close();viewport.fit();say('Paper size and page numbering saved.');
+ },'primary');
 }
 $('page-options').onclick=()=>task(pageOptions);
 function corePageChoices(){
@@ -780,7 +782,7 @@ $('art-file').onchange=e=>{const fs=Array.from(e.target.files);e.target.value=''
 $('svg').onclick=()=>download(pages[active].svg,slug(project.name)+'-'+slug(pages[active].name)+'.svg','image/svg+xml');
 $('export').onclick=()=>task(async()=>{download(await exportVisio(scoped(),pages),slug(project.name)+'.vsdx');say('Editable Visio drawing exported.');});
 $('print').onclick=()=>{
- const container=$('print-set');container.replaceChildren();
+ const container=$('print-set');container.replaceChildren();let style=$('print-page-sizes');if(!style){style=el('style');style.id='print-page-sizes';document.head.append(style);}style.textContent=printPageStyles(pages);
  for(const page of pages){const sheet=el('section');sheet.append(document.importNode(new DOMParser().parseFromString(page.svg,'image/svg+xml').documentElement,true));container.append(sheet);}
  if(window.NDSDesktop)window.NDSDesktop.print();else window.print();
 };

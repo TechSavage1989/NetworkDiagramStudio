@@ -99,7 +99,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   // Continuation badges sit outside the cable rails, not across a passing link.
   // Retain the existing boundary behavior for deliberately off-page edits.
   const referenceX=[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=1162)?Math.min(left-10,...tracks.filter(t=>t.side==='left').map(t=>t.rail-12)):left-10;
-  for(const e of external){const which=nodes.has(e.a)?'a':'b',v=ends.get(e.idx+'/'+which),x=referenceX;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
+  for(const e of external){const which=ends.has(e.idx+'/a')?'a':'b',v=ends.get(e.idx+'/'+which),x=referenceX;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
   for(let i=0;i<routes.length;i++)if(!routes[i].v){routes[i]=minimalCandidate(routes[i],nodes,obstacles,routes.filter((_,j)=>j!==i),minX);for(const v of [routes[i].a,routes[i].b])ends.set(v.e.idx+'/'+v.which,v);}
   return {routes,references,ends};
  }
