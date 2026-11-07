@@ -1,5 +1,13 @@
 # Development handoff
 
+## Preview.15 compact WAN/circuit layout
+
+Prepares 0.1.0-preview.15 / file version 0.1.0.15 from published preview.14 at cf51ed1f6524463b9d373519c85fb5f2cce2d8a4. Preview.14 PR #9 and merged-main Windows validation passed; the public tag, feed, EXE/ZIP hashes and embedded version/icon/source were verified. Its two existing download files were updated. The user authorized building and releasing this additional layout change. Require green exact-head Windows checks, merge, merged-main checks and public asset/feed verification before describing preview.15 as published.
+
+WAN cards measure complete provider/port/gateway captions, with font-substitution allowance, and use their owner's actual body width. Compact rows stay inside the stack span; narrow bodies use extra rows. A lone card aligns with a known top-facing physical port when possible. Page measurement uses the same body width and scale as rendering. Routing considers internal card corridors and tight actual-body exterior bounds while retaining collision, shared-segment, crossing, bend and length priorities. If compact rows cannot accommodate cable labels, a bounded retry spreads the same narrow cards within the available stack width before automatic continuation. Deliberate position/size edits remain authoritative.
+
+Local coverage includes one through seven WAN circuits on one core page, full wrapped captions, label/body/path clearance, single straight routes, internal corridors, narrow panels and explicit card edits. Browser checks load two/four/long-name cases, edit provider text, save/reopen, download Visio and open the offline build. The fictional main screenshot is refreshed. Windows validation remains required. Eight tightly packed circuits can still exceed readable label capacity, as in preview.14; do not claim unlimited density. Direct Microsoft Visio rendering remains unverified.
+
 ## Preview.14 conditional update bar
 
 Prepares 0.1.0-preview.14 / file version 0.1.0.14 from published preview.13 at 1ba5419937d5fa503a146cb7fe2a35a4adafbc60. Preview.13 passed PR and merged-main Windows checks and its public tag, feed and asset hashes were verified. The user authorized building and publishing this UI adjustment. Require green final-head Windows checks, merge, merged-main checks and public asset/feed verification before describing preview.14 as published.
