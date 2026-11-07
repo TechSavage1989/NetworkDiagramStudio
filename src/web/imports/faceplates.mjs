@@ -16,7 +16,17 @@ add(['FG-200F','FG-201F'],'Fortinet','https://fortinetweb.s3.amazonaws.com/docs.
 add(['FG-400F','FG-401F'],'Fortinet',fortiSource('fortigate-400f-series'),[bank(['ha','mgmt'],'RJ45'),bank(span('port',1,16),'RJ45'),bank(span('x',1,8),'SFP+'),bank(span('port',17,24),'SFP')],{ratio:10.8});
 const pan=family=>'https://docs.paloaltonetworks.com/hardware/'+family+'-hardware-reference/'+family+'-firewall-overview/'+family+'-front-panel';
 add(['PA-850'],'Palo Alto Networks',pan('pa-800'),[bank(span('ethernet1/',1,4),'RJ45'),bank(span('ethernet1/',5,8),'SFP'),bank(span('ethernet1/',9,12),'SFP+'),bank(['ha1','ha2'],'RJ45'),bank(['mgmt'],'RJ45',1)],{aliases:{management:'mgmt','dedicated-ha1':'ha1','dedicated-ha2':'ha2'},ratio:10});
-add(['PA-415'],'Palo Alto Networks',pan('pa-400'),[bank(['mgmt'],'RJ45',1),bank(span('ethernet1/',2,9),'RJ45')],{aliases:{management:'mgmt','ethernet1/1':'mgmt'},ratio:5.7});
+// Management and ethernet1/1 are distinct combo interfaces, each with two connectors.
+add(['PA-415'],'Palo Alto Networks',pan('pa-400'),[
+ bank(['mgmt','ethernet1/1'],'SFP',2,'front',{positions:[.296,.296],socketWidth:.050,mirror:true}),
+ bank(['mgmt','ethernet1/1'],'RJ45',2,'front',{positions:[.364,.364],socketWidth:.049}),
+ bank(span('ethernet1/',2,9),'RJ45',2,'front',{positions:[.432,.432,.499,.499,.567,.567,.635,.635],socketWidth:.049})
+],{aliases:{management:'mgmt',mgt:'mgmt'},ratio:7.7,rowsY:[.36,.70]});
+add(['PA-455'],'Palo Alto Networks',pan('pa-400'),[
+ bank(['mgmt'],'RJ45',1,'front',{positions:[[.354,.56]],socketWidth:.042}),
+ bank(['ethernet1/1','ethernet1/2'],'SFP',2,'front',{positions:[.413,.413],socketWidth:.041,mirror:true}),
+ bank(span('ethernet1/',1,8),'RJ45',2,'front',{positions:[.467,.467,.526,.526,.585,.585,.643,.643],socketWidth:.042})
+],{aliases:{management:'mgmt',mgt:'mgmt'},ratio:6.1,rowsY:[.56,.78],bodyFill:'#45484B',vents:true});
 add(['PA-3410'],'Palo Alto Networks','https://docs.paloaltonetworks.com/hardware/pa-3400-hardware-reference/pa-3400-series-overview/front-panel-3400-series',[bank(span('ethernet1/',1,12),'RJ45'),bank(span('ethernet1/',13,22),'SFP+'),bank(span('ethernet1/',23,26),'SFP28'),bank(['hsci'],'QSFP+',1),bank(['ha1-a','ha1-b'],'RJ45'),bank(['mgmt'],'RJ45',1)],{aliases:{management:'mgmt'},ratio:10.5});
 const jun=n=>'https://www.juniper.net/documentation/us/en/hardware/'+n.toLowerCase()+'/topics/topic-map/'+n.toLowerCase()+'-chassis.html';
 for(const n of ['SRX300','SRX320'])add([n,n+'-SYS-JB'],'Juniper',jun(n),[bank(span('ge-0/0/',6,7),'SFP',2),bank(span('ge-0/0/',0,5),'RJ45',2)],{ratio:n==='SRX300'?5.2:8.5});
@@ -27,6 +37,28 @@ add(['1100 Security Gateway','Netgate 1100','SG-1100'],'Netgate',netgate('sg-110
 add(['3100 Security Gateway','Netgate 3100','SG-3100'],'Netgate',netgate('sg-3100'),[bank(['mvneta2','mvneta0','LAN1','LAN2','LAN3','LAN4'],'RJ45',1,'rear')],{ratio:5.6});
 for(const n of [4100,6100])add([n+' Security Gateway','Netgate '+n],'Netgate',netgate('netgate-'+n),[bank(['ix3','ix2'],'SFP',2,'rear'),bank(['ix3','ix2'],'RJ45',2,'rear',{mirror:true}),...(n===6100?[bank(['ix0','ix1'],'SFP+',2,'rear')]:[]),bank(span('igc',0,3),'RJ45',2,'rear')],{ratio:5.5});
 add(['8300 Security Gateway','Netgate 8300'],'Netgate',netgate('netgate-8300'),[bank(span('ice',0,3),'SFP+',2),bank(span('ice',4,7),'SFP',2),bank(['igc2','igc1','igc0'],'RJ45',1)],{ratio:10.2});
+// Netgate labels are not the NIC enumeration order. LAN1..4 on 2100 are
+// physical switch jacks; mvneta1 is shared and must not alias any single jack.
+add(['2100 Security Gateway','Netgate 2100'],'Netgate',netgate('netgate-2100'),[
+ bank(['mvneta0'],'SFP',1,'rear',{positions:[[.31,.59]],socketWidth:.083,mirror:true}),
+ bank(['mvneta0','LAN1','LAN2','LAN3','LAN4'],'RJ45',1,'rear',{positions:[.43,.55,.63,.71,.79].map(x=>[x,.59]),socketWidth:.073})
+],{ratio:5.6,aliases:{wan:'mvneta0'}});
+add(['4200 Security Gateway','Netgate 4200'],'Netgate',netgate('netgate-4200'),[
+ bank(['igc3','igc2','igc1','igc0'],'RJ45',1,'rear',{positions:[.414,.479,.545,.611],socketWidth:.056,orientation:'down'})
+],{ratio:4.4,bodyFill:'#F2F3F0',aliases:{port1wan:'igc3',port2lan:'igc2',port1:'igc3',port2:'igc2',port3:'igc1',port4:'igc0'}});
+// Each model's front view was checked in its own manufacturer quick-start guide.
+// Numbered ports alternate upper/lower within a column; gaps separate copper blocks.
+for(const [model,count,optic] of [
+ ['USW-16-POE',16,'SFP'],['USW-24',24,'SFP'],['USW-24-POE',24,'SFP'],['USW-48-POE',48,'SFP'],
+ ['USW-Pro-24',24,'SFP+'],['USW-Pro-24-POE',24,'SFP+'],['USW-Pro-48',48,'SFP+'],['USW-Pro-48-POE',48,'SFP+']
+]){
+ const start=count===16?.601:count===24?.493:.101,pitch=count===48?.031:.033,block=count===16?4:6;
+ const positions=Array.from({length:count},(_,i)=>{const col=Math.floor(i/2);return start+col*pitch+Math.floor(col/block)*.015;});
+ add([model],'Ubiquiti','https://dl.ui.com/qsg/'+model+'/'+model+'_EN.html',[
+  bank(span('',1,count),'RJ45',2,'front',{positions,socketWidth:.026}),
+  bank(span('',count+1,count+(count===48?4:2)),optic,2,'front',{positions:count===48?[.897,.897,.933,.933]:[.933,.933],socketWidth:.026})
+ ],{ratio:10.12,rowsY:[.35,.66],bodyFill:'#DCDDDE'});
+}
 const sonic='https://csrc.nist.gov/CSRC/media/projects/cryptographic-module-validation-program/documents/security-policies/140sp4162.pdf';
 const descendingPairs=(lo,hi)=>Array.from({length:(hi-lo+1)/2},(_,i)=>[hi-1-i*2,hi-i*2]).flat().map(n=>'x'+n);
 for(const n of [270,370,470,570,670])add(['TZ'+n,...(n!==670?['TZ'+n+'W']:[]),...(n===570?['TZ570P']:[])],'SonicWall',sonic,[...(n>=470?[bank(['x8','x9'],'SFP+',2,'rear')]:[]),bank(descendingPairs(0,7),'RJ45',2,'rear')],{ratio:n>=570?6.4:5,left:n>=470?.40:.36,right:.76,bodyFill:'#30383D'});

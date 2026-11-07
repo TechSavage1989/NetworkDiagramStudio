@@ -5,7 +5,7 @@ export function cableControls(svg,item,selected=-1){
  item.points.forEach(([x,y],index)=>{
   const endpoint=index===0||index===item.points.length-1;
   const n=make(endpoint?'circle':'rect',endpoint?{cx:x,cy:y,r:4,class:'cable-endpoint'}:{x:x-5,y:y-5,width:10,height:10,rx:2,class:'cable-point'+(selected===index?' selected':''),'data-cable-point':index,tabindex:0,role:'button','aria-label':'Bend point '+index},group);
-  make('title',{},n).textContent=endpoint?'Attached port endpoint':'Bend '+index+': drag to move. Select and press Delete to remove.';
+  make('title',{},n).textContent=endpoint?'Attached port endpoint':'Bend '+index+': drag to move; hold Shift for horizontal or vertical movement. Select and press Delete to remove.';
  });
  for(let index=0;index<item.points.length-1;index++){
   const a=item.points[index],b=item.points[index+1];if(Math.abs(b[0]-a[0])+Math.abs(b[1]-a[1])<30)continue;

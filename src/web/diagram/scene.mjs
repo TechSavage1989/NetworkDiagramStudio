@@ -41,20 +41,21 @@ export function mediaInfo(v,access=false){
 }
 export function linkLegend(page){
  const defaults=linkDefaults,scope=page.editScope||page.name,entries=new Map();
- for(const path of page.items.filter(i=>i.type==='path')){const name=path.linkType||'Link',color=path.color.toUpperCase(),opacity=path.opacity??1,weight=path.weight||cableWeight,key=JSON.stringify([name,color,opacity,weight]);if(!entries.has(key))entries.set(key,{name,color,opacity,weight,style:path.linkStyle});}
+ for(const path of page.items.filter(i=>i.type==='path')){const name=path.linkType||'Link',color=path.color.toUpperCase(),opacity=path.opacity??1,weight=path.weight||cableWeight,key=JSON.stringify([name,color,opacity,weight]);if(!entries.has(key))entries.set(key,{name,color,opacity,weight,style:path.linkStyle,speeds:new Set()});if(path.sourceLink)entries.get(key).speeds.add(rate(path.sourceLink.speed)||'Unspecified speed');}
+ const titleOf=entry=>(entry.style?.title||entry.name)+(entry.style?.showSpeed&&entry.speeds.size?' | '+[...entry.speeds].sort().join(', '):'')+(entry.opacity<1?' ('+Math.round(entry.opacity*100)+'%)':'');
  const values=[...entries.values()].sort((a,b)=>{const rank=n=>defaults.findIndex(([name])=>name===n||name.startsWith('Fiber')&&/unspecified|Fiber/.test(n));return (rank(a.name)<0?9:rank(a.name))-(rank(b.name)<0?9:rank(b.name))||a.color.localeCompare(b.color)||a.opacity-b.opacity;});
  if(!values.length)return;
  if(page.legendLayout==='sidebar'){
   label(page.items,38,147,244,26,'CONNECTION TYPES',16,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=198;
   const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
-  for(const {name,color,opacity,weight,style} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight),title=(style?.title||name)+(opacity<1?' ('+Math.round(opacity*100)+'%)':''),lines=wrapPortText(title,176,14),description=style?.description?wrapPortText(style.description,176,12):[];
+  for(const {name,color,opacity,weight,style,speeds} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight),title=titleOf({name,style,speeds,opacity}),lines=wrapPortText(title,176,14),description=style?.description?wrapPortText(style.description,176,12):[];
    rect(page.items,38,y+11,52,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
    lines.forEach((text,n)=>{label(page.items,102,y+n*18,176,18,text,14,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
    description.forEach((text,n)=>{label(page.items,102,y+lines.length*18+n*15,176,15,text,12,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44,lines.length*18+description.length*15+12);
   }page.legendBottom=y;return;
  }
  const cols=values.length<=6?3:6,size=12,width=1128/cols-38,rows=[];
- const entriesWithText=values.map(entry=>({...entry,lines:wrapPortText((entry.style?.title||entry.name)+(entry.opacity<1?' ('+Math.round(entry.opacity*100)+'%)':''),width,size),description:entry.style?.description?wrapPortText(entry.style.description,width,11):[]}));
+ const entriesWithText=values.map(entry=>({...entry,lines:wrapPortText(titleOf(entry),width,size),description:entry.style?.description?wrapPortText(entry.style.description,width,11):[]}));
  for(let i=0;i<entriesWithText.length;i+=cols)rows.push(Math.max(...entriesWithText.slice(i,i+cols).map(e=>Math.max(22,e.lines.length*15+e.description.length*14+5))));
  label(page.items,38,148,1120,15,'LINK COLORS',11,true,C.muted);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});
  entriesWithText.forEach(({name,color,opacity,weight,style,lines,description},i)=>{const x=38+(i%cols)*1128/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight);
