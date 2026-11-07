@@ -39,8 +39,10 @@ internal static class NativeSmoke
     {
         if (args is ["--test-install", var path])
         {
-            using var updater = new Updater(new ReleaseFixture(path));
+            var installFixture = new ReleaseFixture(path);
+            using var updater = new Updater(installFixture);
             updater.Check(TimeSpan.Zero).GetAwaiter().GetResult();
+            if(installFixture.Checks.Count!=1 || updater.Offered==null)throw new Exception("The install fixture did not return an update offer.\n"+updater.Report);
             updater.Download(new Progress<int>()).GetAwaiter().GetResult();
             Installer.Begin(updater.Offered!); return 0;
         }
