@@ -227,7 +227,7 @@ function deviceList(){
  for(const d of matching){const row=el('div','','device-row'),include=el('input');include.type='checkbox';include.checked=!d.hidden;include.setAttribute('aria-label','Include '+d.name);include.title='Show '+d.name+' in the drawing';row.classList.toggle('excluded',!!d.hidden);
  include.onchange=()=>{d.scopeOverride=include.checked;d.hidden=!include.checked;perform();};
  const b=el('button',d.name,'device-details');b.type='button';b.title='Edit '+d.name;b.append(el('small',[deviceKindLabel(d.kind),d.model||d.vendor||'Model unspecified'].join(' / ')));if(d.ip)b.append(el('small',d.ip));b.onclick=()=>task(()=>editDevice(d));row.append(include,b);
- const del=button(row,'Delete',()=>removeDevices([d.id]),'delete-device');del.title='Delete '+d.name+' and its connections';del.setAttribute('aria-label','Delete '+d.name);row.dataset.deviceId=d.id;panel.append(row);}
+ const del=button(row,'Delete',()=>removeDevices([d.id]),'delete-device');del.title='Delete '+d.name+' and its connections';del.setAttribute('aria-label','Delete '+d.name);addOrderControls(row,d);panel.append(row);}
  if(!matching.length)panel.append(el('p',project.devices.length?'No matches. Try a device name, model, type or IP address.':'No devices yet. Add a device or import your configurations.','placeholder'));
 }
 function addOrderControls(row,d,after=()=>{}){

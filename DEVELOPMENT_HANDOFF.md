@@ -1,3 +1,9 @@
+## Preview.25 candidate: restore sidebar device ordering
+
+Prepared from published preview.24 at f717ca6df0f2a6cc2fb90ce70e155b4007137903 on fix/sidebar-device-order. Preview.24 accidentally stopped calling addOrderControls for sidebar device rows while adding Delete. Restore that shared handler, keep the drag cursor, and put Up/Down on a second row so all controls and device details fit the sidebar. The arrangement dialog continues to use the same behavior. Dynamic canvas, deletion and printing are unchanged.
+
+Browser validation exercises real mouse dragging, Up/Down, Undo/Redo, save/reopen, filtering, excluded devices, Delete/Undo, Clear all/Undo and arrangement-dialog ordering. Native regression coverage now checks the sidebar buttons, drag/drop event flow and Undo before the existing arrangement checks. Keep dialog selectors scoped now that both lists have ordering controls. README screenshots use the fictional sample site. Run node scripts/check-repo.mjs, node --test and node scripts/build-web.mjs; require exact-head hosted Windows validation, merged-main publication and public download verification before announcing preview.25. Standing build/release authorization continues; the app still asks the user to install and restart.
+
 ## Preview.24 release candidate: dynamic canvas and device inventory
 
 Prepares preview.24 from published preview.23 on feat/dynamic-canvas-devices. The user requested availability in the app updater. Publish through the existing intent-gated PR and main workflow; require the exact-head Windows validation and merged-main publication to succeed, then verify the public feed and downloaded assets before announcing availability. The Windows updater continues to use the existing release feed.

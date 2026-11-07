@@ -280,8 +280,15 @@ internal sealed partial class Studio
         await CheckEditRecovery();
         await CheckLegendConnections();
         await CheckAddDevice();
+        await ClickEditorTarget("#devices [aria-label='Up SW-1']");
+        await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Sidebar Up did not reorder devices')","sidebar move up");
+        await ClickEditorTarget("#devices [aria-label='Down SW-1']");
+        await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='edge') throw Error('Sidebar Down did not restore device order')","sidebar move down");
+        await RequireEditor("const source=document.querySelector('#devices [data-device-id=\"sw-1\"]'),target=document.querySelector('#devices [data-device-id=\"edge\"]'),data=new DataTransfer();if(!source.draggable)throw Error('Sidebar drag disabled');source.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:data}));target.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:data}));target.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data}));if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1')throw Error('Sidebar drop did not reorder devices')","sidebar drop");
+        await ClickEditorTarget("#undo-devices");
+        await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='edge'||!document.querySelector('#devices [aria-label=\"Delete SW-1\"]'))throw Error('Sidebar reorder Undo lost device order or Delete control')","sidebar reorder undo");
         await ClickEditorTarget("#arrange");
-        await ClickEditorTarget("[aria-label='Up SW-1']");
+        await ClickEditorTarget("#dialog [aria-label='Up SW-1']");
         await RequireEditor("if(document.querySelector('#devices .device-row').dataset.deviceId!=='sw-1') throw Error('Device ordering failed')","device order");
         await RequireEditor("[...document.querySelectorAll('#dialog button')].find(button=>button.textContent==='Add core page').click()","add named page");
         await RequireEditor("const name=[...document.querySelectorAll('[aria-label=\"Core page name\"]')].at(-1); if(!name) throw Error('New page name field missing'); name.value='Native test rack'; name.dispatchEvent(new Event('change'))","rename core page");
