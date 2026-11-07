@@ -28,31 +28,23 @@ Network engineers can use the Windows application or the offline browser edition
 
 ## Screenshots
 
-Shared family drawings retain actual port names and explicitly identify an unconfirmed SKU.
+**Shared family drawings with model-confirmation guidance**
 
 <p align="center"><img src="docs/images/hardware-families.png" width="900" alt="Fictional FortiGate 201G, Cisco 9500 family and compact Aruba family with mapped links"></p>
 
-<p align="center"><img src="docs/images/hardware-confirmation.png" width="750" alt="Device details explaining the family evidence and model confirmation"></p>
-
-Modular chassis keep their proportions, slot identities and editable physical sockets.
+**Modular chassis with proportional slots and editable sockets**
 
 <p align="center"><img src="docs/images/modular-port-map.png" width="900" alt="Fictional Aruba 5406R chassis with installed optical and copper cards and grouped port details"></p>
-
-**Paper sizes and orientation**
-
-![Paper size and orientation controls](docs/images/page-options.png)
-
-**Update review and release notes**
-
-![Update review panel with fictional release data](docs/images/update-panel.png)
 
 **Stack and switch port maps at a common scale**
 
 <p align="center"><img src="docs/images/port-map.png" width="900" alt="Fictional two-member stack and standalone switch with equal faceplate widths and a shared assignment table"></p>
 
-**Wireless model and MAC details**
+**Update review with formatted notes and fixed actions**
 
-<p align="center"><img src="docs/images/wireless-models.png" width="900" alt="Eight fictional access points with model, MAC, interface and link details on one sheet"></p>
+![Polished install review with formatted release notes and fixed actions](docs/images/update-panel.png)
+
+More views: [Model confirmation](docs/images/hardware-confirmation.png), [paper size controls](docs/images/page-options.png), and [wireless model and MAC details](docs/images/wireless-models.png).
 
 ## Download
 
@@ -134,7 +126,7 @@ Select **Stack members and installed modules** in Device details to confirm hard
 
 ## Updates and settings
 
-Help opens an update panel with installed and available versions, full release notes, download progress, verification status and an explicit Install and restart action. A compact notice appears only when a newer release is available. Automatic checks and verified download/rollback behavior are unchanged.
+Help opens a polished update review with compact installed/available version labels, formatted release headings and bullets, download progress, verification status and a fixed action footer. Long notes scroll inside the review while the close and install controls stay visible. The install screen explains recovery and reminds you to save unsaved diagram changes before restarting. A compact notice appears only when a newer release is available. Automatic checks and verified download/rollback behavior are unchanged.
 
 For mixed-size printing, retain the document paper sizes in your print/PDF settings. Physical printers and custom forms must support the selected sizes. Visio drawing dimensions and standard printer paper kinds are exported separately; select a matching printer form for custom sizes.
 

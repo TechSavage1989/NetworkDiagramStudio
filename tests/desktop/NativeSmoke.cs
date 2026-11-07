@@ -125,7 +125,7 @@ internal sealed partial class Studio
     internal async Task CheckUpdateFromHelp(string expected,bool available)
     {
         await ClickEditorTarget("#desktop-help");
-        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Help and updates')throw Error('Help did not open');for(const name of ['Check updates','Update details','Notices'])if(![...document.querySelectorAll('#dialog button')].some(b=>b.textContent===name))throw Error('Missing Help action '+name)","Help actions");
+        await RequireEditor("if(!document.getElementById('dialog').open||!document.getElementById('dialog').classList.contains('update-dialog')||!document.getElementById('dialog-title').textContent)throw Error('Help did not open');for(const name of ['Check updates','Update details','Notices'])if(![...document.querySelectorAll('#dialog button')].some(b=>b.textContent===name))throw Error('Missing Help action '+name)","Help actions");
         await ClickEditorTarget("#desktop-check-updates");
         for(int i=0;i<50&&!checking;i++)await Task.Delay(20);
         if(!checking)throw new Exception("Help did not start an update check.");

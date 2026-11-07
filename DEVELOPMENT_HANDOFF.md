@@ -1,3 +1,11 @@
+## Preview.23 polished update review
+
+Prepares 0.1.0-preview.23 / file version 0.1.0.23 from published preview.22 at 30867b32f8b95952091185b3756ad72671266588. Preview.22 passed PR #18 Windows run 42408150968 and merged-main publication run 42408769625; the public feed, tag, downloaded checksums, Windows version/icon and 62 offline modules were verified. Standing build/release authorization continues. Require exact-head Windows success, merged-main publication and verification of public downloads before announcing preview.23.
+
+The update review follows the supplied Configuration Inspector example: a clean white header, compact version labels, a softly tinted release card, formatted headings/bullets/emphasis, recovery statements and a pinned action footer. Only the central content scrolls in small windows or for long notes. Native progress does not rebuild the notes or replace focused buttons. Remote release text stays inert, including HTML-looking content and links. The shared dialog close target stays visible; other dialogs reset the scoped styling. The existing native final save/restart confirmation, busy guards, update cadence, feed, verified binary handling and rollback remain unchanged. Unsaved diagrams are explicitly not claimed to be restored.
+
+Validation passed all 188 Node tests and direct browser tests for available/checking/error/downloading/verifying/ready states, downloads and install actions, busy guards, safe remote notes, fixed-footer geometry at 1366x900, 1366x768, 720x520 and 390x640, long-note scroll/focus retention, close/Escape, and opening other dialogs afterward. The README uses an actual application capture with fictional release data. Final Windows and publication checks remain required.
+
 # Development handoff
 
 ## Preview.22 configuration recognition and physical layouts
