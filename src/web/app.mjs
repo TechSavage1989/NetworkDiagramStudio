@@ -42,6 +42,25 @@ const modelKinds=deviceKinds;
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
 const safeKey=s=>typeof s==='string'&&s.length>0&&s.length<=300&&!['__proto__','constructor','prototype'].includes(s);
 const say=message=>{$('feedback').textContent=message;};
+function syncDesktopUpdates(){
+ const state=window.NDSDesktop?.updateState??{},message=$('desktop-update-status'),check=$('desktop-check-updates');
+ if(message)message.textContent=state.message||'Checking for updates...';
+ if(check){check.disabled=!!(state.checking||state.fetching);check.textContent=state.checking?'Checking...':'Check updates';}
+}
+if(window.NDSDesktop?.checkUpdates){
+ $('desktop-help').hidden=false;
+ $('desktop-help').onclick=()=>{
+  const body=modal('Help and updates');
+  const version=window.NDSDesktop.updateState?.version;
+  if(version)body.append(el('p','Installed '+version,'hint'));
+  const status=el('p');status.id='desktop-update-status';status.setAttribute('role','status');status.setAttribute('aria-live','polite');body.append(status);
+  const row=actions(body),check=button(row,'Check updates',()=>window.NDSDesktop.checkUpdates());check.id='desktop-check-updates';
+  button(row,'Update details',()=>window.NDSDesktop.updateDetails());
+  button(row,'Notices',()=>window.NDSDesktop.notices());
+  syncDesktopUpdates();
+ };
+ window.addEventListener('nds-update-state',syncDesktopUpdates);
+}
 function download(content,name,mime='application/json'){
   const url=URL.createObjectURL(content instanceof Blob?content:new Blob([content],{type:mime}));
   const a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);
