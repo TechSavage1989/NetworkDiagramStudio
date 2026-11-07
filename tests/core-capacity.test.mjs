@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {placeCableLabels,placeDeviceTitles,intersects,pathCrossesText,textWidth,textFootprint} from '../src/web/diagram/labels.mjs';
-import {buildPages} from '../src/web/diagram/index.mjs';
+import {buildPages as buildPaperPages} from '../src/web/diagram/index.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
 import {cleanLayout,coreLinkKey} from '../src/web/layout.mjs';
 import {ProjectHistory} from '../src/web/history.mjs';
@@ -71,3 +71,6 @@ test('a dedicated page can hide one off-page connection without changing project
  assert.ok(!dedicated().items.some(item=>item.sourceLink&&coreLinkKey(item.sourceLink)===coreLinkKey(link)));
  assert.ok(project.links.includes(link));
 });
+
+// Fixed-paper regression coverage; new projects use a dynamic canvas.
+function buildPages(project){return buildPaperPages({...project,layout:{...project.layout,pageSetup:project.layout?.pageSetup||{default:{preset:'original'}}}});}

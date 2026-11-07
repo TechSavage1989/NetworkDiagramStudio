@@ -1,9 +1,9 @@
 export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,onBeforeInteraction,onMoveStart,onBoxStart,onBackground,onEdit}={}){
  const views=new Map();let current=null,svg=null,drag=null,space=false,clickTimer=null,clickTarget=null;
- const clamp=v=>Math.max(.02,Math.min(6,v)),textInput=target=>target.closest('[data-inline-editor]');
+ const clamp=v=>Math.max(.0001,Math.min(6,v)),textInput=target=>target.closest('[data-inline-editor]');
  const itemKey=(target,event)=>((!event.altKey&&target.closest('[data-device-id]'))||target.closest('[data-drawing-key]'))?.getAttribute('data-drawing-key');
  const point=e=>{const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());return [p.x,p.y];};
- function apply(){if(!svg||!current)return;svg.style.transform='translate('+current.x+'px,'+current.y+'px) scale('+current.scale+')';if(percent)percent.textContent=Math.round(current.scale*100)+'%';}
+ function apply(){if(!svg||!current)return;svg.style.transform='translate('+current.x+'px,'+current.y+'px) scale('+current.scale+')';if(percent)percent.textContent=(current.scale<.01?(current.scale*100).toFixed(2):Math.round(current.scale*100))+'%';}
  function fitPage(){if(!svg||!current)return;const width=svg.viewBox.baseVal.width,height=svg.viewBox.baseVal.height,scale=clamp(Math.min((canvas.clientWidth-36)/width,(canvas.clientHeight-36)/height));Object.assign(current,{userSized:false,scale,x:(canvas.clientWidth-width*scale)/2,y:(canvas.clientHeight-height*scale)/2});apply();}
  function zoom(factor,x=canvas.clientWidth/2,y=canvas.clientHeight/2){if(!current)return;const before=current.scale,scale=clamp(before*factor);current.x=x-(x-current.x)*scale/before;current.y=y-(y-current.y)*scale/before;current.scale=scale;current.userSized=true;apply();}
  if(out)out.onclick=()=>zoom(1/1.25);if(inside)inside.onclick=()=>zoom(1.25);if(fit)fit.onclick=fitPage;

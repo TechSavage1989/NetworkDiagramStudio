@@ -1,3 +1,4 @@
+import {normalizedPage} from './dynamic-page.mjs';
 import {cleanNativeArt} from '../native-art.mjs';
 import {xml,round,textLayout} from './scene.mjs';
 import {zip} from './zip.mjs';
@@ -118,7 +119,7 @@ function guid(seed){
 function imageBytes(uri){const str=atob(uri.slice(uri.indexOf(',')+1));return Uint8Array.from(str,c=>c.charCodeAt(0));}
 // Native Visio recomputes arc jumps from the editable orthogonal connector geometry.
 // https://learn.microsoft.com/en-us/office/client-developer/visio/linejumpcode-cell-page-layout-section
-function sheet(w,h,jumps=false,paper=null){return '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+cell('PageWidth',inch(w))+cell('PageHeight',inch(h))+cell('PageScale',1)+cell('DrawingScale',1)+cell('DrawingSizeType',0)+cell('DrawingScaleType',0)+(paper?cell('PrintPageOrientation',w>h?2:1)+({letter:1,tabloid:3,legal:5,a3:8,a4:9,a5:11,a2:66}[paper.preset]?cell('PaperKind',{letter:1,tabloid:3,legal:5,a3:8,a4:9,a5:11,a2:66}[paper.preset]):''):'')+(jumps?cell('LineJumpCode',4)+cell('LineJumpStyle',1)+cell('LineToLineX',inch(14))+cell('LineToLineY',inch(14))+cell('LineJumpFactorX',.5)+cell('LineJumpFactorY',.5):'')+'</PageSheet>';}
+function sheet(w,h,jumps=false,paper=null,fitPrint=false){return '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+cell('PageWidth',inch(w))+cell('PageHeight',inch(h))+cell('PageScale',1)+cell('DrawingScale',1)+cell('DrawingSizeType',0)+cell('DrawingScaleType',0)+(paper?cell('PrintPageOrientation',paper.orientation==='portrait'?1:2)+(fitPrint?cell('OnPage',1)+cell('PagesX',1)+cell('PagesY',1):'')+({letter:1,tabloid:3,legal:5,a3:8,a4:9,a5:11,a2:66}[paper.preset]?cell('PaperKind',{letter:1,tabloid:3,legal:5,a3:8,a4:9,a5:11,a2:66}[paper.preset]):''):'')+(jumps?cell('LineJumpCode',4)+cell('LineJumpStyle',1)+cell('LineToLineX',inch(14))+cell('LineToLineY',inch(14))+cell('LineJumpFactorX',.5)+cell('LineJumpFactorY',.5):'')+'</PageSheet>';}
 export const exportVisio=(project,pages)=>writePackage(pages,false);
 export const exportStencil=(project,pages)=>writePackage(pages,true);
 function writePackage(pages,stencil){
@@ -169,9 +170,10 @@ function writePackage(pages,stencil){
   }
   let pagesXml='';
   const drawingPages=stencil?[]:pages;
-  drawingPages.forEach((p,index)=>{
+  drawingPages.forEach((source,index)=>{
+    const p=normalizedPage(source);
     const n=index+1,name=p.name;
-    pagesXml+='<Page ID="'+index+'" Name="'+xml(name)+'" NameU="'+xml(name)+'" IsCustomName="1" IsCustomNameU="1" ViewScale="0.75" ViewCenterX="'+round(inch(p.width/2))+'" ViewCenterY="'+round(inch(p.height/2))+'">'+sheet(p.width,p.height,true,p.paper)+relation(n)+'</Page>';
+    pagesXml+='<Page ID="'+index+'" Name="'+xml(name)+'" NameU="'+xml(name)+'" IsCustomName="1" IsCustomNameU="1" ViewScale="0.75" ViewCenterX="'+round(inch(p.width/2))+'" ViewCenterY="'+round(inch(p.height/2))+'">'+sheet(p.width,p.height,true,p.printPaper||p.paper,!!p.printPaper)+relation(n)+'</Page>';
     const rel=[],relKeys=new Map(),byKey=new Map(),connect=[];
     function relId(type,target){if(!relKeys.has(target)){relKeys.set(target,rel.length+1);rel.push([rel.length+1,type,target]);}return relKeys.get(target);}
     let seq=p.items.length;

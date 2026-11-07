@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildPaperPages,exportVisio} from '../src/web/diagram/index.mjs';
 import {intersects} from '../src/web/diagram/labels.mjs';
 import {unzip} from '../src/web/zip.mjs';
 const fixture=(count,vlans,long=false)=>({name:'Trunk Lab',devices:Array.from({length:count},(_,i)=>({id:'sw'+i,name:long?'LAB distribution switch '+i+' with complete department designation':'LAB'+i,kind:'switch',ports:[{name:'1/1/49',native:1,tagged:Array.from({length:vlans-1},(_,n)=>n+2)}],vlans:Array.from({length:vlans},(_,n)=>({id:n+1,name:long?'Department '+(n+1)+' with a complete readable VLAN description':'VLAN'+(n+1)}))})),links:[]});
@@ -15,3 +15,6 @@ test('long trunk labels wrap fully and spill only when measured content needs an
  for(let i=0;i<8;i++)for(let v=1;v<=24;v++)assert.ok(pages.some(p=>p.items.some(t=>t.value===project.devices[i].name)&&p.items.some(t=>t.value===v+'    '+project.devices[i].vlans[v-1].name)));
  const files=await unzip(await exportVisio(project,pages).arrayBuffer()),xml=[...files].filter(([n])=>/^visio\/pages\/page\d+\.xml$/.test(n)).map(([,b])=>new TextDecoder().decode(b)).join('');assert.match(xml,/complete/);assert.match(xml,/designation/);assert.match(xml,/description/);
 });
+
+// Fixed-paper regression coverage; new projects use a dynamic canvas.
+function buildPages(project){return buildPaperPages({...project,layout:{...project.layout,pageSetup:project.layout?.pageSetup||{default:{preset:'original'}}}});}

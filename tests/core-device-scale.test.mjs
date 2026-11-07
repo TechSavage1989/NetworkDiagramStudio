@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages} from '../src/web/diagram/index.mjs';
+import {buildPages as buildPaperPages} from '../src/web/diagram/index.mjs';
 import {deviceFaceplate} from '../src/web/diagram/faceplate.mjs';
 import {intersects} from '../src/web/diagram/labels.mjs';
 
@@ -20,3 +20,6 @@ test('explicit device sizing remains authoritative while automatic pages do not 
  const pages=buildPages(site),body=pages.flatMap(p=>p.items).find(i=>i.sourceId==='stack0'&&i.type==='device');assert.equal(body.w,700);assert.equal(body.h,420);
  site.layout={drawingEdits:{[body.editKey]:{w:560,h:336}}};const edited=buildPages(site).flatMap(p=>p.items).find(i=>i.editKey===body.editKey);assert.equal(edited.w,560);assert.equal(edited.h,336);
 });
+
+// Fixed-paper regression coverage; new projects use a dynamic canvas.
+function buildPages(project){return buildPaperPages({...project,layout:{...project.layout,pageSetup:project.layout?.pageSetup||{default:{preset:'original'}}}});}

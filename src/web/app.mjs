@@ -1,3 +1,4 @@
+import {withoutDevices} from './device-actions.mjs';
 import {desktopUpdates} from './desktop-updates.mjs';
 import {deviceMacs,inputMacAddresses} from './device-details.mjs';
 import {inlineTextEditor} from './inline-text.mjs';
@@ -207,12 +208,27 @@ function scoped(source=project){
  return {...source,devices,links,excludedPeerPorts};
 }
 const matchName=d=>[d.name,d.model,d.vendor,d.kind,deviceKindLabel(d.kind),d.technology,d.ip].some(v=>String(v||'').toLowerCase().includes($('filter').value.trim().toLowerCase()));
+function removeDevices(ids){
+ if(!commitInlineEdit())return;
+ const before=project,next=withoutDevices(project,ids),count=before.devices.length-next.devices.length;if(!count)return;
+ project=next;try{validateDrawing();}catch(error){project=before;throw error;}
+ perform('devices');say(count===1?'Device and its connections deleted. Select Undo to restore.':count+' devices and their connections cleared. Select Undo to restore.');
+}
+function clearDevices(){
+ const count=project.devices.length;if(!count)return;
+ const body=modal('Clear all devices?');body.append(el('p','Delete all '+count+' devices and their connections, including devices hidden by the search or excluded from the drawing? Hardware in your library is retained. You can undo this action.'));
+ const bar=actions(body);button(bar,'Clear all '+count+' devices',()=>{removeDevices(project.devices.map(d=>d.id));close();},'danger');button(bar,'Cancel',close);
+}
+$('clear-devices').onclick=()=>task(clearDevices);
+$('undo-devices').onclick=()=>task(()=>drawingHistory());
 function deviceList(){
- const panel=$('devices');panel.replaceChildren();let count=0;
- for(const d of orderedDevices(project).filter(matchName)){if(count++>=350)break;const row=el('div','','device-row'),include=el('input');include.type='checkbox';include.checked=!d.hidden;include.setAttribute('aria-label','Include '+d.name);
- include.onchange=()=>{d.scopeOverride=include.checked;d.hidden=!include.checked;perform();};const b=el('button',d.name);b.title='Edit '+d.name;b.append(el('small',[deviceKindLabel(d.kind),d.model||d.vendor||'Model unspecified'].join('  /  ')));b.onclick=()=>editDevice(d);row.append(include,b);addOrderControls(row,d);panel.append(row);}
- if(!count)panel.append(el('p',project.devices.length?'No matching devices.':'No devices imported.','placeholder'));
- if(count>350)panel.append(el('p','Filter to view more devices.','placeholder'));
+ const panel=$('devices');panel.replaceChildren();const matching=orderedDevices(project).filter(matchName);
+ $('device-count').textContent=matching.length+' of '+project.devices.length+' devices';$('clear-devices').disabled=!project.devices.length;$('undo-devices').disabled=!projectHistory.canUndo();
+ for(const d of matching){const row=el('div','','device-row'),include=el('input');include.type='checkbox';include.checked=!d.hidden;include.setAttribute('aria-label','Include '+d.name);include.title='Show '+d.name+' in the drawing';row.classList.toggle('excluded',!!d.hidden);
+ include.onchange=()=>{d.scopeOverride=include.checked;d.hidden=!include.checked;perform();};
+ const b=el('button',d.name,'device-details');b.type='button';b.title='Edit '+d.name;b.append(el('small',[deviceKindLabel(d.kind),d.model||d.vendor||'Model unspecified'].join(' / ')));if(d.ip)b.append(el('small',d.ip));b.onclick=()=>task(()=>editDevice(d));row.append(include,b);
+ const del=button(row,'Delete',()=>removeDevices([d.id]),'delete-device');del.title='Delete '+d.name+' and its connections';del.setAttribute('aria-label','Delete '+d.name);row.dataset.deviceId=d.id;panel.append(row);}
+ if(!matching.length)panel.append(el('p',project.devices.length?'No matches. Try a device name, model, type or IP address.':'No devices yet. Add a device or import your configurations.','placeholder'));
 }
 function addOrderControls(row,d,after=()=>{}){
  const order=orderedDevices(project),i=order.findIndex(x=>x.id===d.id),bar=el('div','','order-buttons');
@@ -249,18 +265,24 @@ function linkStyleOptions(selected){
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
 function pageOptions(){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
- body.append(el('p','Choose paper for the whole drawing, or use a different size for a page type. Layout, printing, SVG and Visio use the same dimensions.','hint'));
- const target=field(body,'Apply paper size to','default',[['default','All page types (default)'],...pageFamilies]),paperRow=el('div','','form-columns');body.append(paperRow);
- const preset=field(paperRow,'Paper size','original',paperSizes.map(([id,title])=>[id,title])),orientation=field(paperRow,'Orientation','landscape',[['landscape','Landscape'],['portrait','Portrait']]);
+ body.append(el('p','Dynamic / Fit all grows each drawing page around its contents. All devices assigned to a core page stay together at a readable size. Choose paper separately when printing.','hint'));
+ const target=field(body,'Drawing page type','default',[['default','All page types (default)'],...pageFamilies]),paperRow=el('div','','form-columns');body.append(paperRow);
+ const preset=field(paperRow,'Canvas size','dynamic',[['dynamic','Dynamic / Fit all (default)'],...paperSizes.map(([id,title])=>[id,title])]),orientation=field(paperRow,'Orientation','landscape',[['landscape','Landscape'],['portrait','Portrait']]);
  const custom=el('div','','form-columns');body.append(custom);const width=field(custom,'Width (mm)',297),height=field(custom,'Height (mm)',420);for(const input of [width,height]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
  const preview=el('p','','page-size-preview');body.append(preview);let selected='default';
  function store(){const value=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});if(selected==='default')setup.default=value;else setup.overrides[selected]=value;}
- function update(){custom.hidden=preset.value!=='custom';const paper=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value}),g=pageGeometry({layout:{pageSetup:{default:paper}}});preview.textContent=g.widthMm.toFixed(1)+' × '+g.heightMm.toFixed(1)+' mm. Devices fit at a consistent scale; readable text and automatic continuation pages are preserved.';}
+ function update(){custom.hidden=preset.value!=='custom';orientation.disabled=preset.value==='dynamic';const paper=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value}),g=pageGeometry({layout:{pageSetup:{default:paper}}});preview.textContent=paper.preset==='dynamic'?'Fits all objects on each page automatically. No fixed paper boundary or device-count limit.':g.widthMm.toFixed(1)+' × '+g.heightMm.toFixed(1)+' mm. Devices fit at a consistent scale; readable text and automatic continuation pages are preserved.';}
  function load(){const value=selected==='default'?setup.default:setup.overrides[selected]||setup.default;preset.value=value.preset;orientation.value=value.orientation;width.value=value.widthMm;height.value=value.heightMm;update();}
  for(const input of [preset,orientation,width,height])input.oninput=update;
  target.onchange=()=>{store();selected=target.value;load();};load();
- const reset=button(body,'Use default paper for all page types',()=>{setup.overrides={};selected='default';target.value='default';load();});reset.classList.add('paper-reset');
- body.append(el('p','Paper overrides: '+(Object.keys(setup.overrides).map(key=>pageFamilies.find(p=>p[0]===key)?.[1]).join(', ')||'None')+'. Custom dimensions may be 148 to 1500 mm. Existing manual object sizing and positions are retained.','hint'));
+ const reset=button(body,'Use drawing default for all page types',()=>{setup.overrides={};selected='default';target.value='default';load();});reset.classList.add('paper-reset');
+ body.append(el('p','Drawing overrides: '+(Object.keys(setup.overrides).map(key=>pageFamilies.find(p=>p[0]===key)?.[1]).join(', ')||'None')+'. Custom dimensions may be 148 to 1500 mm. Existing manual object sizing and positions are retained.','hint'));
+ const printSection=el('details');printSection.open=true;printSection.append(el('summary','Printing'));body.append(printSection);
+ const printSize=field(printSection,'Print paper',setup.printPaper?.preset||'drawing',[['drawing','Match drawing (full-size PDF)'],...paperSizes]),printOrientation=field(printSection,'Print orientation',setup.printPaper?.orientation||'landscape',[['landscape','Landscape'],['portrait','Portrait']]);
+ const printCustom=el('div','','form-columns');printSection.append(printCustom);const printWidth=field(printCustom,'Print width (mm)',setup.printPaper?.widthMm||297),printHeight=field(printCustom,'Print height (mm)',setup.printPaper?.heightMm||420);
+ for(const input of [printWidth,printHeight]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
+ function updatePrint(){printCustom.hidden=printSize.value!=='custom';printOrientation.disabled=printSize.value==='drawing';}printSize.onchange=updatePrint;updatePrint();
+ printSection.append(el('p','Paper sizes scale each complete drawing page to one printed sheet. The editable canvas and device sizes stay unchanged. For large drawings, use a full-size PDF to retain detail.','hint'));
  const numbering=el('details');numbering.append(el('summary','Page numbering'));body.append(numbering);
  const row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));numbering.append(row);
  const numberRow=el('div','','form-columns');numbering.append(numberRow);const start=field(numberRow,'First page number',p.start),pad=field(numberRow,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(numbering,'Page number format',p.format);start.type='number';start.min=0;start.max=9999;start.step=1;format.maxLength=100;
@@ -268,9 +290,11 @@ function pageOptions(){
  button(actions(body),'Save page options',()=>{
   if(preset.value==='custom'&&[width,height].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter custom dimensions from 148 to 1500 mm.');
   if(start.value===''||!Number.isInteger(+start.value)||+start.value<0||+start.value>9999)throw Error('Use a first page number from 0 to 9999.');if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');store();
+  if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
+  setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value})};
   try{buildPages(scoped());}catch(error){project.layout=before;throw error;}
-  perform('page-options');close();viewport.fit();say('Paper size and page numbering saved.');
+  perform('page-options');close();viewport.fit();say('Drawing size, print paper and page numbering saved.');
  },'primary');
 }
 $('page-options').onclick=()=>task(pageOptions);
@@ -523,7 +547,7 @@ function editDevice(current){
    validateDrawing();perform();close();say('Device saved.');
   }catch(error){Object.assign(project,before);throw error;}
  },'primary');
- if(current)button(a,'Remove device',()=>{if(!confirm('Remove '+d.name+' and its connections?'))return;project.devices=project.devices.filter(n=>n!==d);project.links=project.links.filter(l=>l.a!==d.id&&l.b!==d.id);close();perform();});
+ if(current)button(a,'Remove device',()=>{removeDevices([d.id]);close();});
 }
 function reviewLinks(){
  const body=modal('Connections');const accounts=new Map(project.devices.map(d=>[d.id,d.name]));button(body,'Add connection',()=>editLink());
