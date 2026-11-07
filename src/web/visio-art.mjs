@@ -1,4 +1,5 @@
 import {recordArtwork} from './native-art.mjs';
+import {connectionRows} from './visio-connections.mjs';
 // Visio shapes use local inches with a bottom-left origin. Keep artwork and
 // connection points in that same space until the final image is flattened.
 export const identity=[1,0,0,1,0,0];
@@ -29,6 +30,7 @@ export function masterBounds(root){
  if(w>0&&h>0&&w/h<1000&&h/w<1000)return {x:0,y:0,w,h};
  const points=[];
  function walk(shape,matrix,depth){
+  if(shape.getAttribute('Del')==='1')return;
   if(depth>24)throw Error('Stencil group is too deeply nested.');
   const c=cellValues(shape),sw=Number(c.Width),sh=Number(c.Height),world=depth?multiply(matrix,shapeTransform(c)):matrix;
   if(depth&&sw>0&&sh>0&&(children(shape,'ForeignData').length||children(shape,'Section').some(s=>s.getAttribute('N')==='Geometry'&&cellValues(s).NoShow!=='1'))){
@@ -43,18 +45,46 @@ export function masterBounds(root){
  if(!(bw>0&&bh>0&&bw/bh<1000&&bh/bw<1000))throw Error('Master has no usable artwork bounds.');
  return {x,y,w:bw,h:bh};
 }
-export async function renderMaster(root,decode,namedAnchors){
- const bounds=masterBounds(root),{w,h}=bounds;
+export function connectionLayout(root,artBounds,name=''){
+ const points=[];
+ function walk(shape,matrix,depth){
+  if(shape.getAttribute('Del')==='1')return;
+  if(depth>24)throw Error('Stencil group is too deeply nested.');
+  const world=depth?multiply(matrix,shapeTransform(cellValues(shape))):matrix;
+  for(const p of connectionRows(shape,depth?'':name)){
+   const [x,y]=transform(world,p.x,p.y);if(!Number.isFinite(x+y))throw Error('Invalid stencil connection transform.');
+   points.push({...p,x,y});if(points.length>12000)throw Error('Stencil has too many connection points.');
+  }
+  for(const child of children(children(shape,'Shapes')[0],'Shape'))walk(child,world,depth+1);
+ }
+ walk(root,identity,0);
+ const x=Math.min(artBounds.x,...points.map(p=>p.x)),y=Math.min(artBounds.y,...points.map(p=>p.y));
+ const w=Math.max(artBounds.x+artBounds.w,...points.map(p=>p.x))-x,h=Math.max(artBounds.y+artBounds.h,...points.map(p=>p.y))-y;
+ if(!(w>0&&h>0&&w/h<1000&&h/w<1000))throw Error('Stencil connection points extend beyond usable artwork bounds.');
+ const anchors=Object.create(null),counts=new Map();
+ for(const p of points)counts.set(p.key,(counts.get(p.key)||0)+1);
+ const used=new Map();
+ for(const p of points){
+  let key=p.key;
+  // Distinct points with the same name must not create an invented midpoint
+  // or silently bind a cable to an arbitrary first occurrence.
+  if(counts.get(key)>1){const n=(used.get(key)||0)+1;used.set(key,n);key+=' (connection '+n+')';}
+  const base=key;let suffix=2;while(Object.hasOwn(anchors,key))key=base+' ('+(suffix++)+')';
+  anchors[key]=[(p.x-x)/w,1-(p.y-y)/h].map(v=>Math.max(0,Math.min(1,v)));
+ }
+ return {bounds:{x,y,w,h},anchors};
+}
+export async function renderMaster(root,decode,name=''){
+ const {bounds,anchors}=connectionLayout(root,masterBounds(root),name),{w,h}=bounds;
  const scale=Math.min(2400/w,1600/h),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));
- const recorder=recordArtwork(canvas.getContext('2d'),canvas.width,canvas.height),ctx=recorder.ctx,anchors=Object.create(null),unsupported=new Set();let drawn=0;
+ const recorder=recordArtwork(canvas.getContext('2d'),canvas.width,canvas.height),ctx=recorder.ctx,unsupported=new Set();let drawn=0;
  ctx.setTransform(canvas.width/w,0,0,-canvas.height/h,-bounds.x*canvas.width/w,(bounds.y+h)*canvas.height/h);
  async function walk(shape,matrix,depth){
+  if(shape.getAttribute('Del')==='1')return;
   if(depth>24)throw Error('Stencil group is too deeply nested.');
   const c=cellValues(shape),sw=Number(c.Width)||0,sh=Number(c.Height)||0;
   const local=depth?shapeTransform(c):identity,world=multiply(matrix,local);
   ctx.save();ctx.transform(...local);
-  const points=namedAnchors(shape,depth?'':undefined,{x:0,y:0,w:sw,h:sh});
-  for(const [key,[nx,ny]] of Object.entries(points)){const [x,y]=transform(world,nx*sw,(1-ny)*sh),px=(x-bounds.x)/w,py=1-(y-bounds.y)/h;if(px>=0&&px<=1&&py>=0&&py<=1&&!Object.hasOwn(anchors,key))anchors[key]=[px,py];}
   for(const section of children(shape,'Section').filter(s=>s.getAttribute('N')==='Geometry')){
    const flags=cellValues(section);if(Number(flags.NoShow)||!(sw>0&&sh>0))continue;
    ctx.beginPath();let old=[0,0],marks=0;

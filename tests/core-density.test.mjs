@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
 import {intersects,pathCrossesText} from '../src/web/diagram/labels.mjs';
 import {unzip} from '../src/web/zip.mjs';
+import {textLayout,cableWeight} from '../src/web/diagram/scene.mjs';
 
 const core=project=>buildPages(project).filter(page=>page.coreDeviceIds);
 const fixture=()=>({name:'Harbor Workshop',devices:[
@@ -11,6 +12,13 @@ const fixture=()=>({name:'Harbor Workshop',devices:[
  {id:'sw2',name:'LAB-Harbor-MDF-6100-2',vendor:'HPE Aruba',model:'JL675A',kind:'switch',ip:'10.10.11.2',ports:[{name:'1/1/51'}]}
 ],links:[{a:'edge',ap:'x3',b:'sw1',bp:'1/1/49',media:'SR fiber',speed:'10 Gbps'},{a:'sw1',ap:'1/1/51',b:'sw2',bp:'1/1/51',media:'unknown',speed:'10 Gbps'}]});
 const chain=count=>({name:'Capacity lab',devices:Array.from({length:count},(_,i)=>({id:'sw'+i,name:'LAB-SWITCH-'+(i+1),model:'JL675A',kind:'switch',ports:[{name:'1/1/49'},{name:'1/1/51'}]})),links:Array.from({length:count-1},(_,i)=>({a:'sw'+i,ap:'1/1/51',b:'sw'+(i+1),bp:'1/1/49',media:'fiber',speed:'10 Gbps'}))});
+test('sidebar narrows before splitting and retains readable legends, full module assignments and cable weights',()=>{
+ const p={name:'Harbor Workshop',devices:Array.from({length:8},(_,i)=>({id:'d'+i,name:'LAB-DEVICE-'+(i+1),kind:'switch',model:i?'JL675A':'JL635A',ports:i?[]:[{name:'1/1/1',role:'wan',handoff:'Metro Internet',gateway:'192.0.2.1',media:'copper',speed:'1 Gbps'}]})),links:Array.from({length:7},(_,i)=>({a:'d0',ap:'1/1/'+(41+i),b:'d'+(i+1),bp:'1/1/49',media:'fiber',speed:'10 Gbps'}))};
+ const pages=core(p),page=pages[0];assert.deepEqual(pages.map(p=>p.coreDeviceIds.length),[4,4]);assert.equal(page.sidebar.width,176);assert.equal(page.sidebar.contentLeft,238);clear(page);
+ for(const text of page.items.filter(i=>i.type==='text'&&(i.legendEntry||i.moduleLegend))){assert.ok(text.size>=11);assert.equal(textLayout(text).size,text.size);assert.ok(text.x+text.w<page.sidebar.divider);}
+ for(const line of page.items.filter(i=>i.type==='path'||i.legendEntry&&i.type==='rect'))assert.equal(line.sampleWeight||line.weight,cableWeight);
+ const target=page.items.find(i=>i.moduleLegend&&i.editKey.endsWith('|ports'));if(target){p.layout={drawingEdits:{[target.editKey]:{color:'#2255AA'}}};assert.equal(core(JSON.parse(JSON.stringify(p)))[0].items.find(i=>i.editKey===target.editKey).color,'#2255AA');}
+});
 function clear(page){
  const texts=page.items.filter(i=>i.type==='text'),bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path'),segments=[];
  for(const text of texts.filter(i=>i.labelRole||i.titleOwner)){

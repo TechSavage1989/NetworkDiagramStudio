@@ -1,3 +1,4 @@
+import {logicalPages} from './logical.mjs';
 import {corePages} from './core.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
 import {pageNumber} from '../page-options.mjs';
@@ -377,9 +378,9 @@ function membershipMatrix(project,db) {
   return pages;
 }
 function logical(project,db){
-  const rows=[], trunks=[];
+  const sections=[], trunks=[];
   for(const d of db.devices.values()){
-    const name=nameOf(d);
+    const name=nameOf(d),rows=[];
     list(d.vlans).forEach(v=>{
       const ifaces=list(v.interfaces);
       if(!ifaces.length)rows.push([name,'VLAN '+value(v.id),value(v.name),value(v.ip||v.address),'']);
@@ -387,6 +388,7 @@ function logical(project,db){
     });
     list(d.bridges).forEach(b=>rows.push([name,'Bridge',value(b.name),value(b.type),value(b.members)]));
     list(d.routes).forEach(r=>rows.push([name,'Route',typeof r==='string'?r:field(r,'destination','prefix','network','dst','subnet'),field(r,'nextHop','gateway','via','next_hop'),field(r,'interface','outInterface','port','device')]));
+    if(rows.length)sections.push({id:d.id,name,rows:rows.map(row=>row.slice(1))});
     const profiles=new Map();
     portList(d).forEach(port=>{
       const o=uplinkSettings(d,port);
@@ -398,7 +400,7 @@ function logical(project,db){
     for(const g of profiles.values())trunks.push([name,interfaceList(g.names),...g.values]);
   }
   const matrix=membershipMatrix(project,db);
-  return [...tablePages(project,'VLANs and Routing','Configured VLANs, interface addresses and routing entries',[['Device',250],['Record',138],['Name / destination',283],['Address / next hop / type',281],['Egress / members',176]],rows,'No VLAN or route records were supplied.'),
+  return [...logicalPages(project,sections),
     ...(matrix.length?matrix:tablePages(project,'Trunk VLANs','Native and tagged VLAN membership on trunks and aggregates',[['Device',243],['Interface',164],['Native VLAN',145],['Tagged VLANs',235],['LAG',94],['Description',247]],trunks,'No trunk, tagged-port or aggregate records were supplied.'))];
 }
 export function buildPages(project={}){

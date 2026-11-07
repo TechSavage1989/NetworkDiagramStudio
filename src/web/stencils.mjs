@@ -31,7 +31,6 @@ async function rels(zip,part){
   if(!content)return new Map();
   return new Map(children(xml(content),'Relationship').filter(e=>e.getAttribute('TargetMode')!=='External').map(e=>[e.getAttribute('Id'),resolve(part,e.getAttribute('Target'))]));
 }
-function cellValues(shape) {return Object.fromEntries(children(shape,'Cell').map(e=>[e.getAttribute('N'),e.getAttribute('V')]));}
 function imageFromURL(url){
   return new Promise((yes,no)=>{const i=new Image();i.onload=()=>yes(i);i.onerror=()=>no(Error('Unsupported stencil artwork. Use a front-view PNG instead.'));i.src=url;});
 }
@@ -71,38 +70,6 @@ export async function loadImageStencil(file){
   c.getContext('2d').drawImage(i,0,0,c.width,c.height);
   return {id:newId(),name:file.name.replace(/\.[^.]+$/,''),view:'front',width:c.width,height:c.height,dataUrl:c.toDataURL('image/png'),anchors:{}};
 }
-function namedAnchors(master,name,bounds){
-  const sections=children(master,'Section');
-  const rows=n=>children(sections.find(s=>s.getAttribute('N')===n),'Row');
-  const ports=rows('Connection'),controls=rows('Control'), out={};let manufacturerX3=false;
-  const seen=new Map();
-  const add=(k,v)=>{if(k){const pts=seen.get(k)??[];pts.push(v);seen.set(k,pts);}};
-  for(const row of ports){
-    if(row.getAttribute('Del')==='1')continue;
-    const i=Number(row.getAttribute('IX')),r=cellValues(row);
-    const x=(Number(r.X)-bounds.x)/bounds.w,y=1-(Number(r.Y)-bounds.y)/bounds.h;
-    // A one-dimensional wrapper may have a near-zero Height while artwork and
-    // jacks extend outside it. Clip only after the shared world transform.
-    if(!Number.isFinite(x+y))continue;
-    const coord=[x,y], prompt=r.Prompt||cellValues(controls.find(c=>c.getAttribute('N')==='Row_'+(i+1))).Prompt||'';
-    if(/JL675A/i.test(name) && ports.length>=60){
-      if(i>=12&&i<60)add('1/1/'+(i-11),coord);
-      else if([1,4,7,10].includes(i))add('1/1/'+(49+(i-1)/3),coord);
-    } else if(/10GE SFP(?:\+| Plus) Slot/i.test(prompt) && /#\d+/.test(prompt)){const n=prompt.match(/#(\d+)/)[1];add('x'+n,coord);if(n==='3')manufacturerX3=true;}
-    else if(/Gigabit Ethernet Port|SFP Slot/i.test(prompt) && /#\d+/.test(prompt))add('port'+prompt.match(/#(\d+)/)[1],coord);
-    else if(/^(HA Port|Management Port|Console Port|USB)#/i.test(prompt))add(({ 'ha port':'ha', 'management port':'mgmt','console port':'console','usb':'usb'})[prompt.split('#')[0].toLowerCase()],coord);
-    else if(ports.length===1&&/SFP|transceiver|module|DAC/i.test(name))add('cable',coord);
-    else {
-      // Application-authored and manufacturer stencils may keep the interface
-      // name in either the row name or the literal connection-point prompt.
-      const key=(row.getAttribute('N')||prompt).trim();
-      if(/^(?:[a-z][\w.:/-]{0,59}|\d+(?:\/\d+)*)$/i.test(key))add(key,coord);
-    }
-  }
-  for(const [k,pts] of seen)out[k]=[0,1].map(axis=>pts.reduce((t,p)=>t+p[axis],0)/pts.length);
-  if(manufacturerX3&&/(?:FG-|FortiGate\s*)120(?:G|\/121G)/i.test(name)&&bounds.w/bounds.h>9)out.x3=[.695625,.345439];
-  return out;
-}
 export async function openVisioCatalog(file){
   if(binaryVisio(file.name)){
     let parsed;try{parsed=readBinaryVisio(new Uint8Array(await file.arrayBuffer()),file.name);}catch(e){
@@ -115,7 +82,7 @@ export async function openVisioCatalog(file){
       const root=children(children(xml(new TextEncoder().encode(master.xml)),'Shapes')[0],'Shape')[0];
       try{
        if(master.needsConversion)throw Error('This master includes legacy vector geometry or a rotated group.');
-       const artwork=await renderMaster(root,async foreign=>{const relation=children(foreign,'Rel')[0],id=relation?.getAttributeNS(REL,'id'),part=master.rels[id]?.target;const path=part?'visio/'+part.replace(/^\.\.\//,''):'';const bytes=master.media[path];if(!bytes)throw Error('Legacy picture is missing.');return decodeArt(bytes,path);},(shape,n,bounds)=>namedAnchors(shape,n===undefined?master.name:n,bounds));
+       const artwork=await renderMaster(root,async foreign=>{const relation=children(foreign,'Rel')[0],id=relation?.getAttributeNS(REL,'id'),part=master.rels[id]?.target;const path=part?'visio/'+part.replace(/^\.\.\//,''):'';const bytes=master.media[path];if(!bytes)throw Error('Legacy picture is missing.');return decodeArt(bytes,path);},master.name);
        return {id:newId(),name:master.name,view:/\b(back|rear)\b/i.test(master.name)?'rear':'front',...artwork};
       }catch(e){
        if(!globalThis.window?.NDSDesktop?.convertStencil)throw Error(master.name+': '+e.message+' This legacy master needs conversion to VSSX with desktop Visio.');
@@ -134,7 +101,7 @@ export async function openVisioCatalog(file){
         const value=foreign.textContent.replace(/\s/g,'');if(value.length>20*1024*1024||!/^[A-Za-z0-9+/]+=*$/.test(value))throw Error('Invalid embedded legacy picture.');
         const bytes=Uint8Array.from(atob(value),c=>c.charCodeAt(0)),compression=foreign.getAttribute('CompressionType')||foreign.getAttribute('ForeignType')||'emf';
         return decodeArt(bytes,'picture.'+({Bitmap:'bmp',Metafile:'emf',EnhancedMetafile:'emf'}[compression]||compression).toLowerCase());
-      },(s,n,b)=>namedAnchors(s,n===undefined?item.name:n,b));
+      },item.name);
       return {id:newId(),name:item.name,view:/\b(back|rear)\b/i.test(item.name)?'rear':'front',...artwork};
     }};
   }
@@ -153,7 +120,7 @@ export async function openVisioCatalog(file){
     const artwork=await renderMaster(root,async foreign=>{
       const relation=children(foreign,'Rel')[0],path=relation&&pictureRefs.get(relation.getAttributeNS(REL,'id'));
       const bytes=path&&await zip.get(path);if(!bytes)throw Error('Picture missing from stencil.');return decodeArt(bytes,path);
-    },(shape,n,bounds)=>namedAnchors(shape,n===undefined?item.name:n,bounds));
+    },item.name);
     return {id:newId(),name:item.name,view:/\b(back|rear)\b/i.test(item.name)?'rear':'front',...artwork};
   }};
 }
