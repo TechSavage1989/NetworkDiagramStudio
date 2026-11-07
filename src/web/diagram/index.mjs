@@ -48,13 +48,13 @@ function table(page,cols,rows,start=174){
 function wrappedRows(cols,rows){
   return rows.flatMap(row=>{
     const fields=cols.map((c,k)=>wrapPortText(value(row[k]),c[1]-18,13,k===0));
-    return Array.from({length:Math.max(...fields.map(f=>f.length))},(_,l)=>fields.map(f=>f[l]||''));
+    return Array.from({length:Math.max(...fields.map(f=>f.length))},(_,l)=>Object.assign(fields.map(f=>f[l]||''),{sourceDeviceId:row.sourceDeviceId}));
   });
 }
 function tablePages(project,name,subtitle,cols,rows,none){
   const {width,height}=pageGeometry(project,pageFamily(name));cols=fitColumns(cols,width-72);const buckets=split(wrappedRows(cols,rows),Math.max(1,Math.floor((height-280)/28)));
   if(!buckets.length)buckets.push([]);
-  return buckets.map(b=>{const p=fresh(name,name,subtitle,project);if(b.length)table(p,cols,b);else empty(p,none);return p;});
+  return buckets.map(b=>{const p=fresh(name,name,subtitle,project);if(b.length)table(p,cols,b);else empty(p,none);p.sourceDeviceIds=[...new Set(b.map(r=>r.sourceDeviceId).filter(Boolean))];return p;});
 }
 function vlanSet(raw){
   if(!Array.isArray(raw) || !raw.length || raw.some(v=>!Number.isInteger(Number(v))))return value(raw);
@@ -370,7 +370,7 @@ function wireless(project,db){
     }
   }
   const unseen=[...apIds].filter(id=>!linked.has(id)).map(id=>db.devices.get(id));
-  if(unseen.length)out.push(...tablePages(project,'Wireless Connections','Access points with no mapped switch uplink',[['Access point',390],['Model',370],['IP / MAC address',368]],unseen.map(d=>[nameOf(d),deviceModel(d),[d.ip,macCaption(d)].filter(Boolean).join(' | ')]),''));
+  if(unseen.length)out.push(...tablePages(project,'Wireless Connections','Access points with no mapped switch uplink',[['Access point',390],['Model',370],['IP / MAC address',368]],unseen.map(d=>Object.assign([nameOf(d),deviceModel(d),[d.ip,macCaption(d)].filter(Boolean).join(' | ')],{sourceDeviceId:d.id})),''));
   if(!out.length){const p=fresh('Wireless Connections','Wireless Connections','Access-point uplinks',project);empty(p,'No access points or switch-to-AP links were supplied.');out.push(p);}
   return out;
 }
@@ -386,7 +386,7 @@ function membershipMatrix(project,db) {
       if(!(native>0)&&!tagged.length)continue;
       if(native>0&&!names.has(native))names.set(native,'');
       for(const id of tagged)if(Number(id)>0&&!names.has(+id))names.set(+id,'');
-      const key=JSON.stringify([native,tagged]),g=profiles.get(key)||{device:nameOf(d),ports:[],native,tagged};
+      const key=JSON.stringify([native,tagged]),g=profiles.get(key)||{device:nameOf(d),deviceId:d.id,ports:[],native,tagged};
       g.ports.push(o.name);profiles.set(key,g);
     }
     groups.push(...profiles.values());
@@ -412,7 +412,7 @@ function membershipMatrix(project,db) {
   for(let at=0;at<groups.length;at=plans[at].next){
     const {batch,colW,headings,headerHeight,top,buckets}=plans[at];
     for(const rows of buckets){
-    const p=fresh('Trunk VLANs','Trunk VLANs','Native and tagged VLANs by configured interface group',project),a=p.items;
+    const p=fresh('Trunk VLANs','Trunk VLANs','Native and tagged VLANs by configured interface group',project),a=p.items;p.sourceDeviceIds=[...new Set(batch.map(g=>g.deviceId))];
     label(a,36,150,(W-72),25,'N   Native / untagged       T   Tagged       ·   Outside configured membership',13,true,C.muted);
     rect(a,36,188,(W-72),headerHeight,C.ink);label(a,49,188,nameWidth-5,headerHeight,'VLAN / Name',15,true,C.white);
     headings.forEach(({g,nameHeight,portsHeight,taggedHeight},i)=>{const x=left+i*colW+4;
@@ -451,7 +451,7 @@ function logical(project,db){
       if(!profiles.has(key))profiles.set(key,{names:[],values});
       profiles.get(key).names.push(o.name);
     });
-    for(const g of profiles.values())trunks.push([name,interfaceList(g.names),...g.values]);
+    for(const g of profiles.values())trunks.push(Object.assign([name,interfaceList(g.names),...g.values],{sourceDeviceId:d.id}));
   }
   const matrix=membershipMatrix(project,db);
   return [...logicalPages(project,sections),
@@ -472,7 +472,7 @@ export function buildPages(project={},options={}){
   });
   const visible=pages.filter(p=>!presentation(project,p).hidden);
   pages.forEach(p=>{
-    applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=p.displayName;item.w=Math.max(item.w,textWidth(p.displayName,item.size,true));}
+    applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??p.displayName;item.w=Math.max(item.w,textWidth(item.value,item.size,true));}
     if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p);fitDynamicPage(p,project);
     const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
     rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}

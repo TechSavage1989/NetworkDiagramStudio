@@ -13,7 +13,8 @@ export function informationPanel(page,project){
  page.items=page.items.filter(i=>!isPanel(i)||options.visible&&(i.editKey.includes('module-legend')?options.sections.includes('modules'):options.sections.includes('connections')));
  if(!options.visible){page.items=page.items.filter(i=>i.pageFrame!=='sidebar');return;}
  const panel=page.items.filter(isPanel);for(const item of panel)if(item.type==='text')item._textFactor=config.textScale;
- const ids=new Set(page.coreDeviceIds||page.sourceDeviceIds||project.devices?.map(d=>d.id)||[]),devices=(project.devices||[]).filter(d=>ids.has(d.id));
+ const drawn=page.items.filter(i=>i.type==='device'&&i.kind!=='plug').map(i=>i.sourceId),members=page.coreDeviceIds||page.sourceDeviceIds||page.portMap?.devices||(page.portMap?.device?[page.portMap.device]:null)||page.logicalSections?.map(s=>s.deviceId)||(drawn.length?drawn:null);
+ const ids=new Set(members||project.devices?.map(d=>d.id)||[]),devices=(project.devices||[]).filter(d=>ids.has(d.id));
  let y=Math.max(147,...panel.map(i=>i.y+(i.h||0)))+24;
  const section=(key,title,rows)=>{
   if(!options.sections.includes(key)||!rows.length)return;

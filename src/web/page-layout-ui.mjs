@@ -39,7 +39,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   if(!global&&(page?.coreDeviceIds||page?.reportId)){
    const card=el('section','','layout-card');body.insertBefore(card,sizes);card.append(el('h3',page.reportId?'Devices in this report':'Devices on this network page'));
    const search=field(card,'Find devices','');search.type='search';const list=el('div','','layout-device-list');card.append(list);const assigned=new Set(definition?.devices||page.coreDeviceIds||[]);
-   deviceChecks=project.devices.map(d=>{const checked=check(list,d.name+(d.model?' · '+d.model:'')+(d.hidden?' (excluded from drawing)':''),assigned.has(d.id)&&!d.hidden);checked.dataset.deviceId=d.id;checked.onchange=()=>{if(d.hidden&&checked.checked)include.add(d.id);};return [d.id,checked];});
+   deviceChecks=project.devices.map(d=>{const checked=check(list,d.name+(d.model?' · '+d.model:'')+(d.hidden?' (excluded from drawing)':''),assigned.has(d.id));checked.dataset.deviceId=d.id;checked.onchange=()=>{if(d.hidden&&checked.checked)include.add(d.id);};return [d.id,checked];});
    const selectActions=el('div','','actions');card.append(selectActions);button(selectActions,'Select all',()=>{for(const [id,input] of deviceChecks){input.checked=true;include.add(id);}});button(selectActions,'Clear selection',()=>{for(const [,input] of deviceChecks)input.checked=false;});
    search.oninput=()=>{for(const [,input] of deviceChecks)input.parentElement.hidden=!input.parentElement.textContent.toLowerCase().includes(search.value.toLowerCase());};
    card.append(el('p',page.reportId?'This selection applies to every continued sheet in this report.':'Devices may appear on more than one named network page. Connections to devices on other pages keep their page references.','hint'));
@@ -54,6 +54,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
    if(global||!inherited.checked)Object.assign(next,{drawingScale:+drawing.value/100,textScale:+text.value/100,panel:{visible:show.checked,position:placement.value,width:+width.value,scale:+scale.value/100,textScale:+panelText.value/100,x:+x.value,y:+y.value,sections:choices.filter(([,input])=>input.checked).map(([id])=>id),notes:notes.value}});
    if(global){next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
    if(deviceChecks.length){const chosen=deviceChecks.filter(([,input])=>input.checked).map(([id])=>id);
+    if(!page.reportId)layout.coreExclude=(layout.coreExclude||[]).filter(id=>!chosen.includes(id));
     if(definition)definition.devices=chosen;else if(JSON.stringify(chosen)!==JSON.stringify(page.coreDeviceIds)){definition={id:crypto.randomUUID(),name:page.name,devices:chosen,showReferences:true};layout.corePages.push(definition);}
    }
   };
