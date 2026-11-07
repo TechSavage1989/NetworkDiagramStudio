@@ -14,19 +14,24 @@ internal static class NativeSmoke
     sealed class ReleaseFixture(string? path=null) : HttpMessageHandler
     {
         internal List<DateTimeOffset> Checks = [];
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        internal string? FeedBody;
+        internal bool FailCheck;
+        internal int CheckDelay;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             if (request.RequestUri == Policy.Feed)
             {
                 Checks.Add(DateTimeOffset.UtcNow);
-                if (path == null) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent("[]")});
+                if(CheckDelay>0)await Task.Delay(CheckDelay,ct);
+                if(FailCheck)throw new HttpRequestException("Fixture connection unavailable.");
+                if (path == null) return new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(FeedBody??"[]")};
                 var ver=FileVersionInfo.GetVersionInfo(path).ProductVersion!.Split('+')[0];
                 var tag="v"+ver;using var f=File.OpenRead(path);var digest=Convert.ToHexString(SHA256.HashData(f)).ToLowerInvariant();
                 var json=JsonSerializer.Serialize(new[]{new {draft=false,tag_name=tag,body="Native test release",assets=new[]{new{name=Policy.Asset,browser_download_url=Policy.AssetUri(tag).AbsoluteUri,digest="sha256:"+digest,size=f.Length}}}});
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(json)});
+                return new HttpResponseMessage(HttpStatusCode.OK){Content=new StringContent(json)};
             }
             if (path != null && request.RequestUri == Policy.AssetUri("v"+FileVersionInfo.GetVersionInfo(path).ProductVersion!.Split('+')[0]))
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){Content=new StreamContent(File.OpenRead(path))});
+                return new HttpResponseMessage(HttpStatusCode.OK){Content=new StreamContent(File.OpenRead(path))};
             throw new InvalidOperationException("Unexpected test URL.");
         }
     }
@@ -49,6 +54,7 @@ internal static class NativeSmoke
                 // a second immediate activation must not trigger a new request.
                 for (int i=0; i<60 && !ui.IsEditorHealthy; i++) await Task.Delay(500);
                 if(!ui.IsEditorHealthy) throw new Exception("WebView did not initialize.\n"+await ui.EditorStartupDiagnostics());
+                ui.RequireUpdateBar(false);
                 await ui.ExportAndPrint(Path.GetDirectoryName(result)!);
                 var pause=fixture.Checks[0].AddSeconds(125)-DateTimeOffset.UtcNow;
                 if(pause>TimeSpan.Zero) await Task.Delay(pause);
@@ -60,9 +66,20 @@ internal static class NativeSmoke
                 if (!ui.UpdateProgressIsIdle) throw new Exception("A skipped focus check left stale update progress.");
                 await Task.Delay(183000);
                 if(fixture.Checks.Count!=3 || (fixture.Checks[2]-fixture.Checks[0]).TotalSeconds < 294) throw new Exception("Five-minute WinForms timer failed.");
-                await ui.CheckUpdateButton();
+                fixture.CheckDelay=1000;
+                await ui.CheckUpdateFromHelp("No newer release",false);
                 if(fixture.Checks.Count!=4) throw new Exception("The manual update button did not request a fresh check.");
-                File.WriteAllText(result,"Native window, local editor, startup, focus, cooldown and five-minute timer passed."); exit=0;
+                fixture.FailCheck=true;
+                await ui.CheckUpdateFromHelp("Could not check",false);
+                fixture.FailCheck=false;
+                var tag="v99.0.0-preview.1";
+                fixture.FeedBody=JsonSerializer.Serialize(new[]{new{draft=false,tag_name=tag,body="Fictional update for visibility checks",assets=new[]{new{name=Policy.Asset,browser_download_url=Policy.AssetUri(tag).AbsoluteUri,digest="sha256:"+new string('a',64),size=100}}}});
+                await ui.CheckUpdateFromHelp("Available",true);
+                fixture.FailCheck=true;
+                await ui.CheckUpdateFromHelp("Could not check",true);
+                fixture.FailCheck=false;fixture.FeedBody="[]";
+                await ui.CheckUpdateFromHelp("No newer release",false);
+                File.WriteAllText(result,"Native window, local editor, startup, focus, cooldown, five-minute timer, Help update checks and conditional update bar passed."); exit=0;
             } catch(Exception e){File.WriteAllText(result,e.ToString());} finally{ui.Close();}
         };
         Application.Run(ui); return exit;
@@ -98,11 +115,32 @@ internal sealed partial class Studio
         report.AddRange(editorStartupEvents);return string.Join(Environment.NewLine,report);
     }
     internal bool UpdateProgressIsIdle => !checking && check.Enabled && !status.Text.StartsWith("Checking for updates",StringComparison.Ordinal);
-    internal async Task CheckUpdateButton()
+    internal void RequireUpdateBar(bool visible)
     {
-        check.PerformClick();
-        for(int i=0;i<100&&checking;i++)await Task.Delay(50);
-        if(checking||!check.Enabled||!status.Text.Contains("No newer release"))throw new Exception("Manual update progress or result was not displayed.");
+        if(strip.Visible!=visible || (visible ? browser.Top!=strip.Bottom : browser.Top!=0 || browser.Height!=ClientSize.Height))
+            throw new Exception("The update bar did not reclaim or reserve the expected editor space.");
+    }
+    internal async Task CheckUpdateFromHelp(string expected,bool available)
+    {
+        await ClickEditorTarget("#desktop-help");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Help and updates')throw Error('Help did not open');for(const name of ['Check updates','Update details','Notices'])if(![...document.querySelectorAll('#dialog button')].some(b=>b.textContent===name))throw Error('Missing Help action '+name)","Help actions");
+        await ClickEditorTarget("#desktop-check-updates");
+        for(int i=0;i<50&&!checking;i++)await Task.Delay(20);
+        if(!checking)throw new Exception("Help did not start an update check.");
+        RequireUpdateBar(updater.Offered!=null);
+        await Task.Delay(50);
+        await RequireEditor("if(!document.getElementById('desktop-check-updates').disabled||!document.getElementById('desktop-update-status').textContent.includes('Checking for updates'))throw Error('Help update progress missing')","Help update progress");
+        for(int i=0;i<100;i++){
+            if(!checking&&status.Text.Contains(expected)&&browser.CoreWebView2!=null){
+                var displayed=await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('desktop-update-status')?.textContent");
+                if(displayed.Contains(expected))break;
+            }
+            await Task.Delay(50);
+        }
+        if(checking||!check.Enabled||!status.Text.Contains(expected))throw new Exception("Manual update progress did not finish: "+expected);
+        await RequireEditor("if(document.getElementById('desktop-check-updates').disabled||!document.getElementById('desktop-update-status').textContent.includes("+JsonSerializer.Serialize(expected)+"))throw Error('Help update result missing')","Help update result");
+        RequireUpdateBar(available);
+        await ClickEditorTarget("#close");
     }
     internal string? TestOutputFolder;
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string cls,string caption);

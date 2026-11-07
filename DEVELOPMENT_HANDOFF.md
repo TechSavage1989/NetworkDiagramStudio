@@ -1,5 +1,13 @@
 # Development handoff
 
+## Preview.14 conditional update bar
+
+Prepares 0.1.0-preview.14 / file version 0.1.0.14 from published preview.13 at 1ba5419937d5fa503a146cb7fe2a35a4adafbc60. Preview.13 passed PR and merged-main Windows checks and its public tag, feed and asset hashes were verified. The user authorized building and publishing this UI adjustment. Require green final-head Windows checks, merge, merged-main checks and public asset/feed verification before describing preview.14 as published.
+
+The native update strip starts hidden and is visible only when Updater.Offered contains a detected newer release. WinForms docking returns the space to WebView2. Help in the existing web header opens the installed version, check progress/result, manual Check updates, Update details and Notices. These controls are desktop-only; the offline browser edition and its documented screenshots remain unchanged. A host update-state message refreshes this dialog without replacing the project or drawing. Automatic lookup cadence, retry rules, verified downloads and separate installation consent are preserved. A transient lookup failure retains an existing offer; a successful check with no newer release hides the strip.
+
+NativeSmoke checks full editor bounds with no offer, Help progress/results, offline failure, a newer release, failure with an existing offer, and offer removal. It still exercises real timer/focus checks, exports, update installation and rollback. Browser checks use the production injected bridge with a synthetic host to verify Help actions and desktop-only visibility. Direct Microsoft Visio rendering remains outside this change and untested here.
+
 ## Preview.13 shared connection editing, hardware and trunk density
 
 Prepares 0.1.0-preview.13 / file version 0.1.0.13 from published preview.12 at 0d69e2bc82845524ea9459a85573252c1ae020a3. The user authorized building and publishing without another confirmation. Preview.12 PR #7 and its merged release validation completed successfully. This candidate still requires green exact-head Windows validation, merge, merged-main validation and feed/asset verification before describing it as published. Preserve the existing public source/feed, update cadence and separate download/install actions.

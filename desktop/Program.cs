@@ -49,7 +49,7 @@ internal sealed partial class Studio : Form
 {
     const string Origin = "https://studio.networkdiagram.invalid";
     readonly WebView2 browser = new() { Dock = DockStyle.Fill };
-    readonly FlowLayoutPanel strip = new() { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(6), BackColor = Color.WhiteSmoke, WrapContents = true };
+    readonly FlowLayoutPanel strip = new() { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(6), BackColor = Color.WhiteSmoke, WrapContents = true, Visible = false };
     readonly Label summary = new() { AutoSize = true, Margin = new Padding(4,8,4,0) };
     readonly Label status = new() { AutoSize = true, MaximumSize = new Size(520,0), Margin = new Padding(4, 8, 9, 0), Text = "Windows preview" };
     readonly Button check = ButtonOf("Check updates"), download = ButtonOf("Download"), install = ButtonOf("Install and restart"), notes = ButtonOf("Read more");
@@ -65,30 +65,38 @@ internal sealed partial class Studio : Form
         token = nonce; Text = "NetworkDiagramStudio"; Width = 1380; Height = 900; MinimumSize = new Size(720, 520);
         Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
         Controls.Add(browser); Controls.Add(strip); strip.Controls.AddRange([status, check, summary, notes, download, install]);
-        var notices = ButtonOf("Notices"); strip.Controls.Add(notices);
         var updateDetails=ButtonOf("Update details");strip.Controls.Add(updateDetails);
-        updateDetails.Click+=(_,_)=>{
-            using var view=new Form {Text="Update details",Width=780,Height=450,StartPosition=FormStartPosition.CenterParent,Icon=Icon};
-            var report=new TextBox {Dock=DockStyle.Fill,ReadOnly=true,Multiline=true,ScrollBars=ScrollBars.Vertical,Text=updater.Report};
-            var copy=ButtonOf("Copy details");copy.Dock=DockStyle.Bottom;copy.Click+=(_,_)=>Clipboard.SetText(updater.Report);view.Controls.Add(report);view.Controls.Add(copy);view.ShowDialog(this);
-        };
-        notices.Click += (_,_) => {
-            var assembly=typeof(Studio).Assembly;
-            var names=assembly.GetManifestResourceNames().Where(n=>n.StartsWith("notices/") || n.StartsWith("web/") && (n.EndsWith("LICENSE.txt",StringComparison.OrdinalIgnoreCase) || n.EndsWith("NOTICE.txt",StringComparison.OrdinalIgnoreCase)));
-            var sections=names.Order().Select(n=>{using var reader=new StreamReader(assembly.GetManifestResourceStream(n)!);return n+"\r\n\r\n"+reader.ReadToEnd();});
-            using var view=new Form {Text="Third-party notices", Width=820, Height=580,StartPosition=FormStartPosition.CenterParent};
-            view.Controls.Add(new TextBox {Dock=DockStyle.Fill,ReadOnly=true,Multiline=true,ScrollBars=ScrollBars.Vertical,Text=string.Join("\r\n\r\n",sections)}); view.ShowDialog(this);
-        };
+        updateDetails.Click+=(_,_)=>ShowUpdateDetails();
         RefreshButtons();
         Shown += async (_, _) => { timer.Start(); _ = Check(TimeSpan.Zero); await InitializeBrowser(); };
         Activated += async (_, _) => { if (loaded && NetworkInterface.GetIsNetworkAvailable()) await Check(TimeSpan.FromMinutes(2)); };
         timer.Tick += async (_, _) => { if (NetworkInterface.GetIsNetworkAvailable()) await Check(TimeSpan.FromSeconds(30)); };
         check.Click += async (_, _) => await Check(TimeSpan.Zero, true);
-        download.Click += async (_, _) => { fetching = true; RefreshButtons(); try { await updater.Download(new Progress<int>(p => status.Text = $"Downloading {p}%")); status.Text = "Verified and ready to install."; } catch (Exception e) { status.Text = e.Message; } finally { fetching = false; RefreshButtons(); } };
+        download.Click += async (_, _) => { fetching = true; RefreshButtons(); try { await updater.Download(new Progress<int>(p => {status.Text = $"Downloading {p}%"; PublishUpdateState();})); status.Text = "Verified and ready to install."; } catch (Exception e) { status.Text = e.Message; } finally { fetching = false; RefreshButtons(); } };
         install.Click += (_, _) => { if (busy || fetching || !updater.Downloaded || updater.Offered == null) return;
             if (MessageBox.Show(this, "Save your project before restarting. Install the downloaded update?", Text, MessageBoxButtons.OKCancel) != DialogResult.OK) return;
-            try { Installer.Begin(updater.Offered); Close(); } catch (Exception e) { status.Text = "Install failed. " + e.Message; } };
+            try { Installer.Begin(updater.Offered); Close(); } catch (Exception e) { status.Text = "Install failed. " + e.Message; PublishUpdateState(); } };
         notes.Click += (_, _) => { var release = updater.Offered; if (release != null) MessageBox.Show(this, string.IsNullOrWhiteSpace(release.Notes) ? "No release notes were provided." : release.Notes[..Math.Min(4000,release.Notes.Length)], "What's new in " + release.Tag); };
+    }
+    void ShowUpdateDetails()
+    {
+        using var view=new Form {Text="Update details",Width=780,Height=450,StartPosition=FormStartPosition.CenterParent,Icon=Icon};
+        var report=new TextBox {Dock=DockStyle.Fill,ReadOnly=true,Multiline=true,ScrollBars=ScrollBars.Vertical,Text=updater.Report};
+        var copy=ButtonOf("Copy details");copy.Dock=DockStyle.Bottom;copy.Click+=(_,_)=>Clipboard.SetText(updater.Report);
+        view.Controls.Add(report);view.Controls.Add(copy);view.ShowDialog(this);
+    }
+    void ShowNotices()
+    {
+        var assembly=typeof(Studio).Assembly;
+        var names=assembly.GetManifestResourceNames().Where(n=>n.StartsWith("notices/") || n.StartsWith("web/") && (n.EndsWith("LICENSE.txt",StringComparison.OrdinalIgnoreCase) || n.EndsWith("NOTICE.txt",StringComparison.OrdinalIgnoreCase)));
+        var sections=names.Order().Select(n=>{using var reader=new StreamReader(assembly.GetManifestResourceStream(n)!);return n+"\r\n\r\n"+reader.ReadToEnd();});
+        using var view=new Form {Text="Third-party notices", Width=820, Height=580,StartPosition=FormStartPosition.CenterParent,Icon=Icon};
+        view.Controls.Add(new TextBox {Dock=DockStyle.Fill,ReadOnly=true,Multiline=true,ScrollBars=ScrollBars.Vertical,Text=string.Join("\r\n\r\n",sections)});view.ShowDialog(this);
+    }
+    void PublishUpdateState()
+    {
+        if (!ready || IsDisposed || browser.CoreWebView2 == null) return;
+        browser.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new {type="updateState",version=Policy.Current,message=status.Text,checking,fetching,available=updater.Offered!=null}));
     }
     async Task Check(TimeSpan cooldown, bool manual = false)
     {
@@ -103,6 +111,7 @@ internal sealed partial class Studio : Form
     }
     void RefreshButtons()
     {
+        strip.Visible = updater.Offered != null;
         download.Visible = updater.Offered != null && !updater.Downloaded; install.Visible = updater.Downloaded;
         install.Enabled = !busy && ready && !fetching && !checking; check.Enabled = download.Enabled = !fetching && !checking;
         check.Text = checking ? "Checking..." : "Check updates";
@@ -112,6 +121,7 @@ internal sealed partial class Studio : Form
         summary.Visible = first.Length > 0;
         summary.Text = first.Length > 86 ? first[..83] + "..." : first;
         notes.Visible = lines.Length > 1 || first.Length > 86;
+        PublishUpdateState();
     }
     async Task InitializeBrowser()
     {
@@ -175,15 +185,19 @@ internal sealed partial class Studio : Form
                     } catch (Exception error) { if (!IsDisposed) core.PostWebMessageAsJson(JsonSerializer.Serialize(new {type="stencilConverted",id=requestId,error=error.Message})); }
                     return;
                 }
-                switch(msg) { case "ready": ready=true; ConfirmHealth(); break; case "busy": busy=true; break; case "idle": busy=false; break; case "print":
+                switch(msg) { case "ready": ready=true; ConfirmHealth(); break; case "busy": busy=true; break; case "idle": busy=false; break;
+                    case "checkUpdates": await Check(TimeSpan.Zero,true); break;
+                    case "updateDetails": BeginInvoke((Action)ShowUpdateDetails); break;
+                    case "notices": BeginInvoke((Action)ShowNotices); break;
+                    case "print":
 #if NDS_TEST_HOST
                     if (TestOutputFolder != null) { _ = PrintTestPages(); break; }
 #endif
                     BeginInvoke((Action)(() => core.ShowPrintUI())); break; }
-                RefreshButtons();
+                if (!IsDisposed) RefreshButtons();
             };
             core.NavigationCompleted += (_, e) => { loaded=e.IsSuccess; ConfirmHealth(); };
-            await core.AddScriptToExecuteOnDocumentCreatedAsync("(()=>{\n    const pending=new Map();\n    chrome.webview.addEventListener('message',e=>{const m=e.data;if(m?.type!=='stencilConverted')return;const entry=pending.get(m.id);if(!entry)return;pending.delete(m.id);clearTimeout(entry.timer);m.error?entry.reject(Error(m.error)):entry.resolve(m);});\n    Object.defineProperty(window,'NDSDesktop',{value:Object.freeze({\n        ready:()=>chrome.webview.postMessage('ready'),setBusy:b=>chrome.webview.postMessage(b?'busy':'idle'),print:()=>chrome.webview.postMessage('print'),\n        convertStencil:async file=>{\n            if(file.size>160*1024*1024)throw Error('Stencil exceeds 160 MB.');\n            const data=await new Promise((yes,no)=>{const reader=new FileReader();reader.onload=()=>yes(reader.result.split(',')[1]);reader.onerror=()=>no(Error('Could not read stencil.'));reader.readAsDataURL(file);});\n            return new Promise((resolve,reject)=>{const id=crypto.randomUUID();const timer=setTimeout(()=>{pending.delete(id);reject(Error('Visio conversion timed out.'));},135000);pending.set(id,{resolve,reject,timer});chrome.webview.postMessage('stencil:'+JSON.stringify({id,name:file.name,data}));});\n        }\n    })});\n})();");
+            await core.AddScriptToExecuteOnDocumentCreatedAsync("(()=>{\n    const pending=new Map();let updateState={};\n    chrome.webview.addEventListener('message',e=>{const m=e.data;if(m?.type==='updateState'){updateState=Object.freeze(m);window.dispatchEvent(new Event('nds-update-state'));return;}if(m?.type!=='stencilConverted')return;const entry=pending.get(m.id);if(!entry)return;pending.delete(m.id);clearTimeout(entry.timer);m.error?entry.reject(Error(m.error)):entry.resolve(m);});\n    Object.defineProperty(window,'NDSDesktop',{value:Object.freeze({\n        get updateState(){return updateState;},checkUpdates:()=>chrome.webview.postMessage('checkUpdates'),updateDetails:()=>chrome.webview.postMessage('updateDetails'),notices:()=>chrome.webview.postMessage('notices'),\n        ready:()=>chrome.webview.postMessage('ready'),setBusy:b=>chrome.webview.postMessage(b?'busy':'idle'),print:()=>chrome.webview.postMessage('print'),\n        convertStencil:async file=>{\n            if(file.size>160*1024*1024)throw Error('Stencil exceeds 160 MB.');\n            const data=await new Promise((yes,no)=>{const reader=new FileReader();reader.onload=()=>yes(reader.result.split(',')[1]);reader.onerror=()=>no(Error('Could not read stencil.'));reader.readAsDataURL(file);});\n            return new Promise((resolve,reject)=>{const id=crypto.randomUUID();const timer=setTimeout(()=>{pending.delete(id);reject(Error('Visio conversion timed out.'));},135000);pending.set(id,{resolve,reject,timer});chrome.webview.postMessage('stencil:'+JSON.stringify({id,name:file.name,data}));});\n        }\n    })});\n})();");
             core.Navigate(Origin+"/index.html");
         }
         catch (Exception e) {
