@@ -29,6 +29,7 @@ export function normalizedPage(page){
  return {...page,originX:0,originY:0,items:page.items.map(item=>{
   const next={...item};if(Number.isFinite(item.x))next.x+=dx;if(Number.isFinite(item.y))next.y+=dy;
   if(item.points)next.points=item.points.map(([x,y])=>[x+dx,y+dy]);
+  if(item.type==='vector')next.commands=item.commands.map(([op,x,y])=>op==='Z'?['Z']:[op,x+dx,y+dy]);
   for(const key of ['from','to'])if(item[key])next[key]={...item[key],x:item[key].x+dx,y:item[key].y+dy};
   return next;
  })};

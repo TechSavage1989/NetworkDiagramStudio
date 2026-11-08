@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.IO.Compression;
 using System.Xml.Linq;
 using Microsoft.Web.WebView2.Core;
+using NetworkDiagramStudio.SwitchportReports;
 
 namespace NetworkDiagramStudio;
 internal static class NativeSmoke
@@ -350,8 +351,46 @@ internal sealed partial class Studio
         await ClickEditorTarget("#evidence");
         await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Imported data') throw Error('Import controls missing')","import controls");
         await ClickEditorTarget("#close");
+        await CheckSwitchportReports(folder);
         await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('print').click()");
         await Printed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+    async Task CheckSwitchportReports(string folder)
+    {
+        await ClickEditorTarget("#switchport-reports");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Switchport reports')throw Error('Report options did not open');const field=name=>[...document.querySelectorAll('#dialog-body label')].find(label=>label.textContent===name)?.control;field('Preview').value='booklet';field('Report title').value='Native switchport smoke';field('Export folder / file name').value='Native switchport package';for(const row of document.querySelectorAll('.report-device-row')){const check=row.querySelector('input[type=checkbox]');check.checked=row.textContent.includes('SW-1 |');check.dispatchEvent(new Event('change'));}if([...document.querySelectorAll('.report-device-row input')].filter(input=>input.checked).length!==1)throw Error('Report selection did not retain one device');const build=[...document.querySelectorAll('#dialog button')].find(button=>button.textContent==='Build reports');if(!build)throw Error('Build reports action missing');build.dataset.nativeReport='build'","report options and selected device");
+        await ClickEditorTarget("[data-native-report='build']");
+        await RequireEditor("if(document.getElementById('dialog').open||!document.querySelector('#canvas svg')||!document.getElementById('feedback').textContent.includes('Switchport reports built')||![...document.querySelectorAll('#tabs button')].some(button=>button.textContent.includes('SW-1')))throw Error('Selected report did not build in the common page workspace')","built report page");
+        const string configuration="; JL256A Configuration Editor\nhostname LAB-NATIVE-REPORT\nvlan 10\n name Data\n untagged 1-48\n tagged 49-52\n exit\nvlan 150\n name Voice\n tagged 1-52\n voice\n exit\n";
+        string start="window.__nativeSwitchport={pending:true};(async()=>{const catalog=await NDSDesktop.report('catalog');if(catalog.models.length<281||catalog.modules.length!==75||catalog.additionalModels.length!==10)throw Error('Embedded catalog incomplete');const imported=await NDSDesktop.report('import',{name:'fictional-native.cfg',data:btoa("+JsonSerializer.Serialize(configuration)+")});if(imported.items[0].inventory.ports.length!==52)throw Error('Native import incomplete');const request={items:imported.items,combined:true,title:'Native switchport smoke',outputLabel:'Native switchport package'};const preview=await NDSDesktop.report('preview',{request});if(!preview.items[0].success||preview.pages.length<2)throw Error(preview.items[0].error||'Native preview incomplete');window.__nativeSwitchport={done:true,request,pages:preview.pages.length};})().catch(error=>window.__nativeSwitchport={done:true,error:error.message})";
+        await RequireEditor(start,"start native report bridge");
+        JsonElement request=default;bool complete=false;
+        for(int attempt=0;attempt<300;attempt++)
+        {
+            using var state=JsonDocument.Parse(await browser.CoreWebView2.ExecuteScriptAsync("window.__nativeSwitchport"));
+            if(state.RootElement.TryGetProperty("done",out var done)&&done.GetBoolean())
+            {
+                if(state.RootElement.TryGetProperty("error",out var error))throw new Exception("Packaged report bridge: "+error.GetString());
+                request=state.RootElement.GetProperty("request").Clone();complete=true;break;
+            }
+            await Task.Delay(100);
+        }
+        if(!complete)throw new Exception("Packaged report bridge timed out.");
+        // Windows CI runs this host copied as one EXE. Real rendering here proves
+        // its embedded catalog/fonts/native Skia assets work after extraction.
+        if(File.Exists(Path.Combine(Path.GetDirectoryName(Environment.ProcessPath!)!,"libSkiaSharp.dll")))throw new Exception("The report smoke requires the single-EXE copy, without a Skia sidecar.");
+        string exported=await Task.Run(()=>SwitchportReportService.ExportJson(request.GetRawText(),folder));
+        using var result=JsonDocument.Parse(exported);var item=result.RootElement.GetProperty("items")[0];
+        if(!item.GetProperty("success").GetBoolean())throw new Exception("Packaged report export: "+item.GetProperty("error").GetString());
+        string output=item.GetProperty("outputDirectory").GetString()!;
+        foreach(string name in new[]{"wall-chart.png","a4-one-page.png","a4-one-page.pdf","a4-booklet.pdf","inventory.json","port-map.csv","technician-summary.txt","validation-report.txt"})
+            if(!File.Exists(Path.Combine(output,name))||new FileInfo(Path.Combine(output,name)).Length<50)throw new Exception("Packaged report missing "+name);
+        if(!File.ReadAllText(Path.Combine(output,"validation-report.txt")).Contains("RENDER_BLOCKED=FALSE",StringComparison.Ordinal))throw new Exception("Packaged report failed readable geometry validation.");
+        byte[] png=File.ReadAllBytes(Path.Combine(output,"wall-chart.png"));
+        if(System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16,4))!=3508||System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20,4))!=2480)throw new Exception("Packaged report lost its 300-DPI A4 dimensions.");
+        foreach(string name in new[]{"a4-one-page.pdf","a4-booklet.pdf"})if(!System.Text.Encoding.ASCII.GetString(File.ReadAllBytes(Path.Combine(output,name)),0,5).StartsWith("%PDF-",StringComparison.Ordinal))throw new Exception("Packaged report PDF is invalid.");
+        if(!File.Exists(result.RootElement.GetProperty("combinedDiagramsPath").GetString())||!File.Exists(result.RootElement.GetProperty("combinedBookletPath").GetString()))throw new Exception("Packaged shared reports were not written.");
+        await RequireEditor("delete window.__nativeSwitchport;document.querySelector('#tabs button').click()","finish packaged report checks");
     }
     readonly TaskCompletionSource Printed=new(TaskCreationOptions.RunContinuationsAsynchronously);
     async Task PrintTestPages()

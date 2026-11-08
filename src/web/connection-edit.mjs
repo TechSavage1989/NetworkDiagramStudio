@@ -1,6 +1,7 @@
 import {physicalPorts} from './diagram/scene.mjs';
 import {deviceFaceplate} from './diagram/faceplate.mjs';
 import {comparePorts} from './port-table.mjs';
+import {physicalLink} from './physical-links.mjs';
 const norm=v=>String(v||'').trim().toLowerCase();
 export const sameConnection=(a,b)=>!!(a&&b&&(a.a===b.a&&norm(a.ap)===norm(b.ap)&&a.b===b.b&&norm(a.bp)===norm(b.bp)||a.a===b.b&&norm(a.ap)===norm(b.bp)&&a.b===b.a&&norm(a.bp)===norm(b.ap)));
 function anchors(project,device){return project.stencils?.[device.stencilId]?.anchors||device.stencil?.anchors||deviceFaceplate(device)?.ports||{};}
@@ -15,7 +16,7 @@ export function checkConnection(project,link,except=-1){
  if(![link.a,link.b].every(id=>project.devices.some(d=>d.id===id)))throw Error('The endpoint device is unavailable.');
  for(const [id,port] of [[link.a,link.ap],[link.b,link.bp]]){
   const key=portKey(project,id,port);
-  if(project.links.some((l,i)=>i!==except&&[[l.a,l.ap],[l.b,l.bp]].some(([d,p])=>d===id&&portKey(project,d,p)===key)))throw Error('Port '+port+' is already connected. Choose an unused port or edit its existing connection.');
+  if(project.links.some((l,i)=>i!==except&&physicalLink(l,project.devices)&&[[l.a,l.ap],[l.b,l.bp]].some(([d,p])=>d===id&&portKey(project,d,p)===key)))throw Error('Port '+port+' is already connected. Choose an unused port or edit its existing connection.');
  }
 }
 export function prepareConnection(project,link,index=-1,generatedDevice=null){

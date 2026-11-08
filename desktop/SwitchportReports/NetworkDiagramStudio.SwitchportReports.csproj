@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>NetworkDiagramStudio.SwitchportReports</AssemblyName>
+    <RootNamespace>SwitchportGenerator</RootNamespace>
+    <Version>1.18.5</Version>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" Condition="'$(RuntimeIdentifier)' != 'win-x64'" />
+    <EmbeddedResource Include="Fonts/*.ttf" LogicalName="SwitchportGenerator.Fonts.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Data/*.json" LogicalName="SwitchportGenerator.Data.%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

@@ -1,5 +1,6 @@
-import {physicalLink} from '../physical-links.mjs';
+import {physicalLink,reconcilePhysicalObservations} from '../physical-links.mjs';
 import {hardwareProfile,portCapability} from './hardware.mjs';
+import {identityPlan} from './identity.mjs';
 
 export const deviceId = name => String(name ?? '').trim().toLowerCase();
 export const empty = () => ({devices: [], links: [], warnings: []});
@@ -55,6 +56,11 @@ const uniq = rows => [...new Map(rows.map(x => [key(x),x])).values()];
 function assign(target, input, ignore, warnings, label) {
   for (const [k,v] of Object.entries(input)) {
     if (ignore.includes(k) || !meaningful(v) || (Array.isArray(v) && !v.length)) continue;
+    if(k==='reportSupplementary'&&Array.isArray(v)){
+      const sources=new Map((target[k]||[]).map(source=>[source.id||source.Id,source]));
+      for(const source of v){const id=source.id||source.Id;if(sources.has(id)&&key(sources.get(id))!==key(source))warnings.add(label+' has conflicting supplementary source '+id+'. Review the sources before relying on this value.');else sources.set(id,source);}
+      target[k]=[...sources.values()];continue;
+    }
     if (meaningful(target[k]) && key(target[k]) !== key(v)) {
       if (k === 'name' && deviceId(v) === deviceId(target[k])) continue;
       warnings.add(label + ' has conflicting ' + k + '. Review the sources before relying on this value.');
@@ -84,18 +90,26 @@ function mergeRoutes(routes, incoming) {
 }
 export function mergeModels(...models) {
   const devices = new Map(), links = new Map(), occupied = new Map(), warnings = new Set(), reported=[];
-  for (const model of models.flat()) {
-    for (const warning of model.warnings || []) warnings.add(warning);
+  models=models.flat().filter(Boolean);
+  const identity=identityPlan(models,warnings);
+  // These notices depend on the selected evidence as a whole. Recompute them,
+  // rather than retaining stale conflicts from a separately imported worksheet.
+  const derivedWarning=warning=>/ has multiple reported peers\. Verify physical adjacency\.$| is reported down but has a reported peer\.$| is an alternate HA\/management observation; drawing uses observed .+\.$|^Hostname .+ has multiple fully qualified names\. Devices remain separate; review source identities\.$/.test(warning);
+  const conflict=link=>{if(link.status!=='conflict')link.statusBeforeConflict=link.status||'observed';link.status='conflict';};
+  for (const model of models) {
+    for (const warning of model.warnings || []) if(!derivedWarning(warning))warnings.add(warning);
     for (const input of model.devices || []) {
       if (!input.name || !input.id) continue;
-      const id = deviceId(input.id);
-      if (!devices.has(id)) devices.set(id, device(input.name,{id}));
+      const id = identity.id(input.id);
+      if (!devices.has(id)) devices.set(id, device(identity.name(id)||input.name,{id}));
       const d = devices.get(id);
       const inferred=v=>v.hardwareEvidence?.kind==='family-layout'&&v.hardwareEvidence.model===v.model;
       const declared=v=>meaningful(v.model)&&!/^unknown$/i.test(v.model)&&!inferred(v);
       if(inferred(d)&&declared(input)){d.model=input.model;delete d.hardwareEvidence;delete d.sku;}
-      const ignore=['id','ports','vlans','routes','bridges','ips',...(declared(d)&&inferred(input)?['model','sku','hardwareEvidence']:[])];
+      const ignore=['id','ports','vlans','routes','bridges','ips','identityAliases',...(id!==deviceId(input.id)?['name']:[]),...(declared(d)&&inferred(input)?['model','sku','hardwareEvidence']:[])];
       assign(d,input,ignore,warnings,d.name);
+      const aliases=identity.aliases(id).filter(name=>deviceId(name)!==deviceId(d.name));
+      if(aliases.length)d.identityAliases=aliases;
       for (const entry of input.ports || []) {
         const p = ensurePort(d,entry.name);
         assign(p,entry,['name'],warnings,d.name + ' ' + p.name);
@@ -106,8 +120,18 @@ export function mergeModels(...models) {
       if (input.ips) d.ips = [...new Set([...(d.ips||[]),...input.ips])];
     }
     for (const entry of model.links || []) {
-      const e = {...entry, a:deviceId(entry.a), b:deviceId(entry.b), ap:portName(entry.ap), bp:portName(entry.bp)};
+      const e = {...entry, a:identity.id(entry.a), b:identity.id(entry.b), ap:portName(entry.ap), bp:portName(entry.bp)};
       if (!e.a || !e.b || !e.ap || !e.bp) continue;
+      // Older saved inputs predate statusBeforeConflict. Their exact generated
+      // warnings still identify statuses that should be recomputed here.
+      const priorConflict=[[entry.a,entry.ap],[entry.b,entry.bp]].some(([id,port])=>{
+        const name=model.devices?.find(d=>deviceId(d.id)===deviceId(id))?.name||id;
+        return model.warnings?.some(w=>w===deviceId(id)+' '+deviceId(port)+' has multiple reported peers. Verify physical adjacency.'||w===name+' '+port+' is reported down but has a reported peer.');
+      });
+      if(e.status==='conflict'&&(e.statusBeforeConflict||priorConflict))e.status=e.statusBeforeConflict||'observed';
+      delete e.statusBeforeConflict;
+      if(e.physicalEvidence?.kind==='alternate-interface')delete e.physicalEvidence;
+      if(e.a!==deviceId(entry.a)||e.b!==deviceId(entry.b))e.reportedEndpoints=uniq([...(entry.reportedEndpoints||[]),{a:entry.a,ap:entry.ap,b:entry.b,bp:entry.bp}]);
       reported.push(e);
     }
   }
@@ -122,7 +146,7 @@ export function mergeModels(...models) {
       if(stem.length<6)continue;
       const candidates=to.ports.filter(p=>{const n=norm(p.name);return n&&desc.endsWith(stem+n)&&!['logical','aggregate','virtual'].includes(p.type)&&!p.parent;});
       if(candidates.length!==1||deviceId(candidates[0].name)===deviceId(rp))continue;
-      e.reportedEndpoints||=[];e.reportedEndpoints.push({a:e.a,ap:e.ap,b:e.b,bp:e.bp});
+      e.reportedEndpoints=uniq([...(e.reportedEndpoints||[]),{a:e.a,ap:e.ap,b:e.b,bp:e.bp}]);
       e[field]=candidates[0].name;e.endpointSource='configuration description';e.status='inferred';
       warnings.add(from.name+' '+lp+': reported peer '+to.name+' '+rp+' differs from the explicit configuration description. Drawing uses '+e[field]+'; verify the connection.');
     }
@@ -130,15 +154,21 @@ export function mergeModels(...models) {
       if (ends[0] === ends[1]) continue;
       const id = key([...ends].sort());
       if (!links.has(id)) links.set(id,e);
-      else assign(links.get(id),e,['a','ap','b','bp'],warnings,e.a+' '+e.ap+' / '+e.b+' '+e.bp);
-      for (const endpoint of physicalLink(e,devices)?ends:[]) {
+      else {
+        const existing=links.get(id);assign(existing,e,['a','ap','b','bp','reportedEndpoints'],warnings,e.a+' '+e.ap+' / '+e.b+' '+e.bp);
+        if(e.reportedEndpoints?.length)existing.reportedEndpoints=uniq([...(existing.reportedEndpoints||[]),...e.reportedEndpoints]);
+      }
+  }
+  reconcilePhysicalObservations([...links.values()],devices,warnings);
+  for(const [id,e] of links){
+      for (const endpoint of physicalLink(e,devices)?[[e.a,deviceId(e.ap)],[e.b,deviceId(e.bp)]].map(key):[]) {
         if (!occupied.has(endpoint)) occupied.set(endpoint,new Set());
         occupied.get(endpoint).add(id);
       }
   }
   for (const [endpoint,ids] of occupied) if (ids.size > 1) {
     warnings.add(JSON.parse(endpoint).join(' ') + ' has multiple reported peers. Verify physical adjacency.');
-    for (const id of ids) links.get(id).status = 'conflict';
+    for (const id of ids) conflict(links.get(id));
   }
   for (const e of links.values()) {
     const physical=[];
@@ -150,7 +180,7 @@ export function mergeModels(...models) {
       if(capability){p.capability=capability;physical.push(capability);}
       if(p.media && !meaningful(e.media) && e.status!=='conflict')e.media=p.media;
       if (p.state === 'down') {
-        e.status = 'conflict';
+        conflict(e);
         warnings.add(d.name+' '+port+' is reported down but has a reported peer.');
       }
     }

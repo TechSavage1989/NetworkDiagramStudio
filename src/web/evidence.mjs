@@ -1,5 +1,6 @@
-import {importFiles,mergeModels} from './imports/index.mjs';
+import {importFiles,mergeModels,findDeviceIdentity} from './imports/index.mjs';
 import {isOperational} from './imports/operational.mjs';
+import {migrateIdentityReferences} from './evidence-identities.mjs';
 
 export const categories=['identity','ports','links','vlans','routes','bridges'];
 const copy=x=>JSON.parse(JSON.stringify(x));
@@ -22,7 +23,7 @@ function selected(source){
  if(!source.enabled)return {devices:[],links:[],warnings:[]};
  const c=new Set(source.categories||categories),m=copy(source.model),first=m.devices[0]?.id;
  if(source.targetId&&first){
-  for(const d of m.devices)if(d.id===first){d.id=source.targetId;d.name=source.targetName||source.targetId;}
+  for(const d of m.devices)if(d.id===first){d.id=source.targetId;d.name=source.targetName||source.targetId;d.identityLocked=true;}
   for(const l of m.links){if(l.a===first)l.a=source.targetId;if(l.b===first)l.b=source.targetId;}
  }
  const used=new Set(c.has('links')?m.links.flatMap(l=>[l.a,l.b]):[]);
@@ -39,7 +40,7 @@ function selected(source){
 // removes its observations without removing subsequent manual corrections.
 function difference(before,after,type='root'){
  if(JSON.stringify(before)===JSON.stringify(after))return null;
- if(Array.isArray(before)&&Array.isArray(after)&&['devices','ports','vlans','links'].includes(type)){
+  if(Array.isArray(before)&&Array.isArray(after)&&['devices','ports','vlans','links','reportSupplementary'].includes(type)){
   const a=new Map(before.map(v=>[recordKey(v,type),v])),b=new Map(after.map(v=>[recordKey(v,type),v]));const rows={};
   for(const k of new Set([...a.keys(),...b.keys()])){
    const v=!b.has(k)?{remove:true}:!a.has(k)?{set:b.get(k)}:difference(a.get(k),b.get(k));if(v)rows[k]=v;
@@ -60,27 +61,51 @@ function combine(a,b){
  for(const [k,v] of Object.entries(b[key]||{}))out[key][k]=combine(out[key][k],v);
  return out;
 }
-function patch(value,change,type='root'){
+function patch(value,change,type='root',identities=[]){
  if(change?.remove)return undefined;
  if(Object.hasOwn(change||{},'set'))return copy(change.set);
  if(change?.rows){
   const rows=new Map((value||[]).map(v=>[recordKey(v,type),v]));
-  for(const [k,p] of Object.entries(change.rows)){if(!rows.has(k)&&!Object.hasOwn(p,'set'))continue;const v=patch(rows.get(k),p);if(v===undefined)rows.delete(k);else rows.set(k,v);}return [...rows.values()];
+  for(const [original,p] of Object.entries(change.rows)){
+   let k=original;
+   if(!rows.has(k)&&type==='devices')k=findDeviceIdentity(identities,k)?.id||k;
+   if(!rows.has(k)&&type==='links')try{k=JSON.stringify(JSON.parse(k).map(endpoint=>{const at=endpoint.lastIndexOf('|'),id=endpoint.slice(0,at);return (findDeviceIdentity(identities,id)?.id||id)+endpoint.slice(at);}).sort());}catch{}
+   if(!rows.has(k)&&!Object.hasOwn(p,'set'))continue;
+   const v=patch(rows.get(k),p,'root',identities);if(v===undefined)rows.delete(k);else {if(type==='devices'&&k!==original)v.id=k;rows.set(k,v);}
+  }return [...rows.values()];
  }
- const out={...(value||{})};for(const [k,p] of Object.entries(change?.fields||{})){const v=patch(out[k],p,k);if(v===undefined)delete out[k];else out[k]=v;}return out;
+ const out={...(value||{})};for(const [k,p] of Object.entries(change?.fields||{})){const v=patch(out[k],p,k,identities);if(v===undefined)delete out[k];else out[k]=v;}return out;
+}
+// Remember only accepted identity relationships for keyed manual edits. This is
+// separate from active observations: disabling a source still removes its fields
+// and links, while a correction follows the remaining name of the same device.
+function patchIdentities(e,result){
+ const norm=value=>String(value).toLowerCase(),groups=e.identityGroups||[];
+ for(const d of result.devices)if(d.identityAliases?.length){
+  const group=[...new Set([d.id,...d.identityAliases].map(norm))].sort();
+  if(!groups.some(v=>JSON.stringify(v)===JSON.stringify(group)))groups.push(group);
+ }
+ if(groups.length)e.identityGroups=groups;
+ const identities=result.devices.map(d=>({...d,identityAliases:[...(d.identityAliases||[])]}));
+ for(const group of groups){
+  const matches=identities.filter(d=>group.includes(norm(d.id))||d.identityAliases.some(alias=>group.includes(norm(alias))));
+  if(matches.length===1)matches[0].identityAliases=[...new Set([...matches[0].identityAliases,...group])];
+ }
+ return identities;
 }
 export function captureEdits(p,snapshot){
  if(!snapshot||!p.evidence)return;
  const delta=difference(snapshot,model(p));if(delta)p.evidence.edits=combine(p.evidence.edits,delta);
 }
 export function composeEvidence(p){
+ const before={devices:(p.devices||[]).map(d=>({id:d.id,name:d.name})),links:(p.links||[]).map(({a,ap,b,bp})=>({a,ap,b,bp}))};
  const e=ensureEvidence(p);
  const sources=e.sources.filter(s=>s.enabled).sort((a,b)=>(a.kind==='Configuration'?0:1)-(b.kind==='Configuration'?0:1));
  const result=mergeModels(e.base,...sources.map(selected));
  // Operational speed/state/media are current observations, not intended settings.
  for(const s of sources.filter(s=>s.kind==='Show commands'&&(s.categories||categories).includes('ports'))){
   const data=selected(s);
-  for(const d of data.devices){const target=result.devices.find(v=>v.id===d.id);if(!target)continue;
+  for(const d of data.devices){const target=findDeviceIdentity(result.devices,d.id);if(!target)continue;
    for(const port of d.ports){const q=target.ports.find(v=>v.name.toLowerCase()===port.name.toLowerCase());if(q)for(const k of ['state','speed','media'])if(port[k])q[k]=port[k];}
   }
  }
@@ -90,6 +115,17 @@ export function composeEvidence(p){
   if(port?.speed&&!l.speed)l.speed=port.speed;
   if(port?.media&&(!l.media||l.media==='unknown'))l.media=port.media;
  }
- const edited=patch(result,e.edits);Object.assign(p,edited);
+ const identities=patchIdentities(e,result),edited=patch(result,e.edits,'root',identities);
+ for(const link of edited.links)for(const end of ['a','b'])link[end]=findDeviceIdentity(identities,link[end])?.id||link[end];
+ Object.assign(p,edited);
+ migrateIdentityReferences(p,before,identities);
  return model(p);
+}
+
+// Imported projects retain normalized source models. Reopening can therefore
+// apply improved reconciliation without reimporting files or reviving disabled
+// sources. A project without that provenance keeps its explicit manual model.
+export function reopenEvidence(project){
+ if(project.evidence)composeEvidence(project);
+ return project;
 }

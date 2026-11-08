@@ -10,6 +10,8 @@ try {
     if ($LASTEXITCODE) { throw 'Visio package validation failed.' }
     python -m unittest discover -s tests -p 'test_*.py'
     if ($LASTEXITCODE) { throw 'Damaged Visio package rejection tests failed.' }
+    dotnet run --project tests/switchport-native/SwitchportReports.Tests.csproj -c Release -- .artifacts/switchport-native
+    if ($LASTEXITCODE) { throw 'Switchport report integration checks failed.' }
     dotnet publish desktop/NetworkDiagramStudio.csproj -c Release -r win-x64 --self-contained true -o $Output
     if ($LASTEXITCODE) { throw 'Windows publish failed.' }
     $exe = Join-Path $Output 'NetworkDiagramStudio.exe'
