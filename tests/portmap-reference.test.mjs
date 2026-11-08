@@ -52,7 +52,7 @@ test('long matrix records continue without losing content and every cell remains
 });
 
 test('assignment cells and uniform number labels retain stable edits in SVG and native Visio',async()=>{
- const site=fixture(),before=maps(site)[0],number=before.items.find(item=>item.portNumberRole==='text'&&item.value==='49'),assignment=maps(site).find(page=>page.portMap.bookletRole==='inventory').items.find(item=>item.portAssignmentRole==='assignment');site.layout={drawingEdits:{[number.editKey]:{value:'WAN',color:'#AA2200',w:32,x:number.x+(number.w-32)/2},[assignment.editKey]:{value:'Edited assignment',x:70}}};const pages=buildPages(site),after=pages.find(page=>page.portMap);
+ const site=fixture();site.layout={portMap:{presentation:'separate'}};const before=maps(site)[0],number=before.items.find(item=>item.portNumberRole==='text'&&item.value==='49'),assignment=maps(site).find(page=>page.portMap.bookletRole==='inventory').items.find(item=>item.portAssignmentRole==='assignment');site.layout={drawingEdits:{[number.editKey]:{value:'WAN',color:'#AA2200',w:32,x:number.x+(number.w-32)/2},[assignment.editKey]:{value:'Edited assignment',x:70}}};const pages=buildPages(site),after=pages.find(page=>page.portMap);
  assert.equal(after.items.find(item=>item.editKey===number.editKey).value,'WAN');const inventory=pages.find(page=>page.portMap?.bookletRole==='inventory');assert.equal(inventory.items.find(item=>item.editKey===assignment.editKey).x,70);assert.ok(inventory.svg.includes('Edited assignment'));
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>new TextDecoder().decode(bytes)).join('');assert.ok(xml.includes('Edited assignment'));assert.ok(xml.includes('WAN'));assert.ok(xml.includes('#AA2200'));
 });
@@ -72,8 +72,8 @@ test('paired bitmap and native stencil panels use distinct scene keys and correc
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>new TextDecoder().decode(bytes)).join('');assert.ok(xml.includes('Native panel artwork'));assert.ok(xml.includes('ForeignType="Bitmap"'));assert.equal([...parts.keys()].filter(key=>key.startsWith('visio/media/')).length,1);
 });
 
-test('default booklet sheets separate colored faceplates from complete inventory',()=>{
- const site=fixture(),pages=maps(site);
+test('explicit separate booklet sheets retain colored faceplates and complete inventory',()=>{
+ const site=fixture();site.layout={portMap:{presentation:'separate'}};const pages=maps(site);
  const overviews=pages.filter(page=>page.portMap.bookletRole==='map');
  const inventory=pages.filter(page=>page.portMap.bookletRole==='inventory');
  assert.ok(overviews.length&&inventory.length);

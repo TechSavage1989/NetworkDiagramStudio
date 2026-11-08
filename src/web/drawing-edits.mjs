@@ -1,6 +1,7 @@
 import {textFootprint} from './diagram/labels.mjs';
 import {applyLinkStyles} from './link-styles.mjs';
 import {placeBeside} from './arrange.mjs';
+import {automaticDeviceGap} from './compact-layout.mjs';
 import {unpresentPatch} from './presentation.mjs';
 const keyOk=s=>typeof s==='string'&&s.length<=500&&!/^(?:__proto__|constructor|prototype)$/.test(s);
 const colors=/^(?:#[0-9a-f]{3}|#[0-9a-f]{6}|none)$/i;
@@ -66,6 +67,14 @@ function moveCable(item,dx,dy){
 }
 export function moveDrawingItems(page,edits,offsets){
  const objects=drawingObjects(page),result=cleanDrawingEdits(edits);
+ if(page.coreDeviceIds&&objects.some(item=>offsets.has(item.editKey)&&(item.type==='device'||item.parent?.type==='device'))){
+  // Any positioned device detail disables automatic core packing. Preserve
+  // the visible body positions before that first edit, including WAN cards.
+  // Do not add these pins to offsets: an independently moved child must not
+  // be treated as if its parent was part of the user's selection.
+  const ids=new Set(page.coreDeviceIds);
+  for(const item of page.items)if(item.type==='device'&&item.kind!=='plug'&&(ids.has(item.sourceId)||item.kind==='handoff')&&!item.sourceId?.startsWith('module-legend-')&&!item.sourceId?.startsWith('continuation-'))result[item.editKey]={...result[item.editKey],...unpresentPatch(item,{x:item.x,y:item.y})};
+ }
  for(const [key,[dx,dy]] of offsets){
   const item=objects.find(o=>o.editKey===key);if(!item||item.parent&&offsets.has(item.parent.editKey))continue;
   const localX=item.normalized?dx/item.parent.w:dx,localY=item.normalized?dy/item.parent.h:dy,patch={...(result[key]||{})};
@@ -80,10 +89,10 @@ export function moveDrawingItems(page,edits,offsets){
  }
  return cleanDrawingEdits(result);
 }
-export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='normal'){
+export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='auto'){
  const devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),selected=new Set(keys),chosen=devices.filter(i=>selected.has(i.editKey)),reference=devices.find(i=>i.editKey===referenceKey&&!selected.has(i.editKey));
  if(!chosen.length||!reference)throw Error('Choose devices and a different reference device.');
- const scale=reference.presentation?.scale||1,padding=({compact:56,normal:96,wide:160})[spacing]*scale;
+ const scale=reference.presentation?.scale||1,padding=typeof spacing==='number'?spacing:spacing==='auto'?automaticDeviceGap(page,[...chosen,reference],side):({compact:56,normal:96,wide:160}[spacing]??96)*scale;
  if(!Number.isFinite(padding))throw Error('Choose a valid placement spacing.');
  const others=devices.filter(i=>!selected.has(i.editKey)),offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,others.filter(i=>i!==reference).map(drawingBounds),padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});
  // Pin every visible reference, including generated WAN cards, before core

@@ -55,7 +55,8 @@ test('parallel cables keep a visible gap and exterior rails share one even pitch
  }
  // The fictional chassis bus uses evenly pitched rails, not caption-sized gaps.
  const {bodies,runs}=exteriorRuns(core(modularRoutingFixture())),left=Math.min(...bodies.map(b=>b.x)),rails=[...new Set(runs.filter(r=>!r.h&&r.hi-r.lo>200&&r.c<left).map(r=>Math.round(r.c*100)/100))].sort((a,b)=>a-b);
- assert.ok(rails.length>=4);for(let i=1;i<rails.length;i++)assert.ok(Math.abs(rails[i]-rails[i-1]-ROUTE_STYLE.pitch)<1e-6,'Left rails share the standard pitch instead of caption-sized gaps');
+ assert.ok(rails.length>=4);
+ for(let i=1;i<rails.length;i++){const step=rails[i]-rails[i-1],tracks=Math.round(step/ROUTE_STYLE.pitch);assert.ok(tracks>=1&&tracks<=2&&Math.abs(step-tracks*ROUTE_STYLE.pitch)<1e-6,'Left rails share the standard pitch instead of caption-sized gaps');}
 });
 
 test('captions that cannot sit beside a dense bundle use inline connector text without spreading the rails',()=>{

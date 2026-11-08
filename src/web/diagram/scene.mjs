@@ -108,6 +108,7 @@ export function addDevice(page,project,d,bounds,key,opts={}){
   const g={type:'device',key,sourceId:d.id,instanceKey:opts.instanceKey,name:d.name||d.id,kind:d.kind,model:d.model||'',...placement,asset,
     masterKey:asset?'asset:'+String(asset.id??d.stencilId??d.id):'device:'+d.id,ports:Object.create(null),children:[],fallback:!asset};
   if(!asset&&d.stackMembers?.length)g.masterKey+=':members:'+d.stackMembers.map(m=>m.id).join(',')+':gap:'+(opts.padding??1);
+  if(!asset&&d.stackMembers?.length&&opts.memberGaps&&Object.keys(opts.memberGaps).length){g.memberGaps={...opts.memberGaps};g.masterKey+=':member-gaps:'+JSON.stringify(Object.entries(opts.memberGaps).sort(([a],[b])=>a.localeCompare(b)));}
   const addAnchor=(k,p)=>{if(Array.isArray(p)&&p.length===2&&p.every(n=>Number.isFinite(n)&&n>=0&&n<=1))g.ports[String(k)]=[...p];};
   if(asset){
     for(const [k,v] of Object.entries(asset.anchors||{}))addAnchor(k,Array.isArray(v)?v:[v?.x,v?.y]);
@@ -322,7 +323,7 @@ export function svgPage(p){
       }
       last=[x,y];return t+' '+round(x)+' '+round(y);
     }).join(' ');
-    return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||cableWeight)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+(i.editKey?'<path class="cable-hit-target" data-drawing-key="'+xml(i.editKey)+'" d="'+path+'" fill="none" stroke="transparent" stroke-width="16" vector-effect="non-scaling-stroke" pointer-events="none" aria-hidden="true"/>':'')+'<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+(i.weight||cableWeight)+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
+    return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||cableWeight)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+'<path class="diagram-cable"'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+(i.weight||cableWeight)+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
   };
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title><rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
 }

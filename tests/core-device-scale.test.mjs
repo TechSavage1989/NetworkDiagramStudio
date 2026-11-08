@@ -9,7 +9,8 @@ test('four and five member stacks and a modular chassis retain the same width an
  const site=fixture(),pages=buildPages(site).filter(page=>page.coreDeviceIds);assert.ok(pages.length>1);assert.deepEqual(pages.flatMap(page=>page.coreDeviceIds),site.devices.map(d=>d.id));
  for(const page of pages){
   const bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug');
-  for(const body of bodies){const d=site.devices.find(d=>d.id===body.sourceId),panel=deviceFaceplate(d);assert.equal(body.w,700);assert.ok(Math.abs(body.w/body.h-panel.ratio)<1e-8);assert.ok(body.y>=164&&body.y+body.h<=901);
+  for(const body of bodies){const d=site.devices.find(d=>d.id===body.sourceId),panel=deviceFaceplate(d,{padding:.7,memberGaps:body.memberGaps});assert.equal(body.w,700);assert.ok(Math.abs(body.w/body.h-panel.ratio)<1e-8);assert.ok(body.y>=164&&body.y+body.h<=901);
+   if(d.stackMembers)for(const region of body.panelRegions){const member=deviceFaceplate({...d,stackMembers:[],model:'JL558A'});assert.ok(Math.abs(body.w/(region.h*body.h)-member.ratio)<1e-8,'Compact gaps preserve each physical chassis aspect ratio');}
    const alone=buildPages({...site,devices:[d]}).flatMap(p=>p.items).find(i=>i.type==='device'&&i.sourceId===d.id);assert.equal(body.w,alone.w);assert.equal(body.h,alone.h);
    for(const text of page.items.filter(i=>i.titleOwner))assert.ok(!intersects(body,text));
   }

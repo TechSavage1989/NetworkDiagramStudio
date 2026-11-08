@@ -16,14 +16,14 @@ function fixture(){
     links:[{a:'sw',ap:'p2',b:'fw',bp:'wan1',media:'SR',speed:'10 Gbps'},{a:'sw',ap:'p1',b:'ap',bp:'eth0',media:'copper',speed:'100 Mbps'}]};
 }
 const text=new TextDecoder();
-test('empty inventories have all five pages, and encoded labels are inert',()=>{
-  const ps=buildPages({name:'<script>alert(1)</script>',devices:[],links:[]});
+test('full documentation retains all five empty reference pages, and encoded labels are inert',()=>{
+  const ps=buildPages({name:'<script>alert(1)</script>',devices:[],links:[],layout:{documentation:'full'}});
   assert.deepEqual(ps.map(p=>p.name),['Core Network','MDF Port Map','Wireless Connections','VLANs and Routing','Trunk VLANs']);
   for(const p of ps){assert.match(p.svg,/&lt;script&gt;/);assert.doesNotMatch(p.svg,/<script>/);}
   assert.doesNotMatch(printDocument(ps),/<script[^>]*>/i);
 });
 test('media coloring, source field retention, optics and front access point placement',()=>{
-  const ps=buildPages(fixture());
+  const ps=buildPages({...fixture(),layout:{documentation:'full'}});
   const core=ps.find(p=>p.name==='Core Network'),wire=ps.find(p=>p.name==='Wireless Connections');
   // Only the mapped switch jack has a known optical cage. The unidentified firewall uses its perimeter.
   assert.equal(core.items.filter(i=>i.kind==='plug'&&i.host&&i.asset?.id==='optic').length,1);
