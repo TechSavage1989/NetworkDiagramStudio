@@ -114,6 +114,17 @@ function diamond(items,x,y,size,fill,stroke,weight=.5){items.push({type:'vector'
 // Optional marks follow the switchport builder: a dot per tagged VLAN along
 // the top of the jack, a diamond for the voice VLAN and the trunk's outline.
 const MIN_DOT=1.5;
+// How much taller a plate's jacks must be to hold every tagged VLAN dot at
+// the minimum size (1 when they already fit).
+function markStretch(g,ports,marks,format){
+ const layout=portLabelLayout(g,ports,{fontSize:10,minFontSize:8,minWidth:0,measureRequired:false,...(format?{format}:{})});let need=1;
+ for(const {port,content} of layout.entries||[]){
+  if(!content||port.unconfigured)continue;const mark=marks?.(port);if(!mark||mark.stack||!mark.tagged?.length)continue;
+  const step=MIN_DOT*2+.6,per=Math.max(1,Math.floor((content.w-1)/step)),rows=Math.ceil(mark.tagged.length/per),reserve=mark.voice?9:0;
+  need=Math.max(need,(1+MIN_DOT*2+(rows-1)*step+reserve+1)/content.h);
+ }
+ return need;
+}
 function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null,format=null,unconfiguredFill=null}={}){
  const size=10*(fontScale??1),minimum=8*(fontScale??1),formatting=format?{format}:{};
  let layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,measureRequired:false,...formatting});
@@ -340,12 +351,18 @@ function builderLayout(project,db,info,palette,plan,{sheetLabel='1 / 1'}={},colu
  let {p,top:y}=newSheet(),hasPlate=false,unsupplied=false,markWidth=0;const overflow=[];
  // Hardware, member by member, continuing onto another sheet only when needed.
  for(const part of parts){
-  const barH=part.bar?17:0,size=equipmentSize(project,part.view,hw);
+  // Readable VLAN dots: a built-in faceplate grows taller (never wider, at
+  // most four times) until every jack holds its tagged VLANs at the minimum
+  // dot size. Imported artwork keeps its proportions.
+  const barH=part.bar?17:0,format=d.modules?.length&&!stackPart?name=>portLabelText(name).replace(/^[A-Z]{1,2}(?=\d+$)/,''):null;
+  const probe=addDevice({...p,items:[]},project,part.view,[36,0,hw,1],'probe',{fitWidth:true,padding:equipmentPadding});
+  const stretch=probe.asset?1:Math.max(1,Math.min(4,(footerTop-130-barH)/probe.h,markStretch(probe,physicalPorts(part.view),palette.marks,format)));
+  const size={w:probe.w,h:probe.h*stretch};
   if(hasPlate&&y+barH+size.h>footerTop-8)({p,top:y}=newSheet());
   if(part.bar){rect(p.items,36,y,hw,barH-2,'#14283D');p.items.at(-1).editKey=bodyKey+'|member-bar|'+part.member.id;label(p.items,42,y,hw-12,barH-2,part.bar,10,true,C.white);Object.assign(p.items.at(-1),{editKey:bodyKey+'|member-bar|'+part.member.id+'|text',full:true});}
   p.editScope=prefix+'MDF Port Map|'+equipmentScope(part.view)+'|sheet:0';
   p.portMap.overview=true;p.portMap.bookletRole='map';
-  const g=addDevice(p,project,part.view,[36,y+barH,hw,1],'panel:'+d.id+(part.member?':'+part.member.id:''),{fitWidth:true,padding:equipmentPadding});p.editScope=prefix+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+(sheet-1);
+  const g=stretch>1?addDevice(p,project,part.view,[36,y+barH,size.w,size.h],'panel:'+d.id+(part.member?':'+part.member.id:''),{fillBounds:true,padding:equipmentPadding}):addDevice(p,project,part.view,[36,y+barH,hw,1],'panel:'+d.id+(part.member?':'+part.member.id:''),{fitWidth:true,padding:equipmentPadding});if(stretch>1)g.portMapStretch=stretch;p.editScope=prefix+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+(sheet-1);
   // Every socket is numbered, as on the builder sheet; only configured ports
   // carry VLAN fills and marks. Chassis modules number their own ports 1..n.
   const known=physicalPorts(part.view),names=new Set(known.map(port=>port.name.toLowerCase())),sockets=Object.keys(g.ports).filter(name=>!/^uplink\./.test(name)&&!names.has(name.toLowerCase())).map(name=>({name,unconfigured:true}));
@@ -556,12 +573,12 @@ function portMaps(project,db){
  for(const page of extra){page.interfaceInventory=true;page.interfaceSections=page.logicalSections;delete page.logicalSections;page.tableTop=160;for(const item of page.items)if(item.y>=160)item.tableContent=true;bookletHeader(page);}
  if(!switches.length)return [...(extra.length&&documentationMode(project)==='concise'?[]:portMapsAtScale(project,db)),...extra];
  const savedKeys=Object.keys(project.layout?.drawingEdits||{}).filter(key=>/(?:^|\|)(?:MDF Port Map|Port Inventory)(?:\b|\|)/.test(key)&&!key.includes(logicalInventoryName)),retention=new WeakMap(),retained=pages=>{if(!savedKeys.length)return 0;if(!retention.has(pages)){const keys=new Set(pages.flatMap(page=>drawingObjects(page).flatMap(item=>[item.editKey,item.legacyEditKey])));retention.set(pages,savedKeys.filter(key=>keys.has(key)).length);}return retention.get(pages);};
- // By default each switch's port map is the switchport builder's sheet,
- // fitted to US Letter (or the chosen fixed port-map paper) so it prints as
- // legibly as the builder's own. Faceplate artwork stays available.
+ // Port maps keep the device faceplate artwork by default. The switchport
+ // builder's sheet, fitted to US Letter (or the chosen fixed port-map
+ // paper), is a choice in Port map options.
  const mapOptions=project.layout?.portMap||{},sheetGeometry=pageGeometry(project,'ports');
  const paper=sheetGeometry.dynamic?{width:1056,height:816,preset:'letter',widthMm:279.4,heightMm:215.9}:{width:sheetGeometry.width,height:sheetGeometry.height,preset:'page',widthMm:sheetGeometry.width*25.4/96,heightMm:sheetGeometry.height*25.4/96};paper.fill=true;
- const sheets=mapOptions.mapStyle==='faceplate'||mapOptions.presentation==='combined'?new Map():portMapSheets(project,switches,paper);
+ const sheets=mapOptions.mapStyle!=='switchport'||mapOptions.presentation==='combined'?new Map():portMapSheets(project,switches,paper);
  let initial=portEquipmentPlan(project,switches),best;
  // A narrower common scale may change stack member ranges. An existing
  // edited range takes priority over a page-count saving, including edits
@@ -571,7 +588,9 @@ function portMaps(project,db){
   try{best=portMapsAtScale(project,db,initial);break;}
   catch(error){if(error.code!=='PORT_LABEL_CAPACITY'||!Number.isFinite(error.requiredWidth))throw error;
    const d=switches.find(d=>d.id===error.sourceId),width=Math.max(initial.width+1,error.requiredWidth/(d?deviceScale(project,d):1)+2),geometry=pageGeometry(project,'ports');
-   if(width>geometry.width-82){if(!geometry.dynamic)throw error;project={...project,_pageGeometry:{...project._pageGeometry,ports:{width:Math.ceil(width+82),height:geometry.height}}};}
+   // The default Letter sheet gives way to a growing page when it cannot keep
+   // the numbers readable; a chosen fixed paper reports the limit.
+   if(width>geometry.width-82){if(!geometry.dynamic&&!geometry.preferred)throw error;if(geometry.preferred)project={...project,_portsDynamic:true};const grown=pageGeometry(project,'ports');project={...project,_pageGeometry:{...project._pageGeometry,ports:{width:Math.ceil(width+82),height:grown.height}}};}
    initial=portEquipmentPlan(project,switches,width);
   }
  }

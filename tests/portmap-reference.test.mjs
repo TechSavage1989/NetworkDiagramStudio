@@ -16,7 +16,7 @@ const maps=site=>buildPages(site).filter(page=>page.portMap);
 const identities=pages=>new Set(pages.flatMap(page=>page.portMap.portRecords||page.portMap.rowNames.map(name=>({device:page.portMap.device,name}))).map(port=>port.device+'/'+port.name));
 
 test('compact grouped port maps combine panel pairs and a reference-style assignment matrix',()=>{
- const site=fixture();site.layout={portMap:{presentation:'combined'}};const pages=maps(site),first=pages[0],panels=first.items.filter(item=>item.type==='device');
+ const site=fixture();site.layout={pageSetup:{overrides:{ports:{preset:'dynamic'}}},portMap:{presentation:'combined'}};const pages=maps(site),first=pages[0],panels=first.items.filter(item=>item.type==='device');
  assert.equal(panels.length,2);assert.ok(panels.every(panel=>panel.w>1100));assert.ok(panels[0].y+panels[0].h<panels[1].y);
  assert.equal(first.portMap.assignmentMatrix,true);assert.deepEqual(first.portMap.devices,['switch-1','switch-2']);assert.equal(first.portMap.total,104);assert.equal(identities(pages).size,104);assert.ok(pages.length<=2);
  const text=first.items.filter(item=>item.type==='text').map(item=>item.value);for(const title of ['PORT ROLES','LINK STATE','Port assignment','VLANs and link details'])assert.ok(text.includes(title));

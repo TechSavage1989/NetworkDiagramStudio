@@ -80,8 +80,8 @@ test('a trunk with many tagged VLANs keeps readable dots: wider hardware, or a +
  const core=()=>({id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,
   ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:null,nativeState:'None',tagged:vlans.slice(0,25).map(v=>v.id)})),{name:'C1',state:'up',native:100,voice:125,tagged:vlans.slice(1,20).map(v=>v.id)}]});
  const sheet=layout=>maps({name:'Trunk lab',devices:[core()],links:[],layout}).find(p=>p.portMap.overview&&p.portMap.device==='core');
- // A dynamic page widens the common hardware until every dot fits at the minimum size.
- const page=sheet({});
+ // A growing page widens the common hardware until every dot fits at the minimum size.
+ const page=sheet({pageSetup:{overrides:{ports:{preset:'dynamic'}}}});
  for(const [name,count] of [['A1',25],['A8',25],['C1',19]]){
   const dots=page.items.filter(i=>i.portNumberRole==='tagged'&&i.portName===name),socket=page.items.find(i=>i.portNumberRole==='socket'&&i.portName===name);
   assert.equal(dots.length,count,name+' shows every tagged VLAN');assert.ok(socket,name);assert.ok(dots.every(d=>d.w/2>=1.5-1e-9),name+' dots stay readable');
@@ -96,19 +96,29 @@ test('a trunk with many tagged VLANs keeps readable dots: wider hardware, or a +
  const texts=fixed.items.filter(i=>i.type==='text').map(i=>i.value);assert.ok(texts.includes('Tagged VLANs (+ on the jack)'));assert.ok(texts.some(t=>/^A?1-8: 100-124$/.test(t)),texts.filter(t=>/100/.test(t)).join(' | '));
 });
 
-test('by default each switch port map is the switchport builder sheet on US Letter, readable and complete',async()=>{
+test('the switchport builder sheet style draws each switch port map on US Letter, readable and complete',async()=>{
  const {parseConfig}=await import('../src/web/imports/config.mjs');
  // Fictional AOS-Switch chassis with two SFP+ and two copper modules.
  const text=['; J9851A Configuration Editor; Created on release #KB.16.10.0009','hostname "LAB-SHEET"','module A type j9993a','module B type j9993a','module C type j9986a','module D type j9986a','trunk A1,B2 trk1 lacp',
   'vlan 1','   name "DEFAULT_VLAN"','   untagged C1-C12,Trk1','   no untagged A2-A8,B1,B3-B8,C13-C24,D1-D24','   exit',
   'vlan 20','   name "LAB_USERS"','   untagged C13-C24,D1-D24','   tagged A2-A8,B1,B3-B8,Trk1','   exit','vlan 30','   name "LAB_VOICE"','   tagged A2-A8,B1,B3-B8,C1-C24,Trk1','   voice','   exit'].join('\n');
- const device=parseConfig(text,'lab-sheet.cfg').devices[0],site={name:'Sheet lab',devices:[device],links:[]};
+ const device=parseConfig(text,'lab-sheet.cfg').devices[0],site={name:'Sheet lab',devices:[device],links:[],layout:{portMap:{mapStyle:'switchport'}}};
  const pages=buildAllPages(site),sheet=pages.find(page=>page.portMap?.switchportSheet);assert.ok(sheet,'the builder sheet is the port map');
  assert.equal(Math.round(sheet.width),1056);assert.equal(Math.round(sheet.height),816);assert.equal(sheet.family,'ports');assert.equal(sheet.portMap.device,device.id);
  const numbers=sheet.items.filter(item=>item.reportPortRole==='number'),dots=sheet.items.filter(item=>item.reportPortRole==='tagged'||item.reportPortRole==='voice');
  assert.equal(new Set(numbers.map(item=>item.reportPort)).size,64,'every physical port is drawn');assert.ok(numbers.every(item=>item.size>=10),'numbers stay at least the builder size');
  assert.ok(dots.length&&dots.filter(dot=>dot.type==='ellipse').every(dot=>dot.w>=4.2-1e-9),'VLAN markers stay at least the builder size');
  assert.ok(pages.some(page=>page.portMap?.bookletRole==='inventory'),'the port inventory tables remain');
- // Device faceplate artwork stays available as a choice.
- const faceplate=buildAllPages({...site,layout:{portMap:{mapStyle:'faceplate'}}});assert.ok(!faceplate.some(page=>page.portMap?.switchportSheet));assert.ok(faceplate.some(page=>page.portMap?.overview&&page.items.some(item=>item.portNumberRole==='socket')));
+ // Device faceplate artwork is the default.
+ const faceplate=buildAllPages({...site,layout:{}});assert.ok(!faceplate.some(page=>page.portMap?.switchportSheet));assert.ok(faceplate.some(page=>page.portMap?.overview&&page.items.some(item=>item.portNumberRole==='socket')));
+});
+
+test('port maps keep the realistic faceplate on a US Letter sheet by default, with taller jacks for readable dots',()=>{
+ const vlans=Array.from({length:26},(_,i)=>({id:100+i,name:'Lab '+(100+i)}));
+ const core={id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,ports:[{name:'A1',state:'up',native:100,tagged:vlans.slice(1,13).map(v=>v.id)},{name:'C1',state:'up',native:100,voice:125,tagged:vlans.slice(1,13).map(v=>v.id)}]};
+ const page=buildAllPages({name:'Letter lab',devices:[core],links:[]}).find(p=>p.portMap?.overview);
+ assert.equal(Math.round(page.width),1056);assert.equal(Math.round(page.height),816);assert.ok(!page.portMap.switchportSheet,'the faceplate artwork is the default');
+ const plate=page.items.find(i=>i.type==='device'&&i.sourceId==='core');assert.ok(plate.portMapStretch>1,'the plate grows taller for the dots');
+ for(const name of ['A1','C1']){const dots=page.items.filter(i=>i.portNumberRole==='tagged'&&i.portName===name);assert.equal(dots.length,12,name+' shows every tagged VLAN');assert.ok(dots.every(d=>d.w/2>=1.5-1e-9),name+' dots stay readable');}
+ assert.ok(!page.items.some(i=>i.portNumberRole==='tagged-more'));
 });

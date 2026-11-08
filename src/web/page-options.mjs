@@ -8,11 +8,14 @@ export function cleanPaper(raw){const p=raw&&typeof raw==='object'?raw:{},preset
 export function cleanPageSetup(raw){const p=raw&&typeof raw==='object'?raw:{};return {default:cleanPaper(p.default),overrides:Object.fromEntries(pageFamilies.filter(([key])=>p.overrides?.[key]).map(([key])=>[key,cleanPaper(p.overrides[key])])),printPaper:p.printPaper&&p.printPaper.preset!=='dynamic'?cleanPaper(p.printPaper):null};}
 export function pageFamily(name){return /^Switchport reports/i.test(name)?'switchports':/^(?:MDF Port Map|Port Inventory)/i.test(name)?'ports':/^Wireless Connections/i.test(name)?'wireless':/^VLANs and Routing/i.test(name)?'logical':/^Trunk VLAN/i.test(name)?'trunk':'core';}
 export function pageGeometry(project,family='core'){
- const setup=cleanPageSetup(project?.layout?.pageSetup),paper=setup.overrides[family]||setup.default;
+ // Port maps print on US Letter (landscape) unless their family, or a fixed
+ // drawing default, chooses another paper.
+ const setup=cleanPageSetup(project?.layout?.pageSetup),preferLetter=family==='ports'&&!setup.overrides[family]&&setup.default.preset==='dynamic'&&!project?._portsDynamic,paper=setup.overrides[family]||(preferLetter?{preset:'letter',orientation:'landscape'}:setup.default);
  if(paper.preset==='dynamic'){
   const size=project?._pageGeometry?.[family]||{width:1200,height:975};
   return {...size,widthMm:size.width*25.4/96,heightMm:size.height*25.4/96,paper,dynamic:true,printPaper:setup.printPaper};
  }
+ if(preferLetter)return {...pageGeometry({...project,_portsDynamic:true,layout:{...project?.layout,pageSetup:{default:{preset:'letter',orientation:'landscape'}}}},family),preferred:true};
  const row=paperSizes.find(v=>v[0]===paper.preset);let [w,h]=paper.preset==='custom'?[paper.widthMm,paper.heightMm]:row.slice(2);const short=Math.min(w,h),long=Math.max(w,h);[w,h]=paper.orientation==='portrait'?[short,long]:[long,short];return {width:Math.round(w*96/25.4*1e6)/1e6,height:Math.round(h*96/25.4*1e6)/1e6,widthMm:w,heightMm:h,paper,printPaper:setup.printPaper};
 }
 export function fitColumns(columns,width){const sum=columns.reduce((n,c)=>n+c[1],0);return columns.map(([name,w])=>[name,w*width/sum]);}

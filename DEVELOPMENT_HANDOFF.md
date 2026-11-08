@@ -92,7 +92,12 @@ Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
   - Tagged dots keep a minimum radius of 1.5. Dynamic pages widen the whole port-map family until every dot fits. Fixed paper shows a "+" marker and lists the full VLAN set.
 
 Owner follow-up (printable port maps, port names and off-page tags):
-- Port maps are now the Switchport Diagram Builder sheet by default, fitted to US Letter landscape (or a fixed port-map paper choice).
+- Owner preference: keep the realistic faceplates.
+  - Port maps use the faceplate artwork on a US Letter sheet by default.
+  - Built-in plates grow taller (at most 4x) so every jack holds its VLAN dots at the readable minimum.
+  - The builder sheet described below is now the Port map options > Port map style choice "Switchport builder sheet".
+- Builder sheet details (now optional):
+  - Fitted to US Letter landscape (or a fixed port-map paper choice).
   - Jacks, dots and numbers grow to fill the sheet.
   - Undeclared slots are slim bands, and the VLAN key uses the builder's dense one-line, five-column layout.
   - A fictional 9-module 5412R-style chassis with 28 VLANs fits on one sheet.
