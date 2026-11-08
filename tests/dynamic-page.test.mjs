@@ -13,7 +13,10 @@ const inventory=n=>({name:'Canvas lab',devices:Array.from({length:n},(_,i)=>({id
 const core=p=>buildPages(p).filter(p=>p.coreDeviceIds);
 test('new drawings default to a dynamic canvas, keeping 100 full-size devices on one named page',()=>{
  const p=inventory(100);p.layout={corePages:[{id:'all',name:'Complete network',devices:p.devices.map(d=>d.id)}]};const before=JSON.stringify(p),pages=core(p);
- assert.equal(cleanPageSetup().default.preset,'dynamic');assert.equal(pages.length,1);assert.equal(pages[0].name,'Complete network');assert.equal(pages[0].coreDeviceIds.length,100);assert.ok(pages[0].height>12000);
+ assert.equal(cleanPageSetup().default.preset,'dynamic');assert.equal(pages.length,1);assert.equal(pages[0].name,'Complete network');assert.equal(pages[0].coreDeviceIds.length,100);
+ assert.ok(Math.max(pages[0].width,pages[0].height)<6000,'Automatic packing keeps the complete site in a compact square footprint');
+ const bodies=pages[0].items.filter(i=>i.type==='device'&&i.kind==='switch');assert.ok(new Set(bodies.map(i=>i.x)).size>1,'Use measured columns instead of a single very tall strip');
+ for(let i=0;i<bodies.length;i++)for(const other of bodies.slice(i+1))assert.ok(bodies[i].x+bodies[i].w<=other.x||other.x+other.w<=bodies[i].x||bodies[i].y+bodies[i].h<=other.y||other.y+other.h<=bodies[i].y,'Packed hardware does not overlap');
  assert.ok(pages[0].items.filter(i=>i.type==='device'&&i.kind==='switch').every(i=>i.w===700));assert.equal(JSON.stringify(p),before);
  const last=pages[0].items.find(i=>i.type==='device'&&i.sourceId==='s99');p.layout.drawingEdits=cleanDrawingEdits({[last.editKey]:{y:19000}});assert.equal(core(p)[0].items.find(i=>i.editKey===last.editKey).y,19000);delete p.layout.drawingEdits;
  const fixed=core({...p,devices:p.devices.slice(0,10),layout:{...p.layout,pageSetup:{default:{preset:'letter'}}}});assert.ok(fixed.length>1);

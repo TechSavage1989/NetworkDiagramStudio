@@ -91,7 +91,7 @@ test('invalid saved presentation and report fields are bounded',()=>{
 });
 
 test('automatic report panels follow the devices on their particular sheet',()=>{
- const site=sampleSite();site.layout={presentation:{defaults:{panel:{sections:['models'],position:'right'}}}};
+ const site=sampleSite();site.layout={documentation:'full',presentation:{defaults:{panel:{sections:['models'],position:'right'}}}};
  const pages=buildPages(site),port=pages.find(p=>p.portMap),wireless=pages.find(p=>p.title==='Wireless Connections'),logical=pages.find(p=>p.logicalSections),trunk=pages.find(p=>p.title==='Trunk VLANs');
  for(const page of [port,wireless,logical,trunk]){const ids=page.sourceDeviceIds||page.portMap?.devices||page.logicalSections?.map(s=>s.deviceId)||page.items.filter(i=>i.type==='device'&&i.kind!=='plug').map(i=>i.sourceId),actual=page.items.filter(i=>/\|info-panel\|models\|\d+$/.test(i.editKey)).map(i=>i.value.split(' · ')[0]);assert.deepEqual(new Set(actual),new Set(site.devices.filter(d=>ids.includes(d.id)).map(d=>d.name)));}
  const unlinked=site.devices.find(d=>d.kind==='ap');site.links=site.links.filter(l=>l.a!==unlinked.id&&l.b!==unlinked.id);const page=buildPages(site).find(p=>p.title==='Wireless Connections'&&p.sourceDeviceIds?.includes(unlinked.id));assert.ok(page);assert.deepEqual(page.items.filter(i=>/\|info-panel\|models\|\d+$/.test(i.editKey)).map(i=>i.value.split(' · ')[0]),[unlinked.name]);

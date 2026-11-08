@@ -1,4 +1,6 @@
 import {informationPanel} from './information-panel.mjs';
+import {compactLayout} from '../compact-layout.mjs';
+import {equipmentGapPlan,equipmentPadding} from './equipment-layout.mjs';
 import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry} from '../page-options.mjs';
@@ -25,17 +27,18 @@ function captionReserve(project,sheet,edges,db){
   if(!sheet.ids.includes(edge.a)&&!sheet.ids.includes(edge.b))continue;
   for(const id of [edge.a,edge.b])if(sheet.ids.includes(id))counts.set(id,(counts.get(id)||0)+1);
   const info=mediaInfo(edge.media,db.devices.get(edge.a)?.kind==='ap'||db.devices.get(edge.b)?.kind==='ap');
-  const lines=linkCaption(project,info.name,rate(edge.speed)).filter(Boolean).reduce((n,text)=>n+wrapPortText(text,90,font,true).length,0);
+  const lines=linkCaption(project,info.name,rate(edge.speed)).filter(Boolean).reduce((n,text)=>n+wrapPortText(text,180,font,true).length,0);
   pitch=Math.max(pitch,lines*(font+4)+12);
  }
  return Math.max(0,20+(Math.max(1,...counts.values())-1)*pitch-124);
 }
 
-const TOP=164,BOTTOM=901,GAP=24,LEFT=430,WIDTH=700;
+const TOP=164,BOTTOM=901,LEFT=430,WIDTH=700;
 // Try readable layouts before continuing a page. Extra rail clearance resolves
 // labels trapped between parallel cables; tighter padding recovers unused space.
 const FITS=[244,208,176].flatMap(sidebarWidth=>[1,.85,.7].flatMap(padding=>[12,60].map(railPitch=>({padding,railPitch,sidebarWidth}))));
-const spacing=padding=>({pitch:GAP*padding,topClearance:38+12*padding,bottomClearance:14+4*padding});
+const spacing=(padding,weight=4,wide=false)=>({pitch:Math.max(wide?24:10,weight+3)*padding,topClearance:Math.max((wide?38:28)+(wide?12:8)*padding,weight/2+4),bottomClearance:Math.max((wide?14:10)+4*padding,weight/2+4)});
+const strokeWidth=(project,page)=>Math.max(cableWeight,...Object.entries(project.layout?.drawingEdits||{}).filter(([key,patch])=>key.startsWith(page+'|path|')&&Number.isFinite(patch.weight)).map(([,patch])=>patch.weight));
 function handoffs(db,suppressed=[]){
  const devices=new Map(),links=[...db.links];
  let nextIndex=db.links.reduce((max,link)=>Math.max(max,link.idx),-1)+1;
@@ -55,7 +58,7 @@ function handoffs(db,suppressed=[]){
  return {devices,links};
 }
 function bounds(d,y=0,width=WIDTH,left=LEFT){const scale=1,compact=!['switch','firewall','unknown','handoff','ap'].includes(d.kind),bodyWidth=width*(compact?300/WIDTH:1);return d.kind==='ap'?[left+(width-72*scale*width/WIDTH)/2,y,72*scale*width/WIDTH,72*scale*width/WIDTH]:d.kind==='handoff'?[left+(width-170)/2,y,170,29]:[left+(width-bodyWidth*scale)/2,y,bodyWidth*scale,Math.max(124,Math.min(420,(d.stackMembers?.length||1)*100))];}
-function probe(project,d,width=WIDTH,padding=1){return addDevice({items:[]},project,d,bounds(d,0,width),'probe',{fitWidth:d.kind!=='handoff',padding});}
+function probe(project,d,width=WIDTH,padding=1,options={}){return addDevice({items:[]},project,d,bounds(d,0,width),'probe',{fitWidth:d.kind!=='handoff',padding,...options});}
 function handoffCard(d,width){const textSpan=(width-24)/1.12,detail=[d.ownerPort&&displayPortCaption(d.ownerPort),d.ip||d.model].filter(Boolean).join(' | '),titleHeight=Math.max(25,wrapPortText(d.name,textSpan,18,true).length*22),detailHeight=Math.max(20,wrapPortText(detail,textSpan,12).length*15);return {detail,titleHeight,detailHeight,height:Math.max(64,titleHeight+detailHeight+12)};}
 function handoffRows(devices,span,spread=false){
  // Measure compact cards against the actual chassis. Separate rows reserve
@@ -68,14 +71,14 @@ function handoffRows(devices,span,spread=false){
  if(spread&&cols>1)gap=(available-cols*width)/(cols-1);
  return {width,cols,gap,rows,height:rows.reduce((a,b)=>a+b,0)};
 }
-function measurement(project,d,edges,positions,handoffs=[],width=WIDTH,padding=1){
- const g=probe(project,d,width,padding),counts={top:0,bottom:0};
+function measurement(project,d,edges,positions,handoffs=[],width=WIDTH,padding=1,weight=4,wide=false){
+ const equipment=equipmentGapPlan(project,d,edges,width,{padding:Math.max(.7,equipmentPadding*padding)}),g=probe(project,d,width,padding,equipment),counts={top:0,bottom:0};
  edges.forEach((e,i)=>{const port=e.a===d.id?e.ap:e.bp,other=e.a===d.id?e.b:e.a,prefer=positions.get(other)<positions.get(d.id)?'top':'bottom';counts[d.kind==='ap'?prefer:getAnchor(g,port,prefer,i).side]++;});
  // This space is allocated before packing, so cable tracks cannot enter the next row.
- const {pitch,topClearance,bottomClearance}=spacing(padding);
+ const {pitch,topClearance,bottomClearance}=spacing(padding,weight,wide);
  const top=d.kind==='handoff'?23:Math.max(40+6*padding,counts.top?topClearance+14*padding+pitch*(counts.top-1):0,handoffs.length?handoffRows(handoffs,g.w).height+72+40*padding:0),bottom=d.kind==='handoff'?20:counts.bottom?bottomClearance+26*padding+pitch*(counts.bottom-1):Math.max(24,28*padding);
  const detailHeight=Math.max(18,wrapPortText(deviceDetails(d),g.w,12).length*14.4);
- return {body:g.h,top,height:d.kind==='handoff'&&d.owner?0:g.h+top+Math.max(bottom,detailHeight+10)+10*padding};
+ return {body:g.h,top,equipment,height:d.kind==='handoff'&&d.owner?0:g.h+top+Math.max(bottom,detailHeight+10)+10*padding};
 }
 function moduleLegend(page,project){
  const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
@@ -146,13 +149,19 @@ export function corePages(project,inventory){
  const locations=new Map(),edgeLocations=new Map();for(const page of packed)for(const id of page.ids){if(!locations.has(id))locations.set(id,page.name);for(const e of edges.filter(e=>(e.a===id&&localPort(page,id,e.ap)||e.b===id&&localPort(page,id,e.bp))&&(!page.linkIds||page.linkIds.has(e.idx))))edgeLocations.set(id+'/'+e.idx,page.name);}
  return packed.flatMap((sheet,pi)=>{
   const priorEdits=project.layout?.drawingEdits||{},aliases=sheet.name!==sheet.baseName?Object.fromEntries(Object.entries(priorEdits).filter(([key])=>key.startsWith(sheet.baseName+'|')).map(([key,value])=>[sheet.name+key.slice(sheet.baseName.length),value])):{},aliasProject=Object.keys(aliases).length?{...project,layout:{...project.layout,drawingEdits:{...aliases,...priorEdits}}}:project;
+  const organize=project._organizeCandidate;if(organize?.family==='core'&&organize.name===sheet.name&&organize.clearance){sheet.labelClearance=organize.clearance.railPitch;sheet.expansion=organize.clearance.expansion;sheet.spreadHandoffs=organize.clearance.spreadHandoffs;sheet.columnOnly=organize.clearance.columnOnly;}
   const expansion=sheet.expansion||0,railPitch=dynamic?Math.max(12,sheet.labelClearance||0):FITS[sheet.fit||0].railPitch;
   // A taller canvas cannot open the gap between parallel cable rails. Reserve
   // both route spacing and horizontal room when a measured caption needs it.
   const stableReserve=dynamic?Math.max(Math.max(0,edges.length-8)*24,captionReserve(aliasProject,sheet,edges,db)):0;
   const railReserve=Math.max(stableReserve,Math.max(0,edges.length-8)*24+Math.max(0,edges.length-1)*(railPitch-12));
-  const measuredHeight=dynamic?sheet.ids.reduce((sum,id)=>sum+measurement(aliasProject,viewDevice(sheet,id),edges.filter(e=>e.a===id||e.b===id),positions,(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH).height+expansion,0):0;
-  const W=dynamic?baseW+expansion+railReserve*2+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110,520+edges.length*110):baseH,BOTTOM=H-74;
+  const weight=strokeWidth(aliasProject,sheet.name),owners=sheet.ids.filter(id=>!db.devices.get(id).owner||!sheet.ids.includes(db.devices.get(id).owner)),hasPositions=Object.entries(aliasProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|device|')&&(Number.isFinite(patch.x)||Number.isFinite(patch.y)));
+  const measuredEdges=edges.map(e=>({...e,weight:cablePatch(aliasProject,{name:sheet.name},cableName(db,e))?.weight||cableWeight}));
+  const measured=new Map(dynamic?owners.map(id=>[id,measurement(aliasProject,viewDevice(sheet,id),measuredEdges.filter(e=>e.a===id||e.b===id),positions,(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH,1,weight,railPitch>12)]):[]);
+  const packing=dynamic&&!hasPositions&&!sheet.columnOnly?compactLayout(owners.map(id=>({id,w:WIDTH*deviceScale(aliasProject,viewDevice(sheet,id)),h:measured.get(id).height+expansion})),edges,{gapX:Math.max(48,railPitch*Math.max(0,...owners.map(id=>edges.filter(e=>e.a===id||e.b===id).length))+24),gapY:12,maxColumns:4,minimumWidth:baseW,frameWidth:LEFT+stableReserve+76,frameHeight:TOP+110}):null;
+  sheet.packedColumns=packing?.columns||1;
+  const measuredHeight=dynamic?(packing?.h??[...measured.values()].reduce((sum,m)=>sum+m.height+expansion,0)):0;
+  const W=dynamic?Math.max(baseW+expansion+railReserve*2+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)),packing?LEFT+stableReserve+packing.w+railReserve+38:0):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110):baseH,BOTTOM=H-74;
   const pageProject=dynamic?{...aliasProject,_pageGeometry:{...aliasProject._pageGeometry,core:{width:W,height:H}}}:aliasProject;
   const fit=FITS[sheet.fit||0],fixedSidebar=Object.entries(pageProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|')&&/(?:module-legend|\|legend\|)/.test(key)&&['x','y','w','h'].some(k=>Number.isFinite(patch[k]))),sidebar=coreSidebar(fixedSidebar?244:Math.min(fit.sidebarWidth,W<1000?176:244));
   const panelOptions=presentation(pageProject,sheet.name).panel;
@@ -163,20 +172,21 @@ export function corePages(project,inventory){
   if(dynamic)sidebar.bodyLeft+=stableReserve;
   if(W<1200)sidebar.bodyLeft=Math.max(sidebar.contentLeft+38,Math.min(sidebar.bodyLeft,W-738));
   const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;page.corePageId=sheet.corePageId;
+  page.connectionLayout={railPitch,expansion,padding:fit.padding,spreadHandoffs:!!sheet.spreadHandoffs,columnOnly:!!sheet.columnOnly};
   const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);rect(items,sidebar.divider,145,1,H-214,C.rule);items.at(-1).pageFrame='sidebar';
   const hiddenReferences=new Set(sheet.hiddenReferences||[]);
-  const used=edges.filter(e=>(localPort(sheet,e.a,e.ap)&&localPort(sheet,e.b,e.bp)||sheet.showReferences!==false&&!hiddenReferences.has(linkKey(e))&&(localPort(sheet,e.a,e.ap)||localPort(sheet,e.b,e.bp)))&&(!sheet.linkIds||sheet.linkIds.has(e.idx)));
+  const used=measuredEdges.filter(e=>(localPort(sheet,e.a,e.ap)&&localPort(sheet,e.b,e.bp)||sheet.showReferences!==false&&!hiddenReferences.has(linkKey(e))&&(localPort(sheet,e.a,e.ap)||localPort(sheet,e.b,e.bp)))&&(!sheet.linkIds||sheet.linkIds.has(e.idx)));
   const internal=used.filter(e=>localPort(sheet,e.a,e.ap)&&localPort(sheet,e.b,e.bp)),external=used.filter(e=>!localPort(sheet,e.a,e.ap)||!localPort(sheet,e.b,e.bp));
-  const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.views,sheet.fit,sheet.spreadHandoffs,sheet.expansion,sheet.labelClearance,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
+  const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.views,sheet.fit,sheet.spreadHandoffs,sheet.expansion,sheet.labelClearance,sheet.columnOnly,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
   if(cached?.signature===signature)return cached.pages;
   const width=Math.min(WIDTH,W-(W<1000?276:W<1200?344:430)-38);
-  const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,viewDevice(sheet,id),used.filter(e=>e.a===id&&localPort(sheet,id,e.ap)||e.b===id&&localPort(sheet,id,e.bp)).slice(0,dynamic?Infinity:8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding)]));
+  const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,viewDevice(sheet,id),used.filter(e=>e.a===id&&localPort(sheet,id,e.ap)||e.b===id&&localPort(sheet,id,e.bp)).slice(0,dynamic?Infinity:8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding,weight,railPitch>12)]));
   const height=sheet.ids.reduce((n,id)=>n+pageSizes.get(id).height,0),scale=1;
-  if(height>BOTTOM-TOP)throw Object.assign(Error('This core page needs more room to keep the equipment readable.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
+  if((packing?.h??height)>BOTTOM-TOP)throw Object.assign(Error('This core page needs more room to keep the equipment readable.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   let row=dynamic?TOP:TOP+(BOTTOM-TOP-height*scale)/2;
   sheet.ids.filter(id=>!db.devices.get(id).owner||!members.has(db.devices.get(id).owner)).forEach((id,i)=>{
-   const d=viewDevice(sheet,id),m=pageSizes.get(id),b=bounds(d,row+m.top*scale,width,sidebar.bodyLeft);b[3]=m.body*scale;
-   const node=addDevice(page,pageProject,d,b,'core-'+i,{fitWidth:d.kind!=='handoff',padding:fit.padding});nodes.set(id,node);
+   const d=viewDevice(sheet,id),m=pageSizes.get(id),position=packing?.positions.get(id),b=bounds(d,(position?TOP+position.y:row)+m.top*scale,width,sidebar.bodyLeft+(position?.x||0));b[3]=m.body*scale;
+   const node=addDevice(page,pageProject,d,b,'core-'+i,{fitWidth:d.kind!=='handoff',...m.equipment});nodes.set(id,node);
    if(d.kind!=='handoff'){
     const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleY=node.y-titleHeight-6;
     label(items,node.x,titleY,titleWidth,titleHeight,titleValue,titleSize,titlePatch.bold??true);Object.assign(items.at(-1),{full:true,titleOwner:id,editKey:titleKey});
@@ -217,7 +227,7 @@ export function corePages(project,inventory){
   const stack=[...nodes.values()].filter(n=>n.kind!=='handoff');
   const routingBounds=stack.length?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
   let planned;
-  try{planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding),railPitch,scale,obstacles});}
+  try{planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding,weight,railPitch>12),railPitch,scale,obstacles});}
   catch(error){if(error.code==='CORE_LAYOUT_CAPACITY')error.page=page.name;throw error;}
   if(planned.cost[0]&&[...nodes.values()].every(n=>n.x>=sidebar.contentLeft&&n.x+n.w<=(W-38)&&n.y>=145&&n.y+n.h<=(H-69)))throw Object.assign(Error('This core page needs more room to route cables around the equipment.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   const outer={left:Math.min(routingBounds.left-18,...planned.routes.filter(r=>r.side==='left').map(r=>r.rail)),right:Math.max(routingBounds.right+18,...planned.routes.filter(r=>r.side==='right').map(r=>r.rail))},requests=[];
@@ -257,6 +267,9 @@ export function corePages(project,inventory){
  }catch(error){
   const index=packed.findIndex(sheet=>sheet.name===error.page),sheet=packed[index];
   if(error.code!=='CORE_LAYOUT_CAPACITY'||!sheet)throw error;
+  if(project._organizeCandidate===true||project._organizeCandidate?.family==='core'&&project._organizeCandidate.name===sheet.name)throw error;
+  if(dynamic&&error.labelClearance>(sheet.labelClearance||12)){sheet.labelClearance=error.labelClearance;sheet.expansion=0;sheet.spreadHandoffs=false;continue;}
+  if(sheet.packedColumns>1&&!sheet.columnOnly){sheet.columnOnly=true;continue;}
   // Keep the cards compact; use more of the same stack width only when their
   // cable labels or routes cannot fit safely in the tighter arrangement.
   if(!sheet.spreadHandoffs&&sheet.ids.some(id=>attachments.get(id)?.length>1)){sheet.spreadHandoffs=true;continue;}

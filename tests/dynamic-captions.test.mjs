@@ -23,7 +23,7 @@ test('dynamic parallel stack uplinks keep complete readable labels, clear routes
 });
 
 test('dynamic wireless sheets grow for complete upper and lower captions while retaining paper limits',()=>{
- const project=tallWirelessCaptions(),pages=buildPages(project).filter(p=>p.title==='Wireless Connections');assert.equal(pages.length,2);assert.ok(pages.every(p=>p.height>975));
- for(const page of pages){glued(page);const paths=page.items.filter(i=>i.type==='path'),captions=page.items.filter(i=>i.type==='text'&&i.value.startsWith('LAB-AP-'));assert.equal(captions.length,1);const title=captions[0];assert.ok(project.devices.some(d=>d.name===title.value));assert.ok(title.y+title.h<page.height-47);assert.ok(!paths.some(p=>pathCrossesText(p,title)));}
+ const project=tallWirelessCaptions(),pages=buildPages(project).filter(p=>p.title==='Wireless Connections');assert.equal(pages.length,1);assert.ok(pages.every(p=>p.height>975));
+ for(const page of pages){glued(page);const paths=page.items.filter(i=>i.type==='path'),captions=page.items.filter(i=>i.type==='text'&&i.value.startsWith('LAB-AP-'));assert.equal(captions.length,2);for(const title of captions){assert.ok(project.devices.some(d=>d.name===title.value));assert.ok(title.y+title.h<page.height-47);assert.ok(!paths.some(p=>pathCrossesText(p,title)));}}
  assert.throws(()=>buildPages({...project,layout:{pageSetup:{overrides:{wireless:{preset:'original'}}}}}),/wireless caption needs more space/);
 });

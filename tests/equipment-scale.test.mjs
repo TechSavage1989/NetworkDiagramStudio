@@ -33,12 +33,13 @@ test('paper changes and reordering reorganize hardware without relative scale ch
  for(const preset of ['letter','a3'])for(const reverse of [false,true]){const site=fixture();if(reverse)site.devices.reverse();site.layout={pageSetup:{default:{preset}}};validate(site,buildPages(site));}
  const site=fixture(),small=buildPages({...site,layout:{pageSetup:{default:{preset:'letter'}}}}),large=buildPages({...site,layout:{pageSetup:{default:{preset:'a3'}}}});assert.ok(maps(large).filter(p=>p.portMap.overview).length<=maps(small).filter(p=>p.portMap.overview).length);
 });
-test('wireless stack members keep switch width and real endpoint ownership on separate sheets',async()=>{
+test('wireless pages keep whole dynamic stacks at a shared width with real endpoint ownership',async()=>{
  const site=fixture();site.devices=site.devices.filter(d=>d.id!=='chassis');site.devices.push({id:'single',name:'LAB-SINGLE',kind:'switch',model:'JL558A',ports:[{name:'1/41'}]});
  for(const [i,[id,port]] of [['stack5','1/41'],['stack5','5/41'],['stack8','8/41'],['single','1/41']].entries()){const ap={id:'ap'+i,name:'LAB-AP-'+i,kind:'ap',model:'AP-515',ports:[{name:'eth0'}]};site.devices.push(ap);site.links.push({a:id,ap:port,b:ap.id,bp:'eth0',media:'copper',speed:'1 Gbps'});}
  // An LLDP-only interface still belongs to its declared physical member.
  site.devices.find(d=>d.id==='stack5').ports=site.devices.find(d=>d.id==='stack5').ports.filter(p=>p.name!=='5/41');
- const pages=buildPages(site),wireless=pages.filter(p=>p.title==='Wireless Connections'),panels=bodies(wireless);assert.equal(panels.length,4);assert.equal(new Set(panels.map(p=>p.w)).size,1);assert.equal(new Set(panels.map(p=>p.h.toFixed(6))).size,1);
+ const pages=buildPages(site),wireless=pages.filter(p=>p.title==='Wireless Connections'),panels=bodies(wireless);assert.equal(panels.length,3);assert.equal(new Set(panels.map(p=>p.w)).size,1);
+ for(const panel of panels){const device=site.devices.find(d=>d.id===panel.sourceId),ratio=deviceFaceplate(device,{padding:equipmentPadding,memberGaps:panel.memberGaps}).ratio;assert.ok(Math.abs(panel.w/panel.h-ratio)<1e-8);assert.equal(new Set(panel.panelRegions?.map(r=>r.memberId).filter(Boolean)).size,device.stackMembers?.length||0);}
  for(const p of wireless)for(const cable of p.items.filter(i=>i.type==='path')){const panel=p.items.find(i=>i.key===cable.from.device);assert.ok(panel.ports[cable.from.port]);assert.ok(Math.abs(cable.points[0][0]-panel.x-panel.ports[cable.from.port][0]*panel.w)<1e-7);}
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer());assert.ok(parts.has('visio/pages/page1.xml'));
 });

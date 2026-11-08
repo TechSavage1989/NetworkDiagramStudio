@@ -166,12 +166,12 @@ function buildFaceplate(device,options={}){
    let panel=baseLayout(profile);if(panel)panel=rearExpansion(panel,profile,{ports:localPorts,modules:modules.filter(m=>String(m.member)===String(member.id))});
    return {member,profile,panel,localPorts,units:1/(panel?.ratio||10.2)};
   });
-  const gap=.035*Math.max(.49,Math.min(1,options.padding??1))**2,total=panels.reduce((n,p)=>n+p.units,0)+gap*(panels.length-1);let cursor=0;
-  for(const {member,profile,panel,localPorts,units} of panels){
-   const top=cursor/total,height=units/total;cursor+=units+gap;
-   if(!panel){verified=false;regions.push({y:top,h:height});for(const c of genericDeviceSymbol('switch').children)children.push({...c,name:'Member '+member.id+': '+c.name,y:top+c.y*height,h:c.h*height});text(children,.24,top+height*.12,.67,height*.18,[device.vendor,member.model].filter(Boolean).join(' ')+' / layout unconfirmed',6);continue;}
+  const gap=.035*Math.max(.49,Math.min(1,options.padding??1))**2,gaps=panels.slice(0,-1).map((p,i)=>{const value=options.memberGaps?.[p.member.id+'/'+panels[i+1].member.id];return Number.isFinite(value)&&value>gap?value:gap;}),total=panels.reduce((n,p)=>n+p.units,0)+gaps.reduce((a,b)=>a+b,0);let cursor=0;
+  for(const [index,{member,profile,panel,localPorts,units}] of panels.entries()){
+   const top=cursor/total,height=units/total;cursor+=units+(gaps[index]||0);
+   if(!panel){verified=false;regions.push({y:top,h:height,memberId:String(member.id)});for(const c of genericDeviceSymbol('switch').children)children.push({...c,name:'Member '+member.id+': '+c.name,y:top+c.y*height,h:c.h*height});text(children,.24,top+height*.12,.67,height*.18,[device.vendor,member.model].filter(Boolean).join(' ')+' / layout unconfirmed',6);continue;}
    mapObserved(panel,profile,{ports:localPorts});
-   for(const region of panel.regions)regions.push({y:top+region.y*height,h:region.h*height});
+   for(const region of panel.regions)regions.push({y:top+region.y*height,h:region.h*height,memberId:String(member.id)});
    for(const c of panel.children)children.push({...c,name:'Member '+member.id+': '+(c.name||c.type),x:c.x,y:top+c.y*height,w:c.w,h:c.h*height,...(c.anchorOrigin?{anchorOrigin:[c.anchorOrigin[0],top+c.anchorOrigin[1]*height]}:{})});
    for(const port of localPorts){const pt=panel.ports[port.name];if(pt)ports[port.name]=[pt[0],top+pt[1]*height];}
    if(['cx','classic'].includes(profile.naming))for(const s of panel.sockets.filter(s=>s.primary&&/^(?:[AB])?\d+$/.test(s.name))){
