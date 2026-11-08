@@ -113,6 +113,15 @@ function markerSize(inv,style=normalStyle){
  const fits=width=>specs.every(({socket,port})=>{const h=width*(/RJ|copper/i.test(socket.media)?23.2:16.2)/25.2,columns=Math.max(1,Math.floor((width-4)/step)),bottom=port.disabled||port.taggedVlanPolicy?style.numberFont*1.2+1:3,lines=Math.max(0,Math.floor((h-bottom-top)/step)+1);return markerVlans(inv,port).length<=columns*lines;});
  while(width<=512&&!fits(width))width+=.5;if(width>512)throw new ReportCapacityError('VLAN membership exceeds readable marker capacity. Use the complete inventory table for this interface.');return width;
 }
+// Port maps size every tagged dot alike: the largest radius at which the most
+// filled port still holds all of its markers, never below the style's own
+// builder radius and never past a readable maximum for the face.
+function fillRadius(inv,plan){
+ const specs=inv.groups.flatMap(group=>group.socketLayout.map(socket=>({socket,port:inv.ports.find(port=>port.group===group.id&&port.number===socket.number)}))).filter(row=>row.port),w=plan.portWidth,base=plan.style.markerRadius;
+ const fits=r=>specs.every(({socket,port})=>{const h=w*(/RJ|copper/i.test(socket.media)?23.2:16.2)/25.2,step=r*2+1,columns=Math.max(1,Math.floor((w-4)/step)),bottom=port.disabled||port.taggedVlanPolicy?plan.style.numberFont*1.2+1:3,lines=Math.max(0,Math.floor((h-bottom-r*2-2.2)/step)+1);return markerVlans(inv,port).length<=columns*lines;});
+ if(!fits(base))return base;
+ const cap=Math.max(base,Math.min(3.8,w*.11));for(let r=cap;r>base;r=Math.round((r-.05)*100)/100)if(fits(r))return r;return base;
+}
 function groupPlan(inv,group,portWidth,style=normalStyle){
  const ports=inv.ports.filter(port=>port.group===group.id),pitch=portWidth+(style.compact?1:2),faceHeight=portWidth*23.2/25.2,layout=group.socketLayout,rowsCount=Math.max(...layout.map(socket=>socket.row))+1,numberFont=style.numberFont,rowPitch=faceHeight+(style.compact&&rowsCount<=2?1.4:numberFont*1.2+(style.compact?3:6));
  if(group.configuredInterfaces)return {group,ports,configured:true,width:Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),height:27+Math.max(1,ports.length)*22};
@@ -146,7 +155,7 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
   // Copper faces keep only the latch bar, as the builder draws them: small
   // decorative contact pins read as VLAN markers on an enlarged sheet.
   if(!optical)rect(a,sx+w*.32,sy+h-3,w*.36,2,'#4c5c65');else rect(a,sx+3,sy+h-2.1,w-6,.7,'#61727c');
-  const markerIds=markerVlans(inv,port),radius=plan.style.markerRadius,step=radius*2+1,cols=Math.max(1,Math.floor((w-4)/step)),bottomReserve=port.disabled||port.taggedVlanPolicy?plan.numberFont*1.2+1:3,availableRows=Math.max(0,Math.floor((h-bottomReserve-radius*2-2.2)/step)+1),markerTop=sy+2.2;
+  const markerIds=markerVlans(inv,port),radius=plan.markerRadius??plan.style.markerRadius,step=radius*2+1,cols=Math.max(1,Math.floor((w-4)/step)),bottomReserve=port.disabled||port.taggedVlanPolicy?plan.numberFont*1.2+1:3,availableRows=Math.max(0,Math.floor((h-bottomReserve-radius*2-2.2)/step)+1),markerTop=sy+2.2;
   if(markerIds.length>cols*availableRows)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});
   markerIds.forEach((id,index)=>{const cx=sx+2.6+radius+(index%cols)*step,cy=markerTop+radius+Math.floor(index/cols)*step,extra={editKey:socketKey+'|vlan|'+id,reportPort:port.id,reportPortRole:voiceVlan(inv,port,id)?'voice':'tagged',vlanId:id,sourceId:item.id,name:'VLAN '+id+(voiceVlan(inv,port,id)?' voice':' tagged')};if(voiceVlan(inv,port,id)){diamond(a,cx-radius-.3,cy-radius-.3,radius*2+.6,'#ffffff','#ffffff',.3);diamond(a,cx-radius,cy-radius,radius*2,palette.vlans[id],'#263c49',.5,extra);}else{ellipse(a,cx-radius-.3,cy-radius-.3,radius*2+.6,radius*2+.6,'#ffffff','#ffffff',.3);ellipse(a,cx-radius,cy-radius,radius*2,radius*2,palette.vlans[id],'#263c49',.5,extra);}});
   if(port.disabled)text(a,sx+w-9,sy+h-plan.numberFont*1.2,8,'!',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'center',{editKey:socketKey+'|disabled',reportPort:port.id,reportPortRole:'disabled'});
@@ -171,10 +180,14 @@ export function reportDiagram(item,palette,request,{wall=false}={}){
  let failure;
  for(const style of wall?[normalStyle]:[...(request?.fill?largeStyles:[]),normalStyle,...compactStyles]){
   const sheet=paperOf(request),plan=devicePlan(item,style),width=wall?Math.max(sheet.width,plan.width+margin*2):sheet.width;
+  // A port map (request.fill) draws one dot size: as large as its most filled
+  // port allows, or the common size every port map in the set shares.
+  const fit=request?.fill&&!wall?fillRadius(item.inventory,plan):null,radius=fit==null?null:Math.min(fit,item.markerRadius??fit);
+  if(radius!=null)for(const band of plan.bands)for(const panel of band.panels)if(panel.plan)panel.plan.markerRadius=radius;
   if(plan.width>width-margin*2){failure=new ReportCapacityError('The complete physical banks of '+displayName(item.inventory)+' exceed readable '+reportPageLabel(request.paper)+' width. Use larger paper or the wall chart.',{deviceId:item.id,requiredWidth:plan.width+margin*2});continue;}
   const p=page(request,item.id+'|'+(wall?'wall':'a4'),displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),wall?'wall':'onePage',[item.id],width,sheet.height,style.compact),keyHeight=legendHeight(item.inventory,palette,width-margin*2,style.compact,!!request?.fill),gap=style.compact?4:12,needed=p.contentTop+plan.height+gap+keyHeight+(style.compact?49:59);
   if(wall){p.height=Math.max(p.height,needed);p.paper={preset:'custom',orientation:p.width>=p.height?'landscape':'portrait',widthMm:p.width*25.4/96,heightMm:p.height*25.4/96};}else if(needed>p.height+.01){failure=new ReportCapacityError('The complete port map and VLAN key need '+Math.ceil(needed)+' px of readable height; '+reportPageLabel(request.paper)+' provides '+Math.floor(p.height)+' px. The booklet keeps all content on continued sheets.',{deviceId:item.id,requiredHeight:needed});continue;}
-  try{const bottom=drawBlock(p,plan,margin,p.contentTop,palette,{heading:false});legend(p,bottom+gap,item.inventory,palette);p.widthMm=p.width*25.4/96;p.heightMm=p.height*25.4/96;p.reportGeometryScale=style.scale;p.reportNumberFont=style.numberFont;return finish(p,request,palette,item.inventory);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;failure=error;}
+  try{const bottom=drawBlock(p,plan,margin,p.contentTop,palette,{heading:false});legend(p,bottom+gap,item.inventory,palette);p.widthMm=p.width*25.4/96;p.heightMm=p.height*25.4/96;p.reportGeometryScale=style.scale;p.reportNumberFont=style.numberFont;if(fit!=null){p.reportMarkerFit=fit;p.reportMarkerRadius=radius;}return finish(p,request,palette,item.inventory);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;failure=error;}
  }
  throw failure;
 }

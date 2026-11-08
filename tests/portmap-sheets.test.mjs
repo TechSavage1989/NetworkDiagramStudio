@@ -161,3 +161,20 @@ test('faceplate captions grow to a readable size without pushing a dense chassis
  const blocked=page.items.filter(i=>i.portNumberRole==='text'||i.portNumberRole==='face');
  for(const c of plate.children.filter(c=>c.type==='text'&&c.size>5)){const box={x:plate.x+c.x*plate.w,y:plate.y+c.y*plate.h+(c.h*plate.h-c.size*1.2)/2,w:c.w*plate.w,h:c.size*1.2};assert.ok(!blocked.some(b=>intersects(box,b,0)),c.value+' stays clear of numbers and faces');}
 });
+
+test('builder port maps share one tagged-dot size, the largest that fills the most filled port',()=>{
+ const vlans=Array.from({length:30},(_,i)=>({id:10+i,name:'Lab VLAN '+(10+i)})),ids=vlans.map(v=>v.id);
+ const chassis=(id,max)=>({id,name:'LAB-'+id,kind:'switch',vendor:'HPE Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,
+  ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:ids[0],tagged:ids.slice(6,6+(i%max)+1)})),...Array.from({length:24},(_,i)=>({name:'C'+(i+1),state:'up',native:ids[i%6],tagged:ids.slice(6,6+(i%max)+1)}))]});
+ const sheets=project=>buildAllPages(project).filter(page=>page.portMap?.switchportSheet),sizes=page=>new Set(page.items.filter(i=>i.reportPortRole==='tagged'&&i.type==='ellipse').map(i=>i.w.toFixed(3)));
+ // Alone, a sparse map grows its dots past the builder radius; a denser map is
+ // limited by its most filled port.
+ const [sparse]=sheets({name:'Sparse',devices:[chassis('sparse',3)],links:[],layout:{}}),[dense]=sheets({name:'Dense',devices:[chassis('dense',14)],links:[],layout:{}});
+ assert.ok(sparse.reportMarkerFit>dense.reportMarkerFit,'fewer markers allow larger dots');assert.ok(dense.reportMarkerFit>=1.5,'dots never shrink below the builder minimum');
+ for(const page of [sparse,dense]){assert.equal(sizes(page).size,1,'one dot size per map');assert.ok(Math.abs([...sizes(page)][0]/2-page.reportMarkerFit)<1e-3,'the map uses its fill size');}
+ // Together, every map draws the common size of the most filled port.
+ const both=sheets({name:'Both',devices:[chassis('sparse',3),chassis('dense',14)],links:[],layout:{}}),all=new Set(both.flatMap(page=>[...sizes(page)]));
+ assert.equal(both.length,2);assert.equal(all.size,1,'every port map shares one dot size');assert.ok(Math.abs([...all][0]/2-dense.reportMarkerFit)<1e-3,'the common size fills the most filled port');
+ // Every tagged VLAN is still drawn.
+ for(const page of both){const d=page.portMap.device==='dense'?chassis('dense',14):chassis('sparse',3);assert.equal(page.items.filter(i=>i.reportPortRole==='tagged').length,d.ports.reduce((n,p)=>n+p.tagged.length,0));}
+});

@@ -73,6 +73,14 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
   let pages=null;try{pages=assertScenes([reportDiagram(item,palette,request)]);}catch{try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
   if(pages?.length)sheets.set(item.id,pages);
  }
+ // Every port map shares one tagged-dot size: the largest that still fills
+ // the most filled port of any map. Maps that could take larger dots are
+ // redrawn at that common size.
+ const fits=items.map(item=>[item,sheets.get(item.id)?.[0]?.reportMarkerFit]).filter(([,fit])=>Number.isFinite(fit)),common=Math.min(...fits.map(([,fit])=>fit));
+ for(const [item,fit] of fits){
+  if(fit<=common+1e-9)continue;item.markerRadius=common;
+  try{sheets.set(item.id,assertScenes([reportDiagram(item,palette,request)]));}catch{}
+ }
  return sheets;
 }
 export function buildSwitchportReports(project){
