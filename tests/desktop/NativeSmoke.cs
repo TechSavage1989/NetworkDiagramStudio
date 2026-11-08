@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.IO.Compression;
 using System.Xml.Linq;
@@ -205,8 +206,115 @@ internal sealed partial class Studio
         await RequireEditor("if(document.querySelector('#canvas svg').viewBox.baseVal.width!==1200)throw Error('Original page dimensions were not restored')","original scene bounds");
     }
     internal string? TestOutputFolder;
-    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string cls,string caption);
-    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
+    delegate bool EnumWindowCallback(IntPtr hwnd,IntPtr parameter);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowCallback callback,IntPtr parameter);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint processId);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd,StringBuilder name,int count);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd,StringBuilder text,int count);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd,uint command);
+    [DllImport("user32.dll")] static extern IntPtr GetDlgItem(IntPtr hwnd,int id);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern bool IsWindowEnabled(IntPtr hwnd);
+    [DllImport("user32.dll",SetLastError=true)] static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
+    static async Task AcceptExportDialog(IntPtr owner,Action<string> report,CancellationToken cancel)
+    {
+        IntPtr dialog=IntPtr.Zero,saveButton=IntPtr.Zero;
+        while(saveButton==IntPtr.Zero)
+        {
+            cancel.ThrowIfCancellationRequested();
+            EnumWindows((hwnd,_)=>{
+                GetWindowThreadProcessId(hwnd,out var processId);
+                if(processId!=Environment.ProcessId)return true;
+                var text=new StringBuilder(256);GetClassName(hwnd,text,text.Capacity);
+                if(text.ToString()!="#32770")return true;
+                text.Clear();GetWindowText(hwnd,text,text.Capacity);
+                if(text.ToString()!="Save exported file")return true;
+                var parent=hwnd;bool owned=false;
+                for(int depth=0;depth<16 && parent!=IntPtr.Zero;depth++)
+                {
+                    parent=GetWindow(parent,4); // GW_OWNER, including an intermediate modal owner.
+                    if(parent==owner){owned=true;break;}
+                }
+                if(!owned)return true;
+                var button=GetDlgItem(hwnd,1); // IDOK is the native Save control.
+                bool ready=IsWindowVisible(hwnd)&&IsWindowEnabled(hwnd)&&button!=IntPtr.Zero&&IsWindowVisible(button)&&IsWindowEnabled(button);
+                report($"owned Save dialog=0x{hwnd.ToInt64():x}, Save control=0x{button.ToInt64():x}, ready={ready}");
+                if(!ready)return true;
+                dialog=hwnd;saveButton=button;return false;
+            },IntPtr.Zero);
+            if(saveButton==IntPtr.Zero)await Task.Delay(100,cancel);
+        }
+        cancel.ThrowIfCancellationRequested();
+        // Send exactly one real button command, after native dialog readiness.
+        if(!PostMessage(dialog,0x0111,(IntPtr)1,saveButton))
+            throw new Exception("The Save command could not be posted. Win32 error: "+Marshal.GetLastWin32Error());
+        report($"Save accepted command posted to 0x{dialog.ToInt64():x}; awaiting dialog closure");
+        while(IsWindow(dialog)&&IsWindowVisible(dialog))await Task.Delay(100,cancel);
+        report("owned Save dialog closed after one Save command");
+    }
+    async Task<string> SaveNativeExport(string buttonId,string extension,string folder)
+    {
+        var core=browser.CoreWebView2;
+        var owner=Handle;
+        var completed=new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CoreWebView2DownloadOperation? operation=null;
+        string downloadState="DownloadStarting not observed",dialogState="waiting for an owned visible/enabled Save dialog";
+        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        void ObserveDownload()
+        {
+            if(operation==null)return;
+            try
+            {
+                var state=operation.State;
+                downloadState=$"state={state}, interrupt={operation.InterruptReason}, received={operation.BytesReceived}, total={operation.TotalBytesToReceive}, path={operation.ResultFilePath}";
+                if(state==CoreWebView2DownloadState.Interrupted)
+                    completed.TrySetException(new Exception("The native download was interrupted: "+downloadState));
+                else if(state==CoreWebView2DownloadState.Completed)
+                    completed.TrySetResult(operation.ResultFilePath);
+            }
+            catch(Exception error){completed.TrySetException(error);}
+        }
+        EventHandler<object> changed=(_,_)=>ObserveDownload();
+        EventHandler<CoreWebView2DownloadStartingEventArgs> starting=(_,e)=>{
+            if(operation!=null){completed.TrySetException(new Exception("More than one download started for "+extension));return;}
+            operation=e.DownloadOperation;
+            operation.StateChanged+=changed;operation.BytesReceivedChanged+=changed;
+            if(!operation.Uri.StartsWith("blob:"+Origin+"/",StringComparison.Ordinal)||!string.Equals(Path.GetExtension(e.ResultFilePath),extension,StringComparison.OrdinalIgnoreCase))
+                completed.TrySetException(new Exception("Unexpected native download: "+operation.Uri+" -> "+e.ResultFilePath));
+            RecordEditorStartup("Native export DownloadStarting: "+extension+", suggested path="+e.ResultFilePath);
+            ObserveDownload();
+        };
+        core.DownloadStarting+=starting;
+        // Only HWND polling runs off-thread. WebView properties and event handlers
+        // stay on the UI thread, including the host-updated final result path.
+        var chooser=Task.Run(()=>AcceptExportDialog(owner,value=>Volatile.Write(ref dialogState,value),deadline.Token));
+        try
+        {
+            await ClickEditorButton(buttonId).WaitAsync(deadline.Token);
+            await Task.WhenAll(chooser,completed.Task).WaitAsync(deadline.Token);
+            string saved=Path.GetFullPath(await completed.Task);
+            if(!string.Equals(Path.GetDirectoryName(saved),Path.TrimEndingDirectorySeparator(Path.GetFullPath(folder)),StringComparison.OrdinalIgnoreCase)||!string.Equals(Path.GetExtension(saved),extension,StringComparison.OrdinalIgnoreCase))
+                throw new Exception("The completed export has an unexpected destination: "+saved);
+            var file=new FileInfo(saved);
+            if(!file.Exists||file.Length==0||file.Length!=operation!.BytesReceived)
+                throw new Exception("The completed export is missing, empty or has a different byte count: "+saved);
+            RecordEditorStartup("Native export completed: "+downloadState+"; "+Volatile.Read(ref dialogState));
+            return saved;
+        }
+        catch(Exception error)
+        {
+            ObserveDownload();
+            throw new Exception($"Native {extension} export failed: {downloadState}; dialog={Volatile.Read(ref dialogState)}; dialog error={chooser.Exception?.GetBaseException().Message ?? "none"}",error);
+        }
+        finally
+        {
+            deadline.Cancel();
+            try{await chooser;}catch{ /* Preserve the export failure and its dialog diagnostics. */ }
+            core.DownloadStarting-=starting;
+            if(operation!=null){operation.StateChanged-=changed;operation.BytesReceivedChanged-=changed;}
+        }
+    }
     async Task ClickEditorButton(string id)
     {
         var key=JsonSerializer.Serialize(id);
@@ -302,27 +410,11 @@ internal sealed partial class Studio
         if(browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled)throw new Exception("Browser context menus must be disabled.");
         await RequireEditor("const e=new MouseEvent('contextmenu',{bubbles:true,cancelable:true});document.getElementById('canvas').dispatchEvent(e);if(!e.defaultPrevented)throw Error('Browser context menu was not suppressed')","drawing context menu");
         TestOutputFolder=folder;
-        Task ChooseExport(string format) => Task.Run(async()=>{
-            for(int attempt=0; attempt<100; attempt++) {
-                var hwnd=FindWindow("#32770","Save exported file");
-                if(hwnd!=IntPtr.Zero) { await Task.Delay(400); PostMessage(hwnd,0x0111,(IntPtr)1,IntPtr.Zero); return; }
-                await Task.Delay(100);
-            }
-            throw new Exception("The real Save As dialog was not displayed for "+format+".");
-        });
-        var chooser=ChooseExport("SVG");
         await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('sample').click()");
-        await ClickEditorButton("svg");
-        await chooser;
-        string? saved=null;
-        for(int i=0;i<80;i++) { saved=Directory.EnumerateFiles(folder,"*.svg").FirstOrDefault(); if(saved!=null) break; await Task.Delay(125); }
-        if(saved==null || !File.ReadAllText(saved).Contains("<svg")) throw new Exception("The selected sample SVG page was not saved.");
-        chooser=ChooseExport("Visio");
-        await ClickEditorButton("export");
-        await chooser;
-        string? drawing=null;
-        for(int i=0;i<80;i++){drawing=Directory.EnumerateFiles(folder,"*.vsdx").FirstOrDefault();if(drawing!=null)break;await Task.Delay(125);}
-        if(drawing==null)throw new Exception("The native Visio export was not saved.");
+        string saved=await SaveNativeExport("svg",".svg",folder);
+        if(!File.ReadAllText(saved).Contains("<svg")||XDocument.Load(saved).Root?.Name!=XName.Get("svg","http://www.w3.org/2000/svg"))
+            throw new Exception("The selected sample SVG page was not saved as a valid SVG document.");
+        string drawing=await SaveNativeExport("export",".vsdx",folder);
         using(var package=ZipFile.OpenRead(drawing)){
             foreach(var required in new[]{"[Content_Types].xml","visio/document.xml","visio/pages/pages.xml","visio/windows.xml"})if(package.GetEntry(required)==null)throw new Exception("Native Visio export is missing "+required);
             foreach(var part in package.Entries.Where(p=>p.FullName.EndsWith(".xml")||p.FullName.EndsWith(".rels"))){using var stream=part.Open();XDocument.Load(stream);}
