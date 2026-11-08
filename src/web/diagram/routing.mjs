@@ -681,9 +681,11 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    for(const v of [best.a,best.b])ends.set(v.e.idx+'/'+v.which,v);
   }
   if(neat)neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform});
-  // Continuation badges stay outside every finished left rail.
+  // Off-page tags line up in one column outside every finished left rail and
+  // every lane of the other off-page cables, so no cable crosses a tag.
   if(references.length&&[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)){
-   const x=Math.min(referenceX,...routes.filter(r=>!r.v&&Number.isFinite(r.rail)&&r.rail<left).map(r=>r.rail-Math.max(12,ROUTE_STYLE.pitch)));
+   const gap=Math.max(12,ROUTE_STYLE.pitch),lanes=routes.flatMap(r=>r.v?r.points.slice(0,-1):r.points).map(p=>p[0]).filter(x=>x<left);
+   const x=Math.min(referenceX,...routes.filter(r=>!r.v&&Number.isFinite(r.rail)&&r.rail<left).map(r=>r.rail-gap),...lanes.map(x=>x-gap));
    if(x<referenceX&&x>=minX)for(const r of references){r.x=x;r.points=composeRoute(r);}
   }
   return {routes,references,ends};

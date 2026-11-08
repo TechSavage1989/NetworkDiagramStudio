@@ -17,7 +17,7 @@ import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs
 import {diagramViewport} from './viewport.mjs';
 import {arrangeAnchors,arrangeBoxes} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
-import {drawingObjects,drawingBounds,moveDrawingItems,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
+import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
@@ -57,7 +57,7 @@ const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:proj
 const modelKinds=deviceKinds;
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
 const safeKey=s=>typeof s==='string'&&s.length>0&&s.length<=300&&!['__proto__','constructor','prototype'].includes(s);
-const say=message=>{$('feedback').textContent=message;};
+const say=message=>{$('feedback').textContent=message;$('feedback').title=message;};
 const reports=reportTools({getProject:()=>scoped(),getPages:()=>pages,getActive:()=>pages[active],modal,el,field,button,actions,close,download,say,editDevice,run:task,
  saveSettings(settings,updates={}){const before={layout:project.layout,devices:project.devices};project.layout={...before.layout,switchport:settings};project.devices=project.devices.map(device=>updates[device.id]?{...device,...updates[device.id]}:device);try{const prepared=validateDrawing();perform('reports',prepared);}catch(error){Object.assign(project,before);throw error;}},
  showPage(family){const index=pages.findIndex(page=>familyOf(page)===family);if(index>=0){active=index;draw(pages);}},
@@ -200,7 +200,10 @@ function startDrawingMove(key,event){
   const restore=()=>{path.setAttribute('d',before);showSnapGuides();};
   return {preview(dx,dy,e){const next=geometry(dx,dy,e);path.setAttribute('d',next.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));svg.querySelector('.cable-controls')?.remove();cableControls(svg,{...item,points:next.points},next.points.findIndex(p=>p[0]===next.point[0]&&p[1]===next.point[1]));showSnapGuides(next.guides);},commit(dx,dy,e){restore();task(()=>{cablePoint=-1;changeCablePoints(item,geometry(dx,dy,e).points);say('Cable bend moved.');});},cancel(){restore();syncDrawingSelection();}};
  }
- const keys=drawingSelection.has(key)?new Set(drawingSelection):new Set(event.shiftKey||event.ctrlKey||event.metaKey?[...drawingSelection,key]:[key]),boxes=drawingObjects(page).filter(o=>keys.has(o.editKey)&&!keys.has(o.parent?.editKey)).map(drawingBounds).filter(Boolean),targets=snapTargets(page,keys),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&keys.has(n.getAttribute('data-drawing-key'))&&!keys.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
+ const keys=drawingSelection.has(key)?new Set(drawingSelection):new Set(event.shiftKey||event.ctrlKey||event.metaKey?[...drawingSelection,key]:[key]),
+  // WAN cards and cables with saved bends that follow the selection move too.
+  moving=new Set(movementOffsets(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[1,1]]))).keys()),
+  boxes=drawingObjects(page).filter(o=>moving.has(o.editKey)&&!moving.has(o.parent?.editKey)&&!(o.type==='path'&&!keys.has(o.editKey))).map(drawingBounds).filter(Boolean),targets=snapTargets(page,moving),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&moving.has(n.getAttribute('data-drawing-key'))&&!moving.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
  const restore=()=>{for(const [n,s] of original){if(s.transform==null)n.removeAttribute('transform');else n.setAttribute('transform',s.transform);if(s.d)n.setAttribute('d',s.d);}showSnapGuides();};
  const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey);return snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis);};
  return {preview(dx,dy,e){const next=geometry(dx,dy,e),[x,y]=next.delta;if(!started){drawingSelection.clear();for(const k of keys)drawingSelection.add(k);syncDrawingSelection();started=true;}
@@ -212,6 +215,9 @@ function startDrawingMove(key,event){
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{cancelBesidePick();drawingSelection.clear();syncDrawingSelection();};
 $('drawing-organize').onclick=()=>task(()=>connectionLayoutEditor({project:scoped(),page:pages[active],pages,buildPages:source=>buildPages(source,{cache:pageCache}),modal,el,button,actions,run:task,close,apply(result){const before=project.layout;project.layout={...before,lineSpacing:result.lineSpacing||before?.lineSpacing||{}};try{setDrawingEdits(result.edits);}catch(error){project.layout=before;throw error;}viewport.fit();say((result.spacing?'Lines evenly spaced. ':'Connections organized. ')+'Undo restores the previous layout.');}}));
 function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
+// Devices and generated WAN/ISP/egress cards can be placed beside another object.
+const placeable=item=>item?.type==='device'&&item.kind!=='plug'&&(project.devices.some(d=>d.id===item.sourceId)||item.kind==='handoff'&&!!item.ownerKey);
+function selectedPlaceable(){return pages[active]?.items.filter(i=>placeable(i)&&drawingSelection.has(i.editKey))||[];}
 function resizeSelection(factor){if(!drawingObjects(pages[active]).some(i=>drawingSelection.has(i.editKey)&&i.type!=='path'))throw Error('Select a device, text or another object to resize. Cables follow their connected devices.');setDrawingEdits(scaleDrawingItems(pages[active],project.layout?.drawingEdits,drawingSelection,factor));say('Selected items resized. Connections remain attached.');}
 $('drawing-smaller').onclick=()=>task(()=>resizeSelection(.9));$('drawing-larger').onclick=()=>task(()=>resizeSelection(1.1));
 $('drawing-size').onclick=()=>task(()=>{
@@ -228,7 +234,7 @@ $('drawing-size').onclick=()=>task(()=>{
 let besidePick=null;
 function syncBesideTools(){
  $('drawing-beside').hidden=!editDrawing;
- const devices=pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug')||[],chosen=selectedDrawingDevices(),available=devices.some(i=>!chosen.includes(i))&&(chosen.length||devices.length>1);
+ const devices=pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug')||[],chosen=selectedPlaceable(),available=devices.some(i=>!chosen.includes(i))&&(chosen.length||devices.length>1);
  for(const button of $('drawing-beside').querySelectorAll('[data-place]')){button.disabled=!available;button.setAttribute('aria-pressed',String(besidePick?.side===button.dataset.place));}
  $('placement-cancel').disabled=!besidePick;$('placement-spacing').disabled=!!besidePick;
  $('placement-status').textContent=besidePick?(besidePick.chosen.length?'Click the reference device.':'Click the device to move, then the reference device.'):chosen.length?'Choose a side, then click the reference device.':'Choose a side, then click the device to move.';
@@ -243,7 +249,7 @@ function pickBesideReference(key){
  const {page,chosen,side,spacing}=besidePick;
  const reference=page.items.find(item=>item.editKey===key&&item.type==='device'&&item.kind!=='plug');
  if(!chosen.length){
-  if(!reference||!project.devices.some(d=>d.id===reference.sourceId)){say('Click the device you want to move, or press Esc to cancel.');return;}
+  if(!placeable(reference)){say('Click the device or WAN card you want to move, or press Esc to cancel.');return;}
   besidePick.chosen=[reference];drawingSelection.clear();drawingSelection.add(reference.editKey);syncDrawingSelection();
   say('Click the reference device to place '+reference.name+' '+side+' it. Press Esc to cancel.');return;
  }
@@ -263,7 +269,7 @@ function pickBesideReference(key){
 for(const button of $('drawing-beside').querySelectorAll('[data-place]'))button.onclick=()=>task(()=>{
  if(!commitInlineEdit())return;
  cancelBesidePick();
- const page=pages[active],chosen=selectedDrawingDevices();
+ const page=pages[active],chosen=selectedPlaceable();
  if(!page||!page.items.some(item=>item.type==='device'&&item.kind!=='plug'&&!chosen.includes(item)))throw Error('This page needs another device to place beside.');
  besidePick={page,chosen,side:button.dataset.place,spacing:$('placement-spacing').value};
  viewport.preserve();$('canvas').classList.add('picking-reference');$('canvas').focus({preventScroll:true});syncBesideTools();

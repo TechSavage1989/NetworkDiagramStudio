@@ -47,7 +47,7 @@ test('connected switches continue before any device is reduced from the shared w
 
 test('overflow fills later automatic sheets instead of stranding individual devices',()=>{
  const project=chain(8),pages=core(project);assert.ok(pages.length>1&&pages.length<=3);assert.ok(pages[0].coreDeviceIds.length>=4);assert.ok(pages.slice(1).every(p=>p.coreDeviceIds.length>1));assert.deepEqual(pages.flatMap(p=>p.coreDeviceIds),project.devices.map(d=>d.id));for(const page of pages)clear(page);
- const links=new Set(pages.flatMap(p=>p.items.filter(i=>i.sourceLink).map(i=>JSON.stringify(i.sourceLink))));assert.equal(links.size,7);assert.ok(pages.every(p=>p.items.some(i=>i.labelRole==='reference')));
+ const links=new Set(pages.flatMap(p=>p.items.filter(i=>i.sourceLink).map(i=>JSON.stringify(i.sourceLink))));assert.equal(links.size,7);assert.ok(pages.every(p=>p.items.some(i=>i.offPage)));
 });
 
 test('named pages use fit retries without changing assignments or saved edits and export native connections',async()=>{

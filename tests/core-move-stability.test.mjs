@@ -51,11 +51,14 @@ test('nudging, grouping and alignment move only the explicitly selected core bod
  }
 });
 
-test('generated WAN handoffs stay fixed unless they are part of the moved group',()=>{
+test('generated WAN handoffs follow their firewall unless moved on their own',()=>{
  const project=fixture(),page=core(project),firewall=body(page,'firewall'),handoff=bodies(page).find(item=>item.kind==='handoff');assert.ok(handoff);
+ // Moving the firewall carries its WAN card, so the card stays above it.
  for(const offsets of [new Map([[firewall.editKey,[12,0]]]),new Map([[firewall.editKey,[12,0]],[handoff.editKey,[12,0]]])]){
-  const next=moved(project,page,offsets);unchangedOthers(page,core(next),offsets);assertPins(page,next.layout.drawingEdits);
+  const next=moved(project,page,offsets);unchangedOthers(page,core(next),new Map([[firewall.editKey,[12,0]],[handoff.editKey,[12,0]]]));assertPins(page,next.layout.drawingEdits);
  }
+ // The card can still be moved by itself; the firewall and the rest stay put.
+ const alone=new Map([[handoff.editKey,[-40,0]]]),next=moved(project,page,alone);unchangedOthers(page,core(next),alone);assertPins(page,next.layout.drawingEdits);
 });
 
 test('independent panel-detail movement does not reflow or suppress the selected detail',()=>{

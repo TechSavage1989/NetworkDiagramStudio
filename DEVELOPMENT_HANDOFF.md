@@ -73,6 +73,13 @@ Owner follow-up (crowding, highlight, lag):
 - The Arrange control re-enables after busy work.
 - On a large fictional project: a snapping toggle takes 0.3 s and Arrange 0.3-0.4 s (it was 1.3 s); a device move or undo still re-plans the core page (about 0.6 s).
 
+Owner follow-up (Visio jumps, WAN cards, labels, off-page links, editor space):
+- Native Visio connectors carry the planner's jumps as EllipticalArcTo rows, so hops show as soon as the file opens. Before this, Visio drew them only after it rerouted an edited line.
+- WAN/ISP/egress cards stay above their firewall or router by default and move with it when it is dragged, nudged, aligned or placed beside something (movementOffsets in drawing-edits.mjs). A card can still be moved or placed on its own, keeps that offset from its owner afterwards, and can be the moving item or the reference in Place beside, alone or in a Shift selection. A cable with saved bends whose two ends move together is translated whole.
+- A port label stays on the half of the visible cable nearer its own port, measured from where the cable leaves its equipment to where it enters the far equipment. When that half is crowded, the name sits on its own cable with a white background. Only after that may it take any clear spot. This keeps a far end's port name (5/50) from sitting next to the near end's port (E8).
+- Off-page connections end in one aligned column of white tags reading "far device and port, then page", with no L-numbers. All tags on a page share one width and sit left of every rail and every other off-page lane. Dynamic pages reserve the measured tag width. On fixed paper a tag wraps between words, up to three lines, and stacks without overlapping while still touching its own cable; past three lines it shows only the page.
+- Editor chrome: a slimmer header; page groups on the title row; page tabs, status text, page picker and import notes on one row; and edit, placement and cable tools in one wrapping bar. With fictional data at 1920x1080 the canvas starts at 185 px instead of 362 px; at 1366x768 it is 499 px tall instead of 336 px.
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.

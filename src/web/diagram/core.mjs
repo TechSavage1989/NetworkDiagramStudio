@@ -17,6 +17,54 @@ import {C,addDevice,bridge,cableWeight,displayPortCaption,fresh,getAnchor,label,
 
 const name=d=>d?.name||d?.id||'Device';
 function cableName(db,e){return 'L'+(e.idx+1)+' '+name(db.devices.get(e.a))+' '+e.ap+' / '+name(db.devices.get(e.b))+' '+e.bp;}
+// Off-page connection tag: the far device and port in bold, then the page it
+// continues on. One readable line; no link numbers.
+const TAG={size:10,small:9,line:11,height:16,pad:9,tight:5,bar:4};
+function referenceTag(project,db,e,local,destination){
+ const remote=local==='a'?e.b:e.a,port=String(local==='a'?e.bp:e.ap),page=presentation(project,destination).name||destination,remoteName=name(db.devices.get(remote)),device=remoteName+' '+port;
+ const deviceWidth=textWidth(device,TAG.size,true),pageWidth=textWidth(page,TAG.size,false);
+ return {remote,remoteName,port,device,page,deviceWidth,pageWidth,width:Math.ceil(TAG.bar+TAG.pad+deviceWidth+TAG.pad+pageWidth+TAG.pad)};
+}
+// Words break after spaces, hyphens, slashes, underscores and dots; a word
+// longer than the line is the only thing ever split inside.
+function wrapTag(text,width,size,bold){
+ const lines=[];let line='';
+ for(const word of String(text).split(/(?<=[\s\-\/_.])/)){
+  if(!line||textWidth(line+word,size,bold)<=width){line+=word;continue;}
+  lines.push(line.trimEnd());line=word;
+ }
+ if(line)lines.push(line.trimEnd());
+ return lines.flatMap(l=>{if(textWidth(l,size,bold)<=width)return [l];const parts=[];let part='';for(const c of l){if(part&&textWidth(part+c,size,bold)>width){parts.push(part);part='';}part+=c;}return [...parts,part];});
+}
+// Tags keep one line when the column has room; otherwise each wraps inside the
+// available width. Tags then stack top to bottom without overlapping, each
+// still touching its own cable row (the cable may meet it off center).
+function planTags(tags,available){
+ const single=Math.max(0,...tags.map(t=>t.width)),boxes=new Map();
+ const layout=(width,content)=>{
+  const inner=width-TAG.bar-TAG.tight*2,rows=tags.map(t=>{
+   if(content==='single')return {t,single:true,height:TAG.height};
+   // The port stays whole: it joins the last name line when it fits.
+   const named=wrapTag(t.remoteName,inner,TAG.small,true),last=named.at(-1),device=last&&textWidth(last+' '+t.port,TAG.small,true)<=inner?[...named.slice(0,-1),last+' '+t.port]:[...named,...wrapTag(t.port,inner,TAG.small,true)];
+   const lines=[...(content==='page'?[]:device.map(text=>({text,bold:true}))),...wrapTag(t.page,inner,TAG.small,false).map(text=>({text,bold:false}))];
+   return {t,lines,size:TAG.small,height:4+lines.length*TAG.line};
+  }).sort((a,b)=>a.t.r.y-b.t.r.y);
+  // Tall tags would block port names; past three lines only the page is shown.
+  if(content==='wrap'&&rows.some(row=>row.lines.length>3))return null;
+  // Lowest feasible tops going down, highest going up, then the nearest to
+  // centered within both.
+  const low=[],high=[];let prev=-Infinity;
+  for(const [i,row] of rows.entries()){low[i]=Math.max(row.t.r.y+5-row.height,prev);prev=low[i]+row.height+2;if(low[i]>row.t.r.y-5)return null;}
+  let next=Infinity;for(let i=rows.length-1;i>=0;i--){high[i]=Math.min(rows[i].t.r.y-5,next-rows[i].height-2);next=high[i];}
+  let bottom=-Infinity;
+  for(const [i,row] of rows.entries()){const top=Math.max(low[i],bottom,Math.min(high[i],row.t.r.y-row.height/2));boxes.set(row.t,{...row,top});bottom=top+row.height+2;}
+  return {width,boxes};
+ };
+ if(single<=available)return layout(single,'single')||layout(single,'wrap')||fallback(single);
+ const width=Math.max(72,available);
+ return layout(width,'wrap')||layout(width,'page')||fallback(width);
+ function fallback(width){for(const t of tags)boxes.set(t,{single:true,height:TAG.height,top:t.r.y-TAG.height/2});return {width:Math.max(width,single),boxes};}
+}
 function cablePatch(project,page,name){
  let hash=0;for(const c of JSON.stringify([name.replace(/^L\d+ /,'')]))hash=Math.imul(hash,31)+c.charCodeAt(0)|0;
  return project.layout?.drawingEdits?.[page.name+'|path|'+hash+'|0'];
@@ -231,7 +279,9 @@ export function corePages(project,inventory){
   const packing=choices[Math.min(sheet.rank||0,choices.length-1)]||null;sheet.choices=choices.length;
   sheet.packedColumns=packing?.columns||1;
   const measuredHeight=dynamic?(packing?.h??[...measured.values()].reduce((sum,m)=>sum+m.height+expansion,0)):0;
-  const leftReserve=packing?reserveFor(packing):stableReserve;
+  // Off-page tags line up left of the rails; reserve their measured width.
+  const hiddenTags=new Set(sheet.hiddenReferences||[]),tagRoom=Math.max(0,...measuredEdges.filter(e=>sheet.showReferences!==false&&!hiddenTags.has(linkKey(e))&&!localPort(sheet,e.a,e.ap)!==!localPort(sheet,e.b,e.bp)&&(!sheet.linkIds||sheet.linkIds.has(e.idx))).map(e=>{const local=localPort(sheet,e.a,e.ap)?'a':'b',remote=local==='a'?e.b:e.a;return referenceTag(aliasProject,db,e,local,edgeLocations.get(remote+'/'+e.idx)||locations.get(remote)||'Core Network').width+12;}));
+  const leftReserve=(packing?reserveFor(packing):stableReserve)+(dynamic?tagRoom:0);
   const W=dynamic?Math.max(baseW+expansion+railReserve*2+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)),packing?LEFT+leftReserve+packing.w+railReserve+38:0):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110):baseH,BOTTOM=H-74;
   const pageProject=dynamic?{...aliasProject,_pageGeometry:{...aliasProject._pageGeometry,core:{width:W,height:H}}}:aliasProject;
   const fit=FITS[sheet.fit||0],fixedSidebar=Object.entries(pageProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|')&&/(?:module-legend|\|legend\|)/.test(key)&&['x','y','w','h'].some(k=>Number.isFinite(patch[k]))),sidebar=coreSidebar(fixedSidebar?244:Math.min(fit.sidebarWidth,W<1000?176:244));
@@ -272,7 +322,7 @@ export function corePages(project,inventory){
    local.forEach((id,i)=>{const d=db.devices.get(id),card=handoffCard(d,cards.width),rowIds=local.slice(Math.floor(i/cols)*cols,Math.floor(i/cols)*cols+cols),rowWidth=rowIds.length*cardWidth+(rowIds.length-1)*gap;
     const knownPort=Object.keys(host.ports).find(port=>port.toLowerCase()===String(d.ownerPort||'').toLowerCase()),anchor=rowIds.length===1&&knownPort?getAnchor(host,knownPort,'top',0):null;
     const center=anchor?.side==='top'?Math.max(host.x+rowWidth/2,Math.min(host.x+host.w-rowWidth/2,anchor.x)):host.x+host.w/2;
-    const x=center-rowWidth/2+(i%cols)*(cardWidth+gap),y=host.y-pageSizes.get(owner).top*scale+cards.rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0)*scale,node=addDevice(page,pageProject,d,[x,y,cardWidth,card.height*scale],'handoff-'+id,{fillBounds:true});nodes.set(id,node);
+    const x=center-rowWidth/2+(i%cols)*(cardWidth+gap),y=host.y-pageSizes.get(owner).top*scale+cards.rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0)*scale,node=addDevice(page,pageProject,d,[x,y,cardWidth,card.height*scale],'handoff-'+id,{fillBounds:true});node.ownerKey=host.editKey;nodes.set(id,node);
     label(items,node.x+12*scale,node.y+4*scale,Math.max(1,(node.w-24*scale)/1.12),card.titleHeight*scale,d.name,18*scale,true,C.ink);items.at(-1).deviceTextOwner=id;
     label(items,node.x+12*scale,node.y+(card.titleHeight+6)*scale,Math.max(1,(node.w-24*scale)/1.12),card.detailHeight*scale,card.detail,12*scale,false,C.muted);items.at(-1).deviceTextOwner=id;
    });
@@ -311,16 +361,25 @@ export function corePages(project,inventory){
    const mediaKey=page.name+'|media|'+linkKey(e);
    if(cableCaptions(pageProject)||Object.keys(pageProject.layout?.drawingEdits||{}).some(key=>key.startsWith(mediaKey+'|')))requests.push({role:'media',editKey:mediaKey,linkId:e.idx,value:text,y,side:r.side,outer:outer[r.side],...(r.points.length<=4?horizontal?{segment:horizontal}:{near:{x:r.points[0][0]+9,y:(r.points[0][1]+r.points.at(-1)[1])/2}}:{}),color:a.info.color==='#FFD965'?C.ink:a.info.color});
   }
-  for(const r of planned.references){
-   const {e,v,which:local}=r,remote=local==='a'?e.b:e.a,port=local==='a'?e.bp:e.ap;
-   const destination=edgeLocations.get(remote+'/'+e.idx)||locations.get(remote)||'Core Network',ref=presentation(project,destination).name||destination,stub={id:'continuation-'+pi+'-'+e.idx,name:ref,kind:'handoff',ports:[{name:'handoff'}]};
-   const code='L'+(e.idx+1),badgeWidth=textWidth(code,9,true)+4;
-   const n=addDevice(page,project,stub,[r.x-badgeWidth,r.y-7,badgeWidth,14],'reference-'+e.idx,{fillBounds:true});n.ports.handoff=[1,.5];
-   label(n.children,0,0,1,1,code,9,true,C.teal,'center');
+  // Every tag on a page shares one width, so the column reads as a list.
+  const tags=planned.references.map(r=>{const remote=r.which==='a'?r.e.b:r.e.a,destination=edgeLocations.get(remote+'/'+r.e.idx)||locations.get(remote)||'Core Network';return {r,destination,...referenceTag(project,db,r.e,r.which,destination)};});
+  const tagPlan=planTags(tags,dynamic?Infinity:Math.min(...tags.map(t=>t.r.x))-sidebar.contentLeft-6);
+  for(const t of tags){
+   const {r,destination}=t,{e,v,which:local}=r,remote=local==='a'?e.b:e.a,port=local==='a'?e.bp:e.ap,ref=t.page,stub={id:'continuation-'+pi+'-'+e.idx,name:t.device+' on '+ref,kind:'handoff',ports:[{name:'handoff'}]},box=tagPlan.boxes.get(t);
+   // A white tag at the cable end: teal edge toward the page border, the far
+   // device and port in bold, then the page where the cable continues.
+   const n=addDevice(page,project,stub,[r.x-tagPlan.width,box.top,tagPlan.width,box.height],'reference-'+e.idx,{fillBounds:true});n.ports.handoff=[1,(r.y-box.top)/box.height];n.offPage=true;
+   n.children=[];const across=x=>x/tagPlan.width,down=y=>y/box.height;
+   rect(n.children,0,0,1,1,'#FFFFFF',C.teal,1);rect(n.children,0,0,across(TAG.bar),1,C.teal);
+   if(box.single){
+    label(n.children,across(TAG.bar+TAG.pad),0,across(t.deviceWidth+2),1,t.device,TAG.size,true,C.ink);
+    label(n.children,across(tagPlan.width-TAG.pad-t.pageWidth-2),0,across(t.pageWidth+2),1,t.page,TAG.size,false,C.teal,'right');
+   }else box.lines.forEach((line,i)=>label(n.children,across(TAG.bar+TAG.tight),down(2+i*TAG.line),across(tagPlan.width-TAG.bar-TAG.tight*2+2),down(TAG.line),line.text,box.size,line.bold,line.bold?C.ink:C.teal));
+   for(const child of n.children.filter(c=>c.type==='text'))child.full=true;
+   n.masterKey=n.masterKey.split(':edit:')[0];editDeviceShape(page,project,n);
    const end=getAnchor(n,'handoff','top',0);
    route(page,v.anchor,end,r.points,v.info.color,'L'+(e.idx+1)+' '+name(db.devices.get(remote))+' '+port+' on '+ref,v.info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status});
-   Object.assign(page.items.at(-1),{linkId:e.idx,startEndpoint:local});
-   requests.push({role:'reference',editKey:page.name+'|reference|'+linkKey(e)+'|'+v.id,linkId:e.idx,value:[code+' '+name(db.devices.get(remote)),port+' / '+ref],y:r.y,side:'left',outer:r.x,color:C.teal});
+   Object.assign(page.items.at(-1),{linkId:e.idx,startEndpoint:local,offPageDestination:destination});
   }
   for(const v of planned.ends.values())if(v.node.kind!=='handoff'){
    const port=v.which==='a'?v.e.ap:v.e.bp,r=planned.routes.find(r=>r.e===v.e),side=r?.side||'left',rail=r?.rail||LEFT-26;

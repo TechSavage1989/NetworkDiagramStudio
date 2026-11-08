@@ -95,3 +95,18 @@ test('a socket under an empty bay caption leaves straight up and the caption sli
  // jogs between the outer row's sockets (as B12 does) or turns in its module.
  const inner=getAnchor(g,'B24','top',3,{weight:4});assert.ok(inner.moduleEscape||inner.departure);
 });
+
+test('off-page tags form one column clear of every other cable',async()=>{
+ const {mdfLookalike}=await import('./fixtures/mdf-lookalike.mjs'),{cleanLayout}=await import('../src/web/layout.mjs'),{pathCrossesText}=await import('../src/web/diagram/labels.mjs');
+ const project=mdfLookalike();project.layout=cleanLayout({...(project.layout||{}),corePages:[{id:'a',name:'Core A',devices:['fw','mdf']}]},project.devices.map(d=>d.id));
+ const pages=buildPages(project).filter(p=>p.coreDeviceIds);assert.equal(pages.length,2);
+ for(const page of pages){
+  const tags=page.items.filter(i=>i.offPage),paths=page.items.filter(i=>i.type==='path');assert.ok(tags.length>=5,page.name);
+  assert.equal(new Set(tags.map(t=>t.w.toFixed(3))).size,1,'one shared width');assert.equal(new Set(tags.map(t=>(t.x+t.w).toFixed(3))).size,1,'one right edge');
+  for(const tag of tags){
+   const text=tag.children.filter(c=>c.type==='text').map(c=>c.value);assert.ok(!text.some(v=>/^L\d+\b/.test(v)),'no link numbers');
+   for(const other of tags)if(other!==tag)assert.ok(other.y+other.h<=tag.y||tag.y+tag.h<=other.y,'tags do not overlap');
+   for(const path of paths)if(!path.points.some(([x,y])=>Math.abs(x-tag.x-tag.w)<.01&&Math.abs(y-tag.y-tag.h/2)<.01))assert.ok(!pathCrossesText(path,tag,0),'another cable crosses the tag for '+text.join(' '));
+  }
+ }
+});

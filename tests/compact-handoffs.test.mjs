@@ -9,7 +9,7 @@ const fixture=count=>({name:'Circuit lab',devices:[{id:'edge',name:'LAB-EDGE',ki
 const core=project=>buildPages(project).filter(p=>p.name.startsWith('Core Network'));
 function legible(page){
  const texts=page.items.filter(i=>i.type==='text'),labels=texts.filter(i=>i.labelRole),bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path'),segments=[];
- for(const label of labels){for(const other of texts)if(other!==label)assert.ok(!intersects(label,other),'label overlaps text');for(const body of bodies)assert.ok(!intersects(label,body),'label overlaps a device');for(const path of paths)assert.ok(!pathCrossesText(path,label,1),'label overlaps a cable or jump');}
+ for(const label of labels){for(const other of texts)if(other!==label)assert.ok(!intersects(label,other),'label overlaps text');for(const body of bodies)assert.ok(!intersects(label,body),'label overlaps a device');for(const path of paths)if(!(label.background&&path.linkId===label.linkId))assert.ok(!pathCrossesText(path,label,1),'label overlaps a cable or jump');}
  for(const path of paths)for(let i=1;i<path.points.length;i++){
   const a=path.points[i-1],b=path.points[i],horizontal=a[1]===b[1],axis=a[horizontal?1:0],lo=Math.min(a[horizontal?0:1],b[horizontal?0:1]),hi=Math.max(a[horizontal?0:1],b[horizontal?0:1]);assert.ok(horizontal||a[0]===b[0],'diagonal cable');
   for(const s of segments)if(s.path!==path&&s.horizontal===horizontal&&Math.abs(s.axis-axis)<2.2)assert.ok(Math.min(s.hi,hi)<=Math.max(s.lo,lo)+.01,'shared parallel cable '+JSON.stringify({count:paths.length,a,b,other:[s.lo,s.hi,s.axis],length:Math.min(s.hi,hi)-Math.max(s.lo,lo)}));
