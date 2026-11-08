@@ -574,10 +574,11 @@ function portMaps(project,db){
  // its sheets: widen the common hardware for the whole family when a jack
  // needs it, growing a dynamic page; fixed paper keeps the '+' marker list.
  const crowded=pages=>pages.filter(page=>page.portMap?.markWidth).map(page=>{const d=switches.find(d=>d.id===page.portMap.markSource);return page.portMap.markWidth/(d?deviceScale(project,d):1)+2;});
- for(let attempt=0;attempt<2;attempt++){
+ for(let attempt=0;attempt<4;attempt++){
   const width=Math.max(0,...crowded(best));if(width<=initial.width+1)break;
-  const geometry=pageGeometry(project,'ports');let next=project;
-  if(width>geometry.width-82){if(!geometry.dynamic)break;next={...project,_pageGeometry:{...project._pageGeometry,ports:{width:Math.ceil(width+82),height:geometry.height}}};}
+  // The page also keeps its VLAN key column (up to 230 plus a 16 gap).
+  const geometry=pageGeometry(project,'ports'),room=82+246;let next=project;
+  if(width>geometry.width-room){if(!geometry.dynamic)break;next={...project,_pageGeometry:{...project._pageGeometry,ports:{width:Math.ceil(width+room),height:geometry.height}}};}
   try{const plan=portEquipmentPlan(next,switches,width),pages=portMapsAtScale(next,db,plan);best=pages;initial=plan;project=next;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;break;}
  }
  const legible=pages=>!pages.some(page=>page.portMap?.markWidth);
