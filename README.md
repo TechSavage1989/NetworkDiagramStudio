@@ -8,7 +8,7 @@
 
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
 
-- Build Switchport Diagram Builder reports inside the same project: wall charts, A4 sheets and complete inventory booklets, with native/tagged/voice VLAN symbols, LAG outlines, stack markers and readable numbers outside the ports.
+- Build Switchport Diagram Builder reports inside the same project: wall charts, paper-sized sheets and complete inventory booklets, with native/tagged/voice VLAN symbols, LAG outlines, stack markers and readable numbers outside the ports.
 - Export each device's eight-file report package, shared multi-device sheets, vector PDF, 300 dpi PNG, SVG and editable Visio. Keep one shared VLAN/LAG palette, report title, optional logo, serial numbers, asset tags and notes.
 - Open existing Switchport Diagram Builder workspaces and supported unencrypted RouterOS backups. Keep supplementary observations independently selectable and separate from configuration intent.
 - Navigate large drawing sets by page group and page picker. Moving equipment reroutes affected drawings with short local paths, nearby outside approaches and cable spacing based on painted line thickness.
