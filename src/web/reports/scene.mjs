@@ -4,8 +4,9 @@ import {wrapPortText} from '../port-table.mjs';
 import {portLabelLayout,portLabelText} from '../diagram/port-label-layout.mjs';
 import {aggregateKey,markerVlans,nativeFill,vlanIds,voiceVlan} from './palette.mjs';
 import {taggedText,reportText} from './model.mjs';
+import {reportPageGeometry,reportPageLabel} from './paper.mjs';
 
-export const reportPaper={width:297*96/25.4,height:210*96/25.4};
+export const reportPaper=reportPageGeometry();
 const ink='#16364a',muted='#536779',rule='#cedce0',navy='#203746',pale='#eef4f6',margin=24,bodyFont=10;
 const normalStyle={scale:1,numberFont:10,groupFont:11,markerRadius:2.1,compact:false};
 const compactStyles=[.9,.8,.7,.6,.55].map(scale=>({scale,numberFont:scale>=.8?9:8,groupFont:10,markerRadius:Math.max(1.5,2.1*scale),compact:true}));
@@ -23,9 +24,17 @@ function logoDimensions(data){
  try{const bytes=Uint8Array.from(atob(data.split(',')[1]),character=>character.charCodeAt(0)),view=new DataView(bytes.buffer);if(bytes[0]===137&&bytes[1]===80)return {w:view.getUint32(16),h:view.getUint32(20)};for(let at=2;at+9<bytes.length;){if(bytes[at]!==255)break;const marker=bytes[at+1],length=view.getUint16(at+2);if([192,193,194].includes(marker))return {w:view.getUint16(at+7),h:view.getUint16(at+5)};if(length<2)break;at+=length+2;}}catch{}return {w:2,h:1};
 }
 // A request may carry its own sheet (port maps default to US Letter).
-const paperOf=request=>request?.paper||{...reportPaper,preset:'a4',widthMm:297,heightMm:210};
+const paperOf=request=>{
+ const requested=request?.paper;
+ // Diagram port maps already supply a complete drawing-paper geometry.
+ // Switchport report options supply only the paper name and orientation.
+ if(requested&&Number.isFinite(requested.width)&&Number.isFinite(requested.height)&&requested.width>0&&requested.height>0)
+  return {...requested,orientation:requested.orientation|| (requested.width>=requested.height?'landscape':'portrait'),
+   widthMm:requested.widthMm||requested.width*25.4/96,heightMm:requested.heightMm||requested.height*25.4/96};
+ return reportPageGeometry(requested);
+};
 function page(request,name,title,subtitle,role,ids,width=paperOf(request).width,height=paperOf(request).height,compact=false){
- const sheet=paperOf(request),titleSize=compact?18:20,subtitleSize=compact?10:10.5,p={dense:!!request?.fill,name:'Switchport reports|'+name,title,displayName:title,family:'switchports',switchportReport:true,role,sourceDeviceIds:[...ids],width,height,widthMm:width*25.4/96,heightMm:height*25.4/96,paper:{preset:sheet.preset,orientation:'landscape',widthMm:sheet.widthMm,heightMm:sheet.heightMm},items:[],compact},a=p.items,logo=request.logoDataUrl,available=width-margin*2-(logo?130:0),titleHeight=Math.max(titleSize*1.2,wrapPortText(title,available,titleSize,true).length*titleSize*1.2),subtitleHeight=Math.max(subtitleSize*1.2,wrapPortText(subtitle,available,subtitleSize).length*subtitleSize*1.2),headerHeight=titleHeight+subtitleHeight+(compact?14:30);
+ const sheet=paperOf(request),titleSize=compact?18:20,subtitleSize=compact?10:10.5,p={dense:!!request?.fill,name:'Switchport reports|'+name,title,displayName:title,family:'switchports',switchportReport:true,role,sourceDeviceIds:[...ids],width,height,widthMm:width*25.4/96,heightMm:height*25.4/96,paper:{preset:sheet.preset||'custom',orientation:sheet.orientation|| (width>=height?'landscape':'portrait'),widthMm:width*25.4/96,heightMm:height*25.4/96},items:[],compact},a=p.items,logo=request.logoDataUrl,available=width-margin*2-(logo?130:0),titleHeight=Math.max(titleSize*1.2,wrapPortText(title,available,titleSize,true).length*titleSize*1.2),subtitleHeight=Math.max(subtitleSize*1.2,wrapPortText(subtitle,available,subtitleSize).length*subtitleSize*1.2),headerHeight=titleHeight+subtitleHeight+(compact?14:30);
  rect(a,0,0,width,headerHeight,navy);text(a,margin,compact?5:12,available,title,titleSize,true,'#ffffff');text(a,margin,(compact?8:18)+titleHeight,available,subtitle,subtitleSize,false,'#dce9ee');p.contentTop=headerHeight+(compact?8:16);
  if(logo){const dims=logoDimensions(logo),h=Math.min(headerHeight-20,48),w=Math.min(112,h*dims.w/dims.h),actualH=w*dims.h/dims.w,lx=width-margin-w-4,ly=(headerHeight-actualH)/2;rect(a,lx-4,ly-4,w+8,actualH+8,'#ffffff','none');Object.assign(a.at(-1),{reportLogoBacking:true,editKey:p.name+'|logo-backing'});a.push({type:'device',kind:'logo',key:p.name+'|logo',editKey:p.name+'|logo',masterKey:'report-logo:'+logo.slice(-120),name:'Report logo',x:lx,y:ly,w,h:actualH,ports:{},children:[],asset:{name:'Report logo',width:dims.w,height:dims.h,dataUrl:logo}});}
  return p;
@@ -38,14 +47,35 @@ function finish(p,request,palette,inventory,index=1,count=1){
  p.reportPalette=palette;p.reportInventory=inventory?.hostname;p.reportSourceVersion='1.18.5';return p;
 }
 export function numberReportPages(pages){return pages.map((p,index)=>({...p,items:p.items.map(item=>item.reportFooterRole==='page'?{...item,value:(index+1)+' / '+pages.length}:item)}));}
+function symbolKeyItems(inventory){
+ const titles=['Native VLAN','Tagged VLAN','Voice VLAN','LAG / trunk'];
+ if(inventory.ports.some(port=>port.stackLink))titles.push('Stack / VSF');
+ if(inventory.ports.some(port=>port.disabled))titles.push('Disabled');
+ return titles;
+}
+function symbolKeyHeight(inventory,width){
+ let x=0,rows=1;
+ for(const title of symbolKeyItems(inventory)){
+  const step=textWidth(title,10)+35;
+  if(x>0&&x+step>width){rows++;x=0;}x+=step;
+ }
+ return rows*18-1;
+}
 function symbolKey(p,y,palette,inventory){
- const a=p.items;let x=margin;
+ const a=p.items;let x=margin,lineY=y;
  const example=Object.values(palette.vlans)[0]||'#b9cfdf',outline=Object.values(palette.aggregates)[0]||'#486ba4';
- const entry=(title,paint)=>{paint(x);text(a,x+19,y,Math.max(70,textWidth(title,10)),title,10,false,muted);x+=textWidth(title,10)+35;};
- entry('Native VLAN',x=>rect(a,x,y+2,12,10,example,ink,.65));entry('Tagged VLAN',x=>ellipse(a,x+2,y+3,8,8,example));entry('Voice VLAN',x=>diamond(a,x+1,y+2,10,example));entry('LAG / trunk',x=>rect(a,x,y+2,12,10,'#ffffff',outline,2));
- if(inventory.ports.some(port=>port.stackLink))entry('Stack / VSF',x=>rect(a,x,y+2,12,10,'#000000'));
- if(inventory.ports.some(port=>port.disabled))entry('Disabled',x=>text(a,x+1,y,12,'!',11,true));
- return y+17;
+ const entry=(title,paint)=>{
+  const step=textWidth(title,10)+35;
+  if(x>margin&&x+step>p.width-margin){x=margin;lineY+=18;}
+  paint(x,lineY);text(a,x+19,lineY,Math.max(70,textWidth(title,10)),title,10,false,muted);x+=step;
+ };
+ entry('Native VLAN',(x,y)=>rect(a,x,y+2,12,10,example,ink,.65));
+ entry('Tagged VLAN',(x,y)=>ellipse(a,x+2,y+3,8,8,example));
+ entry('Voice VLAN',(x,y)=>diamond(a,x+1,y+2,10,example));
+ entry('LAG / trunk',(x,y)=>rect(a,x,y+2,12,10,'#ffffff',outline,2));
+ if(inventory.ports.some(port=>port.stackLink))entry('Stack / VSF',(x,y)=>rect(a,x,y+2,12,10,'#000000'));
+ if(inventory.ports.some(port=>port.disabled))entry('Disabled',(x,y)=>text(a,x+1,y,12,'!',11,true));
+ return lineY+17;
 }
 function mergeInventories(items){return {hostname:'Workspace',ports:items.flatMap(item=>item.inventory.ports),vlans:items.flatMap(item=>item.inventory.vlans),groups:items.flatMap(item=>item.inventory.groups)};}
 // Port-map sheets use the builder's dense key: one line per VLAN or LAG,
@@ -60,7 +90,7 @@ function keyRows(inventory,palette,width,compact=false,dense=false){
  const result=[];for(let offset=0;offset<entries.length;offset+=columns){const row=entries.slice(offset,offset+columns),height=Math.max(...row.map(entry=>entry.titleHeight+entry.namesHeight))+(dense?3:compact?6:8);result.push({entries:row,height,columns,columnWidth});}
  return result;
 }
-function legendHeight(inventory,palette,width,compact=false,dense=false){return (compact?18:23)+keyRows(inventory,palette,width,compact,dense).reduce((height,row)=>height+row.height,0)+(compact?23:27);}
+function legendHeight(inventory,palette,width,compact=false,dense=false){return (compact?18:23)+keyRows(inventory,palette,width,compact,dense).reduce((height,row)=>height+row.height,0) +symbolKeyHeight(inventory,width)+(compact?7:13);}
 function legend(p,y,inventory,palette,{continued=false}={}){
  const a=p.items,w=p.width-margin*2;text(a,margin,y,w,'VLAN and LAG key'+(continued?' / continued':''),p.compact?11:12,true);y+=p.compact?18:23;
  for(const row of keyRows(inventory,palette,w,p.compact,p.dense)){for(let column=0;column<row.entries.length;column++){const entry=row.entries[column],x=margin+column*row.columnWidth;rect(a,x,y+1,14,12,entry.fill,entry.stroke||muted,entry.stroke?2:.7);const marked=p.dense&&entry.vlan,tx=marked?x+36:x+22;
@@ -134,9 +164,9 @@ export function reportDiagram(item,palette,request,{wall=false}={}){
  let failure;
  for(const style of wall?[normalStyle]:[...(request?.fill?largeStyles:[]),normalStyle,...compactStyles]){
   const sheet=paperOf(request),plan=devicePlan(item,style),width=wall?Math.max(sheet.width,plan.width+margin*2):sheet.width;
-  if(plan.width>width-margin*2){failure=new ReportCapacityError('The complete physical banks of '+displayName(item.inventory)+' exceed readable A4 width. Use the wall chart or a smaller hardware selection.',{deviceId:item.id,requiredWidth:plan.width+margin*2});continue;}
+  if(plan.width>width-margin*2){failure=new ReportCapacityError('The complete physical banks of '+displayName(item.inventory)+' exceed readable '+reportPageLabel(request.paper)+' width. Use larger paper or the wall chart.',{deviceId:item.id,requiredWidth:plan.width+margin*2});continue;}
   const p=page(request,item.id+'|'+(wall?'wall':'a4'),displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),wall?'wall':'onePage',[item.id],width,sheet.height,style.compact),keyHeight=legendHeight(item.inventory,palette,width-margin*2,style.compact,!!request?.fill),gap=style.compact?4:12,needed=p.contentTop+plan.height+gap+keyHeight+(style.compact?49:59);
-  if(wall)p.height=Math.max(p.height,needed);else if(needed>p.height+.01){failure=new ReportCapacityError('The complete port map and VLAN key need '+Math.ceil(needed)+' px of readable height; A4 provides '+Math.floor(p.height)+' px. The booklet keeps all content on continued sheets.',{deviceId:item.id,requiredHeight:needed});continue;}
+  if(wall){p.height=Math.max(p.height,needed);p.paper={preset:'custom',orientation:p.width>=p.height?'landscape':'portrait',widthMm:p.width*25.4/96,heightMm:p.height*25.4/96};}else if(needed>p.height+.01){failure=new ReportCapacityError('The complete port map and VLAN key need '+Math.ceil(needed)+' px of readable height; '+reportPageLabel(request.paper)+' provides '+Math.floor(p.height)+' px. The booklet keeps all content on continued sheets.',{deviceId:item.id,requiredHeight:needed});continue;}
   try{const bottom=drawBlock(p,plan,margin,p.contentTop,palette,{heading:false});legend(p,bottom+gap,item.inventory,palette);p.widthMm=p.width*25.4/96;p.heightMm=p.height*25.4/96;p.reportGeometryScale=style.scale;p.reportNumberFont=style.numberFont;return finish(p,request,palette,item.inventory);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;failure=error;}
  }
  throw failure;
@@ -152,7 +182,7 @@ export function workspaceDiagrams(items,palette,request){
   single.name='Switchport reports|workspace|'+plan.item.id;single.role='workspace';single.workspaceTitle=request.title;single.standaloneConfiguration=true;single._reportFinished=true;pages.push(single);return true;
  };
  for(const plan of plans){
-  if(plan.width>paperOf(request).width-margin*2){if(standalone(plan))continue;throw new ReportCapacityError('The complete physical bank of '+displayName(plan.item.inventory)+' is too wide for shared A4 sheets.',{deviceId:plan.item.id});}
+  if(plan.width>paperOf(request).width-margin*2){if(standalone(plan))continue;throw new ReportCapacityError('The complete physical bank of '+displayName(plan.item.inventory)+' is too wide for shared '+reportPageLabel(request.paper)+' sheets.',{deviceId:plan.item.id});}
   if(!current)make();let required=blockHeight(plan),candidate=mergeInventories([...currentPlans.map(row=>row.item),plan.item]),keyHeight=legendHeight(candidate,palette,current.width-margin*2);
   if(at+required+keyHeight+69>current.height&&currentPlans.length){close();make();candidate=plan.item.inventory;keyHeight=legendHeight(candidate,palette,current.width-margin*2);}
   if(at+required+keyHeight+69<=current.height){at=drawBlock(current,plan,margin,at,palette)+12;currentPlans.push(plan);continue;}
@@ -163,7 +193,7 @@ export function workspaceDiagrams(items,palette,request){
   for(const band of plan.bands){
    const partial={...plan,bands:[...bands,band],height:[...bands,band].reduce((sum,row)=>sum+row.height+8,0)},limit=current.contentTop+blockHeight(partial)+keyHeight+69;
    if(limit>current.height&&bands.length){at=drawBlock(current,plan,margin,current.contentTop,palette,{bands,continued})+12;currentPlans=[plan];close();make();bands=[];continued=true;}
-   if(current.contentTop+blockHeight({...plan,bands:[band],height:band.height+8})+keyHeight+69>current.height)throw new ReportCapacityError('One module/member and its complete VLAN key cannot fit A4 at readable size.',{deviceId:plan.item.id});
+   if(current.contentTop+blockHeight({...plan,bands:[band],height:band.height+8})+keyHeight+69>current.height)throw new ReportCapacityError('One module/member and its complete VLAN key cannot fit '+reportPageLabel(request.paper)+' at readable size.',{deviceId:plan.item.id});
    bands.push(band);
   }
   if(bands.length){at=drawBlock(current,plan,margin,current.contentTop,palette,{bands,continued})+12;currentPlans=[plan];close();}
@@ -172,7 +202,7 @@ export function workspaceDiagrams(items,palette,request){
 }
 
 function tablePages(item,palette,request,title,columns,records,role){
- const pages=[],contentWidth=reportPaper.width-margin*2,scale=contentWidth/columns.reduce((sum,column)=>sum+column.width,0),widths=columns.map(column=>column.width*scale),lineHeight=12.5,padding=5,bottom=reportPaper.height-62;let p,y;
+ const sheet=paperOf(request),pages=[],contentWidth=sheet.width-margin*2,scale=contentWidth/columns.reduce((sum,column)=>sum+column.width,0),widths=columns.map(column=>column.width*scale),lineHeight=12.5,padding=5,bottom=sheet.height-62;let p,y;
  const start=()=>{p=page(request,item.id+'|'+role+'|'+pages.length,displayName(item.inventory)+' / '+title,'Complete values continue on additional pages when needed.',role,[item.id]);pages.push(p);let x=margin;y=p.contentTop;rect(p.items,x,y,contentWidth,27,navy);for(let column=0;column<columns.length;column++){text(p.items,x+padding,y+6,widths[column]-padding*2,columns[column].label,10,true,'#ffffff');x+=widths[column];}y+=27;};
  for(const [recordIndex,record] of records.entries()){
   const values=columns.map(column=>String(column.value(record)??'')),lines=values.map((value,index)=>wrapPortText(value,widths[index]-padding*2,10,index===0)),maxLines=Math.max(1,...lines.map(lines=>lines.length));let offset=0,segment=0;

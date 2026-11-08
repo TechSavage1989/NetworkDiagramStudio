@@ -34,6 +34,7 @@ public static class SwitchportReportService
         public bool Combined { get; init; } = true;
         public string LogoDataUrl { get; init; } = "";
         public WorkspacePaletteOverrides Palette { get; init; } = new();
+        public ReportPaper Paper { get; init; } = ReportPaper.Default;
     }
     public static string CatalogJson()
     {
@@ -206,7 +207,7 @@ public static class SwitchportReportService
                 try
                 {
                     if (item.Error.Length > 0) throw new InvalidOperationException(item.Error);
-                    int code = GeneratorEntry.RunInventory(item.Inventory, output, logo, item.Supplementary, palette.ForItem(item.Id));
+                    int code = GeneratorEntry.RunInventory(item.Inventory, output, logo, item.Supplementary, palette.ForItem(item.Id),request.Paper);
                     string error = code == 0 ? "" : File.Exists(Path.Combine(output, "validation-report.txt")) ? string.Join("\n", File.ReadLines(Path.Combine(output, "validation-report.txt")).Where(line => line.StartsWith("BLOCKER:", StringComparison.Ordinal))) : "Report generation was blocked.";
                     if (code != 0 && error.Length == 0) error = "Report generation was blocked. Review validation-report.txt.";
                     results.Add(new(item.Id, item.Name, output, code == 0, error));
@@ -228,11 +229,11 @@ public static class SwitchportReportService
                         inputs.Add(new(result.Id, result.Name, inventory, Hash(bytes))); details.AddRange(booklet.Skip(1));
                     }
                     var sheets = WorkspaceSheet.Build(inputs, logo, request.Title); warnings.AddRange(sheets.Warnings);
-                    diagramsPath = Path.Combine(directory, "workspace-a4-diagrams.pdf"); bookletPath = Path.Combine(directory, "workspace-a4-booklets.pdf");
-                    Pdf.Save(sheets.Pages, diagramsPath); Pdf.Save(sheets.Pages.Concat(details).ToList(), bookletPath);
+                    diagramsPath = Path.Combine(directory, "workspace-" + request.Paper.Stem + "-diagrams.pdf"); bookletPath = Path.Combine(directory, "workspace-" + request.Paper.Stem + "-booklets.pdf");
+                    Pdf.Save(sheets.Pages, diagramsPath, request.Paper); Pdf.Save(sheets.Pages.Concat(details).ToList(), bookletPath, request.Paper);
                     for (int index = 0; index < sheets.Pages.Count; index++)
                     {
-                        string path = Path.Combine(directory, $"workspace-sheet-{index + 1:D3}.png"); Png.Save(sheets.Pages[index], path, 3508, 2480, true); images.Add(path);
+                        string path = Path.Combine(directory, $"workspace-sheet-{index + 1:D3}.png"); Png.Save(sheets.Pages[index], path, request.Paper.PixelWidth, request.Paper.PixelHeight, true); images.Add(path);
                     }
                     File.WriteAllText(Path.Combine(directory, "workspace-layout.json"), JsonSerializer.Serialize(new { pageCount = sheets.Pages.Count, sheets.GeometryScale, sheets.Placements, sheets.LegendEntries, sheets.Warnings }, Json), new UTF8Encoding(false));
                 }
@@ -245,11 +246,12 @@ public static class SwitchportReportService
             }
             return true;
         });
-        string summary = results.Count(result => result.Success) + " of " + results.Count + " device report packages created." + (images.Count > 0 ? " Shared A4 sheets: " + images.Count + "." : "") + "\nOutput: " + directory;
+        string summary = results.Count(result => result.Success) + " of " + results.Count + " device report packages created." + (images.Count > 0 ? " Shared " + request.Paper.Label + " sheets: " + images.Count + "." : "") + "\nOutput: " + directory;
         var response = new
         {
             outputDirectory = directory, items = results, combinedDiagramsPath = diagramsPath, combinedBookletPath = bookletPath,
             combinedImages = images, combinedError, warnings, summary,
+            paper = new { request.Paper.Preset, request.Paper.Orientation, request.Paper.Label, request.Paper.WidthPt, request.Paper.HeightPt },
             files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).Select(path => Path.GetRelativePath(directory, path)).Order(StringComparer.Ordinal).Append("workspace-export.json").ToArray()
         };
         string json = JsonSerializer.Serialize(response, Json); File.WriteAllText(Path.Combine(directory, "workspace-export.json"), json, new UTF8Encoding(false)); return json;
@@ -264,7 +266,8 @@ public static class SwitchportReportService
             Title = NormalizedInventory.Text(root, "title", 500) is { Length: > 0 } title ? title : null,
             Combined = NormalizedInventory.Boolean(NormalizedInventory.Get(root, "combined")) != false,
             LogoDataUrl = NormalizedInventory.Get(root, "logoDataUrl").ValueKind == JsonValueKind.String ? NormalizedInventory.Get(root, "logoDataUrl").GetString() ?? "" : "",
-            Palette = NormalizedInventory.Get(root, "palette").ValueKind == JsonValueKind.Object ? ReadPalette(NormalizedInventory.Get(root, "palette")) : new()
+            Palette = NormalizedInventory.Get(root, "palette").ValueKind == JsonValueKind.Object ? ReadPalette(NormalizedInventory.Get(root, "palette")) : new(),
+            Paper = ReportPaper.Parse(NormalizedInventory.Text(NormalizedInventory.Get(root, "paper"), "preset", 25), NormalizedInventory.Text(NormalizedInventory.Get(root, "paper"), "orientation", 25))
         };
         var items = NormalizedInventory.Rows(NormalizedInventory.Get(root, "items")).ToList();
         if (items.Count is < 1 or > 100) throw new InvalidOperationException("Choose between 1 and 100 devices for the report.");
