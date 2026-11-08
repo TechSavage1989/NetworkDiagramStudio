@@ -144,3 +144,12 @@ test('generic symbols give each unmatched port its own attachment point',()=>{
   const points=ends.map(e=>e.device+'@'+e.x.toFixed(2)+','+e.y.toFixed(2));assert.equal(new Set(points).size,points.length,mode+': two cables share an attachment point');
  }
 });
+
+test('reusing planned routes after a bend or color edit matches a fresh rebuild',async()=>{
+ const {mdfLookalike}=await import('./fixtures/mdf-lookalike.mjs');
+ const site=mdfLookalike(),cache=new Map(),first=buildPages(site,{cache}).find(p=>p.name==='Core Network'),cable=first.items.find(i=>i.type==='path'&&i.sourceLink);
+ const bent=cable.points.map(p=>[...p]);if(bent.length>3)bent[1]=[bent[1][0],bent[1][1]];
+ site.layout={drawingEdits:{[cable.editKey]:{color:'#815AC0',points:bent}}};
+ const warm=buildPages(site,{cache}),cold=buildPages(JSON.parse(JSON.stringify(site)));
+ assert.deepEqual(warm.map(p=>p.svg),cold.map(p=>p.svg));
+});

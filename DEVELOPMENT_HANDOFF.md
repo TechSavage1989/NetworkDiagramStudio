@@ -45,6 +45,17 @@ Owner review of the first build (Visio export and a real MDF import, reproduced 
 - Generic symbols give each unmatched port its own attachment point.
 - The left reserve for multi-column pages counts every cable on the first column.
 
+Owner follow-up (editing, snapping, speed and spacing):
+- Edits were being refused with "This change overlaps a link label" on pages with connector text on its own cable. Edit validation and Organize analysis now exempt that text, except where its own cable jumps, and allow a host's own leads through empty bays.
+- Snapping is a one-click on/off button; Snap options... holds the grid and alignment settings.
+- Dragging a bend near a neighboring bend's line merges the points, and interior collinear spikes collapse. Exact keyboard and dialog moves keep their coordinates.
+- Faster rebuilds:
+  - coreRoutes is memoized on its exact inputs;
+  - identical device measurements are reused within a build;
+  - faceplates are memoized.
+  - On a large fictional project, a core cable edit rebuild went from about 1.0 s to 0.5 s, and a browser bend commit from 0.93 s to 0.63 s. A warm rebuild is byte-identical to a cold one.
+- Organize connections has Even line spacing with a spacing value, saved per page in layout.lineSpacing and also used by wireless pages.
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.

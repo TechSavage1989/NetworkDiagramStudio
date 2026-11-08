@@ -185,4 +185,12 @@ function buildFaceplate(device,options={}){
  }
  const result=baseLayout(p);return result?mapObserved(rearExpansion(result,p,device),p,device):null;
 }
-export function deviceFaceplate(device,options={}){return consistentSockets(buildFaceplate(device,options));}
+// Faceplates are pure functions of the device record and options, rebuilt for
+// every probe, measurement and page. Keep a bounded memo and hand out copies,
+// because callers attach page-specific edit data to the result.
+const faceplateMemo=new Map();
+export function deviceFaceplate(device,options={}){
+ let key;try{key=JSON.stringify([device,options]);}catch{return consistentSockets(buildFaceplate(device,options));}
+ if(!faceplateMemo.has(key)){faceplateMemo.set(key,consistentSockets(buildFaceplate(device,options)));if(faceplateMemo.size>400)faceplateMemo.delete(faceplateMemo.keys().next().value);}
+ const value=faceplateMemo.get(key);return value&&structuredClone(value);
+}

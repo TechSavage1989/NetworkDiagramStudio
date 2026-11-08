@@ -5,7 +5,7 @@ import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
-import {coreLinkKey as linkKey,coreArrangement} from '../layout.mjs';
+import {coreLinkKey as linkKey,coreArrangement,lineSpacing} from '../layout.mjs';
 import {coreSidebar} from './sidebar.mjs';
 import {coreRoutes,ROUTE_STYLE} from './routing.mjs';
 import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth} from './labels.mjs';
@@ -109,6 +109,30 @@ function arrangeCore(boxes,links,{mode='compact',weight=4,extraTracks=0,reserve=
  };
  return layouts.map(layout=>({layout,score:score(layout)})).sort((a,b)=>a.score-b.score||a.layout.columns-b.layout.columns).map(choice=>choice.layout);
 }
+// Routing is a pure function of the edges, anchors, equipment geometry and
+// options. Saved bend points, colors and labels are applied afterwards, so an
+// edit that changes only those reuses the planned routes instead of planning
+// every cable again (and again for each retried arrangement). Results are
+// stored as data and relinked to this build's devices and links.
+const routeMemo=new Map();
+function memoRoutes(internal,external,endData,banks,nodes,options){
+ let key;
+ try{key=JSON.stringify([internal.map(e=>[e.idx,e.a,e.ap,e.b,e.bp,e.weight]),external.map(e=>[e.idx,e.a,e.ap,e.b,e.bp,e.weight]),[...endData.entries()].map(([k,v])=>[k,v.id,v.which,v.node.key,v.anchor,v.info?.plug?1:0]),[...nodes.values()].map(n=>[n.key,n.kind,n.sourceId,n.x,n.y,n.w,n.h,!!n.moduleChannel,n.panelRegions]),{...options,obstacles:options.obstacles.map(o=>[o.x,o.y,o.w,o.h,o.angle||0])}]);}
+ catch{return coreRoutes(internal,external,endData,banks,nodes,options);}
+ const edges=new Map([...internal,...external].map(e=>[e.idx,e])),byKey=new Map([...nodes.values()].map(n=>[n.key,n])),cached=routeMemo.get(key);
+ if(cached){routeMemo.delete(key);routeMemo.set(key,cached);}
+ const stored=cached||(()=>{
+  try{const planned=coreRoutes(internal,external,endData,banks,nodes,options);return {data:JSON.stringify(planned,(k,v)=>k==='node'?{__node:v.key}:k==='e'?{__edge:v.idx}:k==='info'?undefined:v instanceof Map?{__map:[...v.entries()]}:v)};}
+  catch(error){if(error.code!=='CORE_LAYOUT_CAPACITY')throw error;return {error:{message:error.message,code:error.code,owner:error.owner,port:error.port}};}
+ })();
+ if(!cached){routeMemo.set(key,stored);if(routeMemo.size>24)routeMemo.delete(routeMemo.keys().next().value);}
+ if(stored.error)throw Object.assign(Error(stored.error.message),stored.error);
+ const planned=JSON.parse(stored.data,(k,v)=>v&&typeof v==='object'?v.__node!==undefined?byKey.get(v.__node):v.__edge!==undefined?edges.get(v.__edge):v.__map?new Map(v.__map):v:v);
+ const relink=end=>{if(end?.e&&end.which){const live=endData.get(end.e.idx+'/'+end.which);if(live)end.info=live.info;}};
+ for(const r of [...planned.routes,...planned.references]){relink(r.a);relink(r.b);relink(r.v);}
+ for(const v of planned.ends.values())relink(v);
+ return planned;
+}
 function moduleLegend(page,project){
  const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
  if(!modules.size)return [];
@@ -169,6 +193,12 @@ export function corePages(project,inventory){
  const viewDevice=(sheet,id)=>sheet.views?.[id]||db.devices.get(id);
  const localPort=(sheet,id,port)=>{if(!sheet.ids.includes(id))return false;const view=sheet.views?.[id];if(!view)return true;const member=String(port||'').match(/^(?:(?:Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i)?.[1];return member?view.stackMembers.some(m=>String(m.id)===member):view.stackMembers[0].id===db.devices.get(id).stackMembers[0].id;};
  const rendered=new Map();
+ // Retried arrangements measure the same devices again. Within one build the
+ // project's presentation and artwork are fixed, so reuse identical measurements.
+ const measured_=new Map(),measure=(source,d,list,...rest)=>{
+  const key=JSON.stringify([d,list.map(e=>[e.idx,e.a,e.ap,e.b,e.bp,e.weight]),rest.map(v=>Array.isArray(v)?v.map(x=>x?.id??x):v)]);
+  if(!measured_.has(key))measured_.set(key,measurement(source,d,list,positions,...rest));return measured_.get(key);
+ };
  for(let attempt=0;attempt<=(dynamic?8:1)*Math.max(1,eligible.length)*2*FITS.length*2;attempt++){
  try{
  for(const sheet of packed)sheet.name=sheet.baseName;
@@ -186,7 +216,7 @@ export function corePages(project,inventory){
   const railReserve=Math.max(stableReserve,Math.max(0,edges.length-8)*24+Math.max(0,edges.length-1)*(railPitch-12));
   const weight=strokeWidth(aliasProject,sheet.name),owners=sheet.ids.filter(id=>!db.devices.get(id).owner||!sheet.ids.includes(db.devices.get(id).owner)),hasPositions=Object.entries(aliasProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|device|')&&(Number.isFinite(patch.x)||Number.isFinite(patch.y)));
   const measuredEdges=edges.map(e=>({...e,weight:cablePatch(aliasProject,{name:sheet.name},cableName(db,e))?.weight||cableWeight}));
-  const measured=new Map(dynamic?owners.map(id=>[id,measurement(aliasProject,viewDevice(sheet,id),measuredEdges.filter(e=>e.a===id||e.b===id),positions,(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH,1,weight,railPitch>12)]):[]);
+  const measured=new Map(dynamic?owners.map(id=>[id,measure(aliasProject,viewDevice(sheet,id),measuredEdges.filter(e=>e.a===id||e.b===id),(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH,1,weight,railPitch>12)]):[]);
   const arrangement=sheet.columnOnly?'vertical':sheet.arrangement||coreArrangement(aliasProject,sheet.corePageId);
   // Several columns leave only the first column's exterior rails, and any
   // continuation references, on the left; the busiest device's captions are
@@ -220,7 +250,7 @@ export function corePages(project,inventory){
   const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.views,sheet.fit,sheet.spreadHandoffs,sheet.expansion,sheet.labelClearance,sheet.columnOnly,arrangement,sheet.columnTracks,sheet.rank,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
   if(cached?.signature===signature)return cached.pages;
   const width=Math.min(WIDTH,W-(W<1000?276:W<1200?344:430)-38);
-  const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,viewDevice(sheet,id),used.filter(e=>e.a===id&&localPort(sheet,id,e.ap)||e.b===id&&localPort(sheet,id,e.bp)).slice(0,dynamic?Infinity:8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding,weight,railPitch>12)]));
+  const pageSizes=new Map(sheet.ids.map(id=>[id,measure(aliasProject,viewDevice(sheet,id),used.filter(e=>e.a===id&&localPort(sheet,id,e.ap)||e.b===id&&localPort(sheet,id,e.bp)).slice(0,dynamic?Infinity:8),(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding,weight,railPitch>12)]));
   const height=sheet.ids.reduce((n,id)=>n+pageSizes.get(id).height,0),scale=1;
   if((packing?.h??height)>BOTTOM-TOP)throw Object.assign(Error('This core page needs more room to keep the equipment readable.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   let row=dynamic?TOP:TOP+(BOTTOM-TOP-height*scale)/2;
@@ -267,7 +297,7 @@ export function corePages(project,inventory){
   const stack=[...nodes.values()].filter(n=>n.kind!=='handoff');
   const routingBounds=stack.length?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
   let planned;
-  try{planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding,weight,railPitch>12),railPitch,scale,obstacles});}
+  try{planned=memoRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding,weight,railPitch>12),railPitch,scale,obstacles,uniform:lineSpacing(aliasProject,sheet.name)});}
   catch(error){if(error.code==='CORE_LAYOUT_CAPACITY')error.page=page.name;throw error;}
   if(planned.cost[0]&&[...nodes.values()].every(n=>n.x>=sidebar.contentLeft&&n.x+n.w<=(W-38)&&n.y>=145&&n.y+n.h<=(H-69)))throw Object.assign(Error('This core page needs more room to route cables around the equipment.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   const outer={left:Math.min(routingBounds.left-18,...planned.routes.filter(r=>r.side==='left').map(r=>r.rail)),right:Math.max(routingBounds.right+18,...planned.routes.filter(r=>r.side==='right').map(r=>r.rail))},requests=[];

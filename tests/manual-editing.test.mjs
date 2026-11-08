@@ -78,3 +78,17 @@ test('crossing hops have visible clearance, scale to nearby crossings, and skip 
  const site=sampleSite(),files=await unzip(await exportVisio(site,buildPages(site)).arrayBuffer()),pages=new TextDecoder().decode(files.get('visio/pages/pages.xml')),content=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
  assert.match(pages,/<Cell N="LineJumpCode" V="4"/);assert.match(pages,/<Cell N="LineJumpStyle" V="1"/);assert.match(content,/<Cell N="ConLineJumpCode" V="0"/);assert.match(content,/<Cell N="ConLineJumpStyle" V="1"/);
 });
+
+test('dragging a bend onto another bend line merges them into one point',async()=>{
+ const {mergeCablePoints}=await import('../src/web/cable-edit.mjs');
+ // A Z route with two interior elbows and a short jog: [0,0] → [0,40] → [60,40] → [60,44] → [120,44] → [120,100].
+ const points=[[0,0],[0,40],[60,40],[60,44],[120,44],[120,100]];
+ const merged=moveCablePoint(points,3,61,42);assert.ok(merged.length<points.length,'the near-aligned jog is merged');assert.ok(validCable(merged));
+ assert.deepEqual(merged[0],[0,0]);assert.deepEqual(merged.at(-1),[120,100]);
+ for(let i=1;i<merged.length;i++)assert.ok(merged[i][0]===merged[i-1][0]||merged[i][1]===merged[i-1][1],'orthogonal');
+ // Exact moves keep the requested coordinates.
+ const exact=moveCablePoint(points,2,60,30,{merge:0});assert.ok(exact.some(p=>p[0]===60&&p[1]===30));
+ // An interior spike back along the same line collapses; port segments stay.
+ assert.deepEqual(mergeCablePoints([[0,0],[0,20],[50,20],[80,20],[50,20],[50,60],[100,60]]),[[0,0],[0,20],[50,20],[50,60],[100,60]]);
+ assert.deepEqual(mergeCablePoints([[0,0],[0,-10],[0,30],[40,30]]),[[0,0],[0,-10],[0,30],[40,30]],'a reversal at a port is kept');
+});

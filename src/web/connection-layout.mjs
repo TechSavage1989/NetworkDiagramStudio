@@ -16,7 +16,8 @@ function bounds(boxes){
  return {x,y,w:Math.max(...boxes.map(b=>b.x+b.w))-x,h:Math.max(...boxes.map(b=>b.y+b.h))-y};
 }
 function crossesEquipment(path,device){
- const own=[path.from?.device,path.to?.device].includes(device.key)||[path.sourceLink?.a,path.sourceLink?.b].includes(device.sourceId),regions=device.moduleChannel&&!own?[{x:0,y:0,w:1,h:1}]:device.panelRegions?.length?device.panelRegions:[{x:0,y:0,w:1,h:1}];
+ // As in routing, an empty bay is open faceplate for the host's own leads.
+ const own=[path.from?.device,path.to?.device].includes(device.key)||[path.sourceLink?.a,path.sourceLink?.b].includes(device.sourceId),regions=device.moduleChannel&&!own?[{x:0,y:0,w:1,h:1}]:device.panelRegions?.length?device.panelRegions.filter(region=>!(own&&region.empty)):[{x:0,y:0,w:1,h:1}];
  return regions.some(region=>{
   const box={x:device.x+(region.x||0)*device.w,y:device.y+region.y*device.h,w:(region.w??1)*device.w,h:region.h*device.h},inBox=([x,y])=>x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h;
   let first=0,last=path.points.length-1;
@@ -36,7 +37,9 @@ export function analyzeConnections(page){
   if(Math.hypot(points[0][0]-path.from.x,points[0][1]-path.from.y)>.01||Math.hypot(points.at(-1)[0]-path.to.x,points.at(-1)[1]-path.to.y)>.01)attachmentErrors++;
   for(const end of [path.from,path.to]){const host=anchors.get(end.device),port=host?.ports?.[end.port];if(!port||Math.hypot(end.x-host.x-port[0]*host.w,end.y-host.y-port[1]*host.h)>.01)attachmentErrors++;}
   for(const device of devices)if(crossesEquipment(path,device))obstructions++;
-  for(const text of texts)if(pathCrossesText(path,text,Math.max(1,weight/2)))obstructions++;
+  // Connector text with a white background sits on its own cable; only that
+  // cable's jumps must stay clear of it.
+  for(const text of texts)if(text.background&&path.linkId!=null&&text.linkId===path.linkId?(path.hops||[]).some(hop=>intersects(hop,text,1)):pathCrossesText(path,text,Math.max(1,weight/2)))obstructions++;
   for(let i=1;i<points.length;i++){
    const a=points[i-1],b=points[i],horizontal=Math.abs(a[1]-b[1])<.001;if(!horizontal&&Math.abs(a[0]-b[0])>.001)orthogonalErrors++;
    length+=Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]);
@@ -49,7 +52,7 @@ export function analyzeConnections(page){
   }
  }
  for(let i=0;i<texts.length;i++){
-  const text=texts[i];for(const other of texts.slice(i+1))if(intersects(text,other,0))obstructions++;
+  const text=texts[i];for(const other of texts.slice(i+1))if(!(text.background&&other.background&&text.linkId!=null&&text.linkId===other.linkId&&text.labelRole===other.labelRole)&&intersects(text,other,0))obstructions++;
   for(const device of devices)if(!(text.deviceTextOwner===device.sourceId&&(!text.ownerInstanceKey||text.ownerInstanceKey===device.instanceKey))&&intersects(text,device,1))obstructions++;
  }
  const footprint=bounds([...devices,...texts,...paths].map(drawingBounds).filter(Boolean));
@@ -108,7 +111,10 @@ const yieldFrame=()=>new Promise(resolve=>setTimeout(resolve,0));
 
 // Each candidate gets one bounded planner attempt. No accepted project mutation
 // occurs until the caller applies the returned edit set as one history entry.
-export async function organizeConnections(project,page,{buildPages,currentPages,compact=true,keepManualBends=true,signal,onProgress=()=>{},yieldWork=yieldFrame,maxCandidates=10}={}){
+// spacing (drawing units) asks for even line spacing on this page: it is saved
+// with the accepted layout, and a clear evenly spaced result is accepted even
+// when it does not shorten the routes, because the user chose it explicitly.
+export async function organizeConnections(project,page,{buildPages,currentPages,compact=true,keepManualBends=true,spacing=0,signal,onProgress=()=>{},yieldWork=yieldFrame,maxCandidates=10}={}){
  if(typeof buildPages!=='function')throw Error('A drawing planner is required.');
  const before=analyzeConnections(page),groups=groupsFor(page),baselineEdits=project.layout?.drawingEdits||{},edits=clearCableBends(page,baselineEdits,keepManualBends),pinned=moveDrawingItems(page,edits,new Map(connectionDevices(page).map(device=>[device.editKey,[0,0]]))),candidates=[{name:'Current positions',edits:pinned}],seen=new Set([JSON.stringify(pinned)]),originalIdentity=identity(page);
  if(!before.connections)throw Error('This page has no connections to organize.');
@@ -126,6 +132,8 @@ export async function organizeConnections(project,page,{buildPages,currentPages,
   for(let rank=0;rank<4;rank++)for(const {name,list,choices} of variants){const choice=choices[rank];if(choice)add(name+' / '+choice.columns+' columns',editedPositions(page,edits,list,choice.positions));}
  }
  const limit=Math.max(1,Math.min(12,maxCandidates)),replay=limit>1,plan=candidates.slice(0,replay?limit-1:1),others=new Map((currentPages||[]).filter(p=>p!==page&&p.name!==page.name).map(p=>[p.name,sceneGeometry(p)]));
+ const spacingLayout=layout=>{const next={...(layout.lineSpacing||{})};if(spacing)next[page.name]=spacing;else delete next[page.name];return next;};
+ const lineSpacing=spacingLayout(project.layout||{}),spacingChanged=JSON.stringify(lineSpacing)!==JSON.stringify(project.layout?.lineSpacing||{});
  const baseline={page,edits:baselineEdits,metrics:before,pages:currentPages,changed:false,name:'Current layout'};
  let best=baseline,tested=0,rejected=0;const rejections=[];
  const validate=pages=>{
@@ -140,11 +148,12 @@ export async function organizeConnections(project,page,{buildPages,currentPages,
   onProgress({completed:tested,total:plan.length+(replay?1:0),name:candidate.name});await yieldWork();
   if(signal?.aborted)throw new DOMException('Connection analysis cancelled.','AbortError');
   try{
-   const source={...project,layout:{...project.layout,drawingEdits:cleanDrawingEdits(candidate.edits)}};
+   const source={...project,layout:{...project.layout,lineSpacing,drawingEdits:cleanDrawingEdits(candidate.edits)}};
    if(replay)source._organizeCandidate={family:page.coreDeviceIds?'core':'wireless',name:page.name,scope:page.editScope,clearance:page.connectionLayout};else delete source._organizeCandidate;
    const checked=validate(buildPages(source)),{page:next,metrics}=checked;
-   if(!best.metrics.valid||quality(metrics,before)<quality(best.metrics,before)-.001){
-    best={...checked,edits:candidate.edits,changed:sceneGeometry(next)!==sceneGeometry(page),name:candidate.name};
+   // A requested spacing change makes the first clear candidate the baseline.
+   if(!best.metrics.valid||spacingChanged&&best===baseline||quality(metrics,before)<quality(best.metrics,before)-.001){
+    best={...checked,edits:candidate.edits,changed:spacingChanged||sceneGeometry(next)!==sceneGeometry(page),name:candidate.name};
    }
   }catch(error){if(signal?.aborted||error.name==='AbortError')throw error;rejected++;rejections.push({name:candidate.name,code:error.code||'LAYOUT_REJECTED',reason:error.message});}
   tested++;
@@ -157,13 +166,13 @@ export async function organizeConnections(project,page,{buildPages,currentPages,
   try{
    // Only drawing edits are saved. Rebuild once without candidate clearance
    // hints so the reviewed scene is exactly what Apply and reopen will show.
-   const source={...project,layout:{...project.layout,drawingEdits:cleanDrawingEdits(best.edits)}};delete source._organizeCandidate;
+   const source={...project,layout:{...project.layout,lineSpacing,drawingEdits:cleanDrawingEdits(best.edits)}};delete source._organizeCandidate;
    const checked=validate(buildPages(source));
-   if(before.valid&&quality(checked.metrics,before)>=quality(before,before)-.001)throw Error('The saved layout does not improve the current drawing.');
-   best={...best,...checked,changed:sceneGeometry(checked.page)!==sceneGeometry(page)};
+   if(before.valid&&!spacingChanged&&quality(checked.metrics,before)>=quality(before,before)-.001)throw Error('The saved layout does not improve the current drawing.');
+   best={...best,...checked,changed:spacingChanged||sceneGeometry(checked.page)!==sceneGeometry(page)};
   }catch(error){if(signal?.aborted||error.name==='AbortError')throw error;rejected++;rejections.push({name,code:error.code||'LAYOUT_REJECTED',reason:error.message});best=baseline;}
   tested++;
  }
  onProgress({completed:tested,total:tested,name:'Complete'});
- return {...best,before,tested,rejected,rejections,manualBends:cables(page).filter(path=>baselineEdits[path.editKey]?.points).length,keepManualBends};
+ return {...best,lineSpacing,spacing,before,tested,rejected,rejections,manualBends:cables(page).filter(path=>baselineEdits[path.editKey]?.points).length,keepManualBends};
 }

@@ -407,7 +407,7 @@ function layout1d(group,pitch,minPitch){
  }
  return out;
 }
-function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch}){
+function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0}){
  // Only the moved cables need rescoring against the rest of the page.
  const local=list=>{const total=[0,0,0];for(const r of list){const others=[];for(const o of routes)if(o!==r)others.push(...geometry(o).lines);const v=routeScore(r,nodes,obstacles,others,minX,maxX,railPitch);total[0]+=v[0];total[1]+=v[1];total[2]+=v[3];}return total;};
  const snapshot=list=>list.map(r=>[r,r.points,r.rail,r.a,r.b,r.v,r.x]);
@@ -484,13 +484,32 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch}){
   }
  };
  const pass=kind=>{
-  const row=kind==='row',groups=prepare(kind),step=row?ROUTE_STYLE.rowPitch:Math.max(ROUTE_STYLE.pitch,railPitch);
+  const row=kind==='row',groups=prepare(kind),step=uniform?Math.max(uniform,row?0:railPitch):row?ROUTE_STYLE.rowPitch:Math.max(ROUTE_STYLE.pitch,railPitch);
+  const plans=[];
   for(const group of groups){
    const minPitch=Math.max(...group.map(i=>separation(i.w,i.w)));
    const valid=placed=>placed&&[...placed].every(([item,c])=>c>=item.bounds.hardMin-.001&&c<=item.bounds.hardMax+.001&&
     (item.joints||[]).every(j=>!j.item||Math.sign(j.x-item.c)===Math.sign((placed.get(j.item)??j.item.c)-c)&&Math.abs((placed.get(j.item)??j.item.c)-c)>=separation(item.w,j.item.w)-.001));
    let placed=layout1d(group,step,minPitch);
    if(!valid(placed)&&row){for(const item of group)groups.bound(item,true);placed=layout1d(group,step,minPitch);}
+   plans.push({group,placed,valid,minPitch});
+  }
+  // Even line spacing: every group in the same channel (one gap between two
+  // bodies, or one exterior side) uses one shared lattice at the chosen pitch,
+  // so bundles start at the same offset instead of where each was routed.
+  if(uniform){
+   const channels=new Map();
+   for(const plan of plans){if(!plan.placed)continue;const key=plan.group[0].bounds.key;if(!channels.has(key))channels.set(key,[]);channels.get(key).push(plan);}
+   for(const list of channels.values()){
+    const items=list.flatMap(p=>p.group),open=items[0].bounds.open,layers=Math.max(...items.map(i=>i.layer))+1,minPitch=Math.max(...list.map(p=>p.minPitch));
+    let place;
+    if(!open[0]&&!open[1]){const lo=Math.max(...items.map(i=>i.bounds.min)),hi=Math.min(...items.map(i=>i.bounds.max)),u=layers<2?0:Math.min(step,(hi-lo)/(layers-1));if(hi<lo||layers>1&&u<minPitch-.001)continue;const start=Math.max(lo,(lo+hi)/2-u*(layers-1)/2);place=i=>start+i.layer*u;}
+    else if(open[0]!==open[1]){const dir=open[0]?-1:1,base=open[0]?Math.min(...items.map(i=>i.bounds.max)):Math.max(...items.map(i=>i.bounds.min));if(!Number.isFinite(base))continue;place=i=>base+dir*i.layer*step;}
+    else continue;
+    for(const plan of list){const lattice=new Map(plan.group.map(i=>[i,place(i)]));if(plan.valid(lattice))plan.placed=lattice;}
+   }
+  }
+  for(const {placed,valid} of plans){
    if(!valid(placed)||[...placed].every(([item,c])=>Math.abs(item.c-c)<.01))continue;
    apply([...placed]);
   }
@@ -551,7 +570,7 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch}){
  repair('row');repair('rail');
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}
 }
-export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true}){
+export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0}){
  const bodies=[...nodes.values()];
  if(bodies.some(n=>n.x<minX))minX=Math.min(minX,...bodies.map(n=>n.x))-Math.max(24,endData.size*railPitch);
  if(bodies.some(n=>n.x+n.w>maxX))maxX=Math.max(maxX,...bodies.map(n=>n.x+n.w))+Math.max(24,endData.size*railPitch);
@@ -657,7 +676,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    routes[i]=best;
    for(const v of [best.a,best.b])ends.set(v.e.idx+'/'+v.which,v);
   }
-  if(neat)neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch});
+  if(neat)neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform});
   // Continuation badges stay outside every finished left rail.
   if(references.length&&[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)){
    const x=Math.min(referenceX,...routes.filter(r=>!r.v&&Number.isFinite(r.rail)&&r.rail<left).map(r=>r.rail-Math.max(12,ROUTE_STYLE.pitch)));

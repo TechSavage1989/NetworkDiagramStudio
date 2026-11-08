@@ -32,6 +32,25 @@ try{
  await page.screenshot({path:resolve(output,'vertical.png')});
  await page.locator('#drawing-undo').click();assert.equal(await scene(),baseline,'Undo restores the compact page in one step');assert.equal(await arrange.inputValue(),'compact');assert.equal(await page.locator('#drawing-undo').isDisabled(),true);
  await page.locator('#drawing-redo').click();assert.equal(await columns(),1);assert.equal(await arrange.inputValue(),'vertical');
+ // Devices and cables stay editable after an arrangement, including pages
+ // whose connector text sits on its own cable.
+ const device=page.locator('#canvas svg [data-drawing-key="Core Network|device|idf2|body"]');const d=await device.boundingBox();
+ await page.mouse.move(d.x+40,d.y+6);await page.mouse.down();for(let i=1;i<=8;i++)await page.mouse.move(d.x+40+i*6,d.y+6+i*2);await page.mouse.up();
+ await page.waitForFunction(()=>/moved/i.test(document.querySelector('#feedback').textContent));result.deviceMove=await page.locator('#feedback').textContent();
+ const point=await page.locator('#canvas svg path.diagram-cable').nth(2).evaluate(path=>{const l=path.getTotalLength(),q=path.getPointAtLength(l*.5),m=path.getScreenCTM();return {x:q.x*m.a+m.e,y:q.y*m.d+m.f};});
+ await page.mouse.click(point.x,point.y);await page.waitForSelector('#canvas svg .cable-controls [data-cable-point]');
+ const bend=await page.locator('#canvas svg .cable-controls [data-cable-point]').first().boundingBox();
+ await page.mouse.move(bend.x+bend.width/2,bend.y+bend.height/2);await page.mouse.down();for(let i=1;i<=6;i++)await page.mouse.move(bend.x+bend.width/2+i*4,bend.y+bend.height/2+i*4);await page.mouse.up();
+ await page.waitForFunction(()=>/bend moved/i.test(document.querySelector('#feedback').textContent));result.bendMove=await page.locator('#feedback').textContent();
+ // Snapping is one click; its options are a separate dialog.
+ assert.equal(await page.locator('#drawing-snap').textContent(),'Snapping: off');await page.locator('#drawing-snap').click();assert.equal(await page.locator('#drawing-snap').textContent(),'Snapping: on');assert.equal(await page.locator('#drawing-snap').getAttribute('aria-pressed'),'true');
+ await page.locator('#drawing-snap-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Snap options');await page.locator('#close').click();
+ // Organize connections can put every parallel line on one even spacing.
+ const beforeSpacing=await scene();await page.locator('#drawing-organize').click();await page.getByLabel('Compact device positions').uncheck();await page.getByLabel('Even line spacing').check();
+ assert.equal(await page.getByLabel('Spacing between lines').isEnabled(),true);await page.getByLabel('Spacing between lines').fill('26');
+ await page.getByRole('button',{name:'Analyze connections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.organize-results').hidden,null,{timeout:60000});
+ await page.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>/evenly spaced/i.test(document.querySelector('#feedback').textContent));result.spacing=await page.locator('#feedback').textContent();
+ await page.locator('#drawing-undo').click();assert.equal(await scene(),beforeSpacing,'Undo restores the previous spacing in one step');await page.locator('#drawing-redo').click();
  // The drawing default is also available in Pages & layout.
  await page.locator('#page-layout').click();await page.locator('#dialog select').first().selectOption('*');
  const field=page.getByLabel('Network page arrangement',{exact:true});assert.equal(await field.inputValue(),'vertical');await field.selectOption('columns-2');
