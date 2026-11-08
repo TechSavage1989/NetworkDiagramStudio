@@ -18,7 +18,7 @@ import {pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles} from '../
 import {applyLinkStyles} from '../link-styles.mjs';
 import {orderedDevices,hopStyle} from '../layout.mjs';
 import {comparePorts,hasPortDetails,consecutivePorts,wrapPortText,portColumnPrefix,portRanges,portNumberBox} from '../port-table.mjs';
-import {textWidth} from './labels.mjs';
+import {textWidth,intersects} from './labels.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
 import {C,addDevice,bridge,fresh,getAnchor,label,linkLegend,list,mediaInfo,optic,physicalPorts,portList,portNumber,rate,rect,route,split,state,svgPage,value,xml} from './scene.mjs';
 export {exportVisio,exportStencil} from './visio.mjs';
@@ -114,23 +114,61 @@ function diamond(items,x,y,size,fill,stroke,weight=.5){items.push({type:'vector'
 // Optional marks follow the switchport builder: a dot per tagged VLAN along
 // the top of the jack, a diamond for the voice VLAN and the trunk's outline.
 const MIN_DOT=1.5;
-// How much taller a plate's jacks must be to hold every tagged VLAN dot at
-// the minimum size (1 when they already fit).
-function markStretch(g,ports,marks,format){
- const layout=portLabelLayout(g,ports,{fontSize:10,minFontSize:8,minWidth:0,measureRequired:false,...(format?{format}:{})});let need=1;
- for(const {port,content} of layout.entries||[]){
-  if(!content||port.unconfigured)continue;const mark=marks?.(port);if(!mark||mark.stack||!mark.tagged?.length)continue;
-  const step=MIN_DOT*2+.6,per=Math.max(1,Math.floor((content.w-1)/step)),rows=Math.ceil(mark.tagged.length/per),reserve=mark.voice?9:0;
-  need=Math.max(need,(1+MIN_DOT*2+(rows-1)*step+reserve+1)/content.h);
+// Plate labels (module and bay names, model text) are tiny at faceplate
+// scale. On a printed port map each grows, after the port numbers and jack
+// faces are placed, to the largest size up to 11 px that still fits its own
+// box and stays clear of every number, face and other label. It never shrinks.
+function readablePlateText(g,obstacles=[],maximum=11){
+ const texts=(g.children||[]).filter(c=>c.type==='text'&&c.value&&!c.hidden&&!c.angle&&[c.x,c.y,c.w,c.h].every(Number.isFinite));
+ const footprint=(c,size)=>{const box={x:g.x+c.x*g.w,y:g.y+c.y*g.h,w:c.w*g.w,h:c.h*g.h},lines=String(c.value).split('\n'),w=Math.min(box.w,Math.max(...lines.map(line=>textWidth(line,size,!!c.bold)))),h=lines.length*size*1.2;return {x:box.x+(c.align==='right'?box.w-w:c.align==='center'?(box.w-w)/2:0),y:box.y+(box.h-h)/2,w,h};};
+ const placed=new Map(texts.map(c=>[c,footprint(c,c.size||5)]));
+ for(const c of texts){
+  const base=c.size||5,width=c.w*g.w,lines=String(c.value).split('\n'),others=[...placed].filter(([o])=>o!==c).map(([,b])=>b);
+  for(let next=maximum;next>base;next-=.5){
+   if(lines.some(line=>textWidth(line,next,!!c.bold)>width))continue;
+   const box=footprint(c,next);if([...obstacles,...others].some(o=>intersects(box,o,.5)))continue;
+   c.size=next;placed.set(c,box);break;
+  }
  }
- return need;
+}
+// Jack faces keep their real proportions and grow until neighbouring jacks
+// touch (edge to edge), with no port number covered and every face on the
+// plate. Copper jacks share one scale; optical cages, usually with more room
+// in their modules, share their own, sized around the copper faces.
+function faceScales(g,entries,limit=2.6){
+ const faces=entries.filter(e=>e.socket),optical=e=>!/rj|copper|base-?t/i.test(String(e.socket.form||'RJ45'));
+ const center=b=>[b.x+b.w/2,b.y+b.h/2],scales=new Map(),fixed=[];
+ const against=(a,box)=>{const [ax,ay]=center(a),[bx,by]=center(box);return Math.max((Math.abs(ax-bx)-box.w/2)/(a.w/2),(Math.abs(ay-by)-box.h/2)/(a.h/2));};
+ const pair=(a,b)=>{const [ax,ay]=center(a),[bx,by]=center(b);return Math.max(Math.abs(ax-bx)/((a.w+b.w)/2),Math.abs(ay-by)/((a.h+b.h)/2));};
+ for(const group of [faces.filter(e=>!optical(e)),faces.filter(optical)]){
+  if(!group.length)continue;let k=limit;
+  for(const [i,e] of group.entries()){
+   const a=e.socket,[ax,ay]=center(a);
+   for(const other of group.slice(i+1))k=Math.min(k,pair(a,other.socket));
+   for(const other of faces)if(!group.includes(other)&&!scales.has(other))k=Math.min(k,against(a,other.socket));
+   for(const box of fixed)k=Math.min(k,against(a,box));
+   for(const n of entries.map(x=>x.number).filter(Boolean))k=Math.min(k,against(a,n));
+   k=Math.min(k,(ax-g.x)/(a.w/2),(g.x+g.w-ax)/(a.w/2),(ay-g.y)/(a.h/2),(g.y+g.h-ay)/(a.h/2));
+  }
+  k=Math.max(1,k);
+  for(const e of group){scales.set(e,k);const a=e.socket;fixed.push({x:a.x+a.w/2-a.w*k/2,y:a.y+a.h/2-a.h*k/2,w:a.w*k,h:a.h*k});}
+ }
+ return scales;
 }
 function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null,format=null,unconfiguredFill=null}={}){
  const size=10*(fontScale??1),minimum=8*(fontScale??1),formatting=format?{format}:{};
  let layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,measureRequired:false,...formatting});
  if(!layout.readable)layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,vertical:true,...formatting});
  if(!layout.readable){const alternatives=[false,true].map(vertical=>portLabelLayout(g,ports,{fontSize:minimum,minFontSize:minimum,minWidth:0,vertical})),required=alternatives.map(v=>v.requiredWidth).filter(Number.isFinite);throw Object.assign(Error('This port map needs a wider device to keep the port numbers readable. Use a wider page or the Switchport report layout.'),{code:'PORT_LABEL_CAPACITY',requiredWidth:required.length?Math.min(...required):null,sourceId:g.sourceId});}
- for(const {port,text,number:box,content,editKey:key,socket} of layout.entries){const active=selected?.has(port.name.toLowerCase()),color=port.unconfigured?unconfiguredFill:selected?(active?referencePortFills.ap:null):fill(port),metadata={portName:port.name,sourceId:g.sourceId},mark=port.unconfigured?null:marks?.(port);
+ // Port maps with VLAN marks enlarge every jack face on the plate together.
+ const scales=marks?faceScales(g,layout.entries):null;
+ for(const entry of layout.entries){
+  const {port,text,number:box,content:inner,editKey:key,socket}=entry,grow=scales?.get(entry)||1;
+  const face=socket&&grow>1?{x:socket.x+socket.w/2-socket.w*grow/2,y:socket.y+socket.h/2-socket.h*grow/2,w:socket.w*grow,h:socket.h*grow}:null;
+  const content=face&&inner?{x:face.x+(inner.x-socket.x)*grow,y:face.y+(inner.y-socket.y)*grow,w:inner.w*grow,h:inner.h*grow}:inner;const active=selected?.has(port.name.toLowerCase()),color=port.unconfigured?unconfiguredFill:selected?(active?referencePortFills.ap:null):fill(port),metadata={portName:port.name,sourceId:g.sourceId},mark=port.unconfigured?null:marks?.(port);
+  // An enlarged face keeps the jack look: a dark frame around the fill.
+  (layout.faces||=[]).push(face||socket);
+  if(face){rect(items,face.x,face.y,face.w,face.h,'#2B3440','#1B222B',.6);Object.assign(items.at(-1),{portName:port.name,sourceId:g.sourceId,editKey:key+'|socket-face',portNumberRole:'face'});}
   if(content&&color){const outline=mark?.lag;rect(items,content.x,content.y,content.w,content.h,mark?.stack?'#111827':color,outline||'none',outline?Math.max(1.2,Math.min(2,content.w*.12)):0);Object.assign(items.at(-1),{...metadata,editKey:key+'|socket-fill',portNumberRole:'socket'});}
   if(content&&mark&&!mark.stack){
    // Every tagged VLAN gets a dot, as in the switchport builder: rows fill the
@@ -317,9 +355,15 @@ function builderFooter(page,palette,scope,sheet,sampleVlan){
 }
 function builderSheets(project,db,info,palette,plan,settings={}){
  // A sheet too narrow for readable numbers beside the key column puts the key
- // under the hardware instead, before the common width is widened.
- try{return builderLayout(project,db,info,palette,plan,settings,true);}
+ // under the hardware instead, before the common width is widened. So does a
+ // sheet whose jacks are too small for every VLAN dot, when the key below
+ // lets the hardware (and its jacks) grow.
+ let side;
+ try{side=builderLayout(project,db,info,palette,plan,settings,true);}
  catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;return builderLayout(project,db,info,palette,plan,settings,false);}
+ const crowded=pages=>pages.reduce((n,page)=>n+page.items.filter(i=>i.portNumberRole==='tagged-more'&&i.type==='ellipse').length,0);
+ if(crowded(side)){try{const below=builderLayout(project,db,info,palette,plan,settings,false);if(crowded(below)<crowded(side))return below;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;}}
+ return side;
 }
 function builderLayout(project,db,info,palette,plan,{sheetLabel='1 / 1'}={},column=true){
  const {width:W,height:H}=pageGeometry(project,'ports'),d=info.device,prefix=project._reportPrefix?project._reportPrefix+'|':'',keyW=column&&W>=1000?Math.min(230,Math.max(190,W*.17)):0,mainW=W-72-(keyW?keyW+16:0),hw=Math.min(plan.width,mainW),footerTop=H-108;
@@ -351,24 +395,19 @@ function builderLayout(project,db,info,palette,plan,{sheetLabel='1 / 1'}={},colu
  let {p,top:y}=newSheet(),hasPlate=false,unsupplied=false,markWidth=0;const overflow=[];
  // Hardware, member by member, continuing onto another sheet only when needed.
  for(const part of parts){
-  // Readable VLAN dots: a built-in faceplate grows taller (never wider, at
-  // most four times) until every jack holds its tagged VLANs at the minimum
-  // dot size. Imported artwork keeps its proportions.
-  const barH=part.bar?17:0,format=d.modules?.length&&!stackPart?name=>portLabelText(name).replace(/^[A-Z]{1,2}(?=\d+$)/,''):null;
-  const probe=addDevice({...p,items:[]},project,part.view,[36,0,hw,1],'probe',{fitWidth:true,padding:equipmentPadding});
-  const stretch=probe.asset?1:Math.max(1,Math.min(4,(footerTop-130-barH)/probe.h,markStretch(probe,physicalPorts(part.view),palette.marks,format)));
-  const size={w:probe.w,h:probe.h*stretch};
+  const barH=part.bar?17:0,size=equipmentSize(project,part.view,hw);
   if(hasPlate&&y+barH+size.h>footerTop-8)({p,top:y}=newSheet());
   if(part.bar){rect(p.items,36,y,hw,barH-2,'#14283D');p.items.at(-1).editKey=bodyKey+'|member-bar|'+part.member.id;label(p.items,42,y,hw-12,barH-2,part.bar,10,true,C.white);Object.assign(p.items.at(-1),{editKey:bodyKey+'|member-bar|'+part.member.id+'|text',full:true});}
   p.editScope=prefix+'MDF Port Map|'+equipmentScope(part.view)+'|sheet:0';
   p.portMap.overview=true;p.portMap.bookletRole='map';
-  const g=stretch>1?addDevice(p,project,part.view,[36,y+barH,size.w,size.h],'panel:'+d.id+(part.member?':'+part.member.id:''),{fillBounds:true,padding:equipmentPadding}):addDevice(p,project,part.view,[36,y+barH,hw,1],'panel:'+d.id+(part.member?':'+part.member.id:''),{fitWidth:true,padding:equipmentPadding});if(stretch>1)g.portMapStretch=stretch;p.editScope=prefix+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+(sheet-1);
+  const g=addDevice(p,project,part.view,[36,y+barH,hw,1],'panel:'+d.id+(part.member?':'+part.member.id:''),{fitWidth:true,padding:equipmentPadding});p.editScope=prefix+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+(sheet-1);
   // Every socket is numbered, as on the builder sheet; only configured ports
   // carry VLAN fills and marks. Chassis modules number their own ports 1..n.
   const known=physicalPorts(part.view),names=new Set(known.map(port=>port.name.toLowerCase())),sockets=Object.keys(g.ports).filter(name=>!/^uplink\./.test(name)&&!names.has(name.toLowerCase())).map(name=>({name,unconfigured:true}));
   if(sockets.length)unsupplied=true;
   const numbering={fill:palette.native,marks:palette.marks,stateKey:true,unconfiguredFill:NATIVE_NOT_SUPPLIED,...(d.modules?.length&&!stackPart?{format:name=>portLabelText(name).replace(/^[A-Z]{1,2}(?=\d+$)/,'')}:{})};
   let drawn;try{drawn=portNumbers(p.items,g,[...known,...sockets],numbering);}catch(error){if(error.code!=='PORT_LABEL_CAPACITY'||!sockets.length)throw error;drawn=portNumbers(p.items,g,known,numbering);}
+  if(!g.asset)readablePlateText(g,[...(drawn?.faces||[]),...(drawn?.entries||[]).map(entry=>entry.number)].filter(Boolean));
   if(drawn?.overflow)overflow.push(...drawn.overflow);if(drawn?.markWidth)markWidth=Math.max(markWidth,drawn.markWidth);
   y=g.y+g.h+(part.bar?4:10);hasPlate=true;
  }
@@ -600,10 +639,13 @@ function portMaps(project,db){
  // needs it, growing a dynamic page; fixed paper keeps the '+' marker list.
  const crowded=pages=>pages.filter(page=>page.portMap?.markWidth).map(page=>{const d=switches.find(d=>d.id===page.portMap.markSource);return page.portMap.markWidth/(d?deviceScale(project,d):1)+2;});
  for(let attempt=0;attempt<4&&switches.some(d=>!sheets.has(d.id));attempt++){
-  const width=Math.max(0,...crowded(best));if(width<=initial.width+1)break;
-  // The page also keeps its VLAN key column (up to 230 plus a 16 gap).
-  const geometry=pageGeometry(project,'ports'),room=82+246;let next=project;
-  if(width>geometry.width-room){if(!geometry.dynamic)break;next={...project,_pageGeometry:{...project._pageGeometry,ports:{width:Math.ceil(width+room),height:geometry.height}}};}
+  // A growing page also keeps its VLAN key column (up to 230 plus a 16 gap);
+  // a fixed sheet widens the hardware only to its own width, and may then
+  // move the key under the hardware (builderSheets).
+  const geometry=pageGeometry(project,'ports'),room=82+246;let next=project,width=Math.max(0,...crowded(best));
+  if(!geometry.dynamic)width=Math.min(width,geometry.width-82);
+  if(width<=initial.width+1)break;
+  if(geometry.dynamic&&width>geometry.width-room)next={...project,_pageGeometry:{...project._pageGeometry,ports:{width:Math.ceil(width+room),height:geometry.height}}};
   try{const plan=portEquipmentPlan(next,switches,width),pages=portMapsAtScale(next,db,plan);best=pages;initial=plan;project=next;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;break;}
  }
  const legible=pages=>!pages.some(page=>page.portMap?.markWidth);

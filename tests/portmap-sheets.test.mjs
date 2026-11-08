@@ -90,10 +90,11 @@ test('a trunk with many tagged VLANs keeps readable dots: wider hardware, or a +
  }
  const voice=page.items.find(i=>i.portNumberRole==='voice'&&i.portName==='C1');assert.ok(voice&&page.items.filter(i=>i.portNumberRole==='tagged'&&i.portName==='C1').every(d=>!intersects(d,voice,0)),'the voice diamond keeps its room');
  assert.ok(!page.items.some(i=>i.portNumberRole==='tagged-more'));
- // Fixed paper cannot widen: readable dots, a + marker and the full list.
+ // Fixed paper cannot grow: every dot stays readable, and any the jack
+ // cannot hold are counted by a + marker and listed in full.
  const fixed=sheet({pageSetup:{default:{preset:'letter'}}}),dots=fixed.items.filter(i=>i.portNumberRole==='tagged'&&i.portName==='A1'),more=fixed.items.find(i=>i.portNumberRole==='tagged-more'&&i.type==='ellipse'&&i.portName==='A1');
- assert.ok(dots.length<25&&dots.every(d=>d.w/2>=1.5-1e-9));assert.equal(more?.moreCount,25-dots.length);
- const texts=fixed.items.filter(i=>i.type==='text').map(i=>i.value);assert.ok(texts.includes('Tagged VLANs (+ on the jack)'));assert.ok(texts.some(t=>/^A?1-8: 100-124$/.test(t)),texts.filter(t=>/100/.test(t)).join(' | '));
+ assert.ok(dots.every(d=>d.w/2>=1.5-1e-9));assert.equal(dots.length+(more?.moreCount||0),25);
+ if(more){const texts=fixed.items.filter(i=>i.type==='text').map(i=>i.value);assert.ok(texts.includes('Tagged VLANs (+ on the jack)'));assert.ok(texts.some(t=>/^A?1-8: 100-124$/.test(t)),texts.filter(t=>/100/.test(t)).join(' | '));}
 });
 
 test('the switchport builder sheet style draws each switch port map on US Letter, readable and complete',async()=>{
@@ -113,12 +114,27 @@ test('the switchport builder sheet style draws each switch port map on US Letter
  const faceplate=buildAllPages({...site,layout:{}});assert.ok(!faceplate.some(page=>page.portMap?.switchportSheet));assert.ok(faceplate.some(page=>page.portMap?.overview&&page.items.some(item=>item.portNumberRole==='socket')));
 });
 
-test('port maps keep the realistic faceplate on a US Letter sheet by default, with taller jacks for readable dots',()=>{
+test('port maps keep the realistic faceplate on a US Letter sheet by default, with proportionally larger jacks for readable dots',()=>{
  const vlans=Array.from({length:26},(_,i)=>({id:100+i,name:'Lab '+(100+i)}));
  const core={id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,ports:[{name:'A1',state:'up',native:100,tagged:vlans.slice(1,13).map(v=>v.id)},{name:'C1',state:'up',native:100,voice:125,tagged:vlans.slice(1,13).map(v=>v.id)}]};
  const page=buildAllPages({name:'Letter lab',devices:[core],links:[]}).find(p=>p.portMap?.overview);
  assert.equal(Math.round(page.width),1056);assert.equal(Math.round(page.height),816);assert.ok(!page.portMap.switchportSheet,'the faceplate artwork is the default');
- const plate=page.items.find(i=>i.type==='device'&&i.sourceId==='core');assert.ok(plate.portMapStretch>1,'the plate grows taller for the dots');
+ // Jack faces grow together, keeping their proportions, and never overlap.
+ const faces=page.items.filter(i=>i.portNumberRole==='face'),plate=page.items.find(i=>i.type==='device'&&i.sourceId==='core');assert.ok(faces.length,'jack faces are enlarged');
+ for(const face of faces){const socket=plate.children.find(c=>c.socketPart===0&&Math.abs(plate.x+(c.x+c.w/2)*plate.w-(face.x+face.w/2))<.5&&Math.abs(plate.y+(c.y+c.h/2)*plate.h-(face.y+face.h/2))<.5);if(socket)assert.ok(Math.abs(face.w/face.h-(socket.w*plate.w)/(socket.h*plate.h))<.01,'a face keeps its jack proportions');}
+ for(let i=0;i<faces.length;i++)for(let j=i+1;j<faces.length;j++)assert.ok(!intersects(faces[i],faces[j],-.01),'faces may touch but not overlap');
  for(const name of ['A1','C1']){const dots=page.items.filter(i=>i.portNumberRole==='tagged'&&i.portName===name);assert.equal(dots.length,12,name+' shows every tagged VLAN');assert.ok(dots.every(d=>d.w/2>=1.5-1e-9),name+' dots stay readable');}
  assert.ok(!page.items.some(i=>i.portNumberRole==='tagged-more'));
+});
+
+test('faceplate captions grow to a readable size without pushing a dense chassis map off US Letter',()=>{
+ const vlans=Array.from({length:26},(_,i)=>({id:100+i,name:'Lab '+(100+i)}));
+ const core={id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:null,nativeState:'None',tagged:vlans.slice(0,25).map(v=>v.id)})),...Array.from({length:24},(_,i)=>({name:'C'+(i+1),state:'up',native:100+(i%6),voice:i%3?125:undefined,tagged:vlans.slice(1,2+(i%8)*2).map(v=>v.id)}))]};
+ const page=buildAllPages({name:'Caption lab',devices:[core],links:[]}).find(p=>p.portMap?.overview);
+ assert.equal(Math.round(page.width),1056);assert.equal(Math.round(page.height),816);
+ const plate=page.items.find(i=>i.type==='device'&&i.sourceId==='core'),caption=value=>plate.children.find(c=>c.type==='text'&&c.value===value);
+ for(const value of ['Management module','Optional MM2 bay'])assert.ok(caption(value)?.size>=9,value+' is readable');
+ // A grown caption stays clear of every port number and jack face.
+ const blocked=page.items.filter(i=>i.portNumberRole==='text'||i.portNumberRole==='face');
+ for(const c of plate.children.filter(c=>c.type==='text'&&c.size>5)){const box={x:plate.x+c.x*plate.w,y:plate.y+c.y*plate.h+(c.h*plate.h-c.size*1.2)/2,w:c.w*plate.w,h:c.size*1.2};assert.ok(!blocked.some(b=>intersects(box,b,0)),c.value+' stays clear of numbers and faces');}
 });

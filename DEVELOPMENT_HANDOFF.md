@@ -83,7 +83,7 @@ Owner follow-up (Visio jumps, WAN cards, labels, off-page links, editor space):
 Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
 - Visio: on a page drawn above its origin (WAN cards above a firewall), connector paths were written 20 units higher than the device shapes. Cables then missed their ports, and stack leads looked as if they ran through the members. normalizedPage now translates cable commands and hops, and scripts/check-visio-package.py checks every connector's path against its Begin and End points. A LibreOffice render of the fictional MDF lookalike shows the leads leaving below each member into the gap.
 - Line jumps default to one hop per crossed line, Visio's usual look. Pages & layout > Line jumps can switch back to one bridge over close lines (layout.hopStyle 'bundle').
-- Port names of leads leaving the same side of a device sit in one row: beside their leads, or on their own line where there is no room.
+- Port names of leads leaving the same side of a device sit in one row: beside their leads, or on their own line where there is no room. This includes leads leaving a left or right side (A1, A3 and C2 on the fictional MDF).
 - Device order, Connections, Add, Reports and Hardware moved to the header, so the device list is the sidebar's only scrolling area.
 - Port maps now follow the Switchport Diagram Builder:
   - The AOS-Switch parser joins port lists that a backup wraps onto the next line, even inside a port name. This was the main reason chassis ports were missing: 104 of 184 on the owner's MDF.
@@ -94,7 +94,9 @@ Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
 Owner follow-up (printable port maps, port names and off-page tags):
 - Owner preference: keep the realistic faceplates.
   - Port maps use the faceplate artwork on a US Letter sheet by default.
-  - Built-in plates grow taller (at most 4x) so every jack holds its VLAN dots at the readable minimum.
+  - Jack faces on built-in plates grow in proportion, copper and optical separately, up to edge to edge, so the VLAN dots stay readable. The plate keeps its shape.
+  - Module, bay and model captions on the plate grow to a readable size (up to 11 px) after the port numbers and faces are placed, so they never push a map off Letter.
+  - The VLAN key moves under the hardware when that leaves fewer '+' markers.
   - The builder sheet described below is now the Port map options > Port map style choice "Switchport builder sheet".
 - Builder sheet details (now optional):
   - Fitted to US Letter landscape (or a fixed port-map paper choice).

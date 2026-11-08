@@ -103,40 +103,43 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  // shared distance from the device, each beside its lead on a common side,
  // or on its own line (white background) where there is no room beside it.
  const banked=new Set();
- const banks=new Map();for(const req of requests)if(req.role==='port'&&req.bank&&req.linkId!=null)banks.set(req.bank,[...(banks.get(req.bank)||[]),req]);
- for(const members of banks.values()){
-  if(members.length<2)continue;
-  const leads=[];
-  for(const req of members){
-   const owner=paths.find(path=>path.linkId===req.linkId),m=measure(req);
-   if(!owner||m.lines.length!==1||m.patches.some(p=>Number.isFinite(p.x)||Number.isFinite(p.y)))continue;
-   const points=req.endpoint&&req.endpoint!==(owner.startEndpoint||'a')?[...owner.points].reverse():owner.points,inside=([x,y])=>bodies.some(n=>x>n.x&&x<n.x+n.w&&y>n.y&&y<n.y+n.h);
-   const index=points.slice(1).findIndex((b,i)=>!inside([(points[i][0]+b[0])/2,(points[i][1]+b[1])/2]));if(index<0)continue;
-   const a=points[index],b=points[index+1];if(a[0]!==b[0]||a[1]===b[1])continue;
-   // The visible lead starts at the edge of the equipment it leaves.
-   const dir=Math.sign(b[1]-a[1]),host=bodies.find(n=>a[0]>=n.x&&a[0]<=n.x+n.w&&a[1]>=n.y-.01&&a[1]<=n.y+n.h+.01);
-   // Only a lead leaving through this edge of its device joins the row; a
-   // cable that leaves sideways and later turns down keeps its own spot.
-   if(!host)continue;
-   const from=dir<0?Math.min(a[1],host.y):Math.max(a[1],host.y+host.h);
-   // A lead too short to carry its own name beside it is placed on its own.
-   if(Math.abs(b[1]-from)>=m.w+16)leads.push({req,owner,m,x:a[0],from,to:b[1],dir});
+ // Port names of leads leaving the same side of one device sit in line: one
+ // shared distance from the device edge, beside each lead on a common side or
+ // on its own line (white background) where there is no room beside it. A
+ // lead belongs to the side it crosses when it actually leaves its device.
+ const strictlyInside=([x,y],n)=>x>n.x+.01&&x<n.x+n.w-.01&&y>n.y+.01&&y<n.y+n.h-.01,within=([x,y],n)=>x>=n.x-.01&&x<=n.x+n.w+.01&&y>=n.y-.01&&y<=n.y+n.h+.01;
+ const banks=new Map();
+ for(const req of requests){
+  if(req.role!=='port'||!req.bank||req.linkId==null)continue;
+  const owner=paths.find(path=>path.linkId===req.linkId),m=measure(req);
+  if(!owner||m.lines.length!==1||m.patches.some(p=>Number.isFinite(p.x)||Number.isFinite(p.y)))continue;
+  const points=req.endpoint&&req.endpoint!==(owner.startEndpoint||'a')?[...owner.points].reverse():owner.points;
+  let lead=null;
+  for(let i=0;i+1<points.length&&!lead;i++){
+   const a=points[i],b=points[i+1],host=bodies.find(n=>within(a,n)&&!strictlyInside(b,n)&&!within(b,n));if(!host)continue;
+   const vertical=a[0]===b[0];if(vertical===(a[1]===b[1]))break;
+   const axis=vertical?1:0,dir=Math.sign(b[axis]-a[axis]),from=vertical?(dir<0?host.y:host.y+host.h):(dir<0?host.x:host.x+host.w);
+   if(Math.abs(b[axis]-from)<m.w+16)break;
+   lead={req,owner,m,axis,dir,at:vertical?a[0]:a[1],from,to:b[axis],side:(host.key||host.sourceId)+'|'+(vertical?(dir<0?'top':'bottom'):(dir<0?'left':'right'))};
   }
-  if(leads.length<2||new Set(leads.map(l=>l.dir)).size>1)continue;
-  const dir=leads[0].dir,length=Math.max(...leads.map(l=>l.m.w)),near=dir<0?Math.min(...leads.map(l=>l.from)):Math.max(...leads.map(l=>l.from)),far=dir<0?Math.max(...leads.map(l=>l.to)):Math.min(...leads.map(l=>l.to));
-  let best=null;leads.sort((p,q)=>p.x-q.x);
-  // From the device outward, bounded; each label starts at the same distance.
-  // One style for the whole row: all left of their leads, all right, or all
-  // on their own lines. The most labels in line wins, then that order.
+  if(lead)banks.set(lead.side,[...(banks.get(lead.side)||[]),lead]);
+ }
+ for(const leads of banks.values()){
+  if(leads.length<2)continue;
+  const {axis,dir}=leads[0],length=Math.max(...leads.map(l=>l.m.w)),near=dir<0?Math.min(...leads.map(l=>l.from)):Math.max(...leads.map(l=>l.from)),far=dir<0?Math.max(...leads.map(l=>l.to)):Math.min(...leads.map(l=>l.to));
+  let best=null;leads.sort((p,q)=>p.at-q.at);
+  // From the device outward, bounded; each name ends at the same distance
+  // from the edge. One style for the row (beside on one side, or on the line),
+  // a mixed row only where a side is taken; most names in line wins.
+  const sides=axis===1?['left','right']:['above','below'];
   for(let step=0,start=near+dir*8;step<60&&(far-start)*dir>=length+4;step++,start+=dir*4){
-   // Mixed rows keep a name on its own line where its side is taken.
-   for(const [rank,mode] of ['left','right','inline','left+inline','right+inline'].entries()){
+   for(const [rank,mode] of [sides[0],sides[1],'inline',sides[0]+'+inline',sides[1]+'+inline'].entries()){
     const placed=[];
     for(const lead of leads){
-     // Rotated text reading upward, centered at (x, middle of its span).
      const {m}=lead,th=m.h,lo=dir<0?start-m.w:start,middle=lo+m.w/2,inlineLength=m.w+8;
-     const inline={x:lead.x-inlineLength/2,y:middle-th/2,w:inlineLength,h:th,angle:Math.PI/2,inline:true,parts:[inlineLength]};
-     const beside=side=>({x:(side==='left'?lead.x-th-4:lead.x+4)+(th-m.w)/2,y:middle-th/2,w:m.w,h:th,angle:Math.PI/2,attached:true});
+     // Vertical leads carry rotated text; horizontal leads carry level text.
+     const inline=axis===1?{x:lead.at-inlineLength/2,y:middle-th/2,w:inlineLength,h:th,angle:Math.PI/2,inline:true,parts:[inlineLength]}:{x:middle-inlineLength/2,y:lead.at-th/2,w:inlineLength,h:th,inline:true,parts:[inlineLength]};
+     const beside=side=>axis===1?{x:(side==='left'?lead.at-th-4:lead.at+4)+(th-m.w)/2,y:middle-th/2,w:m.w,h:th,angle:Math.PI/2,attached:true}:{x:lo,y:side==='above'?lead.at-th-4:lead.at+4,w:m.w,h:th,attached:true};
      const options=mode==='inline'?[inline]:mode.includes('+')?[beside(mode.split('+')[0]),inline]:[beside(mode)];
      for(const box of options){
       const f=textFootprint(box);
@@ -150,8 +153,8 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
   if(!best)continue;
   for(const {lead,box,footprint} of best.placed){
    const {req,m}=lead;occupied.push(footprint);banked.add(req);
-   // Names start at the end nearest the device so the row reads evenly.
-   result.push({...req,...box,lines:m.lines,size:m.size,textAlign:dir<0?'left':'right'});
+   // Names end nearest the device so the row reads evenly.
+   result.push({...req,...box,lines:m.lines,size:m.size,textAlign:axis===1?(dir<0?'left':'right'):(dir<0?'right':'left')});
   }
  }
  // One request at one text size: the chosen box, or null when nothing fits.
