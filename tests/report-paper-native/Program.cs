@@ -17,8 +17,12 @@ static class ReportPaperChecks
             string source=Encoding.Latin1.GetString(File.ReadAllBytes(path));
             var box=Regex.Match(source,@"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)\s*\]");
             Require(box.Success,"PDF is missing a MediaBox.");
-            Require(Math.Abs(double.Parse(box.Groups[1].Value,System.Globalization.CultureInfo.InvariantCulture)-paper.WidthPt)<.2,"PDF printed width mismatched.");
-            Require(Math.Abs(double.Parse(box.Groups[2].Value,System.Globalization.CultureInfo.InvariantCulture)-paper.HeightPt)<.2,"PDF printed height mismatched.");
+            // Skia PDF MediaBox can serialize dimensions to whole PDF points.
+            // Half a point is the maximum conversion rounding error.
+            double actualWidth=double.Parse(box.Groups[1].Value,System.Globalization.CultureInfo.InvariantCulture);
+            double actualHeight=double.Parse(box.Groups[2].Value,System.Globalization.CultureInfo.InvariantCulture);
+            Require(Math.Abs(actualWidth-paper.WidthPt)<=.51,"PDF printed width mismatched: "+actualWidth+" versus "+paper.WidthPt);
+            Require(Math.Abs(actualHeight-paper.HeightPt)<=.51,"PDF printed height mismatched: "+actualHeight+" versus "+paper.HeightPt);
         }
         finally { File.Delete(path); }
     }
