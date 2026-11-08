@@ -106,6 +106,21 @@ export function placeCableLabels(page,requests,edits={}){
     }
    }
   }
+  if(owner&&req.role==='media'){
+   // Visio-style connector text: one line on the cable itself, on a white
+   // background. Dense parallel bundles keep their even pitch instead of being
+   // pushed apart only to make room for captions beside each cable.
+   const th=size+4,parts=lines.map(s=>textWidth(s.value,size,s.patch.bold!==false)+8),total=parts.reduce((a,b)=>a+b,0);
+   const runs=owner.points.slice(1).map((b,i)=>[owner.points[i],b]).sort(([a,b],[c,d])=>Math.abs(d[0]-c[0])+Math.abs(d[1]-c[1])-Math.abs(b[0]-a[0])-Math.abs(b[1]-a[1]));
+   for(const [a,b] of runs){
+    const vertical=a[0]===b[0],axis=vertical?1:0,lo=Math.min(a[axis],b[axis])+12,hi=Math.max(a[axis],b[axis])-12-total;
+    if(hi<lo)continue;
+    for(const t of [.5,.35,.65,.2,.8,.05,.95]){
+     const along=lo+(hi-lo)*t;
+     candidates.push(vertical?{x:a[0]-total/2,y:along+total/2-th/2,w:total,h:th,angle:Math.PI/2,inline:true,parts}:{x:along,y:a[1]-th/2,w:total,h:th,inline:true,parts});
+    }
+   }
+  }
   if(owner){
    // Short segments can still take a readable horizontal callout with a leader.
    for(let i=1;i<owner.points.length;i++){
@@ -130,15 +145,25 @@ export function placeCableLabels(page,requests,edits={}){
   let box;
   for(const candidate of candidates){
    const b=textFootprint(candidate);
-   if(b.x<(contentLeft)||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>pathCrossesText(p,b,2)))continue;
-   const leader=owner&&!candidate.attached?cableLeader(b,owner,paths,[...occupied,...bodies]):null;
-   if(owner&&req.role!=='reference'&&!candidate.attached&&!leader)continue;
+   if(b.x<(contentLeft)||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>candidate.inline&&p===owner?(p.hops||[]).some(hop=>intersects(hop,b,2)):pathCrossesText(p,b,2)))continue;
+   const leader=owner&&!candidate.attached&&!candidate.inline?cableLeader(b,owner,paths,[...occupied,...bodies]):null;
+   if(owner&&req.role!=='reference'&&!candidate.attached&&!candidate.inline&&!leader)continue;
    box={...candidate,leader};break;
   }
   if(!box)return {ok:false,failed:req,placed:result,clearance:h+12};
   occupied.push(box);if(box.leader)occupied.push(box.leader);
   result.push({...req,...box,lines,size});
  }
- for(const b of result){if(b.leader)page.items.push({type:'rect',...b.leader,fill:b.color||'#17364A',stroke:'none',weight:0,editKey:b.editKey+'|leader'});for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});}
+ for(const b of result){if(b.leader)page.items.push({type:'rect',...b.leader,fill:b.color||'#17364A',stroke:'none',weight:0,editKey:b.editKey+'|leader'});
+  if(b.inline){
+   // Consecutive boxes along the cable; vertical text reads bottom to top.
+   let offset=0;
+   for(let i=0;i<b.lines.length;i++){
+    const w=b.parts[i],center=b.angle?{x:b.x+b.w/2,y:b.y+b.h/2+b.w/2-offset-w/2}:{x:b.x+offset+w/2,y:b.y+b.h/2};offset+=w;
+    page.items.push({type:'text',x:center.x-w/2,y:center.y-b.h/2,w,h:b.h,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});
+   }
+   continue;
+  }
+  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});}
  return {ok:true,placed:result};
 }

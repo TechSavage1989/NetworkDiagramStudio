@@ -1,3 +1,29 @@
+## Even cable rhythm and switchport-style port sheets (unreleased)
+
+Owner request: core connections were too close in horizontal parallel, ran tight against devices (especially on the left), were unevenly and often widely spaced, and could leave through the empty top module or split between sides. Port maps should drop the color blocks behind port numbers and follow the Switchport Diagram Builder sheets as Configuration Inspector draws them.
+
+Routing (routing.mjs, scene.mjs, faceplate.mjs, labels.mjs, index.mjs wireless lanes):
+- ROUTE_STYLE sets a 24-unit device clearance, a 6-unit visible gap between parallels, an 18-unit rail pitch and a 20-unit row pitch. Wireless lanes use the same rhythm.
+- Scoring adds a soft penalty for crowded parallels and device-hugging rails.
+- neatChannels redistributes rows, rails and chassis exterior lanes on even tracks, and untangle reorders tracks when that removes crossings (see AGENTS.md for the rules).
+- Chassis center tracks keep the visible gap and spread evenly, and module turns balance between the bands above and below the sockets. Empty slots and the optional MM2 bay pass leads toward their peer; the bay caption is now a short right-aligned "Optional MM2 bay".
+- Media captions fall back to inline connector text with a white background, which is also written as a filled Visio text shape.
+
+Port maps (index.mjs):
+- Port numbers are plain black or white text.
+- Booklet maps carry device bars and builder VLAN marks from the shared report palette, then a VLAN key, Trunks / LAGs, port descriptions and a symbol key.
+- Port Inventory pages are builder-style tables, one per device.
+- The combined presentation and the expanded tables are unchanged apart from the number text.
+
+Measured on fictional fixtures (sample, modular routing lab, campus lab), original code → this change:
+- Exterior runs within 20 units of a device: 2/6/12 → 0/0/0.
+- Minimum parallel spacing: 21/4.25/4.25 → 20/14.5/5.5. The 5.5 is inside a chassis module band, where module height is the limit.
+- Hops: 0/23/15 → 0/17/19.
+
+New tests: tests/route-rhythm.test.mjs and tests/portmap-sheets.test.mjs. Tests that asserted the old tight geometry or number boxes were updated to the new rules: modular center/exterior counts, empty-bay crossing, local corridor bound, inline caption exemption, grouped inventory rows and the VLAN key heading.
+
+Local validation: all Node tests, the seven Python package tests, node scripts/check-repo.mjs, node scripts/build-web.mjs, and the nine fictional Visio packages from scripts/export-test-fixtures.mjs checked with scripts/check-visio-package.py. Rendered SVG pages and the offline app were inspected in Chromium. hero.png and port-map.png were recaptured from the built offline app with the fictional sample. Still required: Windows build, native checks on the hosted runner, and opening an export in desktop Visio. Release intent and version are unchanged.
+
 ## Preview.32 publication follow-up: observed native export completion
 
 PR #29 passed exact-head Windows validation 42447977076 and merged as d394210a5ba80fa0a1bfe51dc81f0cd0a6222748. Merged-main publication 42448584320 passed the engine tests, native report checks, production build and packaging, but its native lifecycle job failed at the initial SVG save before the new report smoke ran. Neither the preview.32 tag nor release was published. The failure exposed two gaps in the existing harness: it posted Save after a fixed 400 ms delay without confirming dialog readiness/acceptance, then read the first matching file before observing download completion.

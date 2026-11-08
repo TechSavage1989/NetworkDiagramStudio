@@ -160,12 +160,19 @@ function socketDeparture(device, anchor, socket){
 // A chassis lead may cross its own module horizontally, but its vertical run
 // must use the open center or an exterior side, never the next module/bay.
 function modularAnchor(g,id,nx,ny,region,sideHint,socket,options={}){
-  const blocked=top=>g.panelRegions.some(r=>r!==region&&nx>r.x&&nx<r.x+r.w&&
-    (top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1));
+  // An empty bay is open faceplate unless its own caption sits on the lead.
+  const captionOn=r=>g.children.some(c=>{
+    if(c.type!=='text'||c.x+c.w<=r.x||c.x>=r.x+r.w||c.y+c.h<=r.y||c.y>=r.y+r.h)return false;
+    const {lines,size}=textLayout({...c,w:c.w*g.w,h:c.h*g.h}),w=Math.max(...lines.map(line=>Math.max(0,textWidth(line,size,c.bold)-6)))/g.w,pad=((options.weight||cableWeight)/2+2)/g.w;
+    const left=c.x+(c.align==='right'?c.w-w:c.align==='center'?(c.w-w)/2:0);return nx>left-pad&&nx<left+w+pad;
+  });
+  // Empty bays only open the way toward the peer; they never turn a lead away.
+  const blocked=(top,open=true)=>g.panelRegions.some(r=>r!==region&&nx>r.x&&nx<r.x+r.w&&
+    (top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1)&&(!open||!r.empty||captionOn(r)));
   let top=sideHint==='top'||sideHint!=='bottom'&&ny<=.5;
   // An exposed outer row can leave directly even when its peer is above it.
   // Turning outside the chassis is preferable to crossing every inner row.
-  if(blocked(top)&&!blocked(!top))top=!top;
+  if(blocked(top)&&!blocked(!top,false))top=!top;
   const side=top?'top':'bottom',weight=options.weight||cableWeight,anchor={device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+(top?0:g.h),weight};
   if(!blocked(top)){const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
   const center=(g.moduleChannel.left+g.moduleChannel.right)/2,column=nx<center?'left':'right';
@@ -289,7 +296,8 @@ function svgText(i){
   const {lines,size,lineHeight}=textLayout(i),anchor=i.align==='right'?'end':i.align==='center'?'middle':'start',x=round(i.x+(i.align==='right'?i.w:i.align==='center'?i.w/2:0)),y=i.y+(i.h-lines.length*lineHeight)/2+lineHeight/2+size*.34;
   const rotation=i.angle?' transform="rotate('+round(-i.angle*180/Math.PI)+' '+round(i.x+i.w/2)+' '+round(i.y+i.h/2)+')"':'';
   const content=lines.length===1?xml(lines[0]):lines.map((line,n)=>'<tspan x="'+x+'" y="'+round(y+n*lineHeight)+'">'+xml(line)+'</tspan>').join('');
-  return '<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
+  const background=i.background?'<rect x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+xml(i.background)+'"'+rotation+' pointer-events="none"/>':'';
+  return background+'<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
 }
 export function svgPage(p){
   const W=p.width||1200,H=p.height||975;

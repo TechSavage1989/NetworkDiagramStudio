@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {coreRoutes,planModuleEscapes,endpointLead,simplifyRoute} from '../src/web/diagram/routing.mjs';
+import {coreRoutes,planModuleEscapes,endpointLead,simplifyRoute,ROUTE_STYLE} from '../src/web/diagram/routing.mjs';
 import {addDevice,getAnchor,bridge} from '../src/web/diagram/scene.mjs';
 import {corePages} from '../src/web/diagram/core.mjs';
 import {crossesText} from '../src/web/diagram/labels.mjs';
@@ -38,7 +38,7 @@ test('unrelated distant devices never force a clear nearby pair around the whole
  const f=fixture([body('a',400,100),body('b',450,400),body('west',-1500,200),body('east',2500,200)],
   [['a','b',[430,100],[480,400]]]),r=run(f);
  assert.equal(r.cost[0],0);assert.ok(length(r.routes[0].points)<650);
- assert.ok(r.routes[0].points.every(([x])=>x>=380&&x<=700),'The nearby pair uses its own clear corridor');
+ assert.ok(r.routes[0].points.every(([x])=>x>=400-ROUTE_STYLE.clearance-1e-7&&x<=700),'The nearby pair uses its own clear corridor at the standard device clearance');
  assert.deepEqual(r.routes[0].points[0],[430,100]);assert.deepEqual(r.routes[0].points.at(-1),[480,400]);
 });
 

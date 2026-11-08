@@ -144,15 +144,17 @@ function buildFaceplate(device,options={}){
   const count=/J9851|J8698/i.test(device.model)?12:6,rows=count/2,children=[],ports=Object.create(null),sockets=[],regions=[],unit=.94/(rows+1),firstRow=.04+unit;
   const modern=/^J985[01]A$/i.test(device.model),ratio=modern?44.45/(count===12?30.73:17.53):count===12?1.15:2.25;
   rectangle(children,0,0,1,1,'#D8DDDE','#5D7079',1);text(children,.05,.015,.20,.045,device.model,6);
-  if(modern){for(const x of [.055,.525]){regions.push({id:x<.1?'management':'management-bay',x,y:.06,w:.445,h:unit*.72});rectangle(children,x,.06,.445,unit*.72,'#C5CED1','#7A8B92',.7);text(children,x+.012,.07,.25,.04,x<.1?'Management module':'Optional management bay',5);}
+  // The optional second management bay and slots without a module are open
+  // faceplate. Leads of the chassis may pass through them (never another device's).
+  if(modern){for(const x of [.055,.525]){regions.push({id:x<.1?'management':'management-bay',x,y:.06,w:.445,h:unit*.72,...(x<.1?{}:{empty:true})});rectangle(children,x,.06,.445,unit*.72,'#C5CED1','#7A8B92',.7);if(x<.1)text(children,x+.012,.07,.25,.04,'Management module',5);else children.push({type:'text',x:x+.445-.262,y:.07,w:.25,h:.04,value:'Optional MM2 bay',size:5,color:'#33434A',bold:false,align:'right'});}
   for(let row=0;row<2;row++)for(let j=0;j<7;j++)rectangle(children,.075+j*.032,.09+unit*(.18+row*.17),.012,unit*.075,j%3?'#8D9DA3':'#6C925E');
   const managementY=.06+unit*.43;socket(children,ports,'oobm',.355,managementY,'RJ45','front',.027,unit*.30);socket(children,ports,'console',.43,managementY,'RJ45','front',.027,unit*.30,false);rectangle(children,.481,.06+unit*.23,.009,unit*.32,'#20313A');
   rectangle(children,.012,.10,.018,.72,'#8D9C9F');}
   for(let i=0;i<count;i++){
    const slot=String.fromCharCode(65+i),x=.04+(i%2)*.48,y=modern?firstRow+Math.floor(i/2)*unit:.16+Math.floor(i/2)*(.8/rows),w=.45,h=modern?unit*.91:.72/rows;
-   regions.push({id:slot,x,y,w,h});
-   rectangle(children,x,y,w,h,'#C2CCCF','#7A8B92',.7);text(children,x+.004,y+.004,.04,.05,slot,5);
    const module=modules.find(m=>m.slot===slot&&!m.member),profile=module&&faceplateProfile({model:module.model}),panel=baseLayout(profile);
+   regions.push({id:slot,x,y,w,h,...(module||(device.ports||[]).some(o=>new RegExp('^'+slot+'\\d+$','i').test(String(o.name)))?{}:{empty:true})});
+   rectangle(children,x,y,w,h,'#C2CCCF','#7A8B92',.7);text(children,x+.004,y+.004,.04,.05,slot,5);
    if(panel){for(const c of panel.children)children.push({...c,name:'Slot '+slot+': '+(c.name||c.type),x:x+c.x*w,y:y+c.y*h,w:c.w*w,h:c.h*h,...(c.anchorOrigin?{anchorName:slot+c.anchorName,anchorOrigin:[x+c.anchorOrigin[0]*w,y+c.anchorOrigin[1]*h]}:{})});for(const [n,pt] of Object.entries(panel.ports))ports[slot+n]=[x+pt[0]*w,y+pt[1]*h];for(const socket of panel.sockets)sockets.push({...socket,name:slot+socket.name,x:x+socket.x*w,y:y+socket.y*h});}
    else if(module)text(children,x+.055,y+h*.3,w-.075,h*.4,module.model+' / layout unconfirmed',6);
   }

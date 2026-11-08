@@ -35,7 +35,7 @@ function vectorShape(i,id,H){
 function textShape(i,id,H,masterChild,relative){
   const {lines,size:fontSize}=textLayout(i),shown=lines.join('\n');
   const transform=relative||box(i.x,i.y,i.w,i.h,H).replace(cell('Angle',0),cell('Angle',i.angle||0));
-  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',0)+
+  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',i.background?1:0)+(i.background?cell('FillForegnd',i.background):'')+
     ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+
     '<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(fontSize))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
     '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true)+

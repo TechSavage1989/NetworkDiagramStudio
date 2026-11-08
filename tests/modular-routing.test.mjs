@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {buildPages} from '../src/web/diagram/index.mjs';
 import {addDevice,getAnchor} from '../src/web/diagram/scene.mjs';
 import {planModuleEscapes,endpointLead,simplifyRoute} from '../src/web/diagram/routing.mjs';
-import {crossesText} from '../src/web/diagram/labels.mjs';
+import {crossesText,textWidth} from '../src/web/diagram/labels.mjs';
+import {ROUTE_STYLE} from '../src/web/diagram/routing.mjs';
 import {modularChassis,modularRoutingFixture} from './fixtures/modular-routing.mjs';
 
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,a+' differs from '+b);
@@ -11,7 +12,12 @@ const box=(g,r)=>({x:g.x+(r.x??0)*g.w,y:g.y+r.y*g.h,w:(r.w??1)*g.w,h:r.h*g.h});
 function clearModule(g,port,points){
  const own=g.panelRegions.find(r=>r.id===port[0]||port==='oobm'&&r.id==='management');
  assert.ok(own,'Expected a physical bay for '+port);
- for(const region of g.panelRegions)if(region!==own)assert.ok(!crossesText(points,box(g,region),1.9),port+' crosses bay '+region.id);
+ // An empty bay is open faceplate for the chassis' own leads; its caption is not.
+ for(const region of g.panelRegions)if(region!==own&&!region.empty)assert.ok(!crossesText(points,box(g,region),1.9),port+' crosses bay '+region.id);
+ for(const caption of g.children.filter(c=>c.type==='text'&&g.panelRegions.some(r=>r.empty&&c.x>=r.x&&c.x<r.x+r.w&&c.y>=r.y&&c.y<r.y+r.h))){
+  const width=Math.max(0,textWidth(caption.value,caption.size,caption.bold)-6),left=caption.align==='right'?caption.x*g.w+caption.w*g.w-width:caption.x*g.w;
+  assert.ok(!crossesText(points,{x:g.x+left,y:g.y+caption.y*g.h,w:width,h:caption.h*g.h},1.9),port+' crosses the caption '+caption.value);
+ }
  for(const socket of g.children.filter(c=>c.socketPart===0&&c.anchorName!==port))
   assert.ok(!crossesText(points,{x:g.x+socket.x*g.w,y:g.y+socket.y*g.h,w:socket.w*g.w,h:socket.h*g.h},1.9),port+' crosses '+socket.name);
  for(let i=1;i<points.length;i++)assert.ok(points[i-1][0]===points[i][0]||points[i-1][1]===points[i][1],'Cable is not orthogonal');
@@ -60,8 +66,13 @@ test('six and twelve slot bays route both directions without cutting through man
 
 test('a full center uses clear outer sides and dense resized modules reject merged leads',()=>{
  const ports=Array.from({length:8},(_,i)=>'A'+(i+1)),{g,leads}=localLeads('J9850A',ports,'bottom');
- assert.equal(leads.filter(l=>l.moduleEscape.via==='center').length,5);
- assert.equal(leads.filter(l=>l.moduleEscape.via==='outer').length,3);
+ // The narrow center keeps a visible white gap between leads; the rest use
+ // their column's exterior at the standard device clearance and pitch.
+ const center=leads.filter(l=>l.moduleEscape.via==='center').map(l=>l.moduleEscape.x).sort((a,b)=>a-b),outer=leads.filter(l=>l.moduleEscape.via==='outer').map(l=>l.moduleEscape.x).sort((a,b)=>b-a);
+ assert.equal(center.length,2);assert.equal(outer.length,6);
+ for(let i=1;i<center.length;i++)assert.ok(center[i]-center[i-1]>=4+ROUTE_STYLE.gap-1e-7,'Center leads keep a visible gap');
+ assert.ok(g.x-outer[0]>=ROUTE_STYLE.clearance-1e-7,'Exterior leads clear the chassis');
+ for(let i=1;i<outer.length;i++)assert.ok(outer[i-1]-outer[i]>=ROUTE_STYLE.pitch-1e-7,'Exterior leads use the standard pitch');
  for(const lead of leads){clearModule(g,lead.anchor.port,lead.points);if(lead.moduleEscape.via==='outer')assert.ok(lead.moduleEscape.x<g.x);}
  assert.throws(()=>localLeads('J9850A',ports,'bottom',350),e=>e.code==='CORE_LAYOUT_CAPACITY'&&/separate cables/.test(e.message));
  const {g:small,leads:few}=localLeads('J9850A',['A3','C6'],'bottom',350);for(const lead of few)clearModule(small,lead.anchor.port,lead.points);

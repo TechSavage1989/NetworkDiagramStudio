@@ -25,10 +25,13 @@ test('compact grouped port maps combine panel pairs and a reference-style assign
  for(const panel of panels){const title=first.items.find(item=>item.editKey===panel.editKey+'|port-map-title|0');assert.ok(title.y+title.h<=panel.y&&panel.y-title.y<40);}
 });
 
-test('port number boxes share one size and font across all RJ45 and optical jacks and wireless pages',()=>{
+test('port numbers share one measured box and font across all RJ45 and optical jacks and wireless pages',()=>{
  const pages=buildPages(fixture());
  for(const page of pages.filter(page=>page.portMap||page.title==='Wireless Connections'))for(const panel of page.items.filter(item=>item.type==='device'&&item.kind==='switch')){
-  const boxes=page.items.filter(item=>item.portNumberRole==='box'&&item.sourceId===panel.sourceId),numbers=page.items.filter(item=>item.portNumberRole==='text'&&item.sourceId===panel.sourceId);
+  // Numbers are plain text without a color block; the measured box stays in metadata.
+  const numbers=page.items.filter(item=>item.portNumberRole==='text'&&item.sourceId===panel.sourceId),boxes=numbers.map(number=>({...number.numberBox,portName:number.portName,socketBounds:number.socketBounds}));
+  assert.ok(!page.items.some(item=>item.portNumberRole==='box'),'No color block behind port numbers');
+  for(const number of numbers)assert.ok(['#111827','#FFFFFF'].includes(number.color),'Numbers use black or white for contrast');
   assert.equal(boxes.length,52);assert.equal(numbers.length,52);assert.equal(new Set(boxes.map(box=>[box.w,box.h].join(','))).size,1);assert.equal(new Set(numbers.map(number=>number.size)).size,1);assert.ok(numbers[0].size>=6);
   assert.ok(numbers.some(number=>number.value==='1'));assert.ok(numbers.some(number=>number.value==='49'));
   for(const box of boxes){const point=panel.ports[box.portName];assert.ok(Math.abs(box.x+box.w/2-panel.x-point[0]*panel.w)<1e-8);const socket=box.socketBounds;if(socket)assert.ok(box.y+box.h<=socket.y-1||box.y>=socket.y+socket.h+1,'number must sit above or below its socket');}
@@ -38,7 +41,7 @@ test('port number boxes share one size and font across all RJ45 and optical jack
 });
 
 test('assignment filters preserve faceplate inventory and expanded or ungrouped details remain available',()=>{
- const site=fixture(),original=identities(maps(site));site.layout={portMap:{detailFilter:'connected'}};const filtered=maps(site);assert.equal(identities(filtered).size,8);assert.equal(filtered[0].items.filter(item=>item.portNumberRole==='box').length,104);assert.equal(filtered[0].portMap.total,104);
+ const site=fixture(),original=identities(maps(site));site.layout={portMap:{detailFilter:'connected'}};const filtered=maps(site);assert.equal(identities(filtered).size,8);assert.equal(filtered[0].items.filter(item=>item.portNumberRole==='text').length,104);assert.equal(filtered[0].portMap.total,104);
  for(const options of [{density:'expanded'},{groupConsecutive:false}]){site.layout.portMap={...options};const pages=maps(site);assert.deepEqual(identities(pages),original);assert.ok(pages.every(page=>!page.portMap.assignmentMatrix));}
 });
 
@@ -75,10 +78,10 @@ test('default booklet sheets separate colored faceplates from complete inventory
  const inventory=pages.filter(page=>page.portMap.bookletRole==='inventory');
  assert.ok(overviews.length&&inventory.length);
  assert.ok(overviews.every(page=>page.items.some(item=>item.type==='device')&&
-   page.items.some(item=>item.value==='NATIVE VLAN KEY')&&!page.items.some(item=>item.portTableRole)));
+   page.items.some(item=>item.value==='VLAN key')&&!page.items.some(item=>item.portTableRole)));
  assert.ok(inventory.every(page=>page.title==='Port Inventory'&&
    page.items.some(item=>item.portTableRole)&&!page.items.some(item=>item.type==='device')));
  assert.equal(identities(inventory).size,104);
- const ports=overviews.flatMap(page=>page.items.filter(item=>item.portNumberRole==='box'));
+ const ports=overviews.flatMap(page=>page.items.filter(item=>item.portNumberRole==='socket'));
  assert.notEqual(ports.find(port=>port.portName==='1/1/1').fill,ports.find(port=>port.portName==='1/1/50').fill);
 });
