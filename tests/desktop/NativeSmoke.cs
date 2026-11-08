@@ -219,10 +219,14 @@ internal sealed partial class Studio
     async Task ClickEditorTarget(string selector,int clicks=1,int modifiers=0)
     {
         var query=JsonSerializer.Serialize(selector);
-        var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
+        // Measure the visible target after scroll and resize callbacks settle.
+        var raw=await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new{
+            expression=$"(async () => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()",
+            awaitPromise=true,returnByValue=true}));
         using var doc=JsonDocument.Parse(raw);
-        if(doc.RootElement.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector);
-        var x=doc.RootElement.GetProperty("x").GetDouble();var y=doc.RootElement.GetProperty("y").GetDouble();
+        var result=doc.RootElement.GetProperty("result");
+        if(!result.TryGetProperty("value",out var point)||point.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector+" "+raw);
+        var x=point.GetProperty("x").GetDouble();var y=point.GetProperty("y").GetDouble();
         for(int click=1;click<=clicks;click++)foreach(var type in new[]{"mousePressed","mouseReleased"})
             await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=click,modifiers}));
     }
