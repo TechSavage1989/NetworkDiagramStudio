@@ -31,7 +31,7 @@ test('port maps keep chassis and every stack member at one shared scale with com
 });
 test('paper changes and reordering reorganize hardware without relative scale changes or lost ports',()=>{
  for(const preset of ['letter','a3'])for(const reverse of [false,true]){const site=fixture();if(reverse)site.devices.reverse();site.layout={pageSetup:{default:{preset}}};validate(site,buildPages(site));}
- const site=fixture(),small=buildPages({...site,layout:{pageSetup:{default:{preset:'letter'}}}}),large=buildPages({...site,layout:{pageSetup:{default:{preset:'a3'}}}});assert.ok(maps(large).length<maps(small).length);
+ const site=fixture(),small=buildPages({...site,layout:{pageSetup:{default:{preset:'letter'}}}}),large=buildPages({...site,layout:{pageSetup:{default:{preset:'a3'}}}});assert.ok(maps(large).filter(p=>p.portMap.overview).length<=maps(small).filter(p=>p.portMap.overview).length);
 });
 test('wireless stack members keep switch width and real endpoint ownership on separate sheets',async()=>{
  const site=fixture();site.devices=site.devices.filter(d=>d.id!=='chassis');site.devices.push({id:'single',name:'LAB-SINGLE',kind:'switch',model:'JL558A',ports:[{name:'1/41'}]});

@@ -37,7 +37,7 @@ import {categories,readSources,ensureEvidence,captureEdits,composeEvidence} from
 // Keep browser navigation/debug actions out of the drawing workspace.
 document.addEventListener('contextmenu',event=>event.preventDefault());
 const $=id=>document.getElementById(id);
-const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{if(editDrawing){if(cableControlClick(key,e,target))return true;selectDrawingItem(key,e.shiftKey||e.ctrlKey||e.metaKey);return true;}return false;},onBeforeInteraction:commitInlineEdit,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!target.closest('.cable-controls'))editOnDoubleClick(key);}});
+const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{if(editDrawing){if(besidePick){pickBesideReference(key);return true;}if(cableControlClick(key,e,target))return true;selectDrawingItem(key,e.shiftKey||e.ctrlKey||e.metaKey);return true;}return false;},onBeforeInteraction:commitInlineEdit,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!besidePick&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!besidePick&&!target.closest('.cable-controls'))editOnDoubleClick(key);}});
 const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
 const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false}});
 let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0;const stencilIndexes=new Map(),openCatalogs=new Map();
@@ -61,7 +61,7 @@ async function task(action){if(working)return;busy(true);try{await action();}cat
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
 function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
 function commitInlineEdit(){if(!inlineSession)return true;if(!inlineSession.connected){inlineSession.cancel();return true;}return inlineSession.save();}
-function modal(title,className=''){if(!commitInlineEdit())throw Error('Finish editing the diagram text first.');modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;$('dialog').className=className;$('dialog-title').textContent=title;const body=$('dialog-body');body.className='';body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
+function modal(title,className=''){cancelBesidePick();if(!commitInlineEdit())throw Error('Finish editing the diagram text first.');modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;$('dialog').className=className;$('dialog-title').textContent=title;const body=$('dialog-body');body.className='';body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
 function button(parent,label,fn,cls=''){const b=el('button',label,cls);b.type='button';b.onclick=()=>task(fn);parent.append(b);return b;}
 function line(parent,...nodes){const row=el('div','','itemrow');row.append(...nodes);parent.append(row);return row;}
 function actions(parent){const n=el('div','','actions');parent.append(n);return n;}
@@ -134,6 +134,7 @@ function editOnDoubleClick(key){
 document.addEventListener('pointerdown',event=>{if(inlineSession&&!event.target.closest('[data-inline-editor]')&&!commitInlineEdit()){event.preventDefault();event.stopImmediatePropagation();}},true);
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&inlineSession){inlineSession.cancel();event.preventDefault();event.stopImmediatePropagation();say('Text edit cancelled.');}},true);
 function startDrawingBox(event,start){
+ if(besidePick)return null;
  if(!editDrawing||!pages[active])return null;const svg=$('canvas').querySelector('svg'),baseline=new Set(drawingSelection),rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('class','diagram-marquee');svg.append(rect);
  const objects=drawingObjects(pages[active]).filter(o=>event.altKey?o.parent||o.type!=='device':!o.parent).map(drawingBounds).filter(Boolean);
  function update(end){for(const [k,v] of Object.entries({x:Math.min(start[0],end[0]),y:Math.min(start[1],end[1]),width:Math.abs(end[0]-start[0]),height:Math.abs(end[1]-start[1])}))rect.setAttribute(k,v);
@@ -157,6 +158,7 @@ function snapOptions(){
 }
 $('drawing-snap').onclick=()=>task(snapOptions);
 function startDrawingMove(key,event){
+ if(besidePick)return null;
  if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]'),axisFor=dragAxis();
  if(control){if(control.hasAttribute('data-cable-segment'))return {preview(){},commit(){},cancel(){}};
   const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),path=[...svg.children].find(n=>n.getAttribute('data-drawing-key')===key&&!n.classList.contains('cable-hit-target')),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
@@ -174,7 +176,7 @@ function startDrawingMove(key,event){
   for(const n of $('canvas').querySelectorAll('.diagram-selection'))n.setAttribute('transform','translate('+x+' '+y+')');$('canvas').querySelector('.cable-controls')?.setAttribute('visibility','hidden');showSnapGuides(next.guides);
  },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta]))));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
 }
-$('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{drawingSelection.clear();syncDrawingSelection();};
+$('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{cancelBesidePick();drawingSelection.clear();syncDrawingSelection();};
 function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
 function resizeSelection(factor){if(!drawingObjects(pages[active]).some(i=>drawingSelection.has(i.editKey)&&i.type!=='path'))throw Error('Select a device, text or another object to resize. Cables follow their connected devices.');setDrawingEdits(scaleDrawingItems(pages[active],project.layout?.drawingEdits,drawingSelection,factor));say('Selected items resized. Connections remain attached.');}
 $('drawing-smaller').onclick=()=>task(()=>resizeSelection(.9));$('drawing-larger').onclick=()=>task(()=>resizeSelection(1.1));
@@ -189,27 +191,53 @@ $('drawing-size').onclick=()=>task(()=>{
   close();
  },'primary');
 });
-$('drawing-beside').onclick=()=>task(()=>{
- const page=pages[active],chosen=selectedDrawingDevices(),keys=new Set(chosen.map(d=>d.editKey)),others=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&!keys.has(i.editKey));if(!others.length)throw Error('This page needs another device to place beside.');
- const body=modal('Place devices beside another');
- body.append(el('p',(chosen.length===1?'Moving device: ':'Moving devices: ')+chosen.map(device=>device.name).join(', '),'hint'));
- const target=field(body,'Reference device',others[0].editKey,others.map(d=>[d.editKey,d.name])),gap=field(body,'Space for connections','auto',[['auto','Automatic spacing'],['compact','Compact'],['wide','Extra room']]);
- body.append(el('p','Choose a side. The selected devices move together, leaving room for titles and cables and avoiding other devices.','hint'));
- const bar=actions(body);
- for(const [side,label] of [['left','← Left'],['right','Right →'],['above','↑ Above'],['below','↓ Below']])button(bar,label,()=>{
-  const reference=others.find(d=>d.editKey===target.value),incident=page.items.filter(i=>i.type==='path'&&[...chosen,reference].some(d=>[i.sourceLink?.a,i.sourceLink?.b].includes(d.sourceId))).length,padding=gap.value==='compact'?56:gap.value==='wide'?160:Math.max(80,48+incident*12);
-  const envelope=d=>({...drawingBounds(d),y:d.y-40,h:d.h+68});
-  const offsets=placeBeside(chosen.map(envelope),envelope(reference),side,others.filter(d=>d!==reference).map(envelope),padding);
+let besidePick=null;
+function cancelBesidePick(){
+ if(!besidePick)return;
+ besidePick=null;
+ $('canvas').classList.remove('picking-reference');
+}
+function pickBesideReference(key){
+ const {page,chosen,side,spacing}=besidePick;
+ const reference=page.items.find(item=>item.editKey===key&&item.type==='device'&&item.kind!=='plug');
+ if(!reference||chosen.includes(reference)){
+  say('Click a different device on the drawing, or press Esc to cancel.');
+  return;
+ }
+ cancelBesidePick();
+ task(()=>{
+  const others=page.items.filter(item=>item.type==='device'&&item.kind!=='plug'&&!chosen.includes(item));
+  const deviceIds=new Set([...chosen,reference].map(item=>item.sourceId));
+  const incident=page.items.filter(item=>item.type==='path'&&
+    (deviceIds.has(item.sourceLink?.a)||deviceIds.has(item.sourceLink?.b))).length;
+  const padding=spacing==='compact'?56:spacing==='wide'?160:Math.max(80,48+incident*12);
+  const envelope=device=>({...drawingBounds(device),y:device.y-40,h:device.h+68});
+  const offsets=placeBeside(chosen.map(envelope),envelope(reference),side,
+    others.filter(device=>device!==reference).map(envelope),padding);
   const edits=project.layout?.drawingEdits;
   try{setDrawingEdits(moveDrawingItems(page,edits,offsets));}
   catch(error){
    if(error.code!=='CORE_LAYOUT_CAPACITY'||!page.coreDeviceIds)throw error;
-   // A routing retry may repack the automatic positions used as references.
-   // Keep the visible positions of those devices for the second attempt.
+   // Keep visible references in place if the automatic packing pass shifts them.
    for(const device of others)if(page.coreDeviceIds.includes(device.sourceId))offsets.set(device.editKey,[0,0]);
    setDrawingEdits(moveDrawingItems(page,edits,offsets));
   }
-  close();viewport.fit();say('Devices placed '+side+' '+reference.name+'. Connections rerouted.');
+  viewport.fit();say('Devices placed '+side+' '+reference.name+'. Connections rerouted.');
+ });
+}
+$('drawing-beside').onclick=()=>task(()=>{
+ cancelBesidePick();
+ const page=pages[active],chosen=selectedDrawingDevices();
+ if(!page.items.some(item=>item.type==='device'&&item.kind!=='plug'&&!chosen.includes(item)))throw Error('This page needs another device to place beside.');
+ const body=modal('Place devices beside another');
+ body.append(el('p',(chosen.length===1?'Moving device: ':'Moving devices: ')+chosen.map(device=>device.name).join(', '),'hint'));
+ const gap=field(body,'Space for connections','auto',[['auto','Automatic spacing'],['compact','Compact'],['wide','Extra room']]);
+ body.append(el('p','Choose a direction, then click the reference device on the drawing.','hint'));
+ const bar=actions(body);
+ for(const [side,label] of [['left','← Left'],['right','Right →'],['above','↑ Above'],['below','↓ Below']])button(bar,label,()=>{
+  besidePick={page,chosen,side,spacing:gap.value};
+  close();$('canvas').classList.add('picking-reference');$('canvas').focus({preventScroll:true});
+  say('Click the reference device to place '+chosen.map(device=>device.name).join(', ')+' '+side+' it. Press Esc to cancel.');
  });
 });
 $('drawing-page').onclick=()=>task(()=>{
@@ -243,6 +271,7 @@ function nudgeSelection(event){
 document.addEventListener('keydown',event=>{
  if(event.defaultPrevented||event.target.closest('input,textarea,select,[contenteditable=true]'))return;
  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){if($('dialog').open&&!modalHistoryScope)return;event.preventDefault();task(()=>drawingHistory(event.shiftKey));return;}
+ if(besidePick&&event.key==='Escape'){cancelBesidePick();say('Placement cancelled.');return;}
  if(!editDrawing||!$('canvas').contains(event.target))return;
  if(event.key==='Escape'){drawingSelection.clear();syncDrawingSelection();}
  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();task(()=>nudgeSelection(event));}
@@ -297,9 +326,11 @@ function addOrderControls(row,d,after=()=>{}){
 }
 function portMapOptions(){
  const body=modal('Port map options');project.layout||={};const current=project.layout.portMap||{},filter=field(body,'Port details to show',current.detailFilter||'all',[['all','All physical port records'],['assigned','Hide ports without assignment details'],['connected','Only ports with a peer or description']]),group=field(body,'Port table rows',current.groupConsecutive===false?'each':'group',[['group','Group matching port assignments'],['each','One row per interface']]);
+ const format=field(body,'Report layout',current.presentation||(current.repeatFaceplate?'combined':'separate'),[['separate','Separate port maps and inventory'],['combined','Combined map and inventory']]);
  const density=field(body,'Port table layout',current.density||'compact',[['compact','Compact - fewer pages'],['expanded','Expanded - more space per record']]),repeat=field(body,'Faceplate on continued pages',current.repeatFaceplate?'repeat':'first',[['first','First page only'],['repeat','Repeat on every page']]);
+ const showRepeat=()=>{repeat.hidden=repeat.previousElementSibling.hidden=format.value!=='combined';};format.onchange=showRepeat;showRepeat();
  body.append(el('p','Compact grouped tables combine switches in an assignment matrix. Expanded tables show more space per record. Assignment details include a peer, description, role, VLAN configuration, LAG or IP address. A port number, capacity or up/down state alone does not count. The faceplate retains every physical port.','hint'));
- button(actions(body),'Apply port map options',()=>{project.layout.portMap={density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
+ button(actions(body),'Apply port map options',()=>{project.layout.portMap={presentation:format.value,density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
 }
 $('port-map-options').onclick=()=>task(portMapOptions);
 function linkStyleOptions(selected){
@@ -459,6 +490,7 @@ function evidence(){
 }
 const warningText=x=>typeof x==='string'?x:(x?.message||x?.text||'Review imported evidence.');
 function draw(){
+ cancelBesidePick();
  $('site').value=project.name;$('heading').textContent=project.name;deviceList();
  const subset=scoped();const live=subset.devices.length>0;
  $('link-count').textContent='('+project.links.length+')';$('stats').textContent=subset.devices.length+' of '+project.devices.length+' devices   /   '+subset.links.length+' links';
@@ -796,7 +828,7 @@ function editDrawingObject(key){
  if(item.type==='device'){const device=project.devices.find(d=>d.id===item.sourceId);if(device){button(bar,'Device details',()=>editDevice(device));button(bar,'Find stencil',()=>deviceStencil(device));if(item.asset)button(bar,'Map ports',()=>editAnchors(project.stencils[device.stencilId]));}if(item.asset)body.append(el('p',item.asset.native?'Vector details remain independently editable in the Visio export.':'This stencil contains a picture. Its image can be replaced and resized; map its ports under Map ports.','hint'));}
  button(bar,'Reset page edits',()=>{const next={...project.layout?.drawingEdits},prefix=page.name+'|',scope=(page.editScope||page.name)+'|';for(const k of Object.keys(next))if(k.startsWith(prefix)||k.startsWith(scope))delete next[k];for(const o of objects)if(o.legacyEditKey)delete next[o.legacyEditKey];setDrawingEdits(next);close();});
 }
-$('edit-drawing').onclick=()=>{editDrawing=!editDrawing;$('edit-drawing').setAttribute('aria-pressed',String(editDrawing));$('canvas').classList.toggle('editing',editDrawing);syncDrawingSelection();say(editDrawing?'Drag items to move. Shift-click to select multiple items, then use alignment tools. Double-click or Edit selected to change text and style. Alt-drag a panel detail to move it independently. Hold Space to pan.':'Click a device to find its stencil. Drag to pan; scroll to zoom.');};
+$('edit-drawing').onclick=()=>{cancelBesidePick();editDrawing=!editDrawing;$('edit-drawing').setAttribute('aria-pressed',String(editDrawing));$('canvas').classList.toggle('editing',editDrawing);syncDrawingSelection();say(editDrawing?'Drag items to move. Shift-click to select multiple items, then use alignment tools. Double-click or Edit selected to change text and style. Alt-drag a panel detail to move it independently. Hold Space to pan.':'Click a device to find its stencil. Drag to pan; scroll to zoom.');};
 function hardware(){stencilDevice=null;
  const body=modal('Hardware library');body.append(el('p','Import Visio stencils, drawing or template masters, images, or a hardware pack. Folder import searches every subfolder. Legacy picture masters open locally; other legacy artwork can use installed desktop Visio in the Windows app.','hint'));
  const bar=actions(body);button(bar,'Import shapes',()=>$('art-file').click(),'primary');button(bar,'Import stencil folder',()=>$('art-folder').click());if(discoveredStencils.length)button(bar,'Browse found stencils ('+discoveredStencils.length+')',browseStencils);button(bar,'Save hardware pack',()=>download(JSON.stringify({format:'NDS-hardware',schema:1,stencils:Object.values(project.stencils),optics:project.optics}),'NetworkDiagramStudio-hardware.json'));

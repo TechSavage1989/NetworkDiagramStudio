@@ -41,13 +41,13 @@ test('port details remain in numeric member/slot/port order, with persistent opt
  const d={id:'s',name:'LAB',kind:'switch',model:'JL724A',ports:[{name:'1/1/10'},{name:'1/1/3',native:12},{name:'1/1/2',description:'Printer'},{name:'1/1/1',state:'down'},{name:'1/1/11',role:'uplink'}]},site={devices:[d],links:[],layout:{portMap:{detailFilter:'assigned',groupConsecutive:false}}};
  assert.deepEqual(d.ports.slice().sort(comparePorts).map(p=>p.name),['1/1/1','1/1/2','1/1/3','1/1/10','1/1/11']);assert.equal(hasPortDetails({name:'1',state:'up',speed:'1G'}),false);
  site.layout=cleanLayout(site.layout,['s']);const maps=buildPages(JSON.parse(JSON.stringify(site))).filter(p=>p.portMap);assert.deepEqual(maps.flatMap(p=>p.portMap.rowNames),['1/1/2','1/1/3','1/1/11']);assert.equal(maps[0].portMap.total,5);assert.equal(maps[0].portMap.shown,3);
- assert.ok(maps[0].items.some(i=>i.type==='text'&&i.value.includes('2 hidden by table filter')));
+ assert.ok(maps.some(p=>p.items.some(i=>i.type==='text'&&i.value.includes('2 hidden by table filter'))));
  site.layout.portMap.detailFilter='connected';assert.deepEqual(buildPages(site).filter(p=>p.portMap).flatMap(p=>p.portMap.rowNames),['1/1/2']);
  site.layout.portMap={detailFilter:'all',groupConsecutive:true};const grouped=buildPages(site).filter(p=>p.portMap).flatMap(p=>p.items.filter(i=>i.portTableRole==='interface').map(i=>i.value));assert.ok(grouped.includes('1, 10'));assert.ok(!grouped.some(n=>n.includes('10, 1')));
 });
 test('compact port maps reduce pages without omitting records and keep the faceplate optional on continuations',()=>{
  const ports=Array.from({length:96},(_,i)=>({name:'1/1/'+(i+1),description:'Workstation '+(i+1),state:'up',speed:'1 Gbps',role:'access',native:8,tagged:[20]})),site={devices:[{id:'s',name:'LAB',kind:'switch',model:'JL675A',ports}],links:[]};
- const maps=()=>buildPages(site).filter(p=>p.portMap),compact=maps();site.layout={portMap:{density:'expanded'}};const expanded=maps();assert.ok(compact.length<expanded.length);assert.ok(compact.length<=4);
+ const maps=()=>buildPages(site).filter(p=>p.portMap),compact=maps();site.layout={portMap:{density:'expanded'}};const expanded=maps();assert.ok(compact.length<expanded.length);assert.ok(compact.filter(p=>p.portMap.bookletRole==='inventory').length<=4);
  assert.deepEqual(compact.flatMap(p=>p.portMap.rowNames),ports.map(p=>p.name));assert.equal(compact[0].portMap.overview,true);assert.ok(compact.slice(1).every(p=>!p.portMap.overview&&!p.items.some(i=>i.type==='device')));
  site.layout=cleanLayout({portMap:{density:'compact',repeatFaceplate:true}},['s']);assert.equal(site.layout.portMap.repeatFaceplate,true);assert.ok(maps().every(p=>p.portMap.overview&&p.items.some(i=>i.type==='device')));
  for(const page of [...compact,...expanded])for(const t of page.items.filter(i=>i.portTableRole)){assert.ok(textWidth(t.value,t.size,t.bold)<=t.w,t.value+' is wider than its column');assert.ok(t.y+t.h<=851);}

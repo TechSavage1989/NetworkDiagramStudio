@@ -56,7 +56,7 @@ test('pagination and unresolved peer handling keep user interface names',()=>{
   // A cross-page connection has a continuation at both ends.
   assert.equal(new Set(core.flatMap(p=>p.items).filter(i=>i.type==='path').map(i=>i.name.match(/^L\d+/)?.[0])).size,24);
   assert.equal(core.flatMap(p=>p.items).filter(i=>i.kind==='plug').length,0);
-  const portPages=pages.filter(p=>p.portMap);assert.ok(portPages.length<=4);assert.equal(new Set(portPages.flatMap(p=>p.portMap.rowNames)).size,96);
+  const portPages=pages.filter(p=>p.portMap);assert.ok(portPages.filter(p=>p.portMap.bookletRole==='inventory').length<=4);assert.equal(new Set(portPages.flatMap(p=>p.portMap.rowNames)).size,96);
   assert.equal(new Set(pages.map(p=>p.name)).size,pages.length);
   assert.deepEqual(pages.map(p=>p.svg),buildPages(p).map(p=>p.svg));
 });
@@ -100,7 +100,7 @@ test('MDF assignments distinguish AP evidence, matching trunk profiles, infrastr
   const site={layout:{portMap:{density:'expanded'}},devices:[backbone,peer('ap-a','ap'),peer('ap-b','ap'),peer('fw','firewall'),peer('desk','unknown')],
     links:[link('p1','ap-a'),{a:'ap-b',ap:'eth0',b:'sw',bp:'p2',status:'confirmed'},
       link('p6','desk'),link('p7','fw'),{...link('p9','ap-a'),status:'conflict'}],excludedPeerPorts:[['sw','p11']]};
-  const pages=buildPages(site).filter(p=>p.title==='MDF Port Map');
+  const pages=buildPages(site).filter(p=>p.title==='Port Inventory');
   const rows=[];
   for(const page of pages){
     const cells=page.items.filter(i=>i.type==='text'&&i.portTableRole),ports=cells.filter(c=>c.portTableRole==='interface'&&!c.value.includes('continued'));

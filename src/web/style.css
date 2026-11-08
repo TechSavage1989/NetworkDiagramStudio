@@ -67,3 +67,5 @@
 #canvas.editing path.cable-hit-target{pointer-events:stroke;cursor:pointer}#canvas path.cable-hit-target{pointer-events:none}
 
 .drawing-align{position:relative;font-size:11px}.drawing-align summary{cursor:pointer;border:1px solid #aebfc6;border-radius:5px;padding:5px 7px;background:white;font-weight:600}.align-options{position:absolute;z-index:5;top:32px;left:0;display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#fff;border:1px solid #aebfc6;padding:10px;box-shadow:0 5px 16px #18354433;min-width:260px}.align-options button{text-align:left}
+
+#canvas.picking-reference [data-device-id],#canvas.picking-reference [data-device-id] *{cursor:crosshair}

@@ -80,8 +80,9 @@ test('panel options select content and the dynamic module panel grows rather tha
 
 test('port-map text scales its table spacing without stretching the hardware or its anchors',()=>{
  const site=sampleSite(),before=buildPages(site).find(p=>p.portMap);site.layout={presentation:{defaults:{textScale:2}}};let page=buildPages(site).find(p=>p.portMap),body=page.items.find(i=>i.kind==='switch'),original=before.items.find(i=>i.editKey===body.editKey);near(body.w,original.w);near(body.h,original.h);assert.deepEqual(body.ports,original.ports);
+ page=buildPages(site).find(p=>p.portMap?.bookletRole==='inventory');
  const cells=page.items.filter(i=>i.tableContent&&i.type==='text');for(const cell of cells)for(const other of cells)if(cell!==other)assert.ok(!intersects(cell,other),cell.value+' / '+other.value);
- const cell=cells.find(i=>i.portTableRole);site.layout.drawingEdits=moveDrawingItems(page,{},new Map([[cell.editKey,[30,20]]]));page=buildPages(site).find(p=>p.portMap);const moved=page.items.find(i=>i.editKey===cell.editKey);near(moved.x,cell.x+30);near(moved.y,cell.y+20);
+ const cell=cells.find(i=>i.portTableRole);site.layout.drawingEdits=moveDrawingItems(page,{},new Map([[cell.editKey,[30,20]]]));page=buildPages(site).find(p=>p.portMap?.bookletRole==='inventory');const moved=page.items.find(i=>i.editKey===cell.editKey);near(moved.x,cell.x+30);near(moved.y,cell.y+20);
 });
 
 test('invalid saved presentation and report fields are bounded',()=>{
