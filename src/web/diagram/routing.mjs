@@ -597,7 +597,7 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
  repair('row');repair('rail');
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}
 }
-export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0}){
+export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0,referenceLabel=0}){
  const bodies=[...nodes.values()];
  if(bodies.some(n=>n.x<minX))minX=Math.min(minX,...bodies.map(n=>n.x))-Math.max(24,endData.size*railPitch);
  if(bodies.some(n=>n.x+n.w>maxX))maxX=Math.max(maxX,...bodies.map(n=>n.x+n.w))+Math.max(24,endData.size*railPitch);
@@ -667,7 +667,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   }
   // Continuation badges sit outside the cable rails, not across a passing link.
   // Retain the existing boundary behavior for deliberately off-page edits.
-  const referenceX=[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)?Math.min(left-10,...tracks.filter(t=>t.side==='left').map(t=>t.rail-12)):left-10;
+  const referenceX=([...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)?Math.min(left-10,...tracks.filter(t=>t.side==='left').map(t=>t.rail-12)):left-10)-referenceLabel;
   for(const e of external){const which=ends.has(e.idx+'/a')?'a':'b',v=ends.get(e.idx+'/'+which),x=referenceX;const r={e,v,which,x,y:v.ay,weight:v.anchor.weight||4,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
   // Two bounded local passes let a cable use space released by its neighbor.
   // Do not rebuild the bank for every side flip or rescore unchanged pairs.
@@ -708,7 +708,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   // every lane of the other off-page cables, so no cable crosses a tag.
   if(references.length&&[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)){
    const gap=Math.max(12,ROUTE_STYLE.pitch),lanes=routes.flatMap(r=>r.v?r.points.slice(0,-1):r.points).map(p=>p[0]).filter(x=>x<left);
-   const x=Math.min(referenceX,...routes.filter(r=>!r.v&&Number.isFinite(r.rail)&&r.rail<left).map(r=>r.rail-gap),...lanes.map(x=>x-gap));
+   const x=Math.min(referenceX,...routes.filter(r=>!r.v&&Number.isFinite(r.rail)&&r.rail<left).map(r=>r.rail-gap-referenceLabel),...lanes.map(x=>x-gap-referenceLabel));
    if(x<referenceX&&x>=minX)for(const r of references){r.x=x;r.points=composeRoute(r);}
    untangleReferences(references,routes);
   }

@@ -51,19 +51,21 @@ function mergeInventories(items){return {hostname:'Workspace',ports:items.flatMa
 // Port-map sheets use the builder's dense key: one line per VLAN or LAG,
 // up to five columns.
 function keyRows(inventory,palette,width,compact=false,dense=false){
- const ids=vlanIds(inventory),columns=Math.max(1,Math.min(dense?5:4,Math.floor(width/(dense?190:230)))),columnWidth=width/columns,entries=ids.map(id=>({id,fill:palette.vlans[id],title:'VLAN '+id+(inventory.vlans.some(vlan=>vlan.id===id&&vlan.voice)||inventory.ports.some(port=>port.voiceVlan===id)?' / Voice':''),names:(palette.aliases[id]||[]).join(' / ')}));
+ const ids=vlanIds(inventory),columns=Math.max(1,Math.min(dense?5:4,Math.floor(width/(dense?190:230)))),columnWidth=width/columns,entries=ids.map(id=>({id,vlan:true,voice:inventory.vlans.some(vlan=>vlan.id===id&&vlan.voice)||inventory.ports.some(port=>port.voiceVlan===id),fill:palette.vlans[id],title:'VLAN '+id+(inventory.vlans.some(vlan=>vlan.id===id&&vlan.voice)||inventory.ports.some(port=>port.voiceVlan===id)?' / Voice':''),names:(palette.aliases[id]||[]).join(' / ')}));
  if(inventory.ports.some(port=>!port.stackLink&&!port.untaggedVlan&&port.untaggedState!=='None'))entries.push({id:'unknown',fill:'#e6e6e6',title:'Native not supplied',names:''});
  if(inventory.ports.some(port=>!port.stackLink&&!port.untaggedVlan&&port.untaggedState==='None'))entries.push({id:'none',fill:'#ffffff',title:'No native VLAN',names:''});
  for(const aggregate of unique(inventory.ports.map(port=>aggregateKey(port.aggregate)).filter(Boolean))){const names=inventory.ports.filter(port=>aggregateKey(port.aggregate)===aggregate).map(port=>port.id);entries.push({id:'lag:'+aggregate,fill:'#ffffff',stroke:palette.aggregates[aggregate],title:'LAG / trunk '+aggregate,names:names.join(', ')});}
  if(dense)for(const entry of entries){entry.title=(/^VLAN /.test(entry.title)?entry.title.slice(5):entry.title)+(entry.names?(entry.id.startsWith?.('lag:')?': ':'  ')+entry.names:'');entry.names='';}
- for(const entry of entries){entry.titleHeight=wrapPortText(entry.title,columnWidth-30,10,!dense).length*12;entry.namesHeight=entry.names?wrapPortText(entry.names,columnWidth-30,10).length*12:compact||dense?0:12;}
+ for(const entry of entries){entry.titleHeight=wrapPortText(entry.title,columnWidth-(dense?44:30),10,!dense).length*12;entry.namesHeight=entry.names?wrapPortText(entry.names,columnWidth-30,10).length*12:compact||dense?0:12;}
  const result=[];for(let offset=0;offset<entries.length;offset+=columns){const row=entries.slice(offset,offset+columns),height=Math.max(...row.map(entry=>entry.titleHeight+entry.namesHeight))+(dense?3:compact?6:8);result.push({entries:row,height,columns,columnWidth});}
  return result;
 }
 function legendHeight(inventory,palette,width,compact=false,dense=false){return (compact?18:23)+keyRows(inventory,palette,width,compact,dense).reduce((height,row)=>height+row.height,0)+(compact?23:27);}
 function legend(p,y,inventory,palette,{continued=false}={}){
  const a=p.items,w=p.width-margin*2;text(a,margin,y,w,'VLAN and LAG key'+(continued?' / continued':''),p.compact?11:12,true);y+=p.compact?18:23;
- for(const row of keyRows(inventory,palette,w,p.compact,p.dense)){for(let column=0;column<row.entries.length;column++){const entry=row.entries[column],x=margin+column*row.columnWidth;rect(a,x,y+1,14,12,entry.fill,entry.stroke||muted,entry.stroke?2:.7);text(a,x+22,y,row.columnWidth-30,entry.title,10,!p.dense,ink,'left',{reportKeyTitle:entry.id});if(entry.names)text(a,x+22,y+entry.titleHeight,row.columnWidth-30,entry.names,10,false,muted,'left',{reportKeyNames:entry.id});}y+=row.height;}
+ for(const row of keyRows(inventory,palette,w,p.compact,p.dense)){for(let column=0;column<row.entries.length;column++){const entry=row.entries[column],x=margin+column*row.columnWidth;rect(a,x,y+1,14,12,entry.fill,entry.stroke||muted,entry.stroke?2:.7);const marked=p.dense&&entry.vlan,tx=marked?x+36:x+22;
+   if(marked){const extra={editKey:p.name+'|key|'+entry.id+'|marker',reportKeyMarker:entry.id};if(entry.voice)diamond(a,x+18,y+1.5,11,entry.fill,'#263c49',.5,extra);else ellipse(a,x+18.5,y+2,10,10,entry.fill,'#263c49',.5,extra);}
+   text(a,tx,y,row.columnWidth-(marked?44:30),entry.title,10,!p.dense,ink,'left',{reportKeyTitle:entry.id});if(entry.names)text(a,x+22,y+entry.titleHeight,row.columnWidth-30,entry.names,10,false,muted,'left',{reportKeyNames:entry.id});}y+=row.height;}
  return symbolKey(p,y+(p.compact?1:5),palette,inventory)+(p.compact?5:8);
 }
 function modelLabel(inv){return inv.reportModel||inv.chassisModel||unique(inv.groups.filter(group=>!group.slot).map(group=>group.product)).join(' / ');}

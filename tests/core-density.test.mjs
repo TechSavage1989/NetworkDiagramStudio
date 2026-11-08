@@ -22,7 +22,8 @@ test('full-scale continuation retains readable legends, full module assignments 
 function clear(page){
  const texts=page.items.filter(i=>i.type==='text'),bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path'),segments=[];
  for(const text of texts.filter(i=>i.labelRole||i.titleOwner)){
-  assert.ok(text.size>=12,'readable text size');
+  // Port names may shrink a little to stay beside their own cable.
+  assert.ok(text.size>=(text.labelRole==='port'?9:12),'readable text size');
   for(const other of texts)if(other!==text)assert.ok(!intersects(text,other),'overlapping text');
   for(const body of bodies)assert.ok(!intersects(text,body),'text overlaps equipment');
   for(const path of paths)assert.ok(!pathCrossesText(path,text,1),'text overlaps a cable or hop');

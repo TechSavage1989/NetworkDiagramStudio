@@ -280,7 +280,10 @@ export function corePages(project,inventory){
   sheet.packedColumns=packing?.columns||1;
   const measuredHeight=dynamic?(packing?.h??[...measured.values()].reduce((sum,m)=>sum+m.height+expansion,0)):0;
   // Off-page tags line up left of the rails; reserve their measured width.
-  const hiddenTags=new Set(sheet.hiddenReferences||[]),tagRoom=Math.max(0,...measuredEdges.filter(e=>sheet.showReferences!==false&&!hiddenTags.has(linkKey(e))&&!localPort(sheet,e.a,e.ap)!==!localPort(sheet,e.b,e.bp)&&(!sheet.linkIds||sheet.linkIds.has(e.idx))).map(e=>{const local=localPort(sheet,e.a,e.ap)?'a':'b',remote=local==='a'?e.b:e.a;return referenceTag(aliasProject,db,e,local,edgeLocations.get(remote+'/'+e.idx)||locations.get(remote)||'Core Network').width+12;}));
+  const hiddenTags=new Set(sheet.hiddenReferences||[]),offPageEdges=measuredEdges.filter(e=>sheet.showReferences!==false&&!hiddenTags.has(linkKey(e))&&!localPort(sheet,e.a,e.ap)!==!localPort(sheet,e.b,e.bp)&&(!sheet.linkIds||sheet.linkIds.has(e.idx)));
+  // Each off-page stub keeps room for its own port name beside it.
+  const referenceLabel=dynamic&&offPageEdges.length?Math.ceil(Math.max(...offPageEdges.map(e=>textWidth(String(localPort(sheet,e.a,e.ap)?e.ap:e.bp),12,true)))+20):0;
+  const tagRoom=referenceLabel+Math.max(0,...measuredEdges.filter(e=>sheet.showReferences!==false&&!hiddenTags.has(linkKey(e))&&!localPort(sheet,e.a,e.ap)!==!localPort(sheet,e.b,e.bp)&&(!sheet.linkIds||sheet.linkIds.has(e.idx))).map(e=>{const local=localPort(sheet,e.a,e.ap)?'a':'b',remote=local==='a'?e.b:e.a;return referenceTag(aliasProject,db,e,local,edgeLocations.get(remote+'/'+e.idx)||locations.get(remote)||'Core Network').width+12;}));
   const leftReserve=(packing?reserveFor(packing):stableReserve)+(dynamic?tagRoom:0);
   const W=dynamic?Math.max(baseW+expansion+railReserve*2+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)),packing?LEFT+leftReserve+packing.w+railReserve+38:0):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110):baseH,BOTTOM=H-74;
   const pageProject=dynamic?{...aliasProject,_pageGeometry:{...aliasProject._pageGeometry,core:{width:W,height:H}}}:aliasProject;
@@ -348,7 +351,7 @@ export function corePages(project,inventory){
   const stack=[...nodes.values()].filter(n=>n.kind!=='handoff');
   const routingBounds=stack.length?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
   let planned;
-  try{planned=memoRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding,weight,railPitch>12),railPitch,scale,obstacles,uniform:lineSpacing(aliasProject,sheet.name)});}
+  try{planned=memoRoutes(internal,external,endData,banks,nodes,{referenceLabel,...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding,weight,railPitch>12),railPitch,scale,obstacles,uniform:lineSpacing(aliasProject,sheet.name)});}
   catch(error){if(error.code==='CORE_LAYOUT_CAPACITY')error.page=page.name;throw error;}
   if(planned.cost[0]&&[...nodes.values()].every(n=>n.x>=sidebar.contentLeft&&n.x+n.w<=(W-38)&&n.y>=145&&n.y+n.h<=(H-69)))throw Object.assign(Error('This core page needs more room to route cables around the equipment.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   const outer={left:Math.min(routingBounds.left-18,...planned.routes.filter(r=>r.side==='left').map(r=>r.rail)),right:Math.max(routingBounds.right+18,...planned.routes.filter(r=>r.side==='right').map(r=>r.rail))},requests=[];
@@ -391,7 +394,9 @@ export function corePages(project,inventory){
   linkLegend(page);const modulePages=moduleLegend(page,pageProject);applyDrawingEdits(page,pageProject);for(const continued of modulePages)applyDrawingEdits(continued,pageProject);
   informationPanel(page,pageProject);scaleText(page,pageProject);bridge(page,{style:hopStyle(pageProject)});fitDynamicPage(page,pageProject);placeDeviceTitles(page,pageProject,nodes);fitDynamicPage(page,pageProject);
   const fontFactor=presentation(pageProject,page).textScale;for(const request of requests){request.size=12*fontFactor;request.minSize=Math.min(12,request.size);request.fontFactor=fontFactor;}
-  const placed=placeCableLabels(page,requests,pageProject.layout?.drawingEdits);
+  // Port names use leader lines only after the page has made more room for
+  // them, or on fixed paper that cannot grow.
+  const placed=placeCableLabels(page,requests,pageProject.layout?.drawingEdits,{portLeaders:!dynamic||(sheet.labelClearance||0)>=28});
   if(!placed.ok)throw Object.assign(Error('This core page needs more room for the '+placed.failed.role+' label '+JSON.stringify(placed.failed.value)+'. Move devices to another core page under Device order / Core pages.'),{code:'CORE_LAYOUT_CAPACITY',role:placed.failed.role,page:page.name,labelClearance:placed.clearance});
   // A dynamic page ends at its content: the heading no longer holds the
   // planned width open, so unused rail reserve does not widen the sheet.

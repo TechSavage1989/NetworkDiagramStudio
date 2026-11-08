@@ -89,7 +89,7 @@ function boxDistance(box,path){
  }
  return best;
 }
-export function placeCableLabels(page,requests,edits={}){
+export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const minY=page.dynamic?(page.originY||0)+36:158,maxY=(page.originY||0)+(page.height||975)-69,maxX=(page.originX||0)+(page.width||1200)-38;
  const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path');
  const result=[],sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38;
@@ -114,7 +114,11 @@ export function placeCableLabels(page,requests,edits={}){
    const index=points.slice(1).findIndex((b,i)=>!inside([(points[i][0]+b[0])/2,(points[i][1]+b[1])/2]));if(index<0)continue;
    const a=points[index],b=points[index+1];if(a[0]!==b[0]||a[1]===b[1])continue;
    // The visible lead starts at the edge of the equipment it leaves.
-   const dir=Math.sign(b[1]-a[1]),host=bodies.find(n=>a[0]>=n.x&&a[0]<=n.x+n.w&&a[1]>=n.y-.01&&a[1]<=n.y+n.h+.01),from=host?(dir<0?Math.min(a[1],host.y):Math.max(a[1],host.y+host.h)):a[1];
+   const dir=Math.sign(b[1]-a[1]),host=bodies.find(n=>a[0]>=n.x&&a[0]<=n.x+n.w&&a[1]>=n.y-.01&&a[1]<=n.y+n.h+.01);
+   // Only a lead leaving through this edge of its device joins the row; a
+   // cable that leaves sideways and later turns down keeps its own spot.
+   if(!host)continue;
+   const from=dir<0?Math.min(a[1],host.y):Math.max(a[1],host.y+host.h);
    // A lead too short to carry its own name beside it is placed on its own.
    if(Math.abs(b[1]-from)>=m.w+16)leads.push({req,owner,m,x:a[0],from,to:b[1],dir});
   }
@@ -150,9 +154,9 @@ export function placeCableLabels(page,requests,edits={}){
    result.push({...req,...box,lines:m.lines,size:m.size,textAlign:dir<0?'left':'right'});
   }
  }
- for(const req of requests){
-  if(banked.has(req))continue;
-  const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)continue;
+ // One request at one text size: the chosen box, or null when nothing fits.
+ const placeOne=req=>{
+  const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)return {skip:true};
   const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);let endpoint=null,nearSegments=1,half=Infinity,leaves=0;
   // The cable read from this label's own end, with the distance along it to
   // each bend, so a port name never settles by the far end's port.
@@ -167,7 +171,8 @@ export function placeCableLabels(page,requests,edits={}){
    // "Nearer this port" is measured on the visible cable, between where it
    // leaves this equipment and where it enters the far equipment.
    let lastOut=segments.length-1;while(lastOut>firstOut&&inside([(segments[lastOut][0][0]+segments[lastOut][1][0])/2,(segments[lastOut][0][1]+segments[lastOut][1][1])/2]))lastOut--;
-   half=(travelled[firstOut]+travelled[lastOut+1])/2;leaves=travelled[firstOut];
+   // An off-page cable has no far port name to share its length with.
+   half=owner.startEndpoint!=null?travelled[lastOut+1]:(travelled[firstOut]+travelled[lastOut+1])/2;leaves=travelled[firstOut];
    const order=segments.map((_,i)=>i);if(req.role==='media')order.sort((i,j)=>{const [[a,b],[c,d]]=[segments[i],segments[j]];return Math.hypot(d[0]-c[0],d[1]-c[1])-Math.hypot(b[0]-a[0],b[1]-a[1])||i-j;});
    for(const [rank,index] of order.entries()){const segment=req.role==='media'?rank:index,[a,b]=segments[index];
     const vertical=a[0]===b[0],axis=vertical?1:0;
@@ -264,13 +269,32 @@ export function placeCableLabels(page,requests,edits={}){
     // the first run from that endpoint, or a short leader line near it.
     if(strict===true&&candidate.attached&&(req.role==='port'&&candidate.segment>nearSegments||!clearlyOwn(b)))continue;
     if(strict===true&&req.role==='port'&&!candidate.attached&&!candidate.inline&&endpoint&&Math.hypot(b.x+b.w/2-endpoint[0],b.y+b.h/2-endpoint[1])>160)continue;
+    // Port names sit beside or on their own cable; no leader lines.
+    if(req.role==='port'&&owner&&!req.allowLeader&&!candidate.attached&&!candidate.inline)continue;
     const leader=owner&&!candidate.attached&&!candidate.inline?cableLeader(b,owner,paths,[...occupied,...bodies]):null;
     if(owner&&req.role!=='reference'&&!candidate.attached&&!candidate.inline&&!leader)continue;
     box={...candidate,leader};break;
    }
    if(box)break;
   }
-  if(!box)return {ok:false,failed:req,placed:result,clearance:h+12};
+  return box?{box,lines,size}:{failed:true,clearance:h+12};
+ };
+ for(const req of requests){
+  if(banked.has(req))continue;
+  // A port name may shrink a little (not below 8) before the page is
+  // re-planned with wider cable spacing to make room for it.
+  let placed=null;
+  for(const scale of req.role==='port'?[1,.88,.76]:[1]){
+   const base=req.size||12,size=Math.max(8,base*scale);
+   placed=placeOne(scale===1?req:{...req,size,minSize:Math.min(req.minSize??12,size)});
+   if(placed.box||placed.skip)break;
+  }
+  // Last resort, once the page has already made more room (or cannot grow):
+  // a short leader line rather than a missing port name.
+  if(!placed.box&&!placed.skip&&req.role==='port'&&portLeaders)placed=placeOne({...req,allowLeader:true});
+  if(placed.skip)continue;
+  if(!placed.box){const first=placeOne(req);return {ok:false,failed:req,placed:result,clearance:first.clearance??28};}
+  const {box,lines,size}=placed;
   occupied.push(box);if(box.leader)occupied.push(box.leader);
   result.push({...req,...box,lines,size});
  }
