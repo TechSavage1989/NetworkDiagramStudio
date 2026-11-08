@@ -80,6 +80,17 @@ Owner follow-up (Visio jumps, WAN cards, labels, off-page links, editor space):
 - Off-page connections end in one aligned column of white tags reading "far device and port, then page", with no L-numbers. All tags on a page share one width and sit left of every rail and every other off-page lane. Dynamic pages reserve the measured tag width. On fixed paper a tag wraps between words, up to three lines, and stacks without overlapping while still touching its own cable; past three lines it shows only the page.
 - Editor chrome: a slimmer header; page groups on the title row; page tabs, status text, page picker and import notes on one row; and edit, placement and cable tools in one wrapping bar. With fictional data at 1920x1080 the canvas starts at 185 px instead of 362 px; at 1366x768 it is 499 px tall instead of 336 px.
 
+Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
+- Visio: on a page drawn above its origin (WAN cards above a firewall), connector paths were written 20 units higher than the device shapes. Cables then missed their ports, and stack leads looked as if they ran through the members. normalizedPage now translates cable commands and hops, and scripts/check-visio-package.py checks every connector's path against its Begin and End points. A LibreOffice render of the fictional MDF lookalike shows the leads leaving below each member into the gap.
+- Line jumps default to one hop per crossed line, Visio's usual look. Pages & layout > Line jumps can switch back to one bridge over close lines (layout.hopStyle 'bundle').
+- Port names of leads leaving the same side of a device sit in one row: beside their leads, or on their own line where there is no room.
+- Device order, Connections, Add, Reports and Hardware moved to the header, so the device list is the sidebar's only scrolling area.
+- Port maps now follow the Switchport Diagram Builder:
+  - The AOS-Switch parser joins port lists that a backup wraps onto the next line, even inside a port name. This was the main reason chassis ports were missing: 104 of 184 on the owner's MDF.
+  - The parser applies 'no untagged' and 'no tagged', gives trunk members the trunk's VLANs, and marks the voice VLAN only when exactly one applies.
+  - Sockets are white for "No native VLAN" and gray for "Native not supplied", including sockets with no configuration record.
+  - Tagged dots keep a minimum radius of 1.5. Dynamic pages widen the whole port-map family until every dot fits. Fixed paper shows a "+" marker and lists the full VLAN set.
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.

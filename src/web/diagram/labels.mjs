@@ -92,11 +92,67 @@ function boxDistance(box,path){
 export function placeCableLabels(page,requests,edits={}){
  const minY=page.dynamic?(page.originY||0)+36:158,maxY=(page.originY||0)+(page.height||975)-69,maxX=(page.originX||0)+(page.width||1200)-38;
  const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path');
- const result=[];
+ const result=[],sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38;
+ const measure=req=>{
+  const source=Array.isArray(req.value)?req.value:[req.value],patches=source.map((_,i)=>edits[req.editKey+'|'+i]||{}),size=Math.max(req.minSize??12,req.size||12,...patches.map(p=>p.size||0)),maxWidth=sidebar?(req.role==='media'&&page.dynamic?180:96):req.side==='right'?Math.max(96,1154-Math.max(req.outer+8,984)):Math.max(100,Math.min(req.outer-46,250));
+  const lines=[];for(const [index,original] of source.entries()){const patch=patches[index];if(patch.hidden)continue;const value=patch.value??original;let line='',fragment=0;const push=()=>lines.push({value:line,patch,key:req.editKey+'|'+index+(fragment++?'|wrap'+fragment:'')});for(const char of String(value)){if(line&&textWidth(line+char,size,true)>maxWidth){push();line='';}line+=char;}if(line)push();}
+  return {patches,size,lines,w:lines.length?Math.max(...lines.map(s=>textWidth(s.value,size,s.patch.bold!==false))):0,h:lines.length*(size+4)};
+ };
+ const clear=(b,owner,inline)=>!(b.x<contentLeft||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>inline&&p===owner?(p.hops||[]).some(hop=>intersects(hop,b,2)):pathCrossesText(p,b,2)));
+ // Port names of leads leaving the same side of one device sit in line: one
+ // shared distance from the device, each beside its lead on a common side,
+ // or on its own line (white background) where there is no room beside it.
+ const banked=new Set();
+ const banks=new Map();for(const req of requests)if(req.role==='port'&&req.bank&&req.linkId!=null)banks.set(req.bank,[...(banks.get(req.bank)||[]),req]);
+ for(const members of banks.values()){
+  if(members.length<2)continue;
+  const leads=[];
+  for(const req of members){
+   const owner=paths.find(path=>path.linkId===req.linkId),m=measure(req);
+   if(!owner||m.lines.length!==1||m.patches.some(p=>Number.isFinite(p.x)||Number.isFinite(p.y)))continue;
+   const points=req.endpoint&&req.endpoint!==(owner.startEndpoint||'a')?[...owner.points].reverse():owner.points,inside=([x,y])=>bodies.some(n=>x>n.x&&x<n.x+n.w&&y>n.y&&y<n.y+n.h);
+   const index=points.slice(1).findIndex((b,i)=>!inside([(points[i][0]+b[0])/2,(points[i][1]+b[1])/2]));if(index<0)continue;
+   const a=points[index],b=points[index+1];if(a[0]!==b[0]||a[1]===b[1])continue;
+   // The visible lead starts at the edge of the equipment it leaves.
+   const dir=Math.sign(b[1]-a[1]),host=bodies.find(n=>a[0]>=n.x&&a[0]<=n.x+n.w&&a[1]>=n.y-.01&&a[1]<=n.y+n.h+.01),from=host?(dir<0?Math.min(a[1],host.y):Math.max(a[1],host.y+host.h)):a[1];
+   // A lead too short to carry its own name beside it is placed on its own.
+   if(Math.abs(b[1]-from)>=m.w+16)leads.push({req,owner,m,x:a[0],from,to:b[1],dir});
+  }
+  if(leads.length<2||new Set(leads.map(l=>l.dir)).size>1)continue;
+  const dir=leads[0].dir,length=Math.max(...leads.map(l=>l.m.w)),near=dir<0?Math.min(...leads.map(l=>l.from)):Math.max(...leads.map(l=>l.from)),far=dir<0?Math.max(...leads.map(l=>l.to)):Math.min(...leads.map(l=>l.to));
+  let best=null;leads.sort((p,q)=>p.x-q.x);
+  // From the device outward, bounded; each label starts at the same distance.
+  // One style for the whole row: all left of their leads, all right, or all
+  // on their own lines. The most labels in line wins, then that order.
+  for(let step=0,start=near+dir*8;step<60&&(far-start)*dir>=length+4;step++,start+=dir*4){
+   // Mixed rows keep a name on its own line where its side is taken.
+   for(const [rank,mode] of ['left','right','inline','left+inline','right+inline'].entries()){
+    const placed=[];
+    for(const lead of leads){
+     // Rotated text reading upward, centered at (x, middle of its span).
+     const {m}=lead,th=m.h,lo=dir<0?start-m.w:start,middle=lo+m.w/2,inlineLength=m.w+8;
+     const inline={x:lead.x-inlineLength/2,y:middle-th/2,w:inlineLength,h:th,angle:Math.PI/2,inline:true,parts:[inlineLength]};
+     const beside=side=>({x:(side==='left'?lead.x-th-4:lead.x+4)+(th-m.w)/2,y:middle-th/2,w:m.w,h:th,angle:Math.PI/2,attached:true});
+     const options=mode==='inline'?[inline]:mode.includes('+')?[beside(mode.split('+')[0]),inline]:[beside(mode)];
+     for(const box of options){
+      const f=textFootprint(box);
+      if(clear(f,lead.owner,box.inline)&&!placed.some(q=>intersects(f,q.footprint,3))&&(box.inline||!pathCrossesText(lead.owner,f,1))){placed.push({lead,box,footprint:f});break;}
+     }
+    }
+    if(placed.length>=2&&(!best||placed.length>best.placed.length||placed.length===best.placed.length&&rank<best.rank))best={placed,rank};
+   }
+   if(best?.placed.length===leads.length&&best.rank===0)break;
+  }
+  if(!best)continue;
+  for(const {lead,box,footprint} of best.placed){
+   const {req,m}=lead;occupied.push(footprint);banked.add(req);
+   // Names start at the end nearest the device so the row reads evenly.
+   result.push({...req,...box,lines:m.lines,size:m.size,textAlign:dir<0?'left':'right'});
+  }
+ }
  for(const req of requests){
-  const source=Array.isArray(req.value)?req.value:[req.value],patches=source.map((_,i)=>edits[req.editKey+'|'+i]||{}),size=Math.max(req.minSize??12,req.size||12,...patches.map(p=>p.size||0)),sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38,maxWidth=sidebar?(req.role==='media'&&page.dynamic?180:96):req.side==='right'?Math.max(96,1154-Math.max(req.outer+8,984)):Math.max(100,Math.min(req.outer-46,250));
-  const lines=[];for(const [index,original] of source.entries()){const patch=patches[index];if(patch.hidden)continue;const value=patch.value??original;let line='',fragment=0;const push=()=>lines.push({value:line,patch,key:req.editKey+'|'+index+(fragment++?'|wrap'+fragment:'')});for(const char of String(value)){if(line&&textWidth(line+char,size,true)>maxWidth){push();line='';}line+=char;}if(line)push();}if(!lines.length)continue;
-  const w=Math.max(...lines.map(s=>textWidth(s.value,size,s.patch.bold!==false))),h=lines.length*(size+4),candidates=[];
+  if(banked.has(req))continue;
+  const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)continue;
   const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);let endpoint=null,nearSegments=1,half=Infinity;
   // The cable read from this label's own end, with the distance along it to
   // each bend, so a port name never settles by the far end's port.
@@ -232,6 +288,6 @@ export function placeCableLabels(page,requests,edits={}){
    }
    continue;
   }
-  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});}
+  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||b.textAlign||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});}
  return {ok:true,placed:result};
 }

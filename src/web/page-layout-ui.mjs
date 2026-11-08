@@ -24,6 +24,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   else identity.append(el('h3','Drawing defaults'));
   const captions=global?check(identity,'Show cable type and speed on connection lines',layout.cableCaptions===true):null;
   if(captions)identity.append(el('p','The connection key already names each cable color, so this text is off unless chosen. A caption you moved or edited stays visible.','hint'));
+  const hops=global?field(identity,'Line jumps',layout.hopStyle==='bundle'?'bundle':'single',[['single','One hop per crossed line'],['bundle','One bridge over close lines']]):null;
   const documentation=global?field(identity,'Document detail',layout.documentation==='full'?'full':'concise',[['concise','Concise - combine shared data and avoid repeated tables'],['full','Full reference - include separate VLAN membership matrices']]):null;
   if(global)identity.append(el('p','Port Inventory keeps complete physical port assignments. Concise pages share identical network definitions across devices and retain unique addresses, routes and logical interfaces. Custom reports and edited reference pages remain available.','hint'));
   // Network pages read the saved device order down each column, then across.
@@ -61,7 +62,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
    const numericFields=[drawing,text,equipment,width,scale,panelText,x,y].filter(Boolean);if(numericFields.some(n=>!n.value||!Number.isFinite(+n.value)||+n.value<+n.min||+n.value>+n.max))throw Error('Enter sizes within the ranges shown.');
    const next=global?layout.presentation.defaults:{...(name?.value.trim()?{name:name.value.trim()}:{}),...(!visible?.checked?{hidden:true}:{})};
    if(global||!inherited.checked)Object.assign(next,{drawingScale:+drawing.value/100,textScale:+text.value/100,panel:{visible:show.checked,position:placement.value,width:+width.value,scale:+scale.value/100,textScale:+panelText.value/100,x:+x.value,y:+y.value,sections:choices.filter(([,input])=>input.checked).map(([id])=>id),notes:notes.value}});
-   if(global){next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
+   if(global){next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;if(hops.value==='bundle')layout.hopStyle='bundle';else delete layout.hopStyle;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
    if(deviceChecks.length){const chosen=deviceChecks.filter(([,input])=>input.checked).map(([id])=>id);
     if(!page.reportId)layout.coreExclude=(layout.coreExclude||[]).filter(id=>!chosen.includes(id));
     if(definition)definition.devices=chosen;else if(JSON.stringify(chosen)!==JSON.stringify(page.coreDeviceIds)){definition={id:crypto.randomUUID(),name:page.name,devices:chosen,showReferences:true};layout.corePages.push(definition);}

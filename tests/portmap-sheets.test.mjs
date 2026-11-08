@@ -70,3 +70,26 @@ test('inline connector text paints its white background in native Visio',async()
  const shape=xml.split('<Shape ').find(s=>s.includes('Inline caption'));assert.ok(shape);
  assert.match(shape,/N="FillPattern" V="1"/);assert.match(shape,/N="NoFill" V="0"/);assert.match(shape,/N="NoLine" V="1"/);
 });
+
+test('a trunk with many tagged VLANs keeps readable dots: wider hardware, or a + marker and a full list on fixed paper',()=>{
+ // Fictional chassis: SFP+ trunks carrying 25 VLANs with no native VLAN, and
+ // a copper trunk with a voice VLAN.
+ const vlans=Array.from({length:26},(_,i)=>({id:100+i,name:'Lab '+(100+i)}));
+ const core=()=>({id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,
+  ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:null,nativeState:'None',tagged:vlans.slice(0,25).map(v=>v.id)})),{name:'C1',state:'up',native:100,voice:125,tagged:vlans.slice(1,20).map(v=>v.id)}]});
+ const sheet=layout=>maps({name:'Trunk lab',devices:[core()],links:[],layout}).find(p=>p.portMap.overview&&p.portMap.device==='core');
+ // A dynamic page widens the common hardware until every dot fits at the minimum size.
+ const page=sheet({});
+ for(const [name,count] of [['A1',25],['A8',25],['C1',19]]){
+  const dots=page.items.filter(i=>i.portNumberRole==='tagged'&&i.portName===name),socket=page.items.find(i=>i.portNumberRole==='socket'&&i.portName===name);
+  assert.equal(dots.length,count,name+' shows every tagged VLAN');assert.ok(socket,name);assert.ok(dots.every(d=>d.w/2>=1.5-1e-9),name+' dots stay readable');
+  for(const d of dots)assert.ok(d.x>=socket.x-.01&&d.y>=socket.y-.01&&d.x+d.w<=socket.x+socket.w+.01&&d.y+d.h<=socket.y+socket.h+.01,name+' dot stays on the jack');
+  for(let i=0;i<dots.length;i++)for(let j=i+1;j<dots.length;j++)assert.ok(!intersects(dots[i],dots[j],0),name+' dots do not overlap');
+ }
+ const voice=page.items.find(i=>i.portNumberRole==='voice'&&i.portName==='C1');assert.ok(voice&&page.items.filter(i=>i.portNumberRole==='tagged'&&i.portName==='C1').every(d=>!intersects(d,voice,0)),'the voice diamond keeps its room');
+ assert.ok(!page.items.some(i=>i.portNumberRole==='tagged-more'));
+ // Fixed paper cannot widen: readable dots, a + marker and the full list.
+ const fixed=sheet({pageSetup:{default:{preset:'letter'}}}),dots=fixed.items.filter(i=>i.portNumberRole==='tagged'&&i.portName==='A1'),more=fixed.items.find(i=>i.portNumberRole==='tagged-more'&&i.type==='ellipse'&&i.portName==='A1');
+ assert.ok(dots.length<25&&dots.every(d=>d.w/2>=1.5-1e-9));assert.equal(more?.moreCount,25-dots.length);
+ const texts=fixed.items.filter(i=>i.type==='text').map(i=>i.value);assert.ok(texts.includes('Tagged VLANs (+ on the jack)'));assert.ok(texts.some(t=>/^A?1-8: 100-124$/.test(t)),texts.filter(t=>/100/.test(t)).join(' | '));
+});

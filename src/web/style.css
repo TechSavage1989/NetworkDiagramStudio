@@ -96,4 +96,9 @@
 .edit-bars{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:4px 12px;background:#f3f8f9;border-bottom:1px solid var(--rule)}.edit-bars:not(:has(>:not([hidden]))){display:none}
 .edit-bars>.drawing-tools{padding:0;border:0;background:transparent;gap:4px;flex:0 1 auto;min-width:0;max-width:100%}.edit-bars>.cable-tools{padding:2px 8px;border-radius:5px;background:#e6f2f3}.drawing-tools button{padding:3px 6px}.placement-tools{gap:4px}
 #canvas{padding:10px}.statusbar{padding:2px 14px;font-size:11px}
+/* Site tools sit in the header; the device list is the sidebar's only scroll. */
+.site-tools{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-left:auto}.appbar .site-tools button{background:transparent;color:#dbe9ed;border:1px solid #3d5a69;padding:4px 9px;font-size:12px;font-weight:600}.appbar .site-tools button:hover:not(:disabled){background:#24455a;color:#fff;border-color:#6fa7b3}.site-tools #link-count{font-weight:400;opacity:.85}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media screen and (min-width:621px){aside{display:flex;flex-direction:column}aside>section{flex:none}aside>section.inventory{flex:1 1 auto;min-height:240px;display:flex;flex-direction:column;border-bottom:0}aside .inventory .list{flex:1 1 auto;max-height:none;min-height:96px}}
+.appbar button{white-space:nowrap}@media(max-width:1500px){.brand span{display:none}}@media(max-width:1180px){.appbar .site-tools button,.appbar .toolbar button{padding:4px 7px}.brand strong{font-size:15px}}
 

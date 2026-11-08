@@ -73,8 +73,12 @@ test('endpoint selectors include unused model jacks and reject an occupied port 
 });
 test('crossing hops have visible clearance, scale to nearby crossings, and skip shared endpoints',async()=>{
  const line=(points,color)=>({type:'path',points,color,name:'Test',weight:2.2}),p={title:'Crossing',items:[line([[0,20],[100,20]],'#FF0000'),line([[30,0],[30,60]],'#00B0F0'),line([[34,0],[34,60]],'#00B050'),line([[0,20],[0,60]],'#000000')]};
- // The red line crosses a tight pair of verticals, so it makes one bridge over both.
- bridge(p);assert.equal(p.items[0].commands.filter(c=>c[0]==='A').length,1);assert.equal(p.items[1].hops.length,0);assert.equal(p.items[2].hops.length,0);assert.equal(p.items[3].hops.length,0);
+ // By default the red line makes one small hop over each line of the tight
+ // pair, as Visio does; the pair itself never jumps.
+ bridge(p);const single=p.items[0].hops;assert.equal(p.items[0].commands.filter(c=>c[0]==='A').length,2);assert.equal(p.items[1].hops.length,0);assert.equal(p.items[2].hops.length,0);assert.equal(p.items[3].hops.length,0);
+ assert.ok(single[0].x+2<30&&single[0].x+single[0].w-2>30&&single[1].x+2<34&&single[1].x+single[1].w-2>34,'each hop spans its own crossing');assert.ok(single[0].x+single[0].w-2<=single[1].x+2+1e-9,'adjacent hops do not overlap');
+ // The bundle style puts one bridge over both.
+ bridge(p,{style:'bundle'});assert.equal(p.items[0].commands.filter(c=>c[0]==='A').length,1);
  assert.match(svgPage(p),/class="link-hop-clearance"/);const bridgeHop=p.items[0].hops[0];assert.ok(bridgeHop.x<30&&bridgeHop.x+bridgeHop.w>34,'the bridge spans both crossings');
  p.items[1].points=[[30,0],[30,10]];bridge(p);assert.equal(p.items[1].hops.length,0);
  const site=sampleSite(),files=await unzip(await exportVisio(site,buildPages(site)).arrayBuffer()),pages=new TextDecoder().decode(files.get('visio/pages/pages.xml')),content=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
@@ -102,4 +106,19 @@ test('native Visio connectors carry the same jumps as the drawing, so they show 
  const connectors=xml.split('<Shape ').filter(s=>/NameU="Connector\./.test(s));assert.ok(connectors.length);
  assert.equal(connectors.reduce((n,s)=>n+(s.match(/T="EllipticalArcTo"/g)||[]).length,0),jumps);
  assert.ok(!xml.split('<Shape ').filter(s=>/NameU="CableLegend\./.test(s)).some(s=>s.includes('EllipticalArcTo')),'legend samples stay straight');
+});
+
+test('a page drawn above its origin exports connectors that still start and end at their ports',async()=>{
+ // WAN cards above a firewall give this fictional page a negative top, so
+ // the Visio copy is shifted; the drawn path (with its jumps) must shift too.
+ const {mdfLookalike}=await import('./fixtures/mdf-lookalike.mjs'),site=mdfLookalike(),pages=buildPages(site),page=pages.find(p=>p.coreDeviceIds);
+ assert.ok(page.originY<0,'the fixture page starts above zero');
+ const files=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
+ const connectors=xml.split('<Shape ').filter(s=>/NameU="Connector\./.test(s));assert.ok(connectors.length>10);
+ const value=(text,name)=>Number(text.match(new RegExp('<Cell N="'+name+'" V="([^"]+)"'))?.[1]);
+ for(const shape of connectors){
+  const rows=[...shape.matchAll(/<Row IX="\d+" T="(?:MoveTo|LineTo|EllipticalArcTo)">(.*?)<\/Row>/g)].map(m=>m[1]),first=rows[0],last=rows.at(-1);
+  assert.ok(Math.abs(value(first,'X'))<1e-3&&Math.abs(value(first,'Y'))<1e-3,'path starts at its begin point');
+  assert.ok(Math.abs(value(last,'X')-value(shape,'Width'))<1e-3&&Math.abs(value(last,'Y')-value(shape,'Height'))<1e-3,'path ends at its end point');
+ }
 });

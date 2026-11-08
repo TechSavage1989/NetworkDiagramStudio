@@ -78,7 +78,7 @@ test('core and wireless stack leads use separate inter-panel lanes instead of cr
    const ends=[p.points[0],p.points.at(-1)],own=ends.some(([x,y])=>x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h);
    if(!own)assert.ok(!crossesText(p.points,box,0),'Cable crossed another member panel.');
   }
-  const labels=page.items.filter(i=>i.type==='text');for(const a of labels.filter(i=>i.labelRole||i.titleOwner)){for(const b of labels)if(a!==b)assert.ok(!intersects(a,b,0));for(const p of paths)assert.ok(!crossesText(p.points,a,0));}
+  const labels=page.items.filter(i=>i.type==='text');for(const a of labels.filter(i=>i.labelRole||i.titleOwner)){for(const b of labels)if(a!==b)assert.ok(!intersects(a,b,0));for(const p of paths)if(!(a.background&&p.linkId===a.linkId))assert.ok(!crossesText(p.points,a,0));}
  }
 });
 
@@ -86,4 +86,18 @@ test('core and wireless stack leads use separate inter-panel lanes instead of cr
 test('classic Aruba VLAN voice intent remains explicit through report imports',()=>{
  const parsed=parseConfig('; J9776A Configuration Editor\nhostname LAB-VOICE\nvlan 20\n name Voice\n tagged 1-24\n voice\n exit\nvlan 30\n no voice\n exit\nvlan 40\n name Data\n exit');
  const device=parsed.devices[0];assert.equal(device.vlans.find(v=>v.id===20).voice,true);assert.equal(device.vlans.find(v=>v.id===30).voice,false);assert.ok(!Object.hasOwn(device.vlans.find(v=>v.id===40),'voice'));
+});
+
+test('AOS-Switch VLAN membership follows the switchport builder: wrapped lists, trunks, removals and voice',async()=>{
+ const {parseConfig}=await import('../src/web/imports/config.mjs');
+ // Fictional backup with port lists wrapped inside a token, as exported.
+ const text=['; J9851A Configuration Editor; Created on release #KB.16.10.0009','hostname "LAB-WRAP"','module A type j9993a','module C type j9986a','module D type j9986a','trunk A1,C19 trk1 lacp',
+  'vlan 1','   name "DEFAULT_VLAN"','   no untagged A2-A8,C1-C18,C20-C24,D1-D24','   untagged Trk1','   exit',
+  'vlan 4','   name "LAB_PHONES"','   untagged C6-C17','   tagged Trk1','   voice','   exit',
+  'vlan 200','   name "LAB_WRAPPED"','   untagged D1-D3,D5,D7,D9,D11,D13,D15,D17,D19,D2','2,D23-D','24','   tagged A2-A4,','A7-A8,Trk1','   exit'].join('\n');
+ const device=parseConfig(text,'lab-wrap.cfg').devices[0],port=name=>device.ports.find(p=>p.name===name);
+ for(const name of ['D22','D23','D24'])assert.equal(port(name).native,200,name+' keeps its wrapped membership');
+ assert.deepEqual(port('A8').tagged,[200]);assert.equal(port('A8').nativeState,'None','removed from VLAN 1 with no other native VLAN');
+ assert.equal(port('A1').native,1,'trunk members carry the trunk native VLAN');assert.deepEqual(port('C19').tagged,[4,200]);assert.equal(port('C19').voice,4);
+ assert.equal(port('C6').native,4);assert.equal(port('C6').voice,4,'a voice VLAN marks its member ports');assert.equal(port('C1').nativeState,'None');
 });

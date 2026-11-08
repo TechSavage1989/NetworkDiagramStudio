@@ -539,7 +539,7 @@ function draw(prepared){
  $('site').value=project.name;$('heading').textContent=project.name;deviceList();
  const subset=scoped();const live=subset.devices.length>0;
  $('link-count').textContent='('+project.links.length+')';$('stats').textContent=subset.devices.length+' of '+project.devices.length+' devices   /   '+subset.links.length+' links';
- $('art-count').textContent=Object.keys(project.stencils).length+' local hardware shapes';
+ $('art-count').textContent=Object.keys(project.stencils).length+' local hardware shapes';$('hardware').title='Local stencil library: '+$('art-count').textContent;
  const tabs=$('tabs'),canvas=$('canvas');
  try{const rebuilt=prepared||(live?buildDrawing(subset):[]);pages=rebuilt;drawingReady=pages.length>0;displayedProject=project;}catch(e){drawingReady=false;for(const id of ['export','export-menu','print','svg'])$(id).disabled=true;say('Diagram could not be rebuilt: '+e.message+(displayedProject===project&&pages.length?' The last valid drawing is retained. Undo the last change or correct its settings.':''));if(displayedProject===project&&pages.length){syncDrawingSelection();return;}pages=[];viewport.clear();canvas.replaceChildren(el('p','The drawing needs a layout correction. '+e.message,'error'));tabs.replaceChildren();pageNavigation();return;}
  tabs.replaceChildren();

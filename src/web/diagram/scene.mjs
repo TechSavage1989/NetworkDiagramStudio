@@ -335,7 +335,7 @@ export function route(page,from,to,points,color,name,linkType='Link',sourceLink=
   if(pts.length<2)return;
   page.items.push({type:'path',from,to,points:pts,color,name,linkType,sourceLink,generatedDevice,weight:cableWeight});
 }
-export function bridge(page){
+export function bridge(page,{style='single'}={}){
   const routes=page.items.filter(i=>i.type==='path'),segments=[];
   routes.forEach((r,order)=>r.points.slice(1).forEach((b,j)=>{const a=r.points[j];segments.push({r,order,j,a,b,h:a[1]===b[1],marks:[]});}));
   // Every crossing between two cables gets one jump. A cable crossing a
@@ -357,14 +357,20 @@ export function bridge(page){
     r.commands=[['M',...r.points[0]]];r.hops=[];
     for(const segment of segments.filter(s=>s.r===r)){
       const {a,b,h}=segment,axis=h?0:1,dir=Math.sign(b[axis]-a[axis]),marks=segment.marks.sort((m,n)=>dir*(m.p[axis]-n.p[axis]));
-      // Crossings closer together than two jumps share one wider bridge, so
-      // a run past several parallel cables reads as one clean hop.
+      // Single style: one hop per crossed line, made smaller where crossings
+      // are close, as Visio draws them. Bundle style: crossings closer than
+      // two jumps share one wider bridge.
       const groups=[];
-      for(const mark of marks){const last=groups.at(-1);if(last&&Math.abs(mark.p[axis]-last.at(-1).p[axis])<2*Math.max(mark.rad,last.at(-1).rad)+6)last.push(mark);else groups.push([mark]);}
+      for(const mark of marks){const last=groups.at(-1);if(style==='bundle'&&last&&Math.abs(mark.p[axis]-last.at(-1).p[axis])<2*Math.max(mark.rad,last.at(-1).rad)+6)last.push(mark);else groups.push([mark]);}
       let end=a[axis];
       for(let k=0;k<groups.length;k++){
         const group=groups[k],first=group[0].p,last=group.at(-1).p,rad=Math.min(...group.map(m=>m.rad)),next=groups[k+1]?.[0].p[axis]??b[axis];
-        const radius=Math.min(rad,Math.abs(first[axis]-end)*.46,Math.abs(next-last[axis])*.46);if(radius<1)continue;
+        // A single hop shares the room to each neighboring crossing equally,
+        // so a tight bundle still shows one small hop per line.
+        const prevMark=k?groups[k-1].at(-1).p[axis]:null,nextMark=groups[k+1]?.[0].p[axis];
+        const radius=style==='bundle'?Math.min(rad,Math.abs(first[axis]-end)*.46,Math.abs(next-last[axis])*.46):
+          Math.min(rad,prevMark==null?Math.abs(first[axis]-a[axis])*.46:Math.abs(first[axis]-prevMark)/2-.5,nextMark==null?Math.abs(b[axis]-last[axis])*.46:Math.abs(nextMark-last[axis])/2-.5);
+        if(radius<1)continue;
         const before=[...first],after=[...last],mid=[...first];before[axis]-=dir*radius;after[axis]+=dir*radius;mid[axis]=(before[axis]+after[axis])/2;mid[1-axis]-=radius;
         r.commands.push(['L',...before],['A',...mid,...after]);r.hops.push({x:Math.min(before[0],mid[0],after[0])-2,y:Math.min(before[1],mid[1],after[1])-2,w:Math.max(before[0],mid[0],after[0])-Math.min(before[0],mid[0],after[0])+4,h:Math.max(before[1],mid[1],after[1])-Math.min(before[1],mid[1],after[1])+4});end=after[axis];
       }

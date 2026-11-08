@@ -70,7 +70,21 @@ function interfaceNames(value,warn=()=>{}) {
   }
   return names;
 }
+// AOS-Switch backups wrap long tagged/untagged port lists onto following lines,
+// even inside a port token (F2-F / 24). Join them before parsing, as the
+// Switchport Diagram Builder does, so no wrapped port loses its VLANs.
+function joinPortLists(text){
+  const lines=text.split('\n'),command=/^\s*(?:no\s+)?(?:tagged|untagged)\b/i;
+  for(let i=0;i<lines.length;i++){
+    if(!command.test(lines[i]))continue;
+    while(i+1<lines.length&&!command.test(lines[i+1])&&/^[A-LTRK0-9/,\-]+$/i.test(lines[i+1].trim())){
+      const tail=lines[i+1].trim();lines[i]+=/(?:tagged|untagged)\s*$/i.test(lines[i])?' '+tail:tail;lines.splice(i+1,1);
+    }
+  }
+  return lines.join('\n');
+}
 function switchCLI(text,filename) {
+  text=joinPortLists(text.replace(/\r/g,''));
   const out=empty(); let hostname=/^(?:hostname|sysname)\s+(.+)$/im.exec(text)?.[1];
   const ranges=value=>interfaceNames(value,part=>{const note=filename+': unsupported interface range '+part+'. Review its individual ports.';if(!out.warnings.includes(note))out.warnings.push(note);});
   const aruba=/AOS-CX|ArubaOS-CX|^(?:vsf member|interface lag|\s*vlan trunk (?:native|allowed))\b/im.test(text);
@@ -115,7 +129,12 @@ function switchCLI(text,filename) {
       if(/^(?:no )?voice$/i.test(s))vids.forEach(id=>{ensureVlan(d,id).voice=!/^no /i.test(s);});
       if((m=/^(?:name|description)\s+(.+)$/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).name=scalar(m[1]);});
       if((m=/^ip address\s+(\d[\d./]*)(?:\s+(\d[\d.]*))?/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).ip=cidr(m[1],m[2]);});
-      if((m=/^(tagged|untagged)\s+(.+)$/i.exec(s)))for(const n of ranges(m[2])){const p=ensurePort(d,n);if(m[1]==='untagged')p.native=vids[0];else p.tagged=[...new Set([...(p.tagged||[]),...vids])];}
+      if((m=/^(tagged|untagged)\s+(.+)$/i.exec(s)))for(const n of ranges(m[2])){const p=ensurePort(d,n);if(m[1]==='untagged'){p.native=vids[0];delete p.nativeState;}else p.tagged=[...new Set([...(p.tagged||[]),...vids])];}
+      // Removed membership, as the Switchport Diagram Builder reads it: a port
+      // no longer untagged here has no native VLAN unless another VLAN sets one.
+      if((m=/^no\s+(tagged|untagged)\s+(.+)$/i.exec(s)))for(const n of ranges(m[2])){const p=ensurePort(d,n);
+        if(m[1].toLowerCase()==='untagged'){if(p.native==null||p.native===vids[0]){delete p.native;p.nativeState='None';}}
+        else if(p.tagged)p.tagged=p.tagged.filter(id=>!vids.includes(id));}
     }
     if(section!=='port')continue;
     for(const p of ports){
@@ -138,6 +157,19 @@ function switchCLI(text,filename) {
     }
   }
   for(const p of d.ports)if(p.allowed) p.tagged=p.allowed.filter(n=>p.nativeTagged||n!==p.native);
+  // ProCurve/ArubaOS-Switch: a VLAN marked voice is the voice VLAN of its
+  // member ports, and a trunk's member ports carry the trunk's VLANs.
+  for(const agg of d.ports.filter(p=>p.type==='aggregate'&&Array.isArray(p.members)))for(const name of agg.members){
+   const member=d.ports.find(p=>p.name.toLowerCase()===String(name).toLowerCase());if(!member)continue;
+   if(agg.native!=null){member.native=agg.native;delete member.nativeState;}else if(agg.nativeState==='None'&&member.native==null)member.nativeState='None';
+   if(agg.tagged?.length)member.tagged=[...new Set([...(member.tagged||[]),...agg.tagged])];
+  }
+  const voiceVlans=new Set((d.vlans||[]).filter(v=>v.voice).map(v=>Number(v.id)));
+  for(const p of d.ports){
+   if(p.tagged&&p.native!=null&&!p.nativeTagged)p.tagged=p.tagged.filter(id=>id!==p.native);
+   // One voice VLAN membership marks the port; several need confirmation.
+   if(p.voice==null&&voiceVlans.size){const voices=[...new Set([p.native,...(p.tagged||[])].map(Number).filter(id=>voiceVlans.has(id)))];if(voices.length===1)p.voice=voices[0];}
+  }
   completeConfigHardware(d,text,filename,out.warnings);
   d.fromConfig=true;out.devices.push(d);return out;
 }

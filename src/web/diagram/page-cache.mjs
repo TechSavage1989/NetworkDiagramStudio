@@ -18,7 +18,7 @@ export function cachedDraftPages(cache,family,project,build){
  // network pages; even line spacing affects network and wireless pages.
  delete input.layout.snapping;
  if(family!=='core'){delete input.layout.coreArrangement;delete input.layout.cableCaptions;}
- if(family!=='core'&&family!=='wireless')delete input.layout.lineSpacing;
+ if(family!=='core'&&family!=='wireless'){delete input.layout.lineSpacing;delete input.layout.hopStyle;}
  // Source selection has already been composed into devices/links. Raw evidence
  // and source metadata do not participate in drawing calculations.
  delete input.evidence;delete input.warnings;
