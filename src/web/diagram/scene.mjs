@@ -5,7 +5,7 @@ import {deviceScale} from '../presentation.mjs';
 import {coreSidebar} from './sidebar.mjs';
 import {deviceFaceplate} from './faceplate.mjs';
 import {editDeviceShape} from '../drawing-edits.mjs';
-import {simplifyRoute} from './routing.mjs';
+import {simplifyRoute,ROUTE_STYLE} from './routing.mjs';
 import {linkDefaults,legendStyleId,cleanLinkStyles} from '../link-styles.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {connectionMediaInfo} from '../connection-types.mjs';
@@ -160,6 +160,38 @@ function socketDeparture(device, anchor, socket){
 }
 // A chassis lead may cross its own module horizontally, but its vertical run
 // must use the open center or an exterior side, never the next module/bay.
+// Sockets under an empty bay's caption share the bay below (or above) the
+// caption. Each takes its own turn row and lane beside the caption edge it is
+// nearer to; nearer sockets turn closest to the row and use the outer lane, so
+// the doglegs nest without crossing. Returns null when the bay lacks room.
+function captionDeparture(g,nx,ny,region,top,weight){
+  const between=r=>r!==region&&nx>r.x&&nx<r.x+r.w&&(top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1);
+  if(g.panelRegions.some(r=>between(r)&&!r.empty))return null;
+  const bays=g.panelRegions.filter(r=>between(r)&&r.empty);if(bays.length!==1)return null;
+  const bay=bays[0],padX=(weight/2+3)/g.w,padY=(weight/2+3)/g.h,stepY=ROUTE_STYLE.modulePitch/g.h;
+  // The rise must not cross another socket of the same module (an inner row).
+  const edge=top?bay.y+bay.h:bay.y,low=Math.min(ny,edge),high=Math.max(ny,edge);
+  if(g.children.some(c=>c.socketPart===0&&!(c.anchorOrigin&&Math.abs(c.anchorOrigin[0]-nx)<1e-6&&Math.abs(c.anchorOrigin[1]-ny)<1e-6)&&nx>c.x-padX&&nx<c.x+c.w+padX&&c.y+c.h>low&&c.y<high))return null;
+  const caption=g.children.filter(c=>c.type==='text'&&c.x<bay.x+bay.w&&c.x+c.w>bay.x&&c.y<bay.y+bay.h&&c.y+c.h>bay.y).map(c=>{
+    const {lines,size,lineHeight}=textLayout({...c,w:c.w*g.w,h:c.h*g.h}),w=Math.max(...lines.map(line=>Math.max(0,textWidth(line,size,c.bold)-6)))/g.w,h=lines.length*lineHeight/g.h;
+    const x=c.x+(c.align==='right'?c.w-w:c.align==='center'?(c.w-w)/2:0);return {x,y:c.y+(c.h-h)/2,w,h};
+  }).find(c=>nx>c.x-padX&&nx<c.x+c.w+padX);
+  if(!caption)return null;
+  const left=nx<caption.x+caption.w/2,same=g.children.filter(c=>c.anchorOrigin&&Math.abs(c.anchorOrigin[1]-ny)<1e-6).map(c=>c.anchorOrigin[0])
+    .filter(x=>x>caption.x-padX&&x<caption.x+caption.w+padX&&(x<caption.x+caption.w/2)===left).sort((a,b)=>left?a-b:b-a);
+  const k=Math.max(0,same.findIndex(x=>Math.abs(x-nx)<1e-6)),n=Math.max(1,same.length);
+  const near=top?bay.y+bay.h-padY:bay.y+padY,far=top?caption.y+caption.h+padY:caption.y-padY,turn=near+(top?-1:1)*k*stepY;
+  if(top?turn<far:turn>far)return null;
+  // Lanes keep a full cable separation from every socket column (a neighbor's
+  // own straight lead) and from each other, scanning outward from the caption.
+  const columns=g.children.filter(c=>c.anchorOrigin&&c.x<region.x+region.w&&c.x+c.w>region.x).map(c=>c.anchorOrigin[0]);
+  const gap=(weight+ROUTE_STYLE.gap)/g.w,lanes=[];
+  for(let x=left?caption.x-padX:caption.x+caption.w+padX;lanes.length<n&&x>bay.x+padX&&x<bay.x+bay.w-padX;x+=(left?-1:1)/g.w)
+   if(columns.every(c=>Math.abs(c-x)>=gap)&&lanes.every(l=>Math.abs(l-x)>=gap))lanes.push(x);
+  const lane=lanes[n-1-k];
+  if(lane===undefined)return null;
+  return [[g.x+nx*g.w,g.y+turn*g.h],[g.x+lane*g.w,g.y+turn*g.h]];
+}
 function modularAnchor(g,id,nx,ny,region,sideHint,socket,options={}){
   // An empty bay is open faceplate unless its own caption sits on the lead.
   const captionOn=r=>g.children.some(c=>{
@@ -176,6 +208,10 @@ function modularAnchor(g,id,nx,ny,region,sideHint,socket,options={}){
   if(blocked(top)&&!blocked(!top,false))top=!top;
   const side=top?'top':'bottom',weight=options.weight||cableWeight,anchor={device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+(top?0:g.h),weight};
   if(!blocked(top)){const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
+  // Only an empty bay's caption is in the way: rise into the bay, turn under
+  // the caption and leave beside it, rather than crossing the module's rows.
+  const bayTurn=captionDeparture(g,nx,ny,region,top,weight);
+  if(bayTurn){anchor.departure=bayTurn;return anchor;}
   const center=(g.moduleChannel.left+g.moduleChannel.right)/2,column=nx<center?'left':'right';
   const pad=(weight/2+.01)/g.h,xPad=(weight/2+.01)/g.w,lo=region.y+pad,hi=region.y+region.h-pad;
   const details=g.children.filter(c=>(c.socketPart===0||c.type==='text')&&c.x+c.w>region.x&&c.x<region.x+region.w&&c.y+c.h>region.y&&c.y<region.y+region.h).map(c=>{

@@ -77,3 +77,15 @@ test('empty chassis bays open the way toward the peer but never turn a lead away
  assert.ok(getAnchor(g,'C3','top',2).moduleEscape,'A peer above still uses the module corridor instead of turning through the empty slot');
  assert.ok(getAnchor(g,'A3','top',3).moduleEscape,'An installed management module is never crossed');
 });
+
+test('a socket under an empty bay caption rises into the bay and turns beside the caption instead of crossing module rows',()=>{
+ const d=modularChassis(),g=addDevice({items:[]},{},d,[0,0,700,1],'chassis',{fitWidth:true});
+ const bay=g.panelRegions.find(r=>r.id==='management-bay');assert.ok(bay.empty);
+ const under=getAnchor(g,'B23','top',0,{weight:4,peer:{x:-300,y:-300}}),open=getAnchor(g,'B11','top',1,{weight:4});
+ assert.equal(under.side,'top');assert.equal(under.moduleEscape,undefined,'no turn between the module rows');assert.ok(under.departure,'a dogleg inside the empty bay');
+ const [[x1,turn],[lane,turn2]]=under.departure;assert.equal(turn,turn2);assert.ok(turn>bay.y*g.h&&turn<(bay.y+bay.h)*g.h,'the turn stays inside the bay');
+ const columns=g.children.filter(c=>c.anchorOrigin).map(c=>c.anchorOrigin[0]*g.w);assert.ok(columns.every(c=>Math.abs(c-lane)>=10-1e-6),'the lane keeps clear of every socket column');
+ assert.equal(open.departure,undefined);assert.equal(open.moduleEscape,undefined);
+ // A socket in the inner row is never routed up through the row above it.
+ assert.ok(getAnchor(g,'B24','top',2,{weight:4}).moduleEscape);
+});
