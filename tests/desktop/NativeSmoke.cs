@@ -154,6 +154,36 @@ internal sealed partial class Studio
         await ClickEditorTarget("#undo-devices");
         await RequireEditor("if([...document.querySelectorAll('#tabs button')].some(b=>b.textContent==='Native campus'))throw Error('Layout undo failed')","page layout undo");
     }
+    async Task CheckDrawingControls()
+    {
+        const string sw="#canvas g[data-device-id='sw-1'][data-drawing-key$='|body']";
+        await ClickEditorTarget("#edit-drawing");
+        await ClickEditorTarget(sw);
+        await ClickEditorTarget("#canvas g[data-device-id='sw-2'][data-drawing-key$='|body']",1,8);
+        await RequireEditor("if(document.getElementById('drawing-selection').textContent!=='2 selected'||document.getElementById('dialog').open)throw Error('Shift selection failed')","Shift multi-selection");
+        await ClickEditorTarget("#drawing-clear");
+        await ClickEditorTarget(sw);
+        var raw=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const b=document.querySelector(\""+sw+"\").getBoundingClientRect();window.__gestureBefore={x:b.x,y:b.y,w:b.width};return {x:b.x+5,y:b.y+5};})()");
+        using(var point=JsonDocument.Parse(raw)){
+            var x=point.RootElement.GetProperty("x").GetDouble();var y=point.RootElement.GetProperty("y").GetDouble();
+            foreach(var (type,dx,dy) in new[]{("mousePressed",0,0),("mouseMoved",30,4),("mouseMoved",60,25),("mouseReleased",60,25)})
+                await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x=x+dx,y=y+dy,button="left",buttons=type=="mouseReleased"?0:1,modifiers=8,clickCount=1}));
+        }
+        await Task.Delay(100); // Allow the viewport resize observer to settle after feedback reflow.
+        await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect(),a=window.__gestureBefore;if(Math.abs(b.y-a.y)>.1||b.x<a.x+50)throw Error('Shift did not hold the initial horizontal axis')","Shift drag axis");
+        await ClickEditorTarget("#drawing-undo");
+        await ClickEditorTarget("#drawing-smaller");
+        await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect();if(Math.abs(b.width/window.__gestureBefore.w-.9)>.001)throw Error('Quick scale failed')","quick item scale");
+        await ClickEditorTarget("#drawing-undo");
+        await ClickEditorTarget("#drawing-beside");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('Reference device').value=document.querySelector(\"#canvas g[data-device-id='sw-2'][data-drawing-key$='|body']\").dataset.drawingKey;[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Right →').click();if(document.getElementById('dialog').open)throw Error('Place beside failed')","place beside another device");
+        await ClickEditorTarget("#drawing-undo");
+        await ClickEditorTarget("#drawing-page");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('New page name').value='Native access wing';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Move devices').click();if(document.getElementById('dialog').open||!document.querySelector('#tabs .active').textContent.includes('Native access wing')||!document.querySelector('#canvas svg').textContent.includes('Core Network'))throw Error('Move to page or off-page indicator failed')","move with off-page references");
+        await ClickEditorTarget("#drawing-undo");
+        await RequireEditor("document.querySelector('#tabs button').click();delete window.__gestureBefore","restore original page");
+        await ClickEditorTarget("#edit-drawing");
+    }
     async Task CheckPageSetup()
     {
         await ClickEditorTarget("#page-options");
@@ -180,7 +210,7 @@ internal sealed partial class Studio
         // Real input supplies the user gesture required for repeated downloads.
         foreach(var type in new[]{"mousePressed","mouseReleased"})await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=1}));
     }
-    async Task ClickEditorTarget(string selector,int clicks=1)
+    async Task ClickEditorTarget(string selector,int clicks=1,int modifiers=0)
     {
         var query=JsonSerializer.Serialize(selector);
         var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
@@ -188,7 +218,7 @@ internal sealed partial class Studio
         if(doc.RootElement.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector);
         var x=doc.RootElement.GetProperty("x").GetDouble();var y=doc.RootElement.GetProperty("y").GetDouble();
         for(int click=1;click<=clicks;click++)foreach(var type in new[]{"mousePressed","mouseReleased"})
-            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=click}));
+            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=click,modifiers}));
     }
     async Task EditorKey(string key,int code)
     {
@@ -286,6 +316,7 @@ internal sealed partial class Studio
             foreach(var required in new[]{"[Content_Types].xml","visio/document.xml","visio/pages/pages.xml","visio/windows.xml"})if(package.GetEntry(required)==null)throw new Exception("Native Visio export is missing "+required);
             foreach(var part in package.Entries.Where(p=>p.FullName.EndsWith(".xml")||p.FullName.EndsWith(".rels"))){using var stream=part.Open();XDocument.Load(stream);}
         }
+        await CheckDrawingControls();
         await CheckFlexibleLayout();
         await CheckPageSetup();
         await CheckEditRecovery();

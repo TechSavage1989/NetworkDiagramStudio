@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {inputMacAddresses,deviceMacs,deviceModel,macCaption} from '../src/web/device-details.mjs';
+import {inputMacAddresses,deviceMacs,deviceModel,macCaption,deviceDetails} from '../src/web/device-details.mjs';
 import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
 import {textLayout} from '../src/web/diagram/scene.mjs';
 import {intersects,pathCrossesText} from '../src/web/diagram/labels.mjs';
@@ -74,4 +74,28 @@ test('reported device and interface MACs retain source selection and manual corr
 test('operational chassis and interface MACs are assigned to the right device, never to learned peers on the local switch',()=>{
  const report=parseOperational('LAB-SW# show version\nBase ethernet MAC Address : 0200.0000.0001\nLAB-SW# show interface Gi1/0/1\nGi1/0/1 is up\nHardware is Gigabit Ethernet, address is 0200.0000.0002 (bia 0200.0000.0002)\nLAB-SW# show lldp neighbors detail\nLocal Port: Gi1/0/1\nChassis id: 0200.0000.0003\nSystem Name: LAB-AP\nPort id: eth0\nSystem Capabilities: WLAN\nLAB-SW# show mac address-table\nMAC address: 0200.0000.0099');
  const sw=report.devices.find(d=>d.name==='LAB-SW'),ap=report.devices.find(d=>d.name==='LAB-AP');assert.equal(sw.mac,'02:00:00:00:00:01');assert.equal(sw.ports[0].mac,'02:00:00:00:00:02');assert.equal(ap.mac,'02:00:00:00:00:03');assert.equal(ap.kind,'ap');assert.ok(!JSON.stringify(report).includes('00:99'));
+});
+
+const manyMacs=()=>Array.from({length:512},(_,i)=>'02:00:00:'+i.toString(16).padStart(6,'0').match(/../g).join(':').toUpperCase());
+
+test('aggregated inventory MACs stay complete in saved data but use a compact diagram caption',async()=>{
+ const addresses=manyMacs(),imported=parseTable(readCSV('Device Name,Type,Make & Model,IP Address(es),MAC Address(es)\nLAB-STACK,Switch,HPE JL558A,192.0.2.10,"'+addresses.join(', ')+'"'));
+ const project={name:'Address summary lab',...imported},saved=JSON.stringify(project),d=project.devices[0],pages=buildPages(project),detail=pages[0].items.find(i=>i.titleOwner===d.id&&i.titleSlot==='detail');
+ assert.equal(deviceMacs(d).length,512);assert.equal(macCaption(d),'512 MAC addresses');assert.ok(deviceDetails(d).includes('192.0.2.10'));assert.ok(detail.h<50);assert.ok(detail.value.includes('512 MAC addresses'));assert.ok(!detail.value.includes(addresses[0]));assert.equal(textLayout(detail).size,12);
+ const reopened=JSON.parse(saved);assert.deepEqual(deviceMacs(reopened.devices[0]),addresses);assert.equal(buildPages(reopened)[0].svg,pages[0].svg);assert.equal(JSON.stringify(project),saved);
+ const files=await unzip(await exportVisio(project,pages).arrayBuffer()),xml=new TextDecoder().decode(files.get('visio/pages/page1.xml'));assert.ok(xml.includes('512 MAC addresses'));assert.ok(!xml.includes(addresses.at(-1)));
+});
+
+test('interface address summaries retain the named connected-interface fallback and full details',()=>{
+ const addresses=manyMacs(),d={ports:addresses.map((mac,i)=>({name:'port'+i,mac}))};
+ assert.equal(macCaption(d),'512 interface MAC addresses');assert.equal(macCaption(d,'port17'),'MAC '+addresses[17]);assert.equal(macCaption(d,'missing'),'');
+ const full=macCaption(d,undefined,{full:true});assert.ok(full.includes('MAC port0 '+addresses[0]));assert.ok(full.includes('MAC port511 '+addresses[511]));
+ d.ports[1].mac=d.ports[0].mac;assert.equal(macCaption(d),'511 interface MAC addresses');assert.equal(macCaption({ports:[{name:'eth0',mac:addresses[0]}]}),'MAC eth0 '+addresses[0]);
+});
+
+test('full address lists appear only in the selected address panel and keep manual captions authoritative',()=>{
+ const addresses=manyMacs(),project={name:'Address panel lab',devices:[{id:'sw',name:'LAB-SW',kind:'switch',model:'JL558A',macAddresses:addresses,ports:[]}],links:[]},plain=buildPages(project)[0],detail=plain.items.find(i=>i.titleSlot==='detail');
+ assert.ok(!plain.svg.includes(addresses.at(-1)));project.layout={presentation:{defaults:{panel:{position:'right',sections:['addresses','models']}}},drawingEdits:{[detail.editKey]:{value:'Approved device caption'}}};
+ const page=buildPages(project)[0],addressRow=page.items.find(i=>i.editKey?.includes('|info-panel|addresses|0')),modelRow=page.items.find(i=>i.editKey?.includes('|info-panel|models|0'));
+ assert.ok(addressRow);for(const mac of addresses)assert.ok(addressRow.value.includes(mac));assert.ok(modelRow.value.includes('512 MAC addresses'));assert.ok(!modelRow.value.includes(addresses.at(-1)));assert.equal(page.items.find(i=>i.editKey===detail.editKey).value,'Approved device caption');assert.deepEqual(deviceMacs(project.devices[0]),addresses);
 });

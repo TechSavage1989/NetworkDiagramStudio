@@ -1,6 +1,6 @@
 import {presentation} from '../presentation.mjs';
 import {wrapPortText} from '../port-table.mjs';
-import {deviceDetails} from '../device-details.mjs';
+import {deviceDetails,macCaption} from '../device-details.mjs';
 import {label,linkLegend,C,value} from './scene.mjs';
 
 export function informationPanel(page,project){
@@ -24,7 +24,8 @@ export function informationPanel(page,project){
   });y+=18*options.textScale;
  };
  section('vlans','VLANS',devices.flatMap(d=>(d.vlans||[]).map(v=>[d.name,'VLAN '+value(v.id),v.name,v.ip||v.address].filter(Boolean).join(' · '))));
- section('addresses','DEVICE ADDRESSES',devices.filter(d=>d.ip||d.mac).map(d=>[d.name,d.ip,d.mac].filter(Boolean).join(' · ')));
+ const addresses=devices.map(d=>({device:d,mac:macCaption(d,undefined,{full:true})}));
+ section('addresses','DEVICE ADDRESSES',addresses.filter(({device:d,mac})=>d.ip||mac).map(({device:d,mac})=>[d.name,d.ip,mac].filter(Boolean).join(' · ')));
  section('models','DEVICE DETAILS',devices.map(d=>[d.name,deviceDetails(d)].filter(Boolean).join(' · ')));
  section('routes','ROUTES',devices.flatMap(d=>(d.routes||[]).map(r=>d.name+' · '+(typeof r==='string'?r:[r.destination||r.prefix||r.network,r.gateway||r.nextHop,r.interface].filter(Boolean).join(' · ')))));
  section('ports','PORT DETAILS',devices.flatMap(d=>(d.ports||[]).filter(p=>p.description||p.native!=null||p.tagged?.length).map(p=>[d.name,p.name,p.description,p.native!=null?'Native VLAN '+p.native:'',p.tagged?.length?'Tagged '+value(p.tagged):'',p.speed,p.state].filter(Boolean).join(' · '))));
