@@ -14,7 +14,7 @@ const maps=site=>buildPages(site).filter(page=>page.portMap);
 const identities=pages=>new Set(pages.flatMap(page=>page.portMap.portRecords||page.portMap.rowNames.map(name=>({device:page.portMap.device,name}))).map(port=>port.device+'/'+port.name));
 
 test('compact grouped port maps combine panel pairs and a reference-style assignment matrix',()=>{
- const site=fixture(),pages=maps(site),first=pages[0],panels=first.items.filter(item=>item.type==='device');
+ const site=fixture();site.layout={portMap:{presentation:'combined'}};const pages=maps(site),first=pages[0],panels=first.items.filter(item=>item.type==='device');
  assert.equal(panels.length,2);assert.ok(panels.every(panel=>panel.w>1100));assert.ok(panels[0].y+panels[0].h<panels[1].y);
  assert.equal(first.portMap.assignmentMatrix,true);assert.deepEqual(first.portMap.devices,['switch-1','switch-2']);assert.equal(first.portMap.total,104);assert.equal(identities(pages).size,104);assert.ok(pages.length<=2);
  const text=first.items.filter(item=>item.type==='text').map(item=>item.value);for(const title of ['PORT ROLES','LINK STATE','Port assignment','VLANs and link details'])assert.ok(text.includes(title));
@@ -49,8 +49,8 @@ test('long matrix records continue without losing content and every cell remains
 });
 
 test('assignment cells and uniform number labels retain stable edits in SVG and native Visio',async()=>{
- const site=fixture(),before=maps(site)[0],number=before.items.find(item=>item.portNumberRole==='text'&&item.value==='49'),assignment=before.items.find(item=>item.portAssignmentRole==='assignment');site.layout={drawingEdits:{[number.editKey]:{value:'WAN',color:'#AA2200',w:32,x:number.x+(number.w-32)/2},[assignment.editKey]:{value:'Edited assignment',x:70}}};const pages=buildPages(site),after=pages.find(page=>page.portMap);
- assert.equal(after.items.find(item=>item.editKey===number.editKey).value,'WAN');assert.equal(after.items.find(item=>item.editKey===assignment.editKey).x,70);assert.ok(after.svg.includes('Edited assignment'));
+ const site=fixture(),before=maps(site)[0],number=before.items.find(item=>item.portNumberRole==='text'&&item.value==='49'),assignment=maps(site).find(page=>page.portMap.bookletRole==='inventory').items.find(item=>item.portAssignmentRole==='assignment');site.layout={drawingEdits:{[number.editKey]:{value:'WAN',color:'#AA2200',w:32,x:number.x+(number.w-32)/2},[assignment.editKey]:{value:'Edited assignment',x:70}}};const pages=buildPages(site),after=pages.find(page=>page.portMap);
+ assert.equal(after.items.find(item=>item.editKey===number.editKey).value,'WAN');const inventory=pages.find(page=>page.portMap?.bookletRole==='inventory');assert.equal(inventory.items.find(item=>item.editKey===assignment.editKey).x,70);assert.ok(inventory.svg.includes('Edited assignment'));
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>new TextDecoder().decode(bytes)).join('');assert.ok(xml.includes('Edited assignment'));assert.ok(xml.includes('WAN'));assert.ok(xml.includes('#AA2200'));
 });
 
@@ -67,4 +67,18 @@ test('long device titles and summaries wrap above their panels and existing pane
 test('paired bitmap and native stencil panels use distinct scene keys and correct Visio masters',async()=>{
  const site=fixture(),bitmap={id:'bitmap',name:'Lab bitmap panel',view:'front',width:10,height:1,dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5F8AAAAASUVORK5CYII=',anchors:{'1/1/1':[.1,.3],'1/1/49':[.8,.7]}},native={...bitmap,id:'native',name:'Lab native panel',native:{paths:[{commands:[['M',0,0],['L',1,0],['L',1,1],['L',0,1],['Z']],fill:'#EEEEEE',stroke:'#16364A',weight:.001}],texts:[{text:'Native panel artwork',x:.5,y:.5,w:.5,size:.02,angle:0,color:'#16364A'}]}};site.stencils={bitmap,native};site.devices[0].stencilId='bitmap';site.devices[1].stencilId='native';const pages=buildPages(site),panels=pages.find(page=>page.portMap).items.filter(item=>item.type==='device');assert.equal(new Set(panels.map(panel=>panel.key)).size,2);assert.deepEqual(panels.map(panel=>panel.asset.id),['bitmap','native']);
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>new TextDecoder().decode(bytes)).join('');assert.ok(xml.includes('Native panel artwork'));assert.ok(xml.includes('ForeignType="Bitmap"'));assert.equal([...parts.keys()].filter(key=>key.startsWith('visio/media/')).length,1);
+});
+
+test('default booklet sheets separate colored faceplates from complete inventory',()=>{
+ const site=fixture(),pages=maps(site);
+ const overviews=pages.filter(page=>page.portMap.bookletRole==='map');
+ const inventory=pages.filter(page=>page.portMap.bookletRole==='inventory');
+ assert.ok(overviews.length&&inventory.length);
+ assert.ok(overviews.every(page=>page.items.some(item=>item.type==='device')&&
+   page.items.some(item=>item.value==='NATIVE VLAN KEY')&&!page.items.some(item=>item.portTableRole)));
+ assert.ok(inventory.every(page=>page.title==='Port Inventory'&&
+   page.items.some(item=>item.portTableRole)&&!page.items.some(item=>item.type==='device')));
+ assert.equal(identities(inventory).size,104);
+ const ports=overviews.flatMap(page=>page.items.filter(item=>item.portNumberRole==='box'));
+ assert.notEqual(ports.find(port=>port.portName==='1/1/1').fill,ports.find(port=>port.portName==='1/1/50').fill);
 });
