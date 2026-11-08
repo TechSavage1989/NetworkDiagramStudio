@@ -94,3 +94,12 @@ test('dragging a bend onto another bend line merges them into one point',async()
  assert.deepEqual(mergeCablePoints([[0,0],[0,20],[50,20],[80,20],[50,20],[50,60],[100,60]]),[[0,0],[0,20],[50,20],[50,60],[100,60]]);
  assert.deepEqual(mergeCablePoints([[0,0],[0,-10],[0,30],[40,30]]),[[0,0],[0,-10],[0,30],[40,30]],'a reversal at a port is kept');
 });
+
+test('native Visio connectors carry the same jumps as the drawing, so they show on open',async()=>{
+ const {modularRoutingFixture}=await import('./fixtures/modular-routing.mjs'),site=modularRoutingFixture(),pages=buildPages(site),page=pages.find(p=>p.name==='Core Network');
+ const jumps=page.items.filter(i=>i.type==='path'&&i.sourceLink).reduce((n,p)=>n+(p.commands||[]).filter(c=>c[0]==='A').length,0);assert.ok(jumps>0,'the fixture has crossings');
+ const files=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
+ const connectors=xml.split('<Shape ').filter(s=>/NameU="Connector\./.test(s));assert.ok(connectors.length);
+ assert.equal(connectors.reduce((n,s)=>n+(s.match(/T="EllipticalArcTo"/g)||[]).length,0),jumps);
+ assert.ok(!xml.split('<Shape ').filter(s=>/NameU="CableLegend\./.test(s)).some(s=>s.includes('EllipticalArcTo')),'legend samples stay straight');
+});

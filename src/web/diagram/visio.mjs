@@ -113,10 +113,21 @@ function connector(i,id,H,byKey,connects,styleId,sampleId){
     data+=cell('LineColor',i.color.toUpperCase(),ref+'LineColor')+cell('LineColorTrans',1-(i.opacity??1),ref+'LineColorTrans')+
       cell('LineWeight',inch(i.weight),ref+'LineWeight','PT')+cell('LinePattern',1,ref+'LinePattern');
   }
-  const commands=i.points.map((p,j)=>[j?'L':'M',...p]);
+  // The planner's jumps are written into the connector geometry, as Visio
+  // saves its own routed connectors, so they show on open. Each jump is an
+  // EllipticalArcTo through its apex: a semicircle for one crossing, a flatter
+  // bridge over a tight bundle. Visio replaces the geometry (and draws its own
+  // jumps) only when it reroutes the connector.
+  const commands=i.commands?.length&&!i.legendEntry?i.commands:i.points.map((p,j)=>[j?'L':'M',...p]);
+  let previous=null;
   const geom=commands.map(([t,x,y,ex,ey],j)=>{
-    const pt=[x,y], ox=pt[0]-x0,oy=y0-pt[1],end=j===commands.length-1;
-    const follow=(d,total,dim)=>end?dim:Math.abs(d-total)<Math.abs(d)?dim+(d>=total?'+':'')+round(inch(d-total)):undefined;
+    const end=j===commands.length-1,follow=(d,total,dim)=>end?dim:Math.abs(d-total)<Math.abs(d)?dim+(d>=total?'+':'')+round(inch(d-total)):undefined;
+    if(t==='A'&&previous){
+      const chord=Math.hypot(ex-previous[0],ey-previous[1])/2,apex=Math.hypot(x-(previous[0]+ex)/2,y-(previous[1]+ey)/2)||chord,vertical=Math.abs(ey-previous[1])>Math.abs(ex-previous[0]);
+      const ratio=vertical?apex/chord:chord/apex,ox=ex-x0,oy=y0-ey;previous=[ex,ey];
+      return '<Row IX="'+(j+1)+'" T="EllipticalArcTo">'+cell('X',inch(ox),follow(ox,w,'Width'))+cell('Y',inch(oy),follow(oy,h,'Height'))+cell('A',inch(x-x0))+cell('B',inch(y0-y))+cell('C',0)+cell('D',round(ratio))+'</Row>';
+    }
+    const ox=x-x0,oy=y0-y;previous=[x,y];
     return xyRow(j+1,t==='M'?'MoveTo':'LineTo',inch(ox),inch(oy),follow(ox,w,'Width'),follow(oy,h,'Height'));
   }).join('');
   return '<Shape ID="'+id+'" NameU="'+(i.legendEntry?'CableLegend.':'Connector.')+id+'" Name="'+xml(i.name)+'" Type="Shape" LineStyle="'+styleId+'" FillStyle="0" TextStyle="0">'+data+'<Section N="Geometry" IX="0">'+cell('NoFill',1)+geom+'</Section></Shape>';
