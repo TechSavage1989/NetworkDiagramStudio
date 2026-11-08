@@ -175,7 +175,7 @@ function startDrawingMove(key,event){
  },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta]))));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
 }
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{drawingSelection.clear();syncDrawingSelection();};
-function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
+function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
 function resizeSelection(factor){if(!drawingObjects(pages[active]).some(i=>drawingSelection.has(i.editKey)&&i.type!=='path'))throw Error('Select a device, text or another object to resize. Cables follow their connected devices.');setDrawingEdits(scaleDrawingItems(pages[active],project.layout?.drawingEdits,drawingSelection,factor));say('Selected items resized. Connections remain attached.');}
 $('drawing-smaller').onclick=()=>task(()=>resizeSelection(.9));$('drawing-larger').onclick=()=>task(()=>resizeSelection(1.1));
 $('drawing-size').onclick=()=>task(()=>{
