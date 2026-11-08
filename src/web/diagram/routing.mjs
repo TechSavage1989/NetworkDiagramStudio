@@ -535,11 +535,15 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
  // moves to the nearest clear coordinate inside its channel, validated like
  // every other change. Bounded by a small budget per page.
  const leadConflicts=r=>{
-  let count=0;const own=segments(r.points);
+  // Runs beside equipment closer than the clearance count too, so a repair
+  // never trades a merged segment for a cable hugging a device.
+  let count=0;const own=segments(r.points);for(const q of own)count+=hugs(q,r,nodes);
   for(const o of routes)if(o!==r)for(const t of segments(o.points))for(const q of own){
    if(q.h!==t.h)continue;const along=q.h?0:1,c1=q.a[q.h?1:0],c2=t.a[t.h?1:0];
    const lo=Math.max(Math.min(q.a[along],q.b[along]),Math.min(t.a[along],t.b[along])),hi=Math.min(Math.max(q.a[along],q.b[along]),Math.max(t.a[along],t.b[along]));
-   if(hi-lo<=.5||Math.abs(c1-c2)>=separation(r.weight||4,o.weight||4)-.001)continue;
+   // Collinear runs that almost meet end to end read as one cable, so a
+   // break shorter than the standard clearance counts as well.
+   if(hi-lo<=-ROUTE_STYLE.clearance||Math.abs(c1-c2)>=separation(r.weight||4,o.weight||4)-.001)continue;
    const mid=(lo+hi)/2,[x,y]=q.h?[mid,c1]:[c1,mid];
    if(![...nodes.values()].some(n=>x>n.x&&x<n.x+n.w&&y>n.y&&y<n.y+n.h))count++;
   }

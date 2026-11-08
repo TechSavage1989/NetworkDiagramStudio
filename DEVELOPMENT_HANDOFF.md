@@ -56,6 +56,11 @@ Owner follow-up (editing, snapping, speed and spacing):
   - On a large fictional project, a core cable edit rebuild went from about 1.0 s to 0.5 s, and a browser bend commit from 0.93 s to 0.63 s. A warm rebuild is byte-identical to a cold one.
 - Organize connections has Even line spacing with a spacing value, saved per page in layout.lineSpacing and also used by wireless pages.
 
+Owner follow-up (captions and remaining overlaps):
+- Cable type and speed text on lines is off by default (layout.cableCaptions); Pages & layout has the option. Explicitly edited captions stay.
+- Collinear runs of different cables (for example vertically aligned ports on stacked devices) keep at least the standard clearance between their ends.
+- The final repair counts runs hugging equipment, so no repair adds one.
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.

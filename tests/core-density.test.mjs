@@ -51,7 +51,7 @@ test('overflow fills later automatic sheets instead of stranding individual devi
 });
 
 test('named pages use fit retries without changing assignments or saved edits and export native connections',async()=>{
- const project=fixture();project.layout={order:['edge','sw2','sw1'],corePages:[{id:'primary',name:'Primary core',devices:['edge','sw1','sw2']}]};const initial=core(project),title=initial[0].items.find(i=>i.titleOwner==='edge'&&!i.titleSlot);project.layout.drawingEdits={[title.editKey]:{color:'#2255AA'}};const saved=JSON.stringify(project),pages=core(JSON.parse(saved));assert.equal(pages.length,1);assert.equal(pages[0].name,'Primary core');assert.equal(pages[0].items.find(i=>i.editKey===title.editKey).color,'#2255AA');assert.equal(JSON.stringify(project),saved);clear(pages[0]);
+ const project=fixture();project.layout={cableCaptions:true,order:['edge','sw2','sw1'],corePages:[{id:'primary',name:'Primary core',devices:['edge','sw1','sw2']}]};const initial=core(project),title=initial[0].items.find(i=>i.titleOwner==='edge'&&!i.titleSlot);project.layout.drawingEdits={[title.editKey]:{color:'#2255AA'}};const saved=JSON.stringify(project),pages=core(JSON.parse(saved));assert.equal(pages.length,1);assert.equal(pages[0].name,'Primary core');assert.equal(pages[0].items.find(i=>i.editKey===title.editKey).color,'#2255AA');assert.equal(JSON.stringify(project),saved);clear(pages[0]);
  const parts=await unzip(await exportVisio(project,pages).arrayBuffer()),xml=new TextDecoder().decode(parts.get('visio/pages/page1.xml'));assert.equal((xml.match(/<Connect /g)||[]).length,8);assert.ok(xml.includes('10 Gbps'));assert.ok(xml.includes('Primary core'));
 });
 

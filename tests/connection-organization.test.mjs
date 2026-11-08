@@ -151,9 +151,10 @@ test('even line spacing puts every parallel cable of a channel on one lattice an
  const result=await organizeConnections(project,page,{buildPages,currentPages:pages,yieldWork:immediate,compact:false,spacing:24});
  assert.deepEqual(project,beforeProject,'analysis does not mutate the project');
  assert.equal(result.changed,true);assert.equal(result.spacing,24);assert.deepEqual(result.lineSpacing,{'Core Network':24});assert.ok(result.metrics.valid);assertAttached(result.page);
- // Long rails left of the stack column now share the 24-unit lattice.
+ // Long rails left of the stack column sit on the shared 24-unit lattice (a
+ // short rail may hold a lattice position between them).
  const left=Math.min(...connectionDevices(result.page).filter(d=>d.kind!=='handoff').map(d=>d.x)),rails=[...new Set(result.page.items.filter(i=>i.type==='path'&&i.sourceLink).flatMap(p=>p.points.slice(1).map((b,i)=>[p.points[i],b]).filter(([a,b])=>a[0]===b[0]&&Math.abs(a[1]-b[1])>200&&a[0]<left).map(([a])=>Math.round(a[0]*100)/100)))].sort((a,b)=>a-b);
- assert.ok(rails.length>=4);for(let i=1;i<rails.length;i++)assert.ok(Math.abs(rails[i]-rails[i-1]-24)<1e-6,'rails '+rails.join(', '));
+ assert.ok(rails.length>=4);for(let i=1;i<rails.length;i++){const steps=(rails[i]-rails[i-1])/24;assert.ok(steps>=1-1e-6&&Math.abs(steps-Math.round(steps))<1e-6,'rails '+rails.join(', '));}
  // The saved setting reproduces the reviewed page after reopen.
  const saved={...project,layout:cleanLayout({...project.layout,lineSpacing:result.lineSpacing,drawingEdits:result.edits},project.devices.map(d=>d.id))};
  assert.equal(buildPages(JSON.parse(JSON.stringify(saved))).find(p=>p.name==='Core Network').svg,result.page.svg);

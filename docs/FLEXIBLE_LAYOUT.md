@@ -4,6 +4,8 @@
 
 **Place beside** stays visible in Edit drawing. Select the moving device or group, choose Left, Right, Above or Below, then click the reference device. Automatic spacing measures titles and the cables using the facing sides; unrelated connections do not inflate the gap. Compact, Standard and Extra room provide explicit alternatives. Selected devices move together. **Move to page...** sends selected devices to an existing page or a new named page, with off-page device and port indicators. Both actions support Undo.
 
+**Show cable type and speed on connection lines** (Pages & layout > Drawing defaults) is off by default: the connection key names each cable color, so pages keep only port names on the lines. A caption you moved or edited stays visible.
+
 **Even line spacing** in Organize connections puts every parallel cable on a page on one shared spacing (24 drawing units by default, 12-80): each gap between devices and each exterior side uses one lattice, so there are no wide gaps beside tight ones. Analyze previews it with the other options; Apply saves the spacing with the page as one Undo step, and clearing the option and applying again returns to the routed spacing. Lines that cannot fit at the chosen spacing keep their routed position rather than crowding equipment.
 
 **Snapping: on/off** turns snapping on or off with one click; **Snap options...** holds grid spacing, alignment distance and targets. Dragging a cable bend within a few screen pixels of the line of a neighboring bend joins that line, and points that end up on one straight line merge into one.

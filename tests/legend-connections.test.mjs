@@ -37,8 +37,8 @@ test('legend changes materialize inferred handoffs once and retain bends, names 
 });
 
 test('legend edits refresh overridden cable details and unchanged speed selections still appear in the key',()=>{
- const project=sampleSite(),pages=buildPages(project),path=pages[0].items.find(i=>i.type==='path'&&i.linkType==='SR fiber'),label=pages[0].items.find(i=>i.labelRole==='media'&&i.linkId===path.linkId);
- project.layout={drawingEdits:{[label.editKey]:{value:'Outdated cable detail',color:'#334455'}}};
+ const project=sampleSite();project.layout={cableCaptions:true};const pages=buildPages(project),path=pages[0].items.find(i=>i.type==='path'&&i.linkType==='SR fiber'),label=pages[0].items.find(i=>i.labelRole==='media'&&i.linkId===path.linkId);
+ project.layout={cableCaptions:true,drawingEdits:{[label.editKey]:{value:'Outdated cable detail',color:'#334455'}}};
  const next=changeLegendConnections(project,buildPages(project),'SR fiber',{media:'LR',speed:'25 Gbps'},{}),texts=buildPages(next).flatMap(p=>p.items).filter(i=>i.type==='text');
  assert.ok(!texts.some(t=>t.value==='Outdated cable detail'));assert.equal(next.layout.drawingEdits[label.editKey].color,'#334455');assert.ok(texts.some(t=>t.value.includes('25 Gbps')));
  const same=changeLegendConnections(project,buildPages(project),'SR fiber',{media:'SR',speed:'10 Gbps'},{});assert.ok(buildPages(same).flatMap(p=>p.items).some(i=>i.legendEntry&&i.value?.includes('10 Gbps')));

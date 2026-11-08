@@ -5,7 +5,7 @@ import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
-import {coreLinkKey as linkKey,coreArrangement,lineSpacing} from '../layout.mjs';
+import {coreLinkKey as linkKey,coreArrangement,lineSpacing,cableCaptions} from '../layout.mjs';
 import {coreSidebar} from './sidebar.mjs';
 import {coreRoutes,ROUTE_STYLE} from './routing.mjs';
 import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth} from './labels.mjs';
@@ -27,7 +27,8 @@ function captionReserve(project,sheet,edges,db){
   if(!sheet.ids.includes(edge.a)&&!sheet.ids.includes(edge.b))continue;
   for(const id of [edge.a,edge.b])if(sheet.ids.includes(id))counts.set(id,(counts.get(id)||0)+1);
   const info=mediaInfo(edge.media,db.devices.get(edge.a)?.kind==='ap'||db.devices.get(edge.b)?.kind==='ap');
-  const lines=linkCaption(project,info.name,rate(edge.speed)).filter(Boolean).reduce((n,text)=>n+wrapPortText(text,180,font,true).length,0);
+  // Without cable captions only the one-line port names need room.
+  const lines=cableCaptions(project)?linkCaption(project,info.name,rate(edge.speed)).filter(Boolean).reduce((n,text)=>n+wrapPortText(text,180,font,true).length,0):1;
   pitch=Math.max(pitch,lines*(font+4)+12);
  }
  return Math.max(0,20+(Math.max(1,...counts.values())-1)*pitch-124);
@@ -307,7 +308,8 @@ export function corePages(project,inventory){
    page.items.at(-1).linkId=e.idx;
    const y=(a.ay+b.ay)/2,text=linkCaption(project,a.info.name,rate(e.speed));
    const horizontal=r.points.slice(1).map((p,i)=>[r.points[i],p]).filter(([a,b])=>a[1]===b[1]).sort((a,b)=>Math.abs(b[1][0]-b[0][0])-Math.abs(a[1][0]-a[0][0]))[0];
-   requests.push({role:'media',editKey:page.name+'|media|'+linkKey(e),linkId:e.idx,value:text,y,side:r.side,outer:outer[r.side],...(r.points.length<=4?horizontal?{segment:horizontal}:{near:{x:r.points[0][0]+9,y:(r.points[0][1]+r.points.at(-1)[1])/2}}:{}),color:a.info.color==='#FFD965'?C.ink:a.info.color});
+   const mediaKey=page.name+'|media|'+linkKey(e);
+   if(cableCaptions(pageProject)||Object.keys(pageProject.layout?.drawingEdits||{}).some(key=>key.startsWith(mediaKey+'|')))requests.push({role:'media',editKey:mediaKey,linkId:e.idx,value:text,y,side:r.side,outer:outer[r.side],...(r.points.length<=4?horizontal?{segment:horizontal}:{near:{x:r.points[0][0]+9,y:(r.points[0][1]+r.points.at(-1)[1])/2}}:{}),color:a.info.color==='#FFD965'?C.ink:a.info.color});
   }
   for(const r of planned.references){
    const {e,v,which:local}=r,remote=local==='a'?e.b:e.a,port=local==='a'?e.bp:e.ap;

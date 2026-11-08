@@ -126,8 +126,10 @@ test('an MDF-shaped site keeps every cable apart and off the socket edges in eac
   for(const path of paths)for(let i=1;i<path.points.length;i++){const a=path.points[i-1],b=path.points[i],h=a[1]===b[1];segments.push({path,h,c:h?a[1]:a[0],lo:Math.min(h?a[0]:a[1],h?b[0]:b[1]),hi:Math.max(h?a[0]:a[1],h?b[0]:b[1]),weight:path.weight||4});}
   const inside=([x,y])=>equipment.some(n=>x>n.x&&x<n.x+n.w&&y>n.y&&y<n.y+n.h);
   for(let i=0;i<segments.length;i++)for(let j=i+1;j<segments.length;j++){
-   const s=segments[i],t=segments[j];if(s.path===t.path||s.h!==t.h)continue;const lo=Math.max(s.lo,t.lo),hi=Math.min(s.hi,t.hi);if(hi-lo<=.5)continue;
+   const s=segments[i],t=segments[j];if(s.path===t.path||s.h!==t.h)continue;const lo=Math.max(s.lo,t.lo),hi=Math.min(s.hi,t.hi);
    const mid=(lo+hi)/2;if(inside(s.h?[mid,s.c]:[s.c,mid]))continue;
+   // Collinear cables that almost meet end to end would read as one line.
+   if(hi-lo<=.5){if(Math.abs(s.c-t.c)<1)assert.ok(lo-hi>=ROUTE_STYLE.clearance-1e-6,mode+': '+s.path.name+' and '+t.path.name+' nearly meet ('+(lo-hi).toFixed(1)+')');continue;}
    assert.ok(Math.abs(s.c-t.c)>=(s.weight+t.weight)/2+ROUTE_STYLE.gap-1e-6,mode+': '+s.path.name+' and '+t.path.name+' run '+Math.abs(s.c-t.c).toFixed(1)+' apart');
   }
   // Module turns keep a visible gap from the sockets they pass (a socket is about 14 units tall).
@@ -152,4 +154,15 @@ test('reusing planned routes after a bend or color edit matches a fresh rebuild'
  site.layout={drawingEdits:{[cable.editKey]:{color:'#815AC0',points:bent}}};
  const warm=buildPages(site,{cache}),cold=buildPages(JSON.parse(JSON.stringify(site)));
  assert.deepEqual(warm.map(p=>p.svg),cold.map(p=>p.svg));
+});
+
+test('cable type and speed text on lines is optional and off by default',()=>{
+ const site=campus(),plain=core(site),labelled=core({...site,layout:{cableCaptions:true}});
+ assert.equal(plain.items.filter(i=>i.labelRole==='media').length,0,'off by default; the connection key names each cable type');
+ assert.ok(plain.items.some(i=>i.labelRole==='port'),'port names stay');
+ assert.ok(labelled.items.filter(i=>i.labelRole==='media').length>0);
+ assert.equal(cleanLayout({cableCaptions:true},[]).cableCaptions,true);assert.equal(cleanLayout({},[]).cableCaptions,false);
+ // A caption the user edited stays visible with captions off.
+ const media=labelled.items.find(i=>i.labelRole==='media'),edited=core({...site,layout:{drawingEdits:{[media.editKey]:{value:'Patch panel run'}}}});
+ assert.ok(edited.items.some(i=>i.labelRole==='media'&&i.value==='Patch panel run'));
 });
