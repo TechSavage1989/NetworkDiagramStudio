@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {moveDrawingItems} from '../src/web/drawing-edits.mjs';
 import {analyzeConnections,connectionDevices,organizeConnections} from '../src/web/connection-layout.mjs';
 

@@ -3,7 +3,9 @@ import {addCableBends,moveCablePoint,removeCablePoint,validCable} from '../src/w
 import {movementStep,selectedInBox,moveAnchors} from '../src/web/point-tools.mjs';
 import {parseHex,rgb,rgbHex,toHSV,hsvHex,toHSL,hslHex} from '../src/web/color-picker.mjs';
 import {comparePorts,hasPortDetails} from '../src/web/port-table.mjs';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {cleanLayout} from '../src/web/layout.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
 import {unzip} from '../src/web/zip.mjs';

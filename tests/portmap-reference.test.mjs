@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {portColumnPrefix,portRanges,portNumberBox} from '../src/web/port-table.mjs';
 import {textWidth} from '../src/web/diagram/labels.mjs';
 import {unzip} from '../src/web/zip.mjs';

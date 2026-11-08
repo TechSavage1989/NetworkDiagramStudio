@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {arrangeBoxes} from '../src/web/arrange.mjs';
 import {drawingBounds,drawingObjects,moveDrawingItems} from '../src/web/drawing-edits.mjs';
 import {ProjectHistory} from '../src/web/history.mjs';

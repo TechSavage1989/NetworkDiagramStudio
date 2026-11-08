@@ -153,7 +153,7 @@ export function placeCableLabels(page,requests,edits={}){
  for(const req of requests){
   if(banked.has(req))continue;
   const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)continue;
-  const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);let endpoint=null,nearSegments=1,half=Infinity;
+  const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);let endpoint=null,nearSegments=1,half=Infinity,leaves=0;
   // The cable read from this label's own end, with the distance along it to
   // each bend, so a port name never settles by the far end's port.
   const points=owner?(req.endpoint&&req.endpoint!==(owner.startEndpoint||'a')?[...owner.points].reverse():owner.points):[],travelled=[0];
@@ -167,7 +167,7 @@ export function placeCableLabels(page,requests,edits={}){
    // "Nearer this port" is measured on the visible cable, between where it
    // leaves this equipment and where it enters the far equipment.
    let lastOut=segments.length-1;while(lastOut>firstOut&&inside([(segments[lastOut][0][0]+segments[lastOut][1][0])/2,(segments[lastOut][0][1]+segments[lastOut][1][1])/2]))lastOut--;
-   half=(travelled[firstOut]+travelled[lastOut+1])/2;
+   half=(travelled[firstOut]+travelled[lastOut+1])/2;leaves=travelled[firstOut];
    const order=segments.map((_,i)=>i);if(req.role==='media')order.sort((i,j)=>{const [[a,b],[c,d]]=[segments[i],segments[j]];return Math.hypot(d[0]-c[0],d[1]-c[1])-Math.hypot(b[0]-a[0],b[1]-a[1])||i-j;});
    for(const [rank,index] of order.entries()){const segment=req.role==='media'?rank:index,[a,b]=segments[index];
     const vertical=a[0]===b[0],axis=vertical?1:0;
@@ -250,9 +250,14 @@ export function placeCableLabels(page,requests,edits={}){
   let box;
   // Passes: clearly by its own port; then anywhere on the half of the cable
   // nearer its own port; only then any clear spot.
+  // A port name takes the spot nearest its own port: beside the cable, or on
+  // its own line when the nearest clear spot beside it is much farther.
+  const reach=c=>(c.at??Infinity)+(c.inline?60:0),nearest=req.role==='port'&&owner?[...candidates].sort((p,q)=>reach(p)-reach(q)):candidates;
   for(const strict of owner?req.role==='port'?[true,'half',false]:[true,false]:[false]){
-   for(const candidate of candidates){
+   for(const candidate of strict==='half'?nearest:candidates){
     if(strict&&req.role==='port'&&owner&&!(candidate.at<=half))continue;
+    // The first pass stays close to where the cable leaves its equipment.
+    if(strict===true&&req.role==='port'&&owner&&!(candidate.at<=leaves+120))continue;
     const b=textFootprint(candidate);
     if(b.x<(contentLeft)||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>candidate.inline&&p===owner?(p.hops||[]).some(hop=>intersects(hop,b,2)):pathCrossesText(p,b,2)))continue;
     // A port name stays by its port: the strict pass only uses the lead and

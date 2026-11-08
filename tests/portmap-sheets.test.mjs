@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {unzip} from '../src/web/zip.mjs';
 import {intersects} from '../src/web/diagram/labels.mjs';
 
@@ -92,4 +94,21 @@ test('a trunk with many tagged VLANs keeps readable dots: wider hardware, or a +
  const fixed=sheet({pageSetup:{default:{preset:'letter'}}}),dots=fixed.items.filter(i=>i.portNumberRole==='tagged'&&i.portName==='A1'),more=fixed.items.find(i=>i.portNumberRole==='tagged-more'&&i.type==='ellipse'&&i.portName==='A1');
  assert.ok(dots.length<25&&dots.every(d=>d.w/2>=1.5-1e-9));assert.equal(more?.moreCount,25-dots.length);
  const texts=fixed.items.filter(i=>i.type==='text').map(i=>i.value);assert.ok(texts.includes('Tagged VLANs (+ on the jack)'));assert.ok(texts.some(t=>/^A?1-8: 100-124$/.test(t)),texts.filter(t=>/100/.test(t)).join(' | '));
+});
+
+test('by default each switch port map is the switchport builder sheet on US Letter, readable and complete',async()=>{
+ const {parseConfig}=await import('../src/web/imports/config.mjs');
+ // Fictional AOS-Switch chassis with two SFP+ and two copper modules.
+ const text=['; J9851A Configuration Editor; Created on release #KB.16.10.0009','hostname "LAB-SHEET"','module A type j9993a','module B type j9993a','module C type j9986a','module D type j9986a','trunk A1,B2 trk1 lacp',
+  'vlan 1','   name "DEFAULT_VLAN"','   untagged C1-C12,Trk1','   no untagged A2-A8,B1,B3-B8,C13-C24,D1-D24','   exit',
+  'vlan 20','   name "LAB_USERS"','   untagged C13-C24,D1-D24','   tagged A2-A8,B1,B3-B8,Trk1','   exit','vlan 30','   name "LAB_VOICE"','   tagged A2-A8,B1,B3-B8,C1-C24,Trk1','   voice','   exit'].join('\n');
+ const device=parseConfig(text,'lab-sheet.cfg').devices[0],site={name:'Sheet lab',devices:[device],links:[]};
+ const pages=buildAllPages(site),sheet=pages.find(page=>page.portMap?.switchportSheet);assert.ok(sheet,'the builder sheet is the port map');
+ assert.equal(Math.round(sheet.width),1056);assert.equal(Math.round(sheet.height),816);assert.equal(sheet.family,'ports');assert.equal(sheet.portMap.device,device.id);
+ const numbers=sheet.items.filter(item=>item.reportPortRole==='number'),dots=sheet.items.filter(item=>item.reportPortRole==='tagged'||item.reportPortRole==='voice');
+ assert.equal(new Set(numbers.map(item=>item.reportPort)).size,64,'every physical port is drawn');assert.ok(numbers.every(item=>item.size>=10),'numbers stay at least the builder size');
+ assert.ok(dots.length&&dots.filter(dot=>dot.type==='ellipse').every(dot=>dot.w>=4.2-1e-9),'VLAN markers stay at least the builder size');
+ assert.ok(pages.some(page=>page.portMap?.bookletRole==='inventory'),'the port inventory tables remain');
+ // Device faceplate artwork stays available as a choice.
+ const faceplate=buildAllPages({...site,layout:{portMap:{mapStyle:'faceplate'}}});assert.ok(!faceplate.some(page=>page.portMap?.switchportSheet));assert.ok(faceplate.some(page=>page.portMap?.overview&&page.items.some(item=>item.portNumberRole==='socket')));
 });

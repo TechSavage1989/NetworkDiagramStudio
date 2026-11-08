@@ -314,6 +314,29 @@ function minimalCandidate(route,nodes,obstacles,evaluate){
 // free when the gap allows. Every channel change is kept only when it adds no
 // obstruction, merged segment or crossing.
 function fixedEnd(v){return !v||v.anchor.escapeY!=null||!!v.anchor.escapeRange;}
+// Off-page cables that leave one side of a device trade their rows so the
+// lane farthest out ends nearest the device: none then crosses another on its
+// way to the tag column. Kept only when the page has fewer crossings.
+function crossingCount(paths){
+ const segments=paths.flatMap((points,owner)=>points.slice(1).map((b,i)=>({owner,a:points[i],b})));let count=0;
+ for(const h of segments.filter(s=>s.a[1]===s.b[1]&&s.a[0]!==s.b[0]))for(const v of segments.filter(s=>s.a[0]===s.b[0]&&s.a[1]!==s.b[1])){
+  if(h.owner===v.owner)continue;const x=v.a[0],y=h.a[1];
+  if(x>Math.min(h.a[0],h.b[0])+.5&&x<Math.max(h.a[0],h.b[0])-.5&&y>Math.min(v.a[1],v.b[1])+.5&&y<Math.max(v.a[1],v.b[1])-.5)count++;
+ }
+ return count;
+}
+function untangleReferences(references,routes){
+ const groups=new Map();for(const r of references){const key=r.v.node.key+'|'+r.v.anchor.side;groups.set(key,[...(groups.get(key)||[]),r]);}
+ for(const group of groups.values()){
+  if(group.length<2)continue;
+  const before=group.map(r=>({ay:r.v.ay,y:r.y,points:r.points})),score=()=>crossingCount(routes.map(r=>r.points));
+  const baseline=score(),lane=r=>r.points.length>=2?r.points.at(-2)[0]:r.v.anchor.x,top=group[0].v.anchor.side==='top';
+  // Rows nearest the device first; lanes from the outside (left) in.
+  const rows=group.map(r=>r.v.ay).sort((a,b)=>top?b-a:a-b),order=[...group].sort((a,b)=>lane(a)-lane(b));
+  order.forEach((r,i)=>{r.v.ay=rows[i];r.y=rows[i];r.points=composeRoute(r);});
+  if(score()>=baseline)group.forEach((r,i)=>{r.v.ay=before[i].ay;r.y=before[i].y;r.points=before[i].points;});
+ }
+}
 function composeRoute(r){
  if(r.v)return clean([...lead(r.v),[r.x,r.v.ay]]);
  if(r.shape==='direct')return r.points;
@@ -687,6 +710,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    const gap=Math.max(12,ROUTE_STYLE.pitch),lanes=routes.flatMap(r=>r.v?r.points.slice(0,-1):r.points).map(p=>p[0]).filter(x=>x<left);
    const x=Math.min(referenceX,...routes.filter(r=>!r.v&&Number.isFinite(r.rail)&&r.rail<left).map(r=>r.rail-gap),...lanes.map(x=>x-gap));
    if(x<referenceX&&x>=minX)for(const r of references){r.x=x;r.points=composeRoute(r);}
+   untangleReferences(references,routes);
   }
   return {routes,references,ends};
  }

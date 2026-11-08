@@ -57,6 +57,20 @@ export function buildReportPackage(project,selectedIds){
  const details=items.flatMap(item=>item.pages.booklet.filter(page=>!['onePage','workspace','validation'].includes(page.role))),combined={pages:shared,diagrams:shared,booklet:numberReportPages([...shared,...details]),validation:{ok:!combinedError,errors:combinedError?[combinedError]:[],warnings:[...palette.warnings]},validationText:combinedError?'RENDER_BLOCKED=TRUE\n'+combinedError+'\n':'RENDER_BLOCKED=FALSE\nShared A4 sheets retain complete configuration blocks where they fit, then continue at module/member boundaries.\n'+palette.warnings.join('\n')+'\n'};
  return {items,combined,palette,request,outputLabel:request.outputLabel,title:request.title,summary:items.map(item=>item.summary).join('\n'),validation:{ok:items.every(item=>item.validation.ok)&&!combinedError,errors:[...items.flatMap(item=>item.validation.errors),...(combinedError?[combinedError]:[])]}};
 }
+// Port maps in the drawing set use the switchport builder's sheet for each
+// switch whose hardware it confirms, on the requested paper; a switch it
+// cannot draw keeps the faceplate port map.
+export function portMapSheets(project,devices,paper){
+ const ids=devices.map(device=>device.id),sheets=new Map();if(!ids.length)return sheets;
+ let prepared;try{prepared=prepare({...project,layout:{...project.layout,switchport:{...(project.layout?.switchport||{}),enabled:true,deviceIds:ids}}},ids);}catch{return sheets;}
+ const {items,palette}=prepared,request={...prepared.request,paper,fill:!!paper?.fill};
+ for(const item of items){
+  if(!item.validation.ok)continue;
+  let pages=null;try{pages=assertScenes([reportDiagram(item,palette,request)]);}catch{try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
+  if(pages?.length)sheets.set(item.id,pages);
+ }
+ return sheets;
+}
 export function buildSwitchportReports(project){
  const settings=cleanSwitchportSettings(project.layout?.switchport);if(!settings.enabled)return [];
  const {items,palette,request}=prepare(project);if(!items.length)return [];

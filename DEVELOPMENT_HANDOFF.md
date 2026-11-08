@@ -91,6 +91,16 @@ Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
   - Sockets are white for "No native VLAN" and gray for "Native not supplied", including sockets with no configuration record.
   - Tagged dots keep a minimum radius of 1.5. Dynamic pages widen the whole port-map family until every dot fits. Fixed paper shows a "+" marker and lists the full VLAN set.
 
+Owner follow-up (printable port maps, port names and off-page tags):
+- Port maps are now the Switchport Diagram Builder sheet by default, fitted to US Letter landscape (or a fixed port-map paper choice).
+  - Jacks, dots and numbers grow to fill the sheet.
+  - Undeclared slots are slim bands, and the VLAN key uses the builder's dense one-line, five-column layout.
+  - A fictional 9-module 5412R-style chassis with 28 VLANs fits on one sheet.
+  - Port map options > Port map style can switch back to the device faceplate artwork.
+  - Port Inventory tables are unchanged.
+- Port names take the spot nearest their own port (C2), on the line when the nearest clear spot beside it is farther away.
+- Off-page cables from one side of a device trade rows so they reach the tag column without crossing each other.
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.

@@ -1,6 +1,6 @@
 import {physicalInventory} from '../physical-links.mjs';
 import {cachedDraftPages} from './page-cache.mjs';
-import {buildSwitchportReports,sharedReportPalette,aggregateKey,cleanSwitchportSettings} from '../reports/index.mjs';
+import {buildSwitchportReports,sharedReportPalette,aggregateKey,cleanSwitchportSettings,portMapSheets} from '../reports/index.mjs';
 import {luminance} from '../reports/palette.mjs';
 import {portLabelLayout,portLabelText} from './port-label-layout.mjs';
 import {informationPanel} from './information-panel.mjs';
@@ -556,6 +556,12 @@ function portMaps(project,db){
  for(const page of extra){page.interfaceInventory=true;page.interfaceSections=page.logicalSections;delete page.logicalSections;page.tableTop=160;for(const item of page.items)if(item.y>=160)item.tableContent=true;bookletHeader(page);}
  if(!switches.length)return [...(extra.length&&documentationMode(project)==='concise'?[]:portMapsAtScale(project,db)),...extra];
  const savedKeys=Object.keys(project.layout?.drawingEdits||{}).filter(key=>/(?:^|\|)(?:MDF Port Map|Port Inventory)(?:\b|\|)/.test(key)&&!key.includes(logicalInventoryName)),retention=new WeakMap(),retained=pages=>{if(!savedKeys.length)return 0;if(!retention.has(pages)){const keys=new Set(pages.flatMap(page=>drawingObjects(page).flatMap(item=>[item.editKey,item.legacyEditKey])));retention.set(pages,savedKeys.filter(key=>keys.has(key)).length);}return retention.get(pages);};
+ // By default each switch's port map is the switchport builder's sheet,
+ // fitted to US Letter (or the chosen fixed port-map paper) so it prints as
+ // legibly as the builder's own. Faceplate artwork stays available.
+ const mapOptions=project.layout?.portMap||{},sheetGeometry=pageGeometry(project,'ports');
+ const paper=sheetGeometry.dynamic?{width:1056,height:816,preset:'letter',widthMm:279.4,heightMm:215.9}:{width:sheetGeometry.width,height:sheetGeometry.height,preset:'page',widthMm:sheetGeometry.width*25.4/96,heightMm:sheetGeometry.height*25.4/96};paper.fill=true;
+ const sheets=mapOptions.mapStyle==='faceplate'||mapOptions.presentation==='combined'?new Map():portMapSheets(project,switches,paper);
  let initial=portEquipmentPlan(project,switches),best;
  // A narrower common scale may change stack member ranges. An existing
  // edited range takes priority over a page-count saving, including edits
@@ -574,7 +580,7 @@ function portMaps(project,db){
  // its sheets: widen the common hardware for the whole family when a jack
  // needs it, growing a dynamic page; fixed paper keeps the '+' marker list.
  const crowded=pages=>pages.filter(page=>page.portMap?.markWidth).map(page=>{const d=switches.find(d=>d.id===page.portMap.markSource);return page.portMap.markWidth/(d?deviceScale(project,d):1)+2;});
- for(let attempt=0;attempt<4;attempt++){
+ for(let attempt=0;attempt<4&&switches.some(d=>!sheets.has(d.id));attempt++){
   const width=Math.max(0,...crowded(best));if(width<=initial.width+1)break;
   // The page also keeps its VLAN key column (up to 230 plus a 16 gap).
   const geometry=pageGeometry(project,'ports'),room=82+246;let next=project;
@@ -586,11 +592,24 @@ function portMaps(project,db){
  const options=project.layout?.portMap||{},auto=!options.presentation||options.presentation==='auto',edited=savedKeys.length>0,customized=Object.entries(project.layout?.presentation?.pages||{}).some(([key,settings])=>!key.includes(logicalInventoryName)&&(/(?:^|\|)Port Inventory(?:\b|\|)/.test(key)||/(?:^|\|)MDF Port Map(?:\b|\|)/.test(key)&&Object.keys(settings).some(key=>!['name','hidden'].includes(key))));
  // Try a measured combined sheet only when it saves a page. Existing
  // separate sheets, enlarged text and drawing edits keep their layout.
- if(auto&&documentationMode(project)==='concise'&&options.density!=='expanded'&&!edited&&!customized&&(project.layout?.presentation?.defaults?.textScale||1)===1){
+ if(auto&&!sheets.size&&documentationMode(project)==='concise'&&options.density!=='expanded'&&!edited&&!customized&&(project.layout?.presentation?.defaults?.textScale||1)===1){
   const combined={...project,layout:{...project.layout,portMap:{...options,presentation:'separate',mergeSheets:true}}};
   try{const pages=portMapsAtScale(combined,db,initial);if(prefer(pages))best=pages;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;}
  }
  for(const page of best)if(page.portMap)page.portMap.presentation=page.portMap.bookletRole?'separate':'combined';
+ if(sheets.size){
+  // The builder sheet replaces that switch's faceplate map; its port
+  // inventory tables stay.
+  const placed=new Set(),out=[];
+  for(const page of best){
+   const id=page.portMap?.device;
+   if(!id||!sheets.has(id)||page.portMap.bookletRole==='inventory'){out.push(page);continue;}
+   if(placed.has(id))continue;placed.add(id);
+   const d=switches.find(d=>d.id===id),ports=physicalPorts(d);
+   out.push(...sheets.get(id).map((sheet,i)=>Object.assign(sheet,{family:'ports',title:'MDF Port Map',portMap:{device:id,devices:[id],shown:ports.length,total:ports.length,rowNames:[],portRecords:[],density:'compact',overview:true,bookletRole:i?'key':'map',presentation:'separate',switchportSheet:true}})));
+  }
+  best=out;
+ }
  return [...best,...extra];
 }
 function portMapsAtScale(project,db,plan){

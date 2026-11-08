@@ -23,7 +23,8 @@ test('cached scenes remain independent through page numbering, drawing scale and
 test('report settings add measured switchport sheets without rebuilding unchanged core routes',()=>{
  const project=sampleSite(),cache=new Map();buildPages(project,{cache});const core=cache.get('core');
  project.layout={...project.layout,switchport:{enabled:true,deviceIds:['sw-1','sw-2'],combined:true,reportType:'workspace',title:'Fictional port reports'}};
- const pages=buildPages(project,{cache}),reports=pages.filter(p=>p.switchportReport);
+ // Port maps use the same builder scene; this checks the reports family.
+ const pages=buildPages(project,{cache}),reports=pages.filter(p=>p.switchportReport&&p.family==='switchports');
  assert.equal(cache.get('core'),core);assert.ok(reports.length);
  for(const page of reports){assert.equal(page.family,'switchports');assert.equal(page.items.filter(item=>item.pageFrame==='footer-name').length,0);assert.match(page.svg,/Fictional port reports/);}
  assert.deepEqual(pages.map(p=>p.svg),buildPages(project).map(p=>p.svg));

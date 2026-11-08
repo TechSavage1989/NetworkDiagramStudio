@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {documentationSections} from '../src/web/diagram/documentation.mjs';
 import {logicalPages} from '../src/web/diagram/logical.mjs';
 import {textLayout} from '../src/web/diagram/scene.mjs';

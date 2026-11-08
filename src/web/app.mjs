@@ -362,11 +362,12 @@ function addOrderControls(row,d,after=()=>{}){
 }
 function portMapOptions(){
  const body=modal('Port map options');project.layout||={};const current=project.layout.portMap||{},filter=field(body,'Port details to show',current.detailFilter||'all',[['all','All physical port records'],['assigned','Hide ports without assignment details'],['connected','Only ports with a peer or description']]),group=field(body,'Port table rows',current.groupConsecutive===false?'each':'group',[['group','Group matching port assignments'],['each','One row per interface']]);
+ const style=field(body,'Port map style',current.mapStyle==='faceplate'?'faceplate':'switchport',[['switchport','Switchport builder sheet - fits Letter, easy to read'],['faceplate','Device faceplate artwork']]);
  const format=field(body,'Report layout',current.presentation||(current.repeatFaceplate?'combined':'auto'),[['auto','Automatic - combine where readable'],['separate','Separate port maps and inventory'],['combined','Combined map and inventory']]);
  const density=field(body,'Port table layout',current.density||'compact',[['compact','Compact - fewer pages'],['expanded','Expanded - more space per record']]),repeat=field(body,'Faceplate on continued pages',current.repeatFaceplate?'repeat':'first',[['first','First page only'],['repeat','Repeat on every page']]);
  const showRepeat=()=>{repeat.hidden=repeat.previousElementSibling.hidden=format.value!=='combined';};format.onchange=showRepeat;showRepeat();
  body.append(el('p','Compact grouped tables combine switches in an assignment matrix. Expanded tables show more space per record. Assignment details include a peer, description, role, VLAN configuration, LAG or IP address. A port number, capacity or up/down state alone does not count. The faceplate retains every physical port.','hint'));
- button(actions(body),'Apply port map options',()=>{project.layout.portMap={presentation:format.value,density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
+ button(actions(body),'Apply port map options',()=>{project.layout.portMap={...(style.value==='faceplate'?{mapStyle:'faceplate'}:{}),presentation:format.value,density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
 }
 $('port-map-options').onclick=()=>task(portMapOptions);
 function linkStyleOptions(selected){
