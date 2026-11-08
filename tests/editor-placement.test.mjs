@@ -1,3 +1,4 @@
+import {crossesText} from '../src/web/diagram/labels.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {placeBeside} from '../src/web/arrange.mjs';
@@ -45,4 +46,16 @@ test('generated handoffs cannot reuse a retained physical observation index afte
  const project={devices:[{id:'f',name:'LAB-EDGE',kind:'firewall',model:'FortiGate 120G',ports:[{name:'port1',role:'wan',gateway:'192.0.2.1'},{name:'port2'}]},{id:'s',name:'LAB-SW',kind:'switch',model:'JL558A',ports:[{name:'1/50'}]}],links:[{a:'f',ap:'VLAN20',b:'s',bp:'1/50'},{a:'f',ap:'port2',b:'s',bp:'1/50'}]};
  const page=buildPages(project)[0],paths=page.items.filter(i=>i.type==='path');assert.equal(paths.length,2);assert.equal(new Set(paths.map(p=>[p.from.device,p.from.port,p.to.device,p.to.port].join('|'))).size,2);
  const physical=paths.find(p=>p.sourceLink.a==='f');assert.equal(physical.from.port,'port2');assert.equal(physical.to.port,'1/50');assert.deepEqual(physical.points[0],[physical.from.x,physical.from.y]);assert.deepEqual(physical.points.at(-1),[physical.to.x,physical.to.y]);
+});
+
+test('a middle chassis jack exits through the gap between lower jacks',()=>{
+ const chassis={id:'c',name:'LAB-CHASSIS',kind:'switch',model:'J9850A',
+  modules:['C','E'].map(slot=>({slot,model:'J9993A'})),ports:[{name:'C6'}]};
+ const peer={id:'s',name:'LAB-SWITCH',kind:'switch',model:'JL558A',ports:[{name:'1/50'}]};
+ const page=buildPages({devices:[chassis,peer],links:[{a:'c',ap:'C6',b:'s',bp:'1/50',media:'fiber'}]})[0];
+ const device=page.items.find(item=>item.kind==='switch'&&item.sourceId==='c');
+ const cable=page.items.find(item=>item.type==='path');
+ const socket=device.children.find(child=>child.anchorName==='E6');
+ assert.ok(socket);
+ assert.ok(!crossesText(cable.points,{x:device.x+socket.x*device.w,y:device.y+socket.y*device.h,w:socket.w*device.w,h:socket.h*device.h},2));
 });

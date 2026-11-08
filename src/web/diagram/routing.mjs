@@ -9,14 +9,26 @@ export function simplifyRoute(points){
 const clean=simplifyRoute;
 function segments(points){return points.slice(1).map((b,i)=>({a:points[i],b,h:points[i][1]===b[1]})).filter(s=>s.a[0]!==s.b[0]||s.a[1]!==s.b[1]);}
 import {crossesText} from './labels.mjs';
+function crossesPanel(route,node){
+ const regions=node.panelRegions?.length?node.panelRegions:[{y:0,h:1}];
+ return regions.some(region=>{
+  const box={x:node.x,y:node.y+region.y*node.h,w:node.w,h:region.h*node.h};
+  const inside=([x,y])=>x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h;
+  let first=0,last=route.points.length-1;
+  // Allow the local jack lead until it first exits its own member.
+  if(route.hosts.includes(node.key)){
+   while(first<last&&inside(route.points[first]))first++;
+   while(last>first&&inside(route.points[last]))last--;
+  }
+  return crossesText(route.points.slice(first,last+1),box,0);
+ });
+}
 function score(routes,nodes,obstacles,minX=306,maxX=1162){
  const seen=[];let blocked=0,shared=0,crossed=0,length=0,bends=0;
  for(const r of routes){if(r.points.some(([x])=>x<minX||x>maxX))blocked++;bends+=Math.max(0,clean(r.points).length-2);}
+ for(const r of routes)for(const node of nodes.values())if(crossesPanel(r,node))blocked++;
  for(const r of routes)for(const s of segments(r.points)){
   const {a,b,h}=s;length+=Math.abs(b[0]-a[0])+Math.abs(b[1]-a[1]);
-  for(const n of nodes.values())if(!r.hosts.includes(n.key)){
-   if(h?between(a[1],n.y,n.y+n.h)&&overlap(a[0],b[0],n.x,n.x+n.w)>0:between(a[0],n.x,n.x+n.w)&&overlap(a[1],b[1],n.y,n.y+n.h)>0)blocked++;
-  }
   for(const box of obstacles)if(crossesText([a,b],box,2))blocked++;
   for(const t of seen){
    if(t.route===r)continue;
@@ -28,11 +40,20 @@ function score(routes,nodes,obstacles,minX=306,maxX=1162){
  return [blocked,shared,crossed,bends,length];
 }
 function better(a,b){for(let i=0;i<a.length;i++){if(Math.abs(a[i]-b[i])>.001)return a[i]<b[i];}return false;}
-function lead(v){const start=[v.anchor.x,v.anchor.y];if(v.anchor.escapeY!=null)return [start,[start[0],v.ay],[v.exitX,v.ay]];return v.exitX===v.anchor.x?[start,[v.exitX,v.ay]]:[start,[start[0],start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,start[1]+(v.anchor.side==='top'?-1:1)*2],[v.exitX,v.ay]];}
+function lead({anchor,ay,exitX}){
+ const start=[anchor.x,anchor.y];
+ if(!anchor.departure&&anchor.escapeY==null&&exitX!==anchor.x){
+  const turn=anchor.y+(anchor.side==='top'?-1:1)*2;
+  return [start,[anchor.x,turn],[exitX,turn],[exitX,ay]];
+ }
+ const points=anchor.departure?[start,[anchor.x,anchor.departure[0][1]],anchor.departure[1]]:[start];
+ const x=points.at(-1)[0];
+ return [...points,[x,ay],[exitX,ay]];
+}
 function turnsClear(v,y){return (v.anchor.side==='top'?-1:1)*(y-v.anchor.edge)>=8;}
 function minimalCandidate(route,nodes,obstacles,others,minX,maxX){
  const {a,b}=route,ax=a.anchor.x,bx=b.anchor.x,candidates=[route];
- if(a.anchor.escapeY!=null||b.anchor.escapeY!=null)return route;
+ if(a.anchor.escapeY!=null||b.anchor.escapeY!=null||a.anchor.departure||b.anchor.departure)return route;
  const ys=[(a.ay+b.ay)/2,a.ay,b.ay];
  for(const y of ys)if(turnsClear(a,y)&&turnsClear(b,y))candidates.push({...route,a:{...a,ay:y},b:{...b,ay:y},points:clean([[ax,a.anchor.y],[ax,y],[bx,y],[bx,b.anchor.y]])});
  if(ax===bx&&((a.anchor.side==='bottom'&&b.anchor.side==='top'&&a.anchor.y<b.anchor.y)||(a.anchor.side==='top'&&b.anchor.side==='bottom'&&a.anchor.y>b.anchor.y)))candidates.push({...route,points:[[ax,a.anchor.y],[bx,b.anchor.y]]});
@@ -70,7 +91,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    }),exits=[];
    sorted.forEach((v,i)=>{
     const side=sides.get(v.e.idx)||'left',dir=side==='right'?1:-1;
-    let escapeX=v.anchor.x;if(sorted.some(o=>o!==v&&Math.abs(o.anchor.x-v.anchor.x)<4))while(exits.some(o=>Math.abs(o-escapeX)<4))escapeX+=dir*6;let x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?topClearance+pitch*i:bottomClearance+pitch*i)*scale;
+    let escapeX=v.anchor.departure?.at(-1)[0]??v.anchor.x;if(sorted.some(o=>o!==v&&Math.abs(o.anchor.x-v.anchor.x)<4))while(exits.some(o=>Math.abs(o-escapeX)<4))escapeX+=dir*6;let x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?topClearance+pitch*i:bottomClearance+pitch*i)*scale;
     if(v.anchor.escapeRange){const matching=sorted.filter(o=>o.anchor.escapeRange&&near(o.anchor.escapeRange[0],v.anchor.escapeRange[0])&&near(o.anchor.escapeRange[1],v.anchor.escapeRange[1])),[lo,hi]=v.anchor.escapeRange;ay=lo+(hi-lo)*(matching.indexOf(v)+1)/(matching.length+1);}
     // Text explicitly positioned by the user remains an obstacle. Automatic
     // device titles are fitted after routing instead of forcing cable doglegs.
@@ -85,12 +106,12 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    const a=ends.get(e.idx+'/a'),b=ends.get(e.idx+'/b'),side=sides.get(e.idx),lo=Math.min(a.ay,b.ay)-7,hi=Math.max(a.ay,b.ay)+7;
    let lane=0;while(tracks.some(t=>t.side===side&&t.lane===lane&&Math.min(hi,t.hi)>Math.max(lo,t.lo)))lane++;
    let rail=side==='left'?left-18-railPitch*lane:right+18+railPitch*lane;
-   const blockers=[...nodes.values()].filter(n=>n!==a.node&&n!==b.node&&n.y<hi&&n.y+n.h>lo);
+   const blockers=[...nodes.values()].filter(n=>n.y<hi&&n.y+n.h>lo);
    const direction=side==='left'?-1:1;
    for(let attempt=0;attempt<=blockers.length+tracks.length;attempt++){
     const block=blockers.find(n=>rail>n.x-5&&rail<n.x+n.w+5);
     if(block){rail=direction<0?block.x-6:block.x+block.w+6;continue;}
-    if(tracks.some(t=>Math.abs(t.rail-rail)<6&&Math.min(hi,t.hi)>Math.max(lo,t.lo))){rail+=direction*6;continue;}
+    if(tracks.some(t=>Math.abs(t.rail-rail)<Math.min(10,railPitch)&&Math.min(hi,t.hi)>Math.max(lo,t.lo))){rail+=direction*6;continue;}
     break;
    }
    tracks.push({side,lane,lo,hi,rail});
@@ -100,7 +121,25 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   // Retain the existing boundary behavior for deliberately off-page edits.
   const referenceX=[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)?Math.min(left-10,...tracks.filter(t=>t.side==='left').map(t=>t.rail-12)):left-10;
   for(const e of external){const which=ends.has(e.idx+'/a')?'a':'b',v=ends.get(e.idx+'/'+which),x=referenceX;const r={e,v,which,x,y:v.ay,hosts:[v.node.key],points:clean([...lead(v),[x,v.ay]])};routes.push(r);references.push(r);}
-  for(let i=0;i<routes.length;i++)if(!routes[i].v){routes[i]=minimalCandidate(routes[i],nodes,obstacles,routes.filter((_,j)=>j!==i),minX,maxX);for(const v of [routes[i].a,routes[i].b])ends.set(v.e.idx+'/'+v.which,v);}
+  for(let i=0;i<routes.length;i++)if(!routes[i].v){
+   const route=routes[i],others=routes.filter((_,j)=>j!==i),{a,b}=route;
+   let best=minimalCandidate(route,nodes,obstacles,others,minX,maxX);
+   const [west,east]=[a.node,b.node].sort((x,y)=>x.x-y.x);
+   const low=west.x+west.w+10,high=east.x-10;
+   if(low<=high){
+    let cost=score([...others,best],nodes,obstacles,minX,maxX);
+    const count=Math.min(16,1+Math.floor((high-low)/Math.max(10,railPitch)));
+    for(let j=0;j<count;j++){
+     const rail=low+(high-low)*(j+.5)/count;
+     const points=clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()]);
+     const candidate={...route,rail,points};
+     const value=score([...others,candidate],nodes,obstacles,minX,maxX);
+     if(better(value,cost)){best=candidate;cost=value;}
+    }
+   }
+   routes[i]=best;
+   for(const v of [best.a,best.b])ends.set(v.e.idx+'/'+v.which,v);
+  }
   return {routes,references,ends};
  }
  let best=build(),cost=score(best.routes,nodes,obstacles,minX,maxX);

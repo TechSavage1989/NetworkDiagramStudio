@@ -191,14 +191,25 @@ $('drawing-size').onclick=()=>task(()=>{
 });
 $('drawing-beside').onclick=()=>task(()=>{
  const page=pages[active],chosen=selectedDrawingDevices(),keys=new Set(chosen.map(d=>d.editKey)),others=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&!keys.has(i.editKey));if(!others.length)throw Error('This page needs another device to place beside.');
- const body=modal('Place devices beside another'),target=field(body,'Reference device',others[0].editKey,others.map(d=>[d.editKey,d.name])),gap=field(body,'Space for connections','auto',[['auto','Automatic spacing'],['compact','Compact'],['wide','Extra room']]);
+ const body=modal('Place devices beside another');
+ body.append(el('p',(chosen.length===1?'Moving device: ':'Moving devices: ')+chosen.map(device=>device.name).join(', '),'hint'));
+ const target=field(body,'Reference device',others[0].editKey,others.map(d=>[d.editKey,d.name])),gap=field(body,'Space for connections','auto',[['auto','Automatic spacing'],['compact','Compact'],['wide','Extra room']]);
  body.append(el('p','Choose a side. The selected devices move together, leaving room for titles and cables and avoiding other devices.','hint'));
  const bar=actions(body);
  for(const [side,label] of [['left','← Left'],['right','Right →'],['above','↑ Above'],['below','↓ Below']])button(bar,label,()=>{
   const reference=others.find(d=>d.editKey===target.value),incident=page.items.filter(i=>i.type==='path'&&[...chosen,reference].some(d=>[i.sourceLink?.a,i.sourceLink?.b].includes(d.sourceId))).length,padding=gap.value==='compact'?56:gap.value==='wide'?160:Math.max(80,48+incident*12);
   const envelope=d=>({...drawingBounds(d),y:d.y-40,h:d.h+68});
   const offsets=placeBeside(chosen.map(envelope),envelope(reference),side,others.filter(d=>d!==reference).map(envelope),padding);
-  setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,offsets));close();viewport.fit();say('Devices placed '+side+' '+reference.name+'. Connections rerouted.');
+  const edits=project.layout?.drawingEdits;
+  try{setDrawingEdits(moveDrawingItems(page,edits,offsets));}
+  catch(error){
+   if(error.code!=='CORE_LAYOUT_CAPACITY'||!page.coreDeviceIds)throw error;
+   // A routing retry may repack the automatic positions used as references.
+   // Keep the visible positions of those devices for the second attempt.
+   for(const device of others)if(page.coreDeviceIds.includes(device.sourceId))offsets.set(device.editKey,[0,0]);
+   setDrawingEdits(moveDrawingItems(page,edits,offsets));
+  }
+  close();viewport.fit();say('Devices placed '+side+' '+reference.name+'. Connections rerouted.');
  });
 });
 $('drawing-page').onclick=()=>task(()=>{
