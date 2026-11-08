@@ -79,3 +79,20 @@ export function moveDrawingItems(page,edits,offsets){
  }
  return cleanDrawingEdits(result);
 }
+export function scaleDrawingItems(page,edits,keys,factor){
+ if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Choose a size from 10 to 400 percent.');
+ const selected=new Set(keys),result=cleanDrawingEdits(edits);
+ for(const item of drawingObjects(page)){
+  if(!selected.has(item.editKey)||selected.has(item.parent?.editKey)||item.type==='path')continue;
+  const change={};
+  for(const k of ['w','h','size'])if(Number.isFinite(item[k]))change[k]=item[k]*factor;
+  if(item.type==='vector'){
+   const points=item.commands.filter(c=>c.length===3),x=Math.min(...points.map(c=>c[1])),y=Math.min(...points.map(c=>c[2]));
+   change.commands=item.commands.map(c=>c.length===3?[c[0],x+(c[1]-x)*factor,y+(c[2]-y)*factor]:[...c]);
+  }
+  const patch=unpresentPatch(item,change),clean=cleanDrawingEdits({[item.editKey]:patch})[item.editKey];
+  if(!clean||Object.keys(clean).length!==Object.keys(patch).length)throw Error('This size exceeds the supported object dimensions.');
+  result[item.editKey]={...result[item.editKey],...clean};
+ }
+ return result;
+}

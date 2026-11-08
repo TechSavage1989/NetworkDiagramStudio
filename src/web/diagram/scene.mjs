@@ -1,3 +1,4 @@
+import {logicalPort} from '../physical-links.mjs';
 import {pageGeometry,pageFamily} from '../page-options.mjs';
 import {deviceScale} from '../presentation.mjs';
 // Geometry is stored in page pixels with a top-left origin. Both exporters consume the same scene.
@@ -96,10 +97,7 @@ export function fitRatio(r,x,y,w,h){
 export function portNumber(s){return String(s??'').match(/(\d+)(?:[^\d]*)$/)?.[1]||String(s??'');}
 export function portList(d){return list(d.ports).filter(p=>p?.name!=null);}
 export function physicalPorts(d){
-  const virtual=['virtual','logical','loopback','aggregate','link aggregation','vlan','softwareloopback','l3ipvlans','tunnel','hard-switch','switch','vap-switch','vdom-link','redundant'];
-  return portList(d).filter(p=>!p.parent&&!p.members?.length&&!virtual.includes(String(p.type||'').toLowerCase())&&!virtual.includes(String(p.configuredType||'').toLowerCase())&&
-    !/^(?:vlan(?:if|[-. ]?\d)|loopback|lo\d+$|lag[- ]?\d|trk\d+$|port-channel|po\d+$|ae\d+$|bridge-aggregation|route-aggregation|eth-trunk|bond\d+|null\d+|bridge[- ]?\d)/i.test(String(p.name)) &&
-    !/\.\d+$/.test(String(p.name)));
+  return portList(d).filter(p=>!logicalPort(p));
 }
 export function state(v){return /^(up|connected|online|active|operational)$/i.test(value(v))?'up':/down|disabled|offline|disconnected|inactive/i.test(value(v))?'down':'unknown';}
 export function addDevice(page,project,d,bounds,key,opts={}){
@@ -240,7 +238,7 @@ export function svgPage(p){
       }
       last=[x,y];return t+' '+round(x)+' '+round(y);
     }).join(' ');
-    return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||cableWeight)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+'<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+(i.weight||cableWeight)+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
+    return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||cableWeight)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+(i.editKey?'<path class="cable-hit-target" data-drawing-key="'+xml(i.editKey)+'" d="'+path+'" fill="none" stroke="transparent" stroke-width="16" vector-effect="non-scaling-stroke" pointer-events="none" aria-hidden="true"/>':'')+'<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+(i.weight||cableWeight)+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
   };
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title><rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
 }

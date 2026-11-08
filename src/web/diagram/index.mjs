@@ -1,3 +1,4 @@
+import {physicalInventory} from '../physical-links.mjs';
 import {informationPanel} from './information-panel.mjs';
 import {presentation,scaleText,scalePage,displayPageName,cleanReportPages,deviceScale} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
@@ -458,10 +459,10 @@ function logical(project,db){
     ...(matrix.length?matrix:tablePages(project,'Trunk VLANs','Native and tagged VLAN membership on trunks and aggregates',[['Device',243],['Interface',164],['Native VLAN',145],['Tagged VLANs',235],['LAG',94],['Description',247]],trunks,'No trunk, tagged-port or aggregate records were supplied.'))];
 }
 export function buildPages(project={},options={}){
-  const db=inventory(project),pages=[...corePages(project,db),...portMaps(project,db),...wireless(project,db),...logical(project,db)];
+  const db=inventory(project),pages=[...corePages(project,physicalInventory(db)),...portMaps(project,db),...wireless(project,physicalInventory(db)),...logical(project,db)];
   for(const report of cleanReportPages(project.layout?.reportPages,(project.devices||[]).map(d=>d.id))){
     const selected=new Set(report.devices),copy={...project,devices:(project.devices||[]).filter(d=>selected.has(d.id)),links:(project.links||[]).filter(l=>selected.has(l.a)&&selected.has(l.b)),_reportPrefix:'report:'+report.id},data=inventory(copy);
-    const generated=report.family==='ports'?portMaps(copy,data):report.family==='wireless'?wireless(copy,data):logical(copy,data).filter(p=>pageFamily(p.title)===report.family);
+    const generated=report.family==='ports'?portMaps(copy,data):report.family==='wireless'?wireless(copy,physicalInventory(data)):logical(copy,data).filter(p=>pageFamily(p.title)===report.family);
     generated.forEach((p,i)=>{p.reportId=report.id;p.sourceDeviceIds=report.devices;p.displayName=report.name+(generated.length>1?' '+(i+1):'');});pages.push(...generated);
   }
   const totals=new Map(),seen=new Map();

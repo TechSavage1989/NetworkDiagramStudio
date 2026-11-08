@@ -20,7 +20,7 @@ function score(routes,nodes,obstacles,minX=306,maxX=1162){
   for(const box of obstacles)if(crossesText([a,b],box,2))blocked++;
   for(const t of seen){
    if(t.route===r)continue;
-   if(h===t.h){if(near(a[h?1:0],t.a[h?1:0])&&overlap(a[h?0:1],b[h?0:1],t.a[h?0:1],t.b[h?0:1])>.01)shared++;}
+   if(h===t.h){if(Math.abs(a[h?1:0]-t.a[h?1:0])<6-.001&&overlap(a[h?0:1],b[h?0:1],t.a[h?0:1],t.b[h?0:1])>.01)shared++;}
    else{const x=h?t.a[0]:a[0],y=h?a[1]:t.a[1];if(between(x,h?a[0]:t.a[0],h?b[0]:t.b[0])&&between(y,h?t.a[1]:a[1],h?t.b[1]:b[1]))crossed++;}
   }
   seen.push({...s,route:r});

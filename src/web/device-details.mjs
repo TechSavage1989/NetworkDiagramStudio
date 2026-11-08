@@ -20,10 +20,15 @@ export function deviceModel(device){
  const vendor=text(device?.vendor),model=text(device?.model);
  return [vendor&&(!model||!model.toLowerCase().includes(vendor.toLowerCase()))?vendor:'',model].filter(Boolean).join(' | ');
 }
-export function macCaption(device,port){
- const direct=deviceMacs(device);if(direct.length)return 'MAC '+direct.join(', ');
+export function macCaption(device,port,{full=false}={}){
+ const caption=(values,prefix='MAC ')=>full||values.length===1?prefix+values.join(', '):values.length+' MAC addresses';
+ const direct=deviceMacs(device);if(direct.length)return caption(direct);
  const ports=(device?.ports||[]).filter(p=>port==null||text(p.name).toLowerCase()===text(port).toLowerCase());
- return ports.flatMap(p=>{const values=deviceMacs(p);return values.length?['MAC '+(port==null?p.name+' ':'')+values.join(', ')]:[];}).join(' | ');
+ const known=ports.map(p=>({port:p,values:deviceMacs(p)})).filter(p=>p.values.length);
+ // Inventory reports may aggregate hundreds of local interface addresses.
+ // Keep all records, without treating the first as a primary device identity.
+ if(!full&&known.length>1){const count=new Set(known.flatMap(p=>p.values)).size;return count+' interface MAC address'+(count===1?'':'es');}
+ return known.map(p=>caption(p.values,'MAC '+(port==null?p.port.name+' ':''))).join(' | ');
 }
 export function deviceDetails(device){
  const platform=text(device?.technology),model=deviceModel(device);

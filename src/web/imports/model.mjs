@@ -1,3 +1,4 @@
+import {physicalLink} from '../physical-links.mjs';
 import {hardwareProfile,portCapability} from './hardware.mjs';
 
 export const deviceId = name => String(name ?? '').trim().toLowerCase();
@@ -130,7 +131,7 @@ export function mergeModels(...models) {
       const id = key([...ends].sort());
       if (!links.has(id)) links.set(id,e);
       else assign(links.get(id),e,['a','ap','b','bp'],warnings,e.a+' '+e.ap+' / '+e.b+' '+e.bp);
-      for (const endpoint of ends) {
+      for (const endpoint of physicalLink(e,devices)?ends:[]) {
         if (!occupied.has(endpoint)) occupied.set(endpoint,new Set());
         occupied.get(endpoint).add(id);
       }

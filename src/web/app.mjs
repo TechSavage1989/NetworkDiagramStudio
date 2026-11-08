@@ -1,5 +1,6 @@
+import {physicalLink} from './physical-links.mjs';
 import {pageLayoutEditor} from './page-layout-ui.mjs';
-import {displayPageName,unpresentPatch} from './presentation.mjs';
+import {displayPageName,unpresentPatch,cleanPresentation,presentation} from './presentation.mjs';
 import {withoutDevices} from './device-actions.mjs';
 import {desktopUpdates} from './desktop-updates.mjs';
 import {deviceMacs,inputMacAddresses} from './device-details.mjs';
@@ -7,9 +8,9 @@ import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
 import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
 import {diagramViewport} from './viewport.mjs';
-import {arrangeAnchors,arrangeBoxes} from './arrange.mjs';
+import {arrangeAnchors,arrangeBoxes,placeBeside} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
-import {drawingObjects,drawingBounds,moveDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
+import {drawingObjects,drawingBounds,moveDrawingItems,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
@@ -79,6 +80,7 @@ function syncDrawingSelection(){
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');
+ const selectedDevices=selectedDrawingDevices();$('drawing-beside').disabled=!selectedDevices.length;$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
  const cable=selectedCable();$('cable-tools').hidden=!editDrawing;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
  if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
  else $('cable-point-info').textContent='Select a cable to edit its bend points or endpoints.';
@@ -150,14 +152,14 @@ function snapOptions(){
  const body=modal('Snapping and automatic alignment'),s=cleanSnap(project.layout?.snapping),fields={};
  for(const [key,name] of [['enabled','Enable snapping'],['grid','Snap to grid'],['guides','Automatic alignment guides'],['deviceEdges','Align with device edges and centers'],['objectEdges','Align with text and other object edges'],['cablePoints','Align with other cable bend points']]){const row=el('label','','check-option'),input=el('input');input.type='checkbox';input.checked=s[key];input.setAttribute('aria-label',name);row.append(input,document.createTextNode(name));body.append(row);fields[key]=input;}
  const grid=el('div','','form-grid');body.append(grid);for(const [key,name] of [['gridSize','Grid spacing (page units)'],['distance','Alignment snap distance (page units)'],['nudge','Arrow-key step (page units)']]){const input=field(grid,name,s[key]);input.type='number';input.step=key==='nudge'?.1:1;input.min=key==='nudge'?.1:1;input.max=key==='nudge'?20:key==='distance'?24:100;fields[key]=input;}
- body.append(el('p','Hold Shift while dragging a cable or bend to lock horizontal or vertical movement. Snapping affects dragging. Press Alt after starting a drag to bypass snapping. Arrow keys use the configured step; Shift multiplies it by 10 and Ctrl divides it by 10. Endpoint ports remain attached. Alignment buttons apply the action you select.','hint'));
+ body.append(el('p','Hold Shift while dragging any item or bend to lock horizontal or vertical movement. Snapping affects dragging. Press Alt after starting a drag to bypass snapping. Arrow keys use the configured step; Shift multiplies it by 10 and Ctrl divides it by 10. Endpoint ports remain attached. Alignment buttons apply the action you select.','hint'));
  button(actions(body),'Save snapping options',()=>{for(const key of ['gridSize','distance','nudge'])if(fields[key].value===''||!Number.isFinite(+fields[key].value)||+fields[key].value<+fields[key].min||+fields[key].value>+fields[key].max)throw Error('Use grid spacing 1-100, snap distance 1-24, and an arrow-key step of 0.1-20.');project.layout||={};project.layout.snapping=cleanSnap(Object.fromEntries(Object.entries(fields).map(([key,input])=>[key,input.type==='checkbox'?input.checked:+input.value])));perform('snapping');close();say('Snapping options saved.');},'primary');
 }
 $('drawing-snap').onclick=()=>task(snapOptions);
 function startDrawingMove(key,event){
  if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]'),axisFor=dragAxis();
  if(control){if(control.hasAttribute('data-cable-segment'))return {preview(){},commit(){},cancel(){}};
-  const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),path=[...svg.children].find(n=>n.getAttribute('data-drawing-key')===key),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
+  const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),path=[...svg.children].find(n=>n.getAttribute('data-drawing-key')===key&&!n.classList.contains('cable-hit-target')),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
   if(settings.cablePoints)for(const [i,p] of item.points.entries())if(i!==index)targets.push({axis:0,value:p[0]},{axis:1,value:p[1]});drawingSelection.clear();drawingSelection.add(key);cablePoint=index;
   const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey),snapped=snapPoint([item.points[index][0]+(axis===1?0:dx),item.points[index][1]+(axis===0?0:dy)],settings,targets,e?.altKey,axis);return {...snapped,points:moveCablePoint(item.points,index,...snapped.point)};};
   const restore=()=>{path.setAttribute('d',before);showSnapGuides();};
@@ -165,8 +167,7 @@ function startDrawingMove(key,event){
  }
  const keys=drawingSelection.has(key)?new Set(drawingSelection):new Set(event.shiftKey||event.ctrlKey||event.metaKey?[...drawingSelection,key]:[key]),boxes=drawingObjects(page).filter(o=>keys.has(o.editKey)&&!keys.has(o.parent?.editKey)).map(drawingBounds).filter(Boolean),targets=snapTargets(page,keys),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&keys.has(n.getAttribute('data-drawing-key'))&&!keys.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
  const restore=()=>{for(const [n,s] of original){if(s.transform==null)n.removeAttribute('transform');else n.setAttribute('transform',s.transform);if(s.d)n.setAttribute('d',s.d);}showSnapGuides();};
- const cableDrag=page.items.some(item=>item.editKey===key&&item.type==='path');
- const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,cableDrag&&e?.shiftKey);return snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis);};
+ const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey);return snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis);};
  return {preview(dx,dy,e){const next=geometry(dx,dy,e),[x,y]=next.delta;if(!started){drawingSelection.clear();for(const k of keys)drawingSelection.add(k);syncDrawingSelection();started=true;}
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
   for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else n.setAttribute('transform','translate('+x+' '+y+') '+(s.transform||''));}
@@ -174,6 +175,45 @@ function startDrawingMove(key,event){
  },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta]))));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
 }
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{drawingSelection.clear();syncDrawingSelection();};
+function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
+function resizeSelection(factor){if(!drawingObjects(pages[active]).some(i=>drawingSelection.has(i.editKey)&&i.type!=='path'))throw Error('Select a device, text or another object to resize. Cables follow their connected devices.');setDrawingEdits(scaleDrawingItems(pages[active],project.layout?.drawingEdits,drawingSelection,factor));say('Selected items resized. Connections remain attached.');}
+$('drawing-smaller').onclick=()=>task(()=>resizeSelection(.9));$('drawing-larger').onclick=()=>task(()=>resizeSelection(1.1));
+$('drawing-size').onclick=()=>task(()=>{
+ const body=modal('Resize items'),scope=field(body,'Resize',drawingSelection.size?'selected':'page',[['selected','Selected items'],['page','Everything on this page'],['drawing','Everything on all pages']]),percent=field(body,'Size (% of current size)',100);percent.type='number';percent.min=10;percent.max=400;
+ const bar=actions(body);button(bar,'Smaller −10%',()=>percent.value=Math.max(10,Math.round(+percent.value*.9)));button(bar,'Larger +10%',()=>percent.value=Math.min(400,Math.round(+percent.value*1.1)));
+ body.append(el('p','100% keeps the current size. Device ports and connections stay attached. Use Undo to restore the previous size.','hint'));
+ button(actions(body),'Apply size',()=>{const factor=+percent.value/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Choose a size from 10 to 400 percent.');
+  if(scope.value==='selected'){if(!drawingSelection.size)throw Error('Select an item first.');resizeSelection(factor);}
+  else {const before=project.layout,next=structuredClone(before||{}),config=cleanPresentation(next.presentation),targets=scope.value==='page'?[config.pages[pages[active].name]={...config.pages[pages[active].name],drawingScale:presentation(project,pages[active]).drawingScale}]:[config.defaults,...Object.values(config.pages).filter(p=>Number.isFinite(p.drawingScale))];
+   for(const target of targets){const value=target.drawingScale*factor;if(value<.1||value>4)throw Error('The resulting drawing size must stay between 10% and 400%.');target.drawingScale=value;}next.presentation=config;project.layout=next;try{validateDrawing();}catch(error){project.layout=before;throw error;}perform('drawing');viewport.fit();say('Drawing resized.');}
+  close();
+ },'primary');
+});
+$('drawing-beside').onclick=()=>task(()=>{
+ const page=pages[active],chosen=selectedDrawingDevices(),keys=new Set(chosen.map(d=>d.editKey)),others=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&!keys.has(i.editKey));if(!others.length)throw Error('This page needs another device to place beside.');
+ const body=modal('Place devices beside another'),target=field(body,'Reference device',others[0].editKey,others.map(d=>[d.editKey,d.name])),gap=field(body,'Space for connections','auto',[['auto','Automatic spacing'],['compact','Compact'],['wide','Extra room']]);
+ body.append(el('p','Choose a side. The selected devices move together, leaving room for titles and cables and avoiding other devices.','hint'));
+ const bar=actions(body);
+ for(const [side,label] of [['left','← Left'],['right','Right →'],['above','↑ Above'],['below','↓ Below']])button(bar,label,()=>{
+  const reference=others.find(d=>d.editKey===target.value),incident=page.items.filter(i=>i.type==='path'&&[...chosen,reference].some(d=>[i.sourceLink?.a,i.sourceLink?.b].includes(d.sourceId))).length,padding=gap.value==='compact'?56:gap.value==='wide'?160:Math.max(80,48+incident*12);
+  const envelope=d=>({...drawingBounds(d),y:d.y-40,h:d.h+68});
+  const offsets=placeBeside(chosen.map(envelope),envelope(reference),side,others.filter(d=>d!==reference).map(envelope),padding);
+  setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,offsets));close();viewport.fit();say('Devices placed '+side+' '+reference.name+'. Connections rerouted.');
+ });
+});
+$('drawing-page').onclick=()=>task(()=>{
+ const chosen=selectedDrawingDevices(),ids=new Set(chosen.map(d=>d.sourceId)),body=modal('Move devices to page'),choices=corePageChoices().filter(([id])=>!['exclude','auto'].includes(id));
+ const target=field(body,'Destination page','new',choices),name=field(body,'New page name','Network page');name.maxLength=80;const update=()=>name.hidden=name.previousElementSibling.hidden=target.value!=='new';target.onchange=update;update();
+ body.append(el('p',chosen.map(d=>d.name).join(', '),'hint'));const references=field(body,'Connections to other pages','show',[['show','Show off-page device indicators'],['hide','Hide off-page indicators']]);
+ button(actions(body),'Move devices',()=>{
+  const previous=project.layout,next=structuredClone(previous||{});next.corePages||=[];let choice=target.value;
+  if(choice==='new'){choice=crypto.randomUUID();next.corePages.push({id:choice,name:name.value.trim()||'Network page',devices:[],showReferences:references.value==='show'});}
+  else if(choice.startsWith('@core:')){const rendered=pages.filter(p=>p.coreDeviceIds)[+choice.slice(6)],members=rendered.coreDeviceIds.filter(id=>!ids.has(id));choice=crypto.randomUUID();for(const page of next.corePages)page.devices=page.devices.filter(id=>!members.includes(id));next.corePages.push({id:choice,name:rendered.name,devices:members,showReferences:references.value==='show'});}
+  for(const id of ids)assignCorePage(next,project.devices.find(d=>d.id===id),choice);
+  next.corePages.find(p=>p.id===choice).showReferences=references.value==='show';project.layout=next;
+  try{validateDrawing();}catch(error){project.layout=previous;throw error;}perform('drawing');close();const index=pages.findIndex(p=>p.corePageId===choice);if(index>=0){active=index;draw();}say('Devices moved. Off-page indicators identify their connected devices and pages.');
+ },'primary');
+});
 $('cable-remove-point').onclick=()=>task(removeSelectedCablePoint);
 $('cable-endpoints').onclick=()=>task(()=>connectSelectedCable());
 $('cable-edit-points').onclick=()=>task(()=>editCablePoints(selectedCable()));
@@ -514,7 +554,9 @@ function devicePortFields(parent,device){
 }
 function editDevice(current){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
- const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip),mac=field(body,'MAC address(es)',deviceMacs(d).join(', '));
+ const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip),addresses=deviceMacs(d);
+ let addressFields=body;if(addresses.length>1){addressFields=el('details');addressFields.append(el('summary','MAC addresses ('+addresses.length+')'));body.append(addressFields);addressFields.append(el('p','The diagram shows a count for multiple addresses. Review or edit the full list here.','hint'));}
+ const mac=field(addressFields,'MAC address(es)',addresses.join(addresses.length>1?'\n':', '),addresses.length>1?'multiline':null);if(addresses.length>1)mac.rows=5;
  const models=el('datalist');models.id='known-hardware-models';const suggestions=new Map([...hardwareCatalog,...endpointHardwareCatalog.flatMap(entry=>entry.aliases.map(model=>({model,vendor:entry.vendor})))].map(entry=>[entry.sku||entry.model,entry]));for(const p of suggestions.values()){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
  const platform=field(body,'Platform / technology',d.technology||''),platforms=el('datalist');platforms.id='known-device-platforms';for(const technology of [...new Set(endpointHardwareCatalog.map(entry=>entry.technology).filter(value=>value!=='Physical server'))]){const option=el('option');option.value=technology;platforms.append(option);}body.append(platforms);platform.setAttribute('list',platforms.id);
  const knowledge=el('p','','hint');body.insertBefore(knowledge,ip.previousElementSibling);let kindEdited=false;kind.onchange=()=>kindEdited=true;
@@ -562,7 +604,7 @@ function editDevice(current){
 function reviewLinks(){
  const body=modal('Connections');const accounts=new Map(project.devices.map(d=>[d.id,d.name]));button(body,'Add connection',()=>editLink());
  if(!project.links.length)body.append(el('p','No links imported. Add a connection using the local and remote interface names.','hint'));
- project.links.forEach((l,i)=>{const text=el('div');text.append(el('strong',(accounts.get(l.a)||l.a)+' '+l.ap+'  /  '+(accounts.get(l.b)||l.b)+' '+l.bp),el('div',[l.media||'Media unspecified',l.speed,l.status].filter(Boolean).join('  |  '),'asset-info'));const row=line(body,text);button(row,'Edit',()=>editLink(i));});
+ project.links.forEach((l,i)=>{const text=el('div');text.append(el('strong',(accounts.get(l.a)||l.a)+' '+l.ap+'  /  '+(accounts.get(l.b)||l.b)+' '+l.bp),el('div',[l.media||'Media unspecified',l.speed,l.status,!physicalLink(l,project.devices)?'Logical observation — retained in data tables':'' ].filter(Boolean).join('  |  '),'asset-info'));const row=line(body,text);button(row,'Edit',()=>editLink(i));});
 }
 function connectionFields(parent,link,{onMediaChange,mixed=false}={}){
  const keep='__keep_connection_value__',choices=(catalog,value)=>mixed&&value===null?[[keep,'Mixed - keep existing'],...connectionChoices(catalog,'')]:connectionChoices(catalog,value),initial=(catalog,value)=>mixed&&value===null?keep:connectionValue(catalog,value);

@@ -29,3 +29,13 @@ export function arrangeAnchors(anchors,keys,action,reference=keys[0]){
  }
  return out;
 }
+export function placeBeside(boxes,target,side,obstacles=[],padding=72){
+ if(!boxes.length||!target||!['left','right','above','below'].includes(side))throw Error('Choose devices and a reference device.');
+ const x=Math.min(...boxes.map(b=>b.x)),y=Math.min(...boxes.map(b=>b.y)),w=Math.max(...boxes.map(b=>b.x+b.w))-x,h=Math.max(...boxes.map(b=>b.y+b.h))-y;
+ const horizontal=side==='left'||side==='right',axis=horizontal?'y':'x',size=horizontal?'h':'w';
+ const base={x:side==='left'?target.x-w-padding:side==='right'?target.x+target.w+padding:target.x+(target.w-w)/2,y:side==='above'?target.y-h-padding:side==='below'?target.y+target.h+padding:target.y+(target.h-h)/2,w,h};
+ const offsets=[0,...obstacles.flatMap(b=>[b[axis]-padding-base[size]-base[axis],b[axis]+b[size]+padding-base[axis]])].sort((a,b)=>Math.abs(a)-Math.abs(b)||a-b);
+ const position=offsets.map(offset=>({...base,[axis]:base[axis]+offset})).find(b=>obstacles.every(o=>b.x+b.w+padding<=o.x||b.x>=o.x+o.w+padding||b.y+b.h+padding<=o.y||b.y>=o.y+o.h+padding));
+ if(!position)throw Error('No clear position beside this device. Move nearby devices first.');
+ return new Map(boxes.map(b=>[b.key,[position.x-x,position.y-y]]));
+}
