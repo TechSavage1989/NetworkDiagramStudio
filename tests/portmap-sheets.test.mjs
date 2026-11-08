@@ -162,19 +162,25 @@ test('faceplate captions grow to a readable size without pushing a dense chassis
  for(const c of plate.children.filter(c=>c.type==='text'&&c.size>5)){const box={x:plate.x+c.x*plate.w,y:plate.y+c.y*plate.h+(c.h*plate.h-c.size*1.2)/2,w:c.w*plate.w,h:c.size*1.2};assert.ok(!blocked.some(b=>intersects(box,b,0)),c.value+' stays clear of numbers and faces');}
 });
 
-test('builder port maps share one tagged-dot size, the largest that fills the most filled port',()=>{
+test('builder port maps grow tagged dots to fill the most filled jack, centered, one size per map',()=>{
  const vlans=Array.from({length:30},(_,i)=>({id:10+i,name:'Lab VLAN '+(10+i)})),ids=vlans.map(v=>v.id);
  const chassis=(id,max)=>({id,name:'LAB-'+id,kind:'switch',vendor:'HPE Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,
   ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:ids[0],tagged:ids.slice(6,6+(i%max)+1)})),...Array.from({length:24},(_,i)=>({name:'C'+(i+1),state:'up',native:ids[i%6],tagged:ids.slice(6,6+(i%max)+1)}))]});
- const sheets=project=>buildAllPages(project).filter(page=>page.portMap?.switchportSheet),sizes=page=>new Set(page.items.filter(i=>i.reportPortRole==='tagged'&&i.type==='ellipse').map(i=>i.w.toFixed(3)));
- // Alone, a sparse map grows its dots past the builder radius; a denser map is
- // limited by its most filled port.
- const [sparse]=sheets({name:'Sparse',devices:[chassis('sparse',3)],links:[],layout:{}}),[dense]=sheets({name:'Dense',devices:[chassis('dense',14)],links:[],layout:{}});
- assert.ok(sparse.reportMarkerFit>dense.reportMarkerFit,'fewer markers allow larger dots');assert.ok(dense.reportMarkerFit>=1.5,'dots never shrink below the builder minimum');
- for(const page of [sparse,dense]){assert.equal(sizes(page).size,1,'one dot size per map');assert.ok(Math.abs([...sizes(page)][0]/2-page.reportMarkerFit)<1e-3,'the map uses its fill size');}
- // Together, every map draws the common size of the most filled port.
- const both=sheets({name:'Both',devices:[chassis('sparse',3),chassis('dense',14)],links:[],layout:{}}),all=new Set(both.flatMap(page=>[...sizes(page)]));
- assert.equal(both.length,2);assert.equal(all.size,1,'every port map shares one dot size');assert.ok(Math.abs([...all][0]/2-dense.reportMarkerFit)<1e-3,'the common size fills the most filled port');
- // Every tagged VLAN is still drawn.
- for(const page of both){const d=page.portMap.device==='dense'?chassis('dense',14):chassis('sparse',3);assert.equal(page.items.filter(i=>i.reportPortRole==='tagged').length,d.ports.reduce((n,p)=>n+p.tagged.length,0));}
+ const pages=buildAllPages({name:'Fill lab',devices:[chassis('sparse',3),chassis('dense',14)],links:[],layout:{}}).filter(page=>page.portMap?.switchportSheet),sheet=id=>pages.find(page=>page.portMap.device===id);
+ const dots=page=>page.items.filter(i=>(i.reportPortRole==='tagged'&&i.type==='ellipse')),sizes=page=>new Set(dots(page).map(i=>i.w.toFixed(3)));
+ for(const page of pages){assert.equal(sizes(page).size,1,'one dot size per map');assert.ok(Math.abs([...sizes(page)][0]/2-page.reportMarkerFit)<1e-3,'the map draws its fill size');}
+ assert.ok(sheet('sparse').reportMarkerFit>sheet('dense').reportMarkerFit,'a sparser map takes larger dots');assert.ok(sheet('dense').reportMarkerFit>2.1,'the dense map grows past the builder radius');
+ for(const page of pages){
+  const faces=new Map(page.items.filter(i=>i.reportPortRole==='native'&&/\|face$/.test(i.editKey||'')).map(i=>[i.reportPort,i])),byPort=new Map();
+  for(const dot of dots(page))byPort.set(dot.reportPort,[...(byPort.get(dot.reportPort)||[]),dot]);
+  let widest=0;
+  for(const [port,list] of byPort){
+   const face=faces.get(port),xs=list.map(d=>d.x+d.w/2),left=Math.min(...list.map(d=>d.x)),right=Math.max(...list.map(d=>d.x+d.w)),top=Math.min(...list.map(d=>d.y)),bottom=Math.max(...list.map(d=>d.y+d.h));
+   // The block is centered across the jack and inside its face.
+   assert.ok(Math.abs((left+right)/2-(face.x+face.w/2))<.6,port+' dots are centered');assert.ok(left>=face.x&&right<=face.x+face.w&&top>=face.y&&bottom<=face.y+face.h,port+' dots stay on the face');
+   widest=Math.max(widest,Math.max((right-left)/(face.w-4),(bottom-top)/(face.h-5)));
+  }
+  assert.ok(widest>.85,'the most filled jack is filled');
+  const d=chassis(page.portMap.device,page.portMap.device==='dense'?14:3);assert.equal(page.items.filter(i=>i.reportPortRole==='tagged').length,d.ports.reduce((n,p)=>n+p.tagged.length,0),'every tagged VLAN is drawn');
+ }
 });

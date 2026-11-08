@@ -110,7 +110,7 @@ Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
 Owner follow-up (printable port maps, port names and off-page tags):
 - Owner decision (latest): port maps use the Switchport builder sheet by default, painted in each device's core-diagram artwork colors. This gives the most room and the builder's exact jack, number and key proportions.
   - Slot panels take the device's plate color; a chassis shows its frame color around and between module-bay-colored slots. Numbers and slot captions turn white on dark plates.
-  - Tagged dots share one size across every port map: the largest that still fills the most filled port of any map (never below the builder minimum, capped for sparse maps).
+  - Tagged dots grow to fill the jacks: each map uses one dot size, the largest at which its most filled port still holds every dot, drawn as a centered grid that grows outward from the middle of the face. A shared size across all maps was tried and rejected by the owner because a dense device shrank every other map's dots.
   - Port map options > Port map style > "Realistic device faceplate artwork" (layout.portMap.mapStyle 'faceplate') keeps the faceplate sheet described next. Its chassis slot line now moves to the next sheet instead of running into the footer key.
 - Realistic faceplate style (now optional):
   - Uses the faceplate artwork on a US Letter sheet.
