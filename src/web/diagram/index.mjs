@@ -272,7 +272,8 @@ function bookletKey(page,top,devices,palette,project){
 // then every port record in one table. Ports with identical configuration
 // share a row (port count in brackets); live state and peers stay per port.
 function bookletInventory(project,db,device,ports,options,palette,grouped){
- const {width:W,height:H}=pageGeometry(project,'ports'),filter=options.detailFilter||'all',sorted=ports.slice().sort(comparePorts),prefix=portColumnPrefix(sorted.map(p=>p.name));
+ // Natural order keeps chassis slots together (A1-A8, then B1) and numeric member/port order.
+ const {width:W,height:H}=pageGeometry(project,'ports'),filter=options.detailFilter||'all',sorted=ports.slice().sort((a,b)=>cmp(a.name,b.name)||comparePorts(a,b)),prefix=portColumnPrefix(sorted.map(p=>p.name));
  // Short columns keep their heading readable; Description, Tagged VLANs and
  // Connected to share the rest of the page width.
  const spec=[['Ports'+(prefix?' ('+prefix+')':''),112],['Description',190,true],['Mode',112],['Native',80],['Tagged VLANs',160,true],['LAG',52],['Voice',52],['Link',122],['Connected to',230,true]],span=W-72,total=spec.reduce((n,c)=>n+c[1],0);
