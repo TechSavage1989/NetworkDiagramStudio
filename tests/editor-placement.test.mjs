@@ -41,3 +41,8 @@ test('stack uplinks with logical observations have separate orthogonal routes an
   for(const s of segments)if(s.path!==path&&s.h===h&&Math.abs(s.axis-axis)<4)assert.ok(Math.min(s.hi,hi)<=Math.max(s.lo,lo)+.001,'parallel cables must stay apart');segments.push({path,h,axis,lo,hi});
  }}
 });
+test('generated handoffs cannot reuse a retained physical observation index after logical filtering',()=>{
+ const project={devices:[{id:'f',name:'LAB-EDGE',kind:'firewall',model:'FortiGate 120G',ports:[{name:'port1',role:'wan',gateway:'192.0.2.1'},{name:'port2'}]},{id:'s',name:'LAB-SW',kind:'switch',model:'JL558A',ports:[{name:'1/50'}]}],links:[{a:'f',ap:'VLAN20',b:'s',bp:'1/50'},{a:'f',ap:'port2',b:'s',bp:'1/50'}]};
+ const page=buildPages(project)[0],paths=page.items.filter(i=>i.type==='path');assert.equal(paths.length,2);assert.equal(new Set(paths.map(p=>[p.from.device,p.from.port,p.to.device,p.to.port].join('|'))).size,2);
+ const physical=paths.find(p=>p.sourceLink.a==='f');assert.equal(physical.from.port,'port2');assert.equal(physical.to.port,'1/50');assert.deepEqual(physical.points[0],[physical.from.x,physical.from.y]);assert.deepEqual(physical.points.at(-1),[physical.to.x,physical.to.y]);
+});

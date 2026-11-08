@@ -22,6 +22,7 @@ const FITS=[244,208,176].flatMap(sidebarWidth=>[1,.85,.7].flatMap(padding=>[12,6
 const spacing=padding=>({pitch:GAP*padding,topClearance:38+12*padding,bottomClearance:14+4*padding});
 function handoffs(db,suppressed=[]){
  const devices=new Map(),links=[...db.links];
+ let nextIndex=db.links.reduce((max,link)=>Math.max(max,link.idx),-1)+1;
  for(const d of db.devices.values()){
   if(d.kind!=='ap')for(const port of physicalPorts(d)){
    if(db.links.some(l=>l.a===d.id&&l.ap===port.name||l.b===d.id&&l.bp===port.name))continue;
@@ -31,7 +32,7 @@ function handoffs(db,suppressed=[]){
    if(db.devices.has(id)||suppressed.includes(id))continue;
    devices.set(id,{id,name:typeof port.handoff==='string'?port.handoff:uplink.description||port.description||port.name+' handoff',kind:'handoff',model:uplink.zone||'Site handoff',ip:gateways.length?'Gateway '+gateways.join(', '):'',ports:[{name:'handoff'}],owner:d.id,ownerPort:port.name});
    const capability=portCapability(hardwareProfile(d),port.name);
-   links.push({a:id,ap:'handoff',b:d.id,bp:port.name,media:port.media||(/(?:base-t$|^RJ.?45$)/i.test(capability||'')?'copper':'unknown'),speed:port.speed,status:'configured',idx:links.length});
+   links.push({a:id,ap:'handoff',b:d.id,bp:port.name,media:port.media||(/(?:base-t$|^RJ.?45$)/i.test(capability||'')?'copper':'unknown'),speed:port.speed,status:'configured',idx:nextIndex++});
   }
   devices.set(d.id,d);
  }
