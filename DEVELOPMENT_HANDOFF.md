@@ -1,3 +1,45 @@
+## Compact network page arrangements (unreleased, after preview.33)
+
+Owner request: by default, network devices should take the least space possible. There should be an option to arrange them in a particular way, for example a vertical stack or a compact square, while the existing orientation and alignment tools stay. Placement follows the order configured with the existing tools. It must work for any device that configurations are provided for.
+
+Layout (compact-layout.mjs, core.mjs, layout.mjs, core-arrangement.mjs):
+- columnLayouts partitions the saved order into balanced columns, reading down each column and then across. Bodies share their column's left edge.
+- Compact scores the finished sheet's estimated area, including the legend column, heading, left rail reserve, column gaps and exterior rails. Strips wider than about 3:1 are penalized, and cable length is a small extra term.
+- Fixed choices are Vertical stack and 2, 3 or 4 columns.
+- On a capacity error, Compact tries its next two ranked arrangements at the standard rail pitch before widening rails. A fixed choice that cannot be routed falls back to Compact, then to one column, and sets arrangementFallback.
+- Multi-column pages reserve left rails only for the first column. Dynamic headings shrink to their text after labels are placed, so sheets end at their content.
+
+Routing (routing.mjs, labels.mjs):
+- Cross-column cables start in the gap between their columns.
+- A final repair separates rows and rails left closer than the visible gap, or rails too close to equipment. It may trade one crossing for a merged segment.
+- A cable's rows and rail stay outside its own modular chassis, even through empty slots.
+- Interior collinear spikes are collapsed.
+- Center-corridor tracks with overlapping channels are spread together.
+- Media captions gain a stacked two-line inline candidate after the existing callouts.
+
+Editor:
+- Edit drawing has an Arrange selector, and Pages & layout has Network page arrangement (Drawing defaults) and Device arrangement (named pages).
+- Changing an arrangement clears device, caption, label and bend positions on the affected pages, keeping sizes, text and styles, as one Undo step.
+- tests/browser-core-arrangement.mjs covers the toolbar, Undo/Redo and the dialog.
+
+Measured on fictional fixtures (page size; previous default → Compact):
+
+| Fixture | Previous default | Compact |
+| --- | --- | --- |
+| Sample | 1200×897 | 1200×897, one column |
+| Modular lab | 1608×2148 | 2008×1369, two columns |
+| Campus lab | 2208×2393 | 2832×1041, three columns |
+| 16-device lab | 3196×2767 | 3012×1581, three columns |
+
+On the 16-device lab:
+- hop arcs fall from 134 to 72;
+- close parallels fall from 2 to 0;
+- cable length falls by about a third.
+
+Known limits:
+- With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
+- Fixed paper keeps the existing column pagination.
+
 ## Even cable rhythm and switchport-style port sheets (unreleased, after preview.33)
 
 Owner request: core connections were too close in horizontal parallel, ran tight against devices (especially on the left), were unevenly and often widely spaced, and could leave through the empty top module or split between sides. Port maps should drop the color blocks behind port numbers and follow the Switchport Diagram Builder sheets as Configuration Inspector draws them.

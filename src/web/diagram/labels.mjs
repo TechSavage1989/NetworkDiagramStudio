@@ -106,18 +106,25 @@ export function placeCableLabels(page,requests,edits={}){
     }
    }
   }
+  const late=[];
   if(owner&&req.role==='media'){
    // Visio-style connector text: one line on the cable itself, on a white
    // background. Dense parallel bundles keep their even pitch instead of being
    // pushed apart only to make room for captions beside each cable.
    const th=size+4,parts=lines.map(s=>textWidth(s.value,size,s.patch.bold!==false)+8),total=parts.reduce((a,b)=>a+b,0);
    const runs=owner.points.slice(1).map((b,i)=>[owner.points[i],b]).sort(([a,b],[c,d])=>Math.abs(d[0]-c[0])+Math.abs(d[1]-c[1])-Math.abs(b[0]-a[0])-Math.abs(b[1]-a[1]));
-   for(const [a,b] of runs){
-    const vertical=a[0]===b[0],axis=vertical?1:0,lo=Math.min(a[axis],b[axis])+12,hi=Math.max(a[axis],b[axis])-12-total;
+   // A short run, or one shared with a port label, may still hold the same
+   // caption as two stacked lines centered on the cable.
+   const stacked=lines.length>1?Math.max(...parts):Infinity;
+   for(const [length,stack] of [[total,false],[stacked,true]])for(const [a,b] of runs){
+    const list=stack?late:candidates;
+    if(!Number.isFinite(length))continue;
+    const vertical=a[0]===b[0],axis=vertical?1:0,lo=Math.min(a[axis],b[axis])+12,hi=Math.max(a[axis],b[axis])-12-length;
     if(hi<lo)continue;
-    for(const t of [.5,.35,.65,.2,.8,.05,.95]){
-     const along=lo+(hi-lo)*t;
-     candidates.push(vertical?{x:a[0]-total/2,y:along+total/2-th/2,w:total,h:th,angle:Math.PI/2,inline:true,parts}:{x:along,y:a[1]-th/2,w:total,h:th,inline:true,parts});
+    const steps=new Set([.5,.35,.65,.2,.8,.05,.95].map(t=>lo+(hi-lo)*t));for(let along=lo;along<=hi&&steps.size<48;along+=8)steps.add(along);
+    for(const along of steps){
+     const across=stack?th*lines.length:th;
+     list.push(vertical?{x:a[0]-length/2,y:along+length/2-across/2,w:length,h:across,angle:Math.PI/2,inline:true,stacked:stack,parts}:{x:along,y:a[1]-across/2,w:length,h:across,inline:true,stacked:stack,parts});
     }
    }
   }
@@ -140,6 +147,7 @@ export function placeCableLabels(page,requests,edits={}){
    for(const dy of [-h-4,4])for(const {x} of positions)candidates.push({x,y:a[1]+dy,w,h});
   }
   const preferred=patches.find(p=>Number.isFinite(p.x)||Number.isFinite(p.y));if(preferred)candidates.unshift({x:preferred.x??(req.side==='right'?req.outer+8:req.outer-w-8),y:preferred.y??req.y-h/2,w:Math.max(w,preferred.w||0),h:Math.max(h,preferred.h||0),angle:preferred.angle});
+  candidates.push(...late);
   const gutter=req.side==='right'?Math.max(req.outer+8,984):sidebar?req.outer-w-8:Math.min(req.outer-w-8,322-w),mainBodies=bodies.filter(b=>b.kind!=='handoff'),gutters=[gutter,...(sidebar?[Math.min(...(mainBodies.length?mainBodies:bodies).map(b=>b.x))-26-w]:[])];
   for(let n=0;n<740;n+=4)for(const sign of [1,-1])for(const x of gutters)candidates.push({x,y:req.y-h/2+n*sign,w,h});
   let box;
@@ -157,6 +165,15 @@ export function placeCableLabels(page,requests,edits={}){
  for(const b of result){if(b.leader)page.items.push({type:'rect',...b.leader,fill:b.color||'#17364A',stroke:'none',weight:0,editKey:b.editKey+'|leader'});
   if(b.inline){
    // Consecutive boxes along the cable; vertical text reads bottom to top.
+   // Stacked captions share one length and sit line by line across the cable.
+   if(b.stacked){
+    const th=b.h/b.lines.length;
+    for(let i=0;i<b.lines.length;i++){
+     const shift=(i-(b.lines.length-1)/2)*th,center=b.angle?{x:b.x+b.w/2+shift,y:b.y+b.h/2}:{x:b.x+b.w/2,y:b.y+b.h/2+shift};
+     page.items.push({type:'text',x:center.x-b.w/2,y:center.y-th/2,w:b.w,h:th,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});
+    }
+    continue;
+   }
    let offset=0;
    for(let i=0;i<b.lines.length;i++){
     const w=b.parts[i],center=b.angle?{x:b.x+b.w/2,y:b.y+b.h/2+b.w/2-offset-w/2}:{x:b.x+offset+w/2,y:b.y+b.h/2};offset+=w;

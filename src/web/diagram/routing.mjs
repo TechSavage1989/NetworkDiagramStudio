@@ -7,7 +7,22 @@ const between=(p,a,b)=>p>Math.min(a,b)+.01&&p<Math.max(a,b)-.01;
 export function simplifyRoute(points){
  const out=[];for(const point of points){const p=[...point];if(out.length&&p[0]===out.at(-1)[0]&&p[1]===out.at(-1)[1])continue;while(out.length>1){const a=out.at(-2),b=out.at(-1);if((a[0]===b[0]&&b[0]===p[0]&&b[1]>=Math.min(a[1],p[1])&&b[1]<=Math.max(a[1],p[1]))||(a[1]===b[1]&&b[1]===p[1]&&b[0]>=Math.min(a[0],p[0])&&b[0]<=Math.max(a[0],p[0])))out.pop();else break;}out.push(p);}return out;
 }
-const clean=simplifyRoute;
+// A collinear spike between two interior turns (down a lane and straight back
+// up the same line) only adds length and a false bend. The first and last
+// segments are never shortened, so a lead cannot reverse through its chassis.
+function collapseSpikes(points){
+ let out=points;
+ for(let changed=true;changed;){
+  changed=false;
+  for(let i=2;i<out.length-2;i++){
+   const [a,b,c]=[out[i-1],out[i],out[i+1]],axis=a[0]===b[0]&&b[0]===c[0]?1:a[1]===b[1]&&b[1]===c[1]?0:-1;
+   if(axis<0||b[axis]>=Math.min(a[axis],c[axis])&&b[axis]<=Math.max(a[axis],c[axis]))continue;
+   out=simplifyRoute([...out.slice(0,i),...out.slice(i+1)]);changed=true;break;
+  }
+ }
+ return out;
+}
+const clean=points=>collapseSpikes(simplifyRoute(points));
 // Shared drawing rhythm (scene units, 96 dpi). Parallel cables keep a visible
 // white gap, cable rails keep clear of every device body, and finished routes
 // are redistributed onto evenly pitched tracks inside each open channel.
@@ -17,6 +32,12 @@ function segments(points){return points.slice(1).map((b,i)=>({a:points[i],b,h:po
 import {crossesText} from './labels.mjs';
 function crossesPanel(route,node){
  // An empty bay is open faceplate: the host's own leads may pass through it.
+ // Once a cable has left its socket, its rows and rail stay outside a modular
+ // chassis, even through empty slots or the gaps between them.
+ if(node.moduleChannel&&route.hosts.includes(node.key)&&route.a&&route.b&&Number.isFinite(route.rail)&&route.shape!=='z'&&route.shape!=='direct'){
+  const middle=[[route.a.exitX,route.a.ay],[route.rail,route.a.ay],[route.rail,route.b.ay],[route.b.exitX,route.b.ay]];
+  if(crossesText(middle,{x:node.x,y:node.y,w:node.w,h:node.h},(route.weight||4)/2-.01))return true;
+ }
  const regions=node.moduleChannel&&!route.hosts.includes(node.key)?[{y:0,h:1}]:node.panelRegions?.length?node.panelRegions.filter(region=>!region.empty||!route.hosts.includes(node.key)):[{y:0,h:1}];
  return regions.some(region=>{
   const box={x:node.x+(region.x??0)*node.w,y:node.y+region.y*node.h,w:(region.w??1)*node.w,h:region.h*node.h};
@@ -139,15 +160,23 @@ export function planModuleEscapes(anchors,{weight=4,pitch=6,minX=-Infinity,maxX=
    }
   }
   // Spread the center tracks evenly across the corridor (order preserved).
-  const byChannel=new Map();
-  for(const t of tracks){const key=t.anchor.moduleEscape.channel.join('/');if(!byChannel.has(key))byChannel.set(key,[]);byChannel.get(key).push(t);}
-  for(const list of byChannel.values()){
+  // Leads leaving up and down share one corridor even when their measured
+  // channels differ slightly, so overlapping channels are spread together
+  // inside their common width.
+  const byChannel=[];
+  for(const t of tracks.slice().sort((a,b)=>a.anchor.moduleEscape.channel[0]-b.anchor.moduleEscape.channel[0])){
+   const [c0,c1]=t.anchor.moduleEscape.channel,group=byChannel.find(g=>Math.min(g.hi,c1)>Math.max(g.lo,c0));
+   if(group){group.list.push(t);group.lo=Math.max(group.lo,c0);group.hi=Math.min(group.hi,c1);}else byChannel.push({list:[t],lo:c0,hi:c1});
+  }
+  for(const {list,lo:c0,hi:c1} of byChannel){
    const sorted=list.slice().sort((a,b)=>a.x-b.x),touch=(a,b)=>Math.min(a.high,b.high)>Math.max(a.low,b.low);
    for(const [i,t] of sorted.entries()){t.layer=0;for(const prior of sorted.slice(0,i))if(touch(prior,t))t.layer=Math.max(t.layer,prior.layer+1);}
-   const layers=Math.max(...sorted.map(t=>t.layer))+1,spec=sorted[0].anchor.moduleEscape,width=Math.max(...sorted.map(t=>t.weight));
-   const lo=spec.channel[0]+width/2,hi=spec.channel[1]-width/2,step=layers>1?Math.min(ROUTE_STYLE.pitch,(hi-lo)/(layers-1)):0;
-   const minimum=Math.max(...sorted.map(t=>(t.weight+width)/2+.25));
-   if(layers>1&&step<minimum-1e-7)continue;
+   const layers=Math.max(...sorted.map(t=>t.layer))+1,width=Math.max(...sorted.map(t=>t.weight));
+   const lo=c0+width/2,hi=c1-width/2,step=layers>1?Math.min(ROUTE_STYLE.pitch,(hi-lo)/(layers-1)):0;
+   // An even spread tighter than the visible gap keeps the planned tracks,
+   // which already hold that gap (or the tight fallback of a full chassis).
+   const minimum=Math.max(...sorted.map(t=>(t.weight+width)/2+.25)),roomy=sorted.every((t,i)=>sorted.every((u,j)=>i===j||!touch(t,u)||Math.abs(t.x-u.x)>=separation(t.weight,u.weight)-1e-7));
+   if(layers>1&&(step<minimum-1e-7||roomy&&step<Math.max(...sorted.map(t=>separation(t.weight,width)))-1e-7))continue;
    const start=(lo+hi)/2-step*(layers-1)/2;
    for(const t of sorted){t.x=start+t.layer*step;result.get(t.anchor).x=t.x;}
   }
@@ -374,7 +403,8 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch}){
   for(const [item,c] of changes)item.set(c);
   for(const r of affected)r.points=composeRoute(r);
   const after=local(affected);
-  if(after[0]<=before[0]&&(fewer||after[1]<=before[1])&&(fewer?after[2]<before[2]:after[2]<=before[2]))return true;
+  // A repair may trade one crossing (drawn with a jump) for a merged segment.
+  if(after[0]<=before[0]&&(fewer==='separate'?after[1]<before[1]||after[1]===before[1]&&after[2]<=before[2]:(fewer||after[1]<=before[1])&&(fewer?after[2]<before[2]:after[2]<=before[2])))return true;
   restore(saved);return false;
  };
  // Device titles sit above a body and model/address details below it. Keep
@@ -466,6 +496,28 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch}){
   restore(stage);
  }
  restore(saved);
+ // Final repair: a run left closer than the visible gap to a parallel cable
+ // moves to the nearest clear coordinate inside its channel, validated like
+ // every other change. Bounded by a small budget per page.
+ const repair=kind=>{
+  const row=kind==='row';let budget=Math.max(40,routes.length*4);
+  for(const group of prepare(kind))for(const item of group){
+   if(budget<=0)return;
+   const lines=routes.filter(o=>o!==item.r).flatMap(o=>segments(o.points).filter(l=>l.h===row).map(l=>({c:l.a[row?1:0],lo:Math.min(l.a[row?0:1],l.b[row?0:1]),hi:Math.max(l.a[row?0:1],l.b[row?0:1]),w:o.weight||4})));
+   // Rails also keep the standard clearance from equipment they run beside.
+   const beside=c=>!row&&!item.lane&&[...nodes.values()].some(n=>overlap(item.lo,item.hi,n.y,n.y+n.h)>1&&(c<n.x?n.x-c:c>n.x+n.w?c-n.x-n.w:-1)>=0&&(c<n.x?n.x-c:c-n.x-n.w)<ROUTE_STYLE.clearance-item.w/2-.01);
+   const crowded=c=>beside(c)||lines.some(l=>overlap(item.lo,item.hi,l.lo,l.hi)>.01&&Math.abs(l.c-c)<separation(item.w,l.w)-.001);
+   if(!crowded(item.c))continue;
+   const options=[];for(let k=1;k<=30;k++)options.push(item.c+k*2,item.c-k*2);
+   for(const c of options){
+    if(c<item.bounds.hardMin-.001||c>item.bounds.hardMax+.001||crowded(c))continue;
+    if((item.joints||[]).some(j=>j.item&&(Math.sign(j.x-item.c)!==Math.sign(j.item.c-c)||Math.abs(j.item.c-c)<separation(item.w,j.item.w)-.001)))continue;
+    budget--;if(apply([[item,c]],'separate')){item.c=c;break;}
+    if(budget<=0)return;
+   }
+  }
+ };
+ repair('row');repair('rail');
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}
 }
 export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true}){
@@ -513,8 +565,17 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   const order=internal.slice().sort((a,b)=>Math.abs(ends.get(a.idx+'/a').ay-ends.get(a.idx+'/b').ay)-Math.abs(ends.get(b.idx+'/a').ay-ends.get(b.idx+'/b').ay)||a.idx-b.idx);
   for(const e of order){
    const a=ends.get(e.idx+'/a'),b=ends.get(e.idx+'/b'),side=sides.get(e.idx),lo=Math.min(a.ay,b.ay)-7,hi=Math.max(a.ay,b.ay)+7;
-   let lane=0;while(tracks.some(t=>t.side===side&&t.lane===lane&&Math.min(hi,t.hi)>Math.max(lo,t.lo)))lane++;
    const lanePitch=Math.max(ROUTE_STYLE.pitch,railPitch),clear=ROUTE_STYLE.clearance;
+   // Equipment in neighboring columns starts in the gap between them, not
+   // around the outside of the whole drawing. Each gap keeps its own lanes.
+   const [west,east]=[a.node,b.node].sort((x,y)=>x.x-y.x),gapLow=west.x+west.w+clear,gapHigh=east.x-clear;
+   if(gapHigh-gapLow>=0&&a.node!==b.node){
+    const key='gap:'+Math.round(gapLow);let lane=0;
+    while(tracks.some(t=>t.side===key&&t.lane===lane&&Math.min(hi,t.hi)>Math.max(lo,t.lo)))lane++;
+    const rail=gapLow+lanePitch*lane,blocked=[...nodes.values()].some(n=>n.y<hi&&n.y+n.h>lo&&rail>n.x-clear+.01&&rail<n.x+n.w+clear-.01);
+    if(rail<=gapHigh+1e-6&&!blocked){tracks.push({side:key,lane,lo,hi,rail});routes.push({e,a,b,side:a.node===west?'right':'left',rail,weight:Math.max(a.anchor.weight||4,b.anchor.weight||4),hosts:[a.node.key,b.node.key],points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});continue;}
+   }
+   let lane=0;while(tracks.some(t=>t.side===side&&t.lane===lane&&Math.min(hi,t.hi)>Math.max(lo,t.lo)))lane++;
    let rail=side==='left'?left-clear-lanePitch*lane:right+clear+lanePitch*lane;
    const blockers=[...nodes.values()].filter(n=>n.y<hi&&n.y+n.h>lo);
    const direction=side==='left'?-1:1;

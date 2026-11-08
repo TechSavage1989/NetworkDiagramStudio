@@ -1,4 +1,5 @@
 import {cleanPresentation,presentation,panelFields,displayPageName} from './presentation.mjs';
+import {CORE_ARRANGEMENT_CHOICES,arrangeCoreLayout} from './core-arrangement.mjs';
 
 export function pageLayoutEditor({project,pages,selected,modal,field,button,apply,close}){
  const layout=structuredClone(project.layout||{});layout.presentation=cleanPresentation(layout.presentation);layout.corePages||=[];layout.reportPages||=[];
@@ -23,6 +24,10 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   else identity.append(el('h3','Drawing defaults'));
   const documentation=global?field(identity,'Document detail',layout.documentation==='full'?'full':'concise',[['concise','Concise - combine shared data and avoid repeated tables'],['full','Full reference - include separate VLAN membership matrices']]):null;
   if(global)identity.append(el('p','Port Inventory keeps complete physical port assignments. Concise pages share identical network definitions across devices and retain unique addresses, routes and logical interfaces. Custom reports and edited reference pages remain available.','hint'));
+  // Network pages read the saved device order down each column, then across.
+  const network=!global&&page?.coreDeviceIds&&!page.reportId,named=network&&page.corePageId?layout.corePages.find(p=>p.id===page.corePageId):null;
+  const arrangement=global?field(identity,'Network page arrangement',layout.coreArrangement||'compact',CORE_ARRANGEMENT_CHOICES):named?field(identity,'Device arrangement',named.arrangement||'',[['','Use drawing default'],...CORE_ARRANGEMENT_CHOICES]):network?field(identity,'Device arrangement (all automatic network pages)',layout.coreArrangement||'compact',CORE_ARRANGEMENT_CHOICES):null;
+  if(arrangement)identity.append(el('p','Compact packs devices into the least area. Every arrangement keeps the saved device order (Device order / Core pages), reading down each column and then across. Choosing a different arrangement replaces moved device positions on those pages; sizes, text and cable styles stay.','hint'));
   const inherited=!global&&check(identity,'Use drawing defaults',!['drawingScale','textScale','panel'].some(k=>own[k]!=null));
   const sizes=el('fieldset','','layout-card');body.append(sizes);sizes.append(el('legend','Size & text'));
   const grid=el('div','','layout-grid');sizes.append(grid);
@@ -58,6 +63,12 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
    if(deviceChecks.length){const chosen=deviceChecks.filter(([,input])=>input.checked).map(([id])=>id);
     if(!page.reportId)layout.coreExclude=(layout.coreExclude||[]).filter(id=>!chosen.includes(id));
     if(definition)definition.devices=chosen;else if(JSON.stringify(chosen)!==JSON.stringify(page.coreDeviceIds)){definition={id:crypto.randomUUID(),name:page.name,devices:chosen,showReferences:true};layout.corePages.push(definition);}
+   }
+   // Last, because it returns fresh page definitions for the whole layout.
+   if(arrangement){
+    const before=named?named.arrangement||'':layout.coreArrangement||'compact',value=arrangement.value;
+    if(value!==before)Object.assign(layout,arrangeCoreLayout({...project,layout},pages,named?{mode:value||null,corePageId:named.id}:{mode:value,scope:'global'}));
+    if(definition)definition=layout.corePages.find(p=>p.id===definition.id)||definition;
    }
   };
   const actions=el('div','','actions layout-footer');body.append(actions);

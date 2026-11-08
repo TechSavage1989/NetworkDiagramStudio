@@ -22,6 +22,9 @@ function campus(){
   link('core','C1','idf3','1/49','copper'),link('core','C2','idf3','2/49','copper'),link('idf1','1/50','access','1/1/27','DAC')]};
 }
 const core=site=>buildPages(site).find(page=>page.name==='Core Network');
+const arranged=(site,coreArrangement)=>({...site,layout:{...site.layout,coreArrangement}});
+// Every check covers the default compact packing and the vertical stack.
+const sites=()=>[sampleSite(),modularRoutingFixture(),campus()].flatMap(site=>[site,arranged(site,'vertical')]);
 const overlap=(a,b,c,d)=>Math.min(Math.max(a,b),Math.max(c,d))-Math.max(Math.min(a,b),Math.min(c,d));
 // Runs outside the equipment: not a socket lead and not inside any body.
 function exteriorRuns(page){
@@ -35,7 +38,7 @@ function exteriorRuns(page){
 }
 
 test('cables keep the standard clearance from every side of every device',()=>{
- for(const site of [sampleSite(),modularRoutingFixture(),campus()]){
+ for(const site of sites()){
   const page=core(site),{bodies,runs}=exteriorRuns(page);assert.ok(runs.length);
   for(const run of runs.filter(run=>!run.h))for(const body of bodies){
    if(overlap(run.lo,run.hi,body.y,body.y+body.h)<=1)continue;
@@ -46,7 +49,7 @@ test('cables keep the standard clearance from every side of every device',()=>{
 });
 
 test('parallel cables keep a visible gap and exterior rails share one even pitch',()=>{
- for(const site of [sampleSite(),modularRoutingFixture(),campus()]){
+ for(const site of sites()){
   const {runs}=exteriorRuns(core(site));
   for(let i=0;i<runs.length;i++)for(let j=i+1;j<runs.length;j++){
    const s=runs[i],t=runs[j];if(s.path===t.path||s.h!==t.h||overlap(s.lo,s.hi,t.lo,t.hi)<=.5)continue;
@@ -54,7 +57,7 @@ test('parallel cables keep a visible gap and exterior rails share one even pitch
   }
  }
  // The fictional chassis bus uses evenly pitched rails, not caption-sized gaps.
- const {bodies,runs}=exteriorRuns(core(modularRoutingFixture())),left=Math.min(...bodies.map(b=>b.x)),rails=[...new Set(runs.filter(r=>!r.h&&r.hi-r.lo>200&&r.c<left).map(r=>Math.round(r.c*100)/100))].sort((a,b)=>a-b);
+ const {bodies,runs}=exteriorRuns(core(arranged(modularRoutingFixture(),'vertical'))),left=Math.min(...bodies.map(b=>b.x)),rails=[...new Set(runs.filter(r=>!r.h&&r.hi-r.lo>200&&r.c<left).map(r=>Math.round(r.c*100)/100))].sort((a,b)=>a-b);
  assert.ok(rails.length>=4);
  for(let i=1;i<rails.length;i++){const step=rails[i]-rails[i-1],tracks=Math.round(step/ROUTE_STYLE.pitch);assert.ok(tracks>=1&&tracks<=2&&Math.abs(step-tracks*ROUTE_STYLE.pitch)<1e-6,'Left rails share the standard pitch instead of caption-sized gaps');}
 });

@@ -6,6 +6,7 @@ import {reportDetailFields} from './report-details.mjs';
 import {reportTools} from './report-ui.mjs';
 import {switchportCatalog} from './reports/catalog-data.mjs';
 import {pageLayoutEditor} from './page-layout-ui.mjs';
+import {arrangeCoreLayout,pageArrangement} from './core-arrangement.mjs';
 import {displayPageName,unpresentPatch,cleanPresentation,presentation} from './presentation.mjs';
 import {withoutDevices} from './device-actions.mjs';
 import {desktopUpdates} from './desktop-updates.mjs';
@@ -89,7 +90,7 @@ function syncDrawingSelection(){
  const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls'))n.remove();
  const objects=pages[active]?drawingObjects(pages[active]):[],known=new Set(objects.map(o=>o.editKey));for(const key of drawingSelection)if(!known.has(key))drawingSelection.delete(key);
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
- $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');
+ $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');
  const selectedDevices=selectedDrawingDevices();syncBesideTools();$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
  const cable=selectedCable();$('cable-tools').hidden=!editDrawing||!cable;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
@@ -170,6 +171,14 @@ function snapOptions(){
  button(actions(body),'Save snapping options',()=>{for(const key of ['gridSize','distance','nudge'])if(fields[key].value===''||!Number.isFinite(+fields[key].value)||+fields[key].value<+fields[key].min||+fields[key].value>+fields[key].max)throw Error('Use grid spacing 1-100, snap distance 1-24, and an arrow-key step of 0.1-20.');project.layout||={};project.layout.snapping=cleanSnap(Object.fromEntries(Object.entries(fields).map(([key,input])=>[key,input.type==='checkbox'?input.checked:+input.value])));perform('snapping');close();say('Snapping options saved.');},'primary');
 }
 $('drawing-snap').onclick=()=>task(snapOptions);
+// Re-arranging keeps the saved device order and is one undoable action.
+$('drawing-arrange').onchange=()=>task(()=>{
+ const page=pages[active],mode=$('drawing-arrange').value;if(!page?.coreDeviceIds)return;
+ const previous=project;project={...project,layout:cleanLayout(arrangeCoreLayout(project,pages,{mode,corePageId:page.corePageId}),project.devices.map(d=>d.id))};
+ try{buildPages(scoped());}catch(error){project=previous;$('drawing-arrange').value=pageArrangement(project,page);throw error;}
+ drawingSelection.clear();perform('arrange');viewport.fit();
+ const now=pages.find(p=>p.name===page.name);say(now?.arrangementFallback?'That arrangement could not fit the cables here, so this page uses a compact arrangement instead. Undo is available.':'Devices re-arranged in their saved order. Undo is available.');
+});
 function startDrawingMove(key,event){
  if(besidePick)return null;
  if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]'),axisFor=dragAxis();

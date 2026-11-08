@@ -73,10 +73,10 @@ export function fresh(name,title,subtitle,project){
   const geometry=pageGeometry(project,pageFamily(name));if(project._reportPrefix)name=project._reportPrefix+'|'+name;
   const p={name,title,...geometry,items:[]}, a=p.items,span=p.width-72,nameWidth=Math.max(180,span-308);
   const projectName=project.name||'Network project',nameHeight=Math.max(23,wrapPortText(projectName,nameWidth,15,true).length*18);
-  label(a,36,Math.max(0,39-nameHeight),nameWidth,Math.min(39,nameHeight),projectName,15,true,C.teal);
+  label(a,36,Math.max(0,39-nameHeight),nameWidth,Math.min(39,nameHeight),projectName,15,true,C.teal);a.at(-1).pageHeading='project';
   label(a,p.width-300,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');a.at(-1).pageFrame='brand';
-  label(a,36,43,span,48,title,33,true);a.at(-1).pageTitle=true;
-  label(a,36,99,span,36,subtitle,16,false,C.muted);
+  label(a,36,43,span,48,title,33,true);a.at(-1).pageTitle=true;a.at(-1).pageHeading='title';
+  label(a,36,99,span,36,subtitle,16,false,C.muted);a.at(-1).pageHeading='subtitle';
   rect(a,36,138,span,2,C.rule);a.at(-1).pageFrame='rule';
   return p;
 }

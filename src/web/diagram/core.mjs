@@ -1,13 +1,13 @@
 import {informationPanel} from './information-panel.mjs';
-import {compactLayout} from '../compact-layout.mjs';
+import {columnLayouts} from '../compact-layout.mjs';
 import {equipmentGapPlan,equipmentPadding} from './equipment-layout.mjs';
 import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
-import {coreLinkKey as linkKey} from '../layout.mjs';
+import {coreLinkKey as linkKey,coreArrangement} from '../layout.mjs';
 import {coreSidebar} from './sidebar.mjs';
-import {coreRoutes} from './routing.mjs';
+import {coreRoutes,ROUTE_STYLE} from './routing.mjs';
 import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth} from './labels.mjs';
 import {applyDrawingEdits,editDeviceShape} from '../drawing-edits.mjs';
 import {linkCaption} from '../link-styles.mjs';
@@ -78,7 +78,36 @@ function measurement(project,d,edges,positions,handoffs=[],width=WIDTH,padding=1
  const {pitch,topClearance,bottomClearance}=spacing(padding,weight,wide);
  const top=d.kind==='handoff'?23:Math.max(40+6*padding,counts.top?topClearance+14*padding+pitch*(counts.top-1):0,handoffs.length?handoffRows(handoffs,g.w).height+72+40*padding:0),bottom=d.kind==='handoff'?20:counts.bottom?bottomClearance+26*padding+pitch*(counts.bottom-1):Math.max(24,28*padding);
  const detailHeight=Math.max(18,wrapPortText(deviceDetails(d),g.w,12).length*14.4);
- return {body:g.h,top,equipment,height:d.kind==='handoff'&&d.owner?0:g.h+top+Math.max(bottom,detailHeight+10)+10*padding};
+ return {body:g.h,width:g.w,top,equipment,height:d.kind==='handoff'&&d.owner?0:g.h+top+Math.max(bottom,detailHeight+10)+10*padding};
+}
+// Measured core arrangements for any equipment mix. Compact runs the saved
+// order down balanced columns and keeps the candidate whose device footprint,
+// including cable rails, covers the least area. Very long strips and long
+// cables cost slightly more. Rails between columns are reserved from the
+// links that cross each gap.
+function arrangeCore(boxes,links,{mode='compact',weight=4,extraTracks=0,reserve=()=>0}={}){
+ if(!boxes.length)return [];
+ const pitch=Math.max(ROUTE_STYLE.pitch,weight+ROUTE_STYLE.gap),clear=2*ROUTE_STYLE.clearance+weight,ids=new Set(boxes.map(b=>b.id)),local=links.filter(l=>l.a!==l.b&&ids.has(l.a)&&ids.has(l.b));
+ const tracks=(left,right)=>{const a=new Set(left),b=new Set(right);return local.filter(l=>a.has(l.a)&&b.has(l.b)||a.has(l.b)&&b.has(l.a)).length;};
+ // A gap carries the links that cross it plus about half of the links inside
+ // each neighboring column, which may turn toward either exterior side.
+ const inside=column=>{const set=new Set(column);return local.filter(l=>set.has(l.a)&&set.has(l.b)).length;};
+ const gapX=(left,right,i,columns)=>clear+pitch*Math.max(0,tracks(left,right)+Math.ceil((inside(columns[i])+inside(columns[i+1]))/2)+extraTracks-1);
+ const options={gapX,gapY:12},fixed=Number(/^columns-(\d)$/.exec(mode)?.[1]);
+ const layouts=mode==='vertical'?columnLayouts(boxes,{...options,maxColumns:1}):fixed?columnLayouts(boxes,{...options,minColumns:Math.min(fixed,boxes.length),maxColumns:fixed}):columnLayouts(boxes,{...options,maxColumns:8});
+ // Score the sheet as printed: the legend column (to its divider and margin),
+ // heading, left rail reserve and the rails left outside the columns are part
+ // of its area. A single column reserves the most rail room.
+ const legend=LEFT-94,footer=110;
+ const score=layout=>{
+  const inGaps=layout.ids.slice(1).reduce((n,_,i)=>n+tracks(layout.ids.slice(0,i+1).flat(),layout.ids.slice(i+1).flat()),0);
+  const w=Math.max(1200,legend+reserve(layout)+layout.w+2*clear+pitch*Math.max(0,local.length-inGaps)),h=TOP+footer+layout.h;
+  let distance=0;for(const link of local){const a=layout.positions.get(link.a),b=layout.positions.get(link.b);distance+=Math.abs(a.x+a.w/2-b.x-b.w/2)+Math.abs(a.y+a.h/2-b.y-b.h/2);}
+  // Least area first; strips wider than 3:1 and long cables cost more.
+  const area=w*h,aspect=Math.max(w,h)/Math.max(1,Math.min(w,h));
+  return area*(1+.3*Math.max(0,aspect-3))*(1+.1*(local.length?distance/local.length:0)/Math.sqrt(area));
+ };
+ return layouts.map(layout=>({layout,score:score(layout)})).sort((a,b)=>a.score-b.score||a.layout.columns-b.layout.columns).map(choice=>choice.layout);
 }
 function moduleLegend(page,project){
  const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
@@ -158,10 +187,19 @@ export function corePages(project,inventory){
   const weight=strokeWidth(aliasProject,sheet.name),owners=sheet.ids.filter(id=>!db.devices.get(id).owner||!sheet.ids.includes(db.devices.get(id).owner)),hasPositions=Object.entries(aliasProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|device|')&&(Number.isFinite(patch.x)||Number.isFinite(patch.y)));
   const measuredEdges=edges.map(e=>({...e,weight:cablePatch(aliasProject,{name:sheet.name},cableName(db,e))?.weight||cableWeight}));
   const measured=new Map(dynamic?owners.map(id=>[id,measurement(aliasProject,viewDevice(sheet,id),measuredEdges.filter(e=>e.a===id||e.b===id),positions,(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH,1,weight,railPitch>12)]):[]);
-  const packing=dynamic&&!hasPositions&&!sheet.columnOnly?compactLayout(owners.map(id=>({id,w:WIDTH*deviceScale(aliasProject,viewDevice(sheet,id)),h:measured.get(id).height+expansion})),edges,{gapX:Math.max(48,railPitch*Math.max(0,...owners.map(id=>edges.filter(e=>e.a===id||e.b===id).length))+24),gapY:12,maxColumns:4,minimumWidth:baseW,frameWidth:LEFT+stableReserve+76,frameHeight:TOP+110}):null;
+  const arrangement=sheet.columnOnly?'vertical':sheet.arrangement||coreArrangement(aliasProject,sheet.corePageId);
+  // Several columns leave only the first column's exterior rails, and any
+  // continuation references, on the left; the busiest device's captions are
+  // spread over the gaps. One column keeps the full measured reserve. Later
+  // capacity retries widen this reserve with the canvas.
+  const away=edges.filter(e=>sheet.ids.includes(e.a)!==sheet.ids.includes(e.b)).length;
+  const reserveFor=layout=>{if(layout.columns<2)return stableReserve;const first=new Set(layout.ids[0]),inside=measuredEdges.filter(e=>first.has(e.a)&&first.has(e.b)).length;return ROUTE_STYLE.pitch*Math.max(0,Math.ceil(inside/2)+away-4)+expansion/2;};
+  const choices=dynamic&&!hasPositions?arrangeCore(owners.map(id=>({id,w:measured.get(id).width,h:measured.get(id).height+expansion})),measuredEdges,{mode:arrangement,weight:cableWeight,extraTracks:sheet.columnTracks||0,reserve:reserveFor}):[];
+  const packing=choices[Math.min(sheet.rank||0,choices.length-1)]||null;sheet.choices=choices.length;
   sheet.packedColumns=packing?.columns||1;
   const measuredHeight=dynamic?(packing?.h??[...measured.values()].reduce((sum,m)=>sum+m.height+expansion,0)):0;
-  const W=dynamic?Math.max(baseW+expansion+railReserve*2+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)),packing?LEFT+stableReserve+packing.w+railReserve+38:0):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110):baseH,BOTTOM=H-74;
+  const leftReserve=packing?reserveFor(packing):stableReserve;
+  const W=dynamic?Math.max(baseW+expansion+railReserve*2+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)),packing?LEFT+leftReserve+packing.w+railReserve+38:0):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110):baseH,BOTTOM=H-74;
   const pageProject=dynamic?{...aliasProject,_pageGeometry:{...aliasProject._pageGeometry,core:{width:W,height:H}}}:aliasProject;
   const fit=FITS[sheet.fit||0],fixedSidebar=Object.entries(pageProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|')&&/(?:module-legend|\|legend\|)/.test(key)&&['x','y','w','h'].some(k=>Number.isFinite(patch[k]))),sidebar=coreSidebar(fixedSidebar?244:Math.min(fit.sidebarWidth,W<1000?176:244));
   const panelOptions=presentation(pageProject,sheet.name).panel;
@@ -169,15 +207,15 @@ export function corePages(project,inventory){
   sidebar.textScale=panelOptions.textScale*presentation(pageProject,sheet.name).textScale;
   // Label retries can expand the canvas, but must not move every unedited
   // device sideways while the user is moving one selected device.
-  if(dynamic)sidebar.bodyLeft+=stableReserve;
+  if(dynamic)sidebar.bodyLeft+=leftReserve;
   if(W<1200)sidebar.bodyLeft=Math.max(sidebar.contentLeft+38,Math.min(sidebar.bodyLeft,W-738));
   const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;page.corePageId=sheet.corePageId;
-  page.connectionLayout={railPitch,expansion,padding:fit.padding,spreadHandoffs:!!sheet.spreadHandoffs,columnOnly:!!sheet.columnOnly};
+  page.connectionLayout={railPitch,expansion,padding:fit.padding,spreadHandoffs:!!sheet.spreadHandoffs,columnOnly:!!sheet.columnOnly,arrangement,columns:sheet.packedColumns};page.coreArrangement=arrangement;page.arrangementFallback=!!sheet.fallback;
   const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);rect(items,sidebar.divider,145,1,H-214,C.rule);items.at(-1).pageFrame='sidebar';
   const hiddenReferences=new Set(sheet.hiddenReferences||[]);
   const used=measuredEdges.filter(e=>(localPort(sheet,e.a,e.ap)&&localPort(sheet,e.b,e.bp)||sheet.showReferences!==false&&!hiddenReferences.has(linkKey(e))&&(localPort(sheet,e.a,e.ap)||localPort(sheet,e.b,e.bp)))&&(!sheet.linkIds||sheet.linkIds.has(e.idx)));
   const internal=used.filter(e=>localPort(sheet,e.a,e.ap)&&localPort(sheet,e.b,e.bp)),external=used.filter(e=>!localPort(sheet,e.a,e.ap)||!localPort(sheet,e.b,e.bp));
-  const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.views,sheet.fit,sheet.spreadHandoffs,sheet.expansion,sheet.labelClearance,sheet.columnOnly,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
+  const signature=JSON.stringify([pi,sheet.name,sheet.ids,sheet.views,sheet.fit,sheet.spreadHandoffs,sheet.expansion,sheet.labelClearance,sheet.columnOnly,arrangement,sheet.columnTracks,sheet.rank,external.map(e=>[edgeLocations.get(e.a+'/'+e.idx),edgeLocations.get(e.b+'/'+e.idx)])]),cached=rendered.get(sheet);
   if(cached?.signature===signature)return cached.pages;
   const width=Math.min(WIDTH,W-(W<1000?276:W<1200?344:430)-38);
   const pageSizes=new Map(sheet.ids.map(id=>[id,measurement(pageProject,viewDevice(sheet,id),used.filter(e=>e.a===id&&localPort(sheet,id,e.ap)||e.b===id&&localPort(sheet,id,e.bp)).slice(0,dynamic?Infinity:8),positions,(attachments.get(id)||[]).filter(id=>members.has(id)).map(id=>db.devices.get(id)),width,fit.padding,weight,railPitch>12)]));
@@ -185,7 +223,7 @@ export function corePages(project,inventory){
   if((packing?.h??height)>BOTTOM-TOP)throw Object.assign(Error('This core page needs more room to keep the equipment readable.'),{code:'CORE_LAYOUT_CAPACITY',page:page.name});
   let row=dynamic?TOP:TOP+(BOTTOM-TOP-height*scale)/2;
   sheet.ids.filter(id=>!db.devices.get(id).owner||!members.has(db.devices.get(id).owner)).forEach((id,i)=>{
-   const d=viewDevice(sheet,id),m=pageSizes.get(id),position=packing?.positions.get(id),b=bounds(d,(position?TOP+position.y:row)+m.top*scale,width,sidebar.bodyLeft+(position?.x||0));b[3]=m.body*scale;
+   const d=viewDevice(sheet,id),m=pageSizes.get(id),position=packing?.positions.get(id),b=bounds(d,(position?TOP+position.y:row)+m.top*scale,width,sidebar.bodyLeft+(position?position.x-(width-bounds(d,0,width)[2])/2:0));b[3]=m.body*scale;
    const node=addDevice(page,pageProject,d,b,'core-'+i,{fitWidth:d.kind!=='handoff',...m.equipment});nodes.set(id,node);
    if(d.kind!=='handoff'){
     const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleY=node.y-titleHeight-6;
@@ -262,21 +300,35 @@ export function corePages(project,inventory){
   const fontFactor=presentation(pageProject,page).textScale;for(const request of requests){request.size=12*fontFactor;request.minSize=Math.min(12,request.size);request.fontFactor=fontFactor;}
   const placed=placeCableLabels(page,requests,pageProject.layout?.drawingEdits);
   if(!placed.ok)throw Object.assign(Error('This core page needs more room for the '+placed.failed.role+' label '+JSON.stringify(placed.failed.value)+'. Move devices to another core page under Device order / Core pages.'),{code:'CORE_LAYOUT_CAPACITY',role:placed.failed.role,page:page.name,labelClearance:placed.clearance});
+  // A dynamic page ends at its content: the heading no longer holds the
+  // planned width open, so unused rail reserve does not widen the sheet.
+  if(dynamic){const edits=pageProject.layout?.drawingEdits||{};for(const item of items.filter(i=>i.pageHeading&&!Number.isFinite(edits[i.editKey]?.w)))item.w=Math.min(item.w,Math.max(180,...wrapPortText(item.value,item.w,item.size,item.bold).map(line=>textWidth(line,item.size,item.bold)+8)));fitDynamicPage(page,pageProject);}
   const pages=[page,...modulePages];rendered.set(sheet,{signature,pages});return pages;
  });
  }catch(error){
   const index=packed.findIndex(sheet=>sheet.name===error.page),sheet=packed[index];
   if(error.code!=='CORE_LAYOUT_CAPACITY'||!sheet)throw error;
   if(project._organizeCandidate===true||project._organizeCandidate?.family==='core'&&project._organizeCandidate.name===sheet.name)throw error;
+  // A compact page first tries the next measured arrangements at the standard
+  // rail pitch, so one crowded caption does not spread every cable apart.
+  if((sheet.choices||0)>1&&!sheet.ranked){if((sheet.rank||0)<Math.min(2,sheet.choices-1)){sheet.rank=(sheet.rank||0)+1;continue;}sheet.ranked=true;sheet.rank=0;}
   if(dynamic&&error.labelClearance>(sheet.labelClearance||12)){sheet.labelClearance=error.labelClearance;sheet.expansion=0;sheet.spreadHandoffs=false;continue;}
-  if(sheet.packedColumns>1&&!sheet.columnOnly){sheet.columnOnly=true;continue;}
+  // Then widen the gaps between the chosen columns.
+  if(sheet.packedColumns>1&&!sheet.columnOnly&&(sheet.columnTracks||0)<4){sheet.columnTracks=(sheet.columnTracks||0)+2;continue;}
   // Keep the cards compact; use more of the same stack width only when their
   // cable labels or routes cannot fit safely in the tighter arrangement.
   if(!sheet.spreadHandoffs&&sheet.ids.some(id=>attachments.get(id)?.length>1)){sheet.spreadHandoffs=true;continue;}
   if(!dynamic&&(sheet.fit||0)<FITS.length-1){sheet.fit=(sheet.fit||0)+1;sheet.spreadHandoffs=false;continue;}
   if(dynamic){
    if(error.labelClearance>(sheet.labelClearance||12)){sheet.labelClearance=error.labelClearance;sheet.expansion=0;sheet.spreadHandoffs=false;continue;}
-   if((sheet.expansion||0)>=768)throw error;
+   if((sheet.expansion||0)>=768){
+    // A chosen column count that cannot be routed falls back to the compact
+    // arrangement, then to one column, instead of failing the drawing.
+    const reset={rank:0,ranked:false,expansion:0,labelClearance:0,columnTracks:0,fit:0,spreadHandoffs:false};
+    if(!sheet.arrangement&&coreArrangement(project,sheet.corePageId)!=='compact'&&coreArrangement(project,sheet.corePageId)!=='vertical'){Object.assign(sheet,reset,{arrangement:'compact',fallback:true});continue;}
+    if(!sheet.columnOnly&&(sheet.packedColumns||1)>1){Object.assign(sheet,reset,{columnOnly:true,fallback:true});continue;}
+    throw error;
+   }
    sheet.expansion=(sheet.expansion||0)+128;sheet.fit=0;sheet.spreadHandoffs=false;continue;
   }
   // A named group can continue at full device scale, just like an automatic group.
