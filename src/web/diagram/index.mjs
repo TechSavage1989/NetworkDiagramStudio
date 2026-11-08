@@ -131,41 +131,44 @@ function readablePlateText(g,obstacles=[],maximum=11){
   }
  }
 }
-// Jack faces keep their real proportions and grow until neighbouring jacks
-// touch (edge to edge), with no port number covered and every face on the
-// plate. Copper jacks share one scale; optical cages, usually with more room
-// in their modules, share their own, sized around the copper faces.
-function faceScales(g,entries,limit=2.6){
- const faces=entries.filter(e=>e.socket),optical=e=>!/rj|copper|base-?t/i.test(String(e.socket.form||'RJ45'));
- const center=b=>[b.x+b.w/2,b.y+b.h/2],scales=new Map(),fixed=[];
- const against=(a,box)=>{const [ax,ay]=center(a),[bx,by]=center(box);return Math.max((Math.abs(ax-bx)-box.w/2)/(a.w/2),(Math.abs(ay-by)-box.h/2)/(a.h/2));};
- const pair=(a,b)=>{const [ax,ay]=center(a),[bx,by]=center(b);return Math.max(Math.abs(ax-bx)/((a.w+b.w)/2),Math.abs(ay-by)/((a.h+b.h)/2));};
- for(const group of [faces.filter(e=>!optical(e)),faces.filter(optical)]){
-  if(!group.length)continue;let k=limit;
-  for(const [i,e] of group.entries()){
-   const a=e.socket,[ax,ay]=center(a);
-   for(const other of group.slice(i+1))k=Math.min(k,pair(a,other.socket));
-   for(const other of faces)if(!group.includes(other)&&!scales.has(other))k=Math.min(k,against(a,other.socket));
-   for(const box of fixed)k=Math.min(k,against(a,box));
-   for(const n of entries.map(x=>x.number).filter(Boolean))k=Math.min(k,against(a,n));
-   k=Math.min(k,(ax-g.x)/(a.w/2),(g.x+g.w-ax)/(a.w/2),(ay-g.y)/(a.h/2),(g.y+g.h-ay)/(a.h/2));
-  }
-  k=Math.max(1,k);
-  for(const e of group){scales.set(e,k);const a=e.socket;fixed.push({x:a.x+a.w/2-a.w*k/2,y:a.y+a.h/2-a.h*k/2,w:a.w*k,h:a.h*k});}
+// Jack faces take the switchport builder's shapes: copper 25.2 x 23.2 and
+// optical 25.2 x 16.2. Copper jacks share one width, as large as the plate
+// allows, then optical cages share theirs around the copper faces (optical
+// modules usually have more room, and the extra width holds more dots). A face
+// keeps the edge beside its port number and grows away from it, so rows meet
+// edge to edge; faces stay inside their own module, never cover a number and
+// always cover the jack artwork. A group that cannot take the builder shape
+// keeps its jack's proportions and grows uniformly instead.
+const FACE_HEIGHT={copper:23.2/25.2,optical:16.2/25.2};
+function faceBoxes(g,entries,limit=2.6){
+ const faces=entries.filter(e=>e.socket),result=new Map();if(!faces.length)return result;
+ const copper=e=>/rj|copper|base-?t/i.test(String(e.socket.form||'RJ45')),ratio=e=>copper(e)?FACE_HEIGHT.copper:FACE_HEIGHT.optical,eps=1e-6;
+ const over=(a,b)=>a.x<b.x+b.w-eps&&b.x<a.x+a.w-eps&&a.y<b.y+b.h-eps&&b.y<a.y+a.h-eps,within=(b,r)=>b.x>=r.x-eps&&b.y>=r.y-eps&&b.x+b.w<=r.x+r.w+eps&&b.y+b.h<=r.y+r.h+eps;
+ const numbers=entries.map(e=>e.number).filter(Boolean),bound=e=>e.region&&within(e.socket,e.region)?e.region:g;
+ const shaped=(e,w)=>{const s=e.socket,h=w*ratio(e),side=e.number?.side;return {x:s.x+s.w/2-w/2,y:side==='above'?s.y:side==='below'?s.y+s.h-h:s.y+s.h/2-h/2,w,h};};
+ const scaled=(e,k)=>{const s=e.socket;return {x:s.x+s.w/2-s.w*k/2,y:s.y+s.h/2-s.h*k/2,w:s.w*k,h:s.h*k};};
+ const fits=(group,make,v,obstacles)=>{const boxes=group.map(e=>make(e,v));return boxes.every((b,i)=>within(b,bound(group[i]))&&!numbers.some(n=>over(b,n))&&!obstacles.some(o=>over(b,o))&&boxes.every((o,j)=>j<=i||!over(b,o)));};
+ const grow=(group,make,low,high,obstacles)=>{if(!(high>=low)||!fits(group,make,low,obstacles))return null;if(fits(group,make,high,obstacles))return high;let lo=low,hi=high;for(let i=0;i<24;i++){const mid=(lo+hi)/2;if(fits(group,make,mid,obstacles))lo=mid;else hi=mid;}return lo;};
+ const span=group=>[Math.max(...group.map(e=>Math.max(e.socket.w,e.socket.h/ratio(e)))),limit*Math.max(...group.map(e=>e.socket.w))];
+ const groups=[faces.filter(copper),faces.filter(e=>!copper(e))].filter(group=>group.length),placed=[];
+ for(const [index,group] of groups.entries()){
+  const obstacles=[...placed,...groups.slice(index+1).flat().map(e=>e.socket)];let make=shaped,v=grow(group,shaped,...span(group),obstacles);
+  if(v==null){make=scaled;v=grow(group,scaled,1,limit,obstacles)??1;}
+  for(const e of group){const box=make(e,v);result.set(e,box);placed.push(box);}
  }
- return scales;
+ return result;
 }
 function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null,format=null,unconfiguredFill=null}={}){
  const size=10*(fontScale??1),minimum=8*(fontScale??1),formatting=format?{format}:{};
  let layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,measureRequired:false,...formatting});
  if(!layout.readable)layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,vertical:true,...formatting});
  if(!layout.readable){const alternatives=[false,true].map(vertical=>portLabelLayout(g,ports,{fontSize:minimum,minFontSize:minimum,minWidth:0,vertical})),required=alternatives.map(v=>v.requiredWidth).filter(Number.isFinite);throw Object.assign(Error('This port map needs a wider device to keep the port numbers readable. Use a wider page or the Switchport report layout.'),{code:'PORT_LABEL_CAPACITY',requiredWidth:required.length?Math.min(...required):null,sourceId:g.sourceId});}
- // Port maps with VLAN marks enlarge every jack face on the plate together.
- const scales=marks?faceScales(g,layout.entries):null;
+ // Port maps with VLAN marks give every jack face on the plate the builder's shape.
+ const faces=marks?faceBoxes(g,layout.entries):null;
  for(const entry of layout.entries){
-  const {port,text,number:box,content:inner,editKey:key,socket}=entry,grow=scales?.get(entry)||1;
-  const face=socket&&grow>1?{x:socket.x+socket.w/2-socket.w*grow/2,y:socket.y+socket.h/2-socket.h*grow/2,w:socket.w*grow,h:socket.h*grow}:null;
-  const content=face&&inner?{x:face.x+(inner.x-socket.x)*grow,y:face.y+(inner.y-socket.y)*grow,w:inner.w*grow,h:inner.h*grow}:inner;const active=selected?.has(port.name.toLowerCase()),color=port.unconfigured?unconfiguredFill:selected?(active?referencePortFills.ap:null):fill(port),metadata={portName:port.name,sourceId:g.sourceId},mark=port.unconfigured?null:marks?.(port);
+  const {port,text,number:box,content:inner,editKey:key,socket}=entry,shape=faces?.get(entry);
+  const face=socket&&shape&&(Math.abs(shape.w-socket.w)>1e-6||Math.abs(shape.h-socket.h)>1e-6||Math.abs(shape.y-socket.y)>1e-6)?shape:null;
+  const kx=face?face.w/socket.w:1,ky=face?face.h/socket.h:1,content=face&&inner?{x:face.x+(inner.x-socket.x)*kx,y:face.y+(inner.y-socket.y)*ky,w:inner.w*kx,h:inner.h*ky}:inner;const active=selected?.has(port.name.toLowerCase()),color=port.unconfigured?unconfiguredFill:selected?(active?referencePortFills.ap:null):fill(port),metadata={portName:port.name,sourceId:g.sourceId},mark=port.unconfigured?null:marks?.(port);
   // An enlarged face keeps the jack look: a dark frame around the fill.
   (layout.faces||=[]).push(face||socket);
   if(face){rect(items,face.x,face.y,face.w,face.h,'#2B3440','#1B222B',.6);Object.assign(items.at(-1),{portName:port.name,sourceId:g.sourceId,editKey:key+'|socket-face',portNumberRole:'face'});}

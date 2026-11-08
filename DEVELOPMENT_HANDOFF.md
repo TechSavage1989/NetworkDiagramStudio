@@ -94,7 +94,7 @@ Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
 Owner follow-up (printable port maps, port names and off-page tags):
 - Owner preference: keep the realistic faceplates.
   - Port maps use the faceplate artwork on a US Letter sheet by default.
-  - Jack faces on built-in plates grow in proportion, copper and optical separately, up to edge to edge, so the VLAN dots stay readable. The plate keeps its shape.
+  - Jack faces on built-in plates take the Switchport builder's shapes: copper 25.2 x 23.2 and optical 25.2 x 16.2. Each media type shares one width, and faces grow away from their port numbers until rows meet edge to edge. Where a plate has no room for that shape (tight rows on a 48-port stack member), copper keeps its own proportions. The plate keeps its shape.
   - Module, bay and model captions on the plate grow to a readable size (up to 11 px) after the port numbers and faces are placed, so they never push a map off Letter.
   - The VLAN key moves under the hardware when that leaves fewer '+' markers.
   - The builder sheet described below is now the Port map options > Port map style choice "Switchport builder sheet".

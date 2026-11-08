@@ -114,14 +114,18 @@ test('the switchport builder sheet style draws each switch port map on US Letter
  const faceplate=buildAllPages({...site,layout:{}});assert.ok(!faceplate.some(page=>page.portMap?.switchportSheet));assert.ok(faceplate.some(page=>page.portMap?.overview&&page.items.some(item=>item.portNumberRole==='socket')));
 });
 
-test('port maps keep the realistic faceplate on a US Letter sheet by default, with proportionally larger jacks for readable dots',()=>{
+test('port maps keep the realistic faceplate on a US Letter sheet by default, with builder-shaped jacks for readable dots',()=>{
  const vlans=Array.from({length:26},(_,i)=>({id:100+i,name:'Lab '+(100+i)}));
  const core={id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,ports:[{name:'A1',state:'up',native:100,tagged:vlans.slice(1,13).map(v=>v.id)},{name:'C1',state:'up',native:100,voice:125,tagged:vlans.slice(1,13).map(v=>v.id)}]};
  const page=buildAllPages({name:'Letter lab',devices:[core],links:[]}).find(p=>p.portMap?.overview);
  assert.equal(Math.round(page.width),1056);assert.equal(Math.round(page.height),816);assert.ok(!page.portMap.switchportSheet,'the faceplate artwork is the default');
- // Jack faces grow together, keeping their proportions, and never overlap.
+ // Jack faces grow together and never overlap.
  const faces=page.items.filter(i=>i.portNumberRole==='face'),plate=page.items.find(i=>i.type==='device'&&i.sourceId==='core');assert.ok(faces.length,'jack faces are enlarged');
- for(const face of faces){const socket=plate.children.find(c=>c.socketPart===0&&Math.abs(plate.x+(c.x+c.w/2)*plate.w-(face.x+face.w/2))<.5&&Math.abs(plate.y+(c.y+c.h/2)*plate.h-(face.y+face.h/2))<.5);if(socket)assert.ok(Math.abs(face.w/face.h-(socket.w*plate.w)/(socket.h*plate.h))<.01,'a face keeps its jack proportions');}
+ // Faces take the switchport builder's shapes and cover their jack artwork.
+ const sockets=plate.children.filter(c=>c.socketPart===0).map(c=>({x:plate.x+c.x*plate.w,y:plate.y+c.y*plate.h,w:c.w*plate.w,h:c.h*plate.h}));
+ for(const face of faces){const optical=/^A/.test(face.portName),ratio=optical?25.2/16.2:25.2/23.2;assert.ok(Math.abs(face.w/face.h-ratio)<.01,face.portName+' uses the builder proportions');
+  assert.ok(sockets.some(s=>s.x>=face.x-1e-6&&s.y>=face.y-1e-6&&s.x+s.w<=face.x+face.w+1e-6&&s.y+s.h<=face.y+face.h+1e-6),face.portName+' covers its jack');}
+ const width=prefix=>new Set(faces.filter(f=>f.portName.startsWith(prefix)).map(f=>f.w.toFixed(3)));assert.equal(width('A').size,1,'optical faces share one width');assert.equal(width('C').size,1,'copper faces share one width');
  for(let i=0;i<faces.length;i++)for(let j=i+1;j<faces.length;j++)assert.ok(!intersects(faces[i],faces[j],-.01),'faces may touch but not overlap');
  for(const name of ['A1','C1']){const dots=page.items.filter(i=>i.portNumberRole==='tagged'&&i.portName===name);assert.equal(dots.length,12,name+' shows every tagged VLAN');assert.ok(dots.every(d=>d.w/2>=1.5-1e-9),name+' dots stay readable');}
  assert.ok(!page.items.some(i=>i.portNumberRole==='tagged-more'));
