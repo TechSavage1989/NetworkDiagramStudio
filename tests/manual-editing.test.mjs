@@ -73,7 +73,9 @@ test('endpoint selectors include unused model jacks and reject an occupied port 
 });
 test('crossing hops have visible clearance, scale to nearby crossings, and skip shared endpoints',async()=>{
  const line=(points,color)=>({type:'path',points,color,name:'Test',weight:2.2}),p={title:'Crossing',items:[line([[0,20],[100,20]],'#FF0000'),line([[30,0],[30,60]],'#00B0F0'),line([[34,0],[34,60]],'#00B050'),line([[0,20],[0,60]],'#000000')]};
- bridge(p);assert.ok(p.items[1].commands.some(c=>c[0]==='A'));assert.equal(p.items[3].hops.length,0);assert.match(svgPage(p),/class="link-hop-clearance"/);assert.ok(p.items[1].hops[0].w>5);
+ // The red line crosses a tight pair of verticals, so it makes one bridge over both.
+ bridge(p);assert.equal(p.items[0].commands.filter(c=>c[0]==='A').length,1);assert.equal(p.items[1].hops.length,0);assert.equal(p.items[2].hops.length,0);assert.equal(p.items[3].hops.length,0);
+ assert.match(svgPage(p),/class="link-hop-clearance"/);const bridgeHop=p.items[0].hops[0];assert.ok(bridgeHop.x<30&&bridgeHop.x+bridgeHop.w>34,'the bridge spans both crossings');
  p.items[1].points=[[30,0],[30,10]];bridge(p);assert.equal(p.items[1].hops.length,0);
  const site=sampleSite(),files=await unzip(await exportVisio(site,buildPages(site)).arrayBuffer()),pages=new TextDecoder().decode(files.get('visio/pages/pages.xml')),content=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
  assert.match(pages,/<Cell N="LineJumpCode" V="4"/);assert.match(pages,/<Cell N="LineJumpStyle" V="1"/);assert.match(content,/<Cell N="ConLineJumpCode" V="0"/);assert.match(content,/<Cell N="ConLineJumpStyle" V="1"/);

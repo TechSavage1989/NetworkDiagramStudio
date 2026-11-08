@@ -336,30 +336,40 @@ export function route(page,from,to,points,color,name,linkType='Link',sourceLink=
   page.items.push({type:'path',from,to,points:pts,color,name,linkType,sourceLink,generatedDevice,weight:cableWeight});
 }
 export function bridge(page){
-  const routes=page.items.filter(i=>i.type==='path'), prior=[];
+  const routes=page.items.filter(i=>i.type==='path'),segments=[];
+  routes.forEach((r,order)=>r.points.slice(1).forEach((b,j)=>{const a=r.points[j];segments.push({r,order,j,a,b,h:a[1]===b[1],marks:[]});}));
+  // Every crossing between two cables gets one jump. A cable crossing a
+  // bundle of close parallel cables makes the jump (one bridge over all of
+  // them); otherwise the later-drawn cable jumps, as before.
+  const between=(v,c,d)=>v>Math.min(c,d)&&v<Math.max(c,d),crossings=[];
+  for(const hs of segments.filter(s=>s.h))for(const vs of segments.filter(s=>!s.h)){
+    if(hs.r===vs.r)continue;const p=[vs.a[0],hs.a[1]];
+    if(!between(p[0],hs.a[0],hs.b[0])||!between(p[1],vs.a[1],vs.b[1]))continue;
+    const margin=Math.min(Math.abs(p[0]-hs.a[0]),Math.abs(p[0]-hs.b[0]),Math.abs(p[1]-vs.a[1]),Math.abs(p[1]-vs.b[1]));if(margin<=2)continue;
+    crossings.push({p,hs,vs,margin});
+  }
+  const near=(segment,p,axis)=>crossings.filter(c=>(c.hs===segment||c.vs===segment)&&Math.abs(c.p[axis]-p[axis])<30).length;
+  for(const c of crossings){
+    const along=near(c.hs,c.p,0),across=near(c.vs,c.p,1),owner=along>across?c.hs:across>along?c.vs:c.hs.order>c.vs.order?c.hs:c.vs;
+    owner.marks.push({p:c.p,rad:Math.min(Math.max(7,(owner.r.weight||cableWeight)*2+2),c.margin*.40)});
+  }
   for(const r of routes){
     r.commands=[['M',...r.points[0]]];r.hops=[];
-    for(let j=1;j<r.points.length;j++){
-      const a=r.points[j-1],b=r.points[j],h=a[1]===b[1],axis=h?0:1,dir=Math.sign(b[axis]-a[axis]);
-      const marks=[];
-      for(const s of prior){
-        if(s.h===h)continue;
-        const x=h?s.a[0]:a[0],y=h?a[1]:s.a[1],p=[x,y];
-        const margin=Math.min(Math.abs(p[axis]-a[axis]),Math.abs(p[axis]-b[axis]),Math.abs(p[1-axis]-s.a[1-axis]),Math.abs(p[1-axis]-s.b[1-axis]));
-        const between=(v,c,d)=>v>Math.min(c,d)&&v<Math.max(c,d);
-        if(margin>2 && between(p[axis],a[axis],b[axis])&&between(p[1-axis],s.a[1-axis],s.b[1-axis]))marks.push({p,rad:Math.min(Math.max(7,(r.weight||cableWeight)*2+2),margin*.40)});
-      }
-      marks.sort((m,n)=>dir*(m.p[axis]-n.p[axis]));
+    for(const segment of segments.filter(s=>s.r===r)){
+      const {a,b,h}=segment,axis=h?0:1,dir=Math.sign(b[axis]-a[axis]),marks=segment.marks.sort((m,n)=>dir*(m.p[axis]-n.p[axis]));
+      // Crossings closer together than two jumps share one wider bridge, so
+      // a run past several parallel cables reads as one clean hop.
+      const groups=[];
+      for(const mark of marks){const last=groups.at(-1);if(last&&Math.abs(mark.p[axis]-last.at(-1).p[axis])<2*Math.max(mark.rad,last.at(-1).rad)+6)last.push(mark);else groups.push([mark]);}
       let end=a[axis];
-      for(let k=0;k<marks.length;k++){
-        const {p,rad}=marks[k],next=marks[k+1]?.p[axis]??b[axis];
-        const radius=Math.min(rad,Math.abs(p[axis]-end)*.46,Math.abs(next-p[axis])*.46);if(radius<1)continue;
-        const before=[...p],after=[...p],mid=[...p];before[axis]-=dir*radius;after[axis]+=dir*radius;mid[1-axis]-=radius;
+      for(let k=0;k<groups.length;k++){
+        const group=groups[k],first=group[0].p,last=group.at(-1).p,rad=Math.min(...group.map(m=>m.rad)),next=groups[k+1]?.[0].p[axis]??b[axis];
+        const radius=Math.min(rad,Math.abs(first[axis]-end)*.46,Math.abs(next-last[axis])*.46);if(radius<1)continue;
+        const before=[...first],after=[...last],mid=[...first];before[axis]-=dir*radius;after[axis]+=dir*radius;mid[axis]=(before[axis]+after[axis])/2;mid[1-axis]-=radius;
         r.commands.push(['L',...before],['A',...mid,...after]);r.hops.push({x:Math.min(before[0],mid[0],after[0])-2,y:Math.min(before[1],mid[1],after[1])-2,w:Math.max(before[0],mid[0],after[0])-Math.min(before[0],mid[0],after[0])+4,h:Math.max(before[1],mid[1],after[1])-Math.min(before[1],mid[1],after[1])+4});end=after[axis];
       }
       r.commands.push(['L',...b]);
     }
-    r.points.slice(1).forEach((b,i)=>prior.push({a:r.points[i],b,h:r.points[i][1]===b[1]}));
   }
 }
 function svgText(i){
@@ -381,14 +391,16 @@ export function svgPage(p){
       const artwork=a?.native?a.native.paths.filter(p=>!p.hidden).map((p,n)=>'<path data-drawing-key="'+xml(i.editKey+'|vector|'+n)+'" d="'+p.commands.map(([op,x,y])=>op==='Z'?'Z':op+' '+round(i.x+x*i.w)+' '+round(i.y+y*i.h)).join(' ')+'" fill="'+xml(p.fill)+'" stroke="'+xml(p.stroke)+'" stroke-width="'+round(p.weight*i.w)+'"/>').join('')+a.native.texts.filter(t=>!t.hidden).map((t,n)=>svgText({x:i.x+t.x*i.w-t.w*i.w/2,y:i.y+t.y*i.h-t.size*i.w*.7,w:t.w*i.w,h:t.size*i.w*1.4,size:t.size*i.w,value:t.text,color:t.color,bold:t.bold||false,align:t.align||'center',angle:t.angle,full:true,editKey:i.editKey+'|arttext|'+n})).join(''):a?'<image x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" href="'+a.dataUrl+'"/>':child;
       return '<g'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.sourceId?' data-device-id="'+xml(i.sourceId)+'" tabindex="0" role="button" aria-label="Find stencil for '+xml(i.name)+'"':'')+'><title>'+xml(i.name+(i.fallback&&i.kind!=='plug'?' (schematic)':''))+'</title>'+artwork+'</g>';
     }
-    // Convert three-point semicircles to precise SVG arcs.
+    // Convert three-point jumps to precise SVG arcs: a semicircle for one
+    // crossing, a flatter half-ellipse when one bridge spans several.
     let last=null;const hopPaths=[];
     const path=i.commands.map(cmd=>{
       const [t,x,y,ex,ey]=cmd;
       if(t==='A'){
-        const dx=ex-last[0],dy=ey-last[1],rad=Math.hypot(dx,dy)/2;
+        const dx=ex-last[0],dy=ey-last[1],rx=Math.hypot(dx,dy)/2,ry=Math.hypot(x-(last[0]+ex)/2,y-(last[1]+ey)/2);
         const sweep=dx*(y-last[1])-dy*(x-last[0])<0?1:0;
-        const arc='A '+round(rad)+' '+round(rad)+' 0 0 '+sweep+' '+round(ex)+' '+round(ey);hopPaths.push('M '+last.map(round).join(' ')+' '+arc);last=[ex,ey];return arc;
+        // SVG radii follow the page axes: a vertical cable's bridge is tall.
+        const vertical=Math.abs(dy)>Math.abs(dx),arc='A '+round(vertical?ry:rx)+' '+round(vertical?rx:ry)+' 0 0 '+sweep+' '+round(ex)+' '+round(ey);hopPaths.push('M '+last.map(round).join(' ')+' '+arc);last=[ex,ey];return arc;
       }
       last=[x,y];return t+' '+round(x)+' '+round(y);
     }).join(' ');
