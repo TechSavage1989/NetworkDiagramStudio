@@ -107,7 +107,9 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
   // All bodies and socket anchors are report-local. The topology hardware and
   // its saved anchors are never changed to make a reference sheet fit.
   rect(a,sx,sy,w,h,fill,outline||'#50616c',outline?2.2:.8);Object.assign(a.at(-1),{editKey:socketKey+'|face',reportPort:port.id,reportPortRole:'native',vlanId:port.untaggedVlan,sourceId:item.id,socketForm:spec.media});
-  if(!optical){rect(a,sx+w*.32,sy+h-3,w*.36,2,'#4c5c65');for(let pin=0;pin<4;pin++)rect(a,sx+2+pin*2.4,sy+1.2,1.2,1.6,'#c4a966');}else rect(a,sx+3,sy+h-2.1,w-6,.7,'#61727c');
+  // Copper faces keep only the latch bar, as the builder draws them: small
+  // decorative contact pins read as VLAN markers on an enlarged sheet.
+  if(!optical)rect(a,sx+w*.32,sy+h-3,w*.36,2,'#4c5c65');else rect(a,sx+3,sy+h-2.1,w-6,.7,'#61727c');
   const markerIds=markerVlans(inv,port),radius=plan.style.markerRadius,step=radius*2+1,cols=Math.max(1,Math.floor((w-4)/step)),bottomReserve=port.disabled||port.taggedVlanPolicy?plan.numberFont*1.2+1:3,availableRows=Math.max(0,Math.floor((h-bottomReserve-radius*2-2.2)/step)+1),markerTop=sy+2.2;
   if(markerIds.length>cols*availableRows)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});
   markerIds.forEach((id,index)=>{const cx=sx+2.6+radius+(index%cols)*step,cy=markerTop+radius+Math.floor(index/cols)*step,extra={editKey:socketKey+'|vlan|'+id,reportPort:port.id,reportPortRole:voiceVlan(inv,port,id)?'voice':'tagged',vlanId:id,sourceId:item.id,name:'VLAN '+id+(voiceVlan(inv,port,id)?' voice':' tagged')};if(voiceVlan(inv,port,id)){diamond(a,cx-radius-.3,cy-radius-.3,radius*2+.6,'#ffffff','#ffffff',.3);diamond(a,cx-radius,cy-radius,radius*2,palette.vlans[id],'#263c49',.5,extra);}else{ellipse(a,cx-radius-.3,cy-radius-.3,radius*2+.6,radius*2+.6,'#ffffff','#ffffff',.3);ellipse(a,cx-radius,cy-radius,radius*2,radius*2,palette.vlans[id],'#263c49',.5,extra);}});
