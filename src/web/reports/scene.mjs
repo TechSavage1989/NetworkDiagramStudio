@@ -118,8 +118,12 @@ function markerSize(inv,style=normalStyle){
 // radius serves every port on a map: the largest at which its most filled
 // port still holds all of its markers, with a gap of DOT_GAP x r between
 // neighbours and at most a readable maximum for sparse maps.
-const DOT_GAP=.35;
-const dotArea=(x,y,w,h,bottom)=>({x:x+2,y:y+2,w:Math.max(0,w-4),h:Math.max(0,h-2-bottom)});
+const DOT_GAP=.28;
+// Optical cages on a port map are a little taller than the builder's, still
+// clearly rectangular and centered in the copper-height row.
+const OPTICAL_HEIGHT={builder:16.2/25.2,map:19.6/25.2};
+const dotArea=(x,y,w,h,bottom)=>({x:x+1.6,y:y+1.6,w:Math.max(0,w-3.2),h:Math.max(0,h-1.6-bottom)});
+const dotReserve=(port,optical,numberFont)=>port.disabled||port.taggedVlanPolicy?numberFont*1.2+1:optical?2.4:3;
 function largestDot(n,box){let best=0;for(let cols=1;cols<=n;cols++){const rows=Math.ceil(n/cols),r=Math.min(box.w/(2*cols+DOT_GAP*(cols-1)),box.h/(2*rows+DOT_GAP*(rows-1)));if(r>best)best=r;}return best;}
 function dotLayout(n,box,r){
  const gap=r*DOT_GAP,step=r*2+gap,most=Math.max(1,Math.floor((box.w+gap)/step+1e-9)),rows=Math.ceil(n/most),cols=Math.ceil(n/rows),top=box.y+(box.h-(rows*step-gap))/2;
@@ -128,7 +132,7 @@ function dotLayout(n,box,r){
 function fillRadius(inv,plan){
  const specs=inv.groups.flatMap(group=>group.socketLayout.map(socket=>({socket,port:inv.ports.find(port=>port.group===group.id&&port.number===socket.number)}))).filter(row=>row.port),w=plan.portWidth;
  let radius=Math.min(5,w*.14);
- for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const h=w*(/RJ|copper/i.test(socket.media)?23.2:16.2)/25.2,bottom=port.disabled||port.taggedVlanPolicy?plan.style.numberFont*1.2+1:3;radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,bottom)));}
+ for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?plan.opticalRatio:23.2/25.2);radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,dotReserve(port,optical,plan.style.numberFont))));}
  // Never smaller than the builder's own markers; the builder layout keeps those.
  return radius>=plan.style.markerRadius?Math.floor(radius*1000)/1000:null;
 }
@@ -138,13 +142,13 @@ function groupPlan(inv,group,portWidth,style=normalStyle){
  const minimum=Math.min(...layout.map(socket=>socket.column)),maximum=Math.max(...layout.map(socket=>socket.column)),width=Math.max(180,(maximum-minimum)*pitch+portWidth+16),header=Math.max(style.compact?14:22,wrapPortText(groupTitle(inv,group),width-14,style.groupFont,true).length*style.groupFont*1.2+(style.compact?2:8)),height=header+numberFont*1.2+(style.compact?1.2:4)+faceHeight+Math.max(0,rowsCount-1)*rowPitch+numberFont*1.2+(style.compact?3:8);
  return {group,ports,width,height,header,minimum,pitch,faceHeight,rowPitch,portWidth,rowsCount,numberFont,style};
 }
-function devicePlan(item,style=normalStyle){
- const inv=item.inventory,portWidth=markerSize(inv,style),plans=inv.groups.map(group=>groupPlan(inv,group,portWidth,style)),bands=[];
+function devicePlan(item,style=normalStyle,width=null,fill=false){
+ const inv=item.inventory,portWidth=width??markerSize(inv,style),opticalRatio=fill?OPTICAL_HEIGHT.map:OPTICAL_HEIGHT.builder,plans=inv.groups.map(group=>({...groupPlan(inv,group,portWidth,style),opticalRatio})),bands=[];
  if(inv.chassisSlots&&inv.groups.every(group=>/^[A-L]$/.test(group.slot))){
   const slotWidth=Math.max(280,...plans.map(plan=>plan.width)),slotHeight=Math.max(80,...plans.map(plan=>plan.height));
   for(let slot=0;slot<inv.chassisSlots;slot+=2){const panels=[0,1].map(column=>({plan:plans.find(plan=>plan.group.slot===String.fromCharCode(65+slot+column)),empty:String.fromCharCode(65+slot+column),x:column*(slotWidth+16)})),height=panels.some(panel=>panel.plan)?slotHeight:24*Math.max(1,Math.min(1.2,style.scale));for(const panel of panels){panel.w=slotWidth;panel.h=height;}bands.push({panels,width:slotWidth*2+16,height});}
  }else for(const plan of plans)bands.push({panels:[{plan,x:0,w:plan.width,h:plan.height}],width:plan.width,height:plan.height});
- return {item,portWidth,bands,style,gap:style.compact?2:8,width:Math.max(200,...bands.map(band=>band.width)),height:bands.reduce((height,band)=>height+band.height+(style.compact?2:8),0)};
+ return {item,portWidth,opticalRatio,bands,style,gap:style.compact?2:8,width:Math.max(200,...bands.map(band=>band.width)),height:bands.reduce((height,band)=>height+band.height+(style.compact?2:8),0)};
 }
 // A port map may carry the device's core-diagram artwork colors (item.artwork):
 // slot panels take the plate or module-bay color, a chassis frame shows
@@ -158,7 +162,7 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
  const sockets=[],portEntries=[];
  for(const spec of group.socketLayout){
   const port=plan.ports.find(port=>port.number===spec.number);if(!port)throw new ReportCapacityError('A report socket has no matching interface.',{deviceId:item.id,group:group.id});
-  const optical=!/RJ|copper/i.test(spec.media),w=plan.portWidth,h=w*(optical?16.2:23.2)/25.2,sx=x+8+(spec.column-plan.minimum)*plan.pitch,sy=y+plan.header+plan.numberFont*1.2+(plan.style.compact?1.2:4)+spec.row*plan.rowPitch+(plan.faceHeight-h)/2,fill=nativeFill(port,palette),outline=palette.aggregates[aggregateKey(port.aggregate)],socketKey=scope+'|port|'+port.id+(spec.suffix?'|'+spec.suffix:'');
+  const optical=!/RJ|copper/i.test(spec.media),w=plan.portWidth,h=w*(optical?plan.opticalRatio??OPTICAL_HEIGHT.builder:23.2/25.2),sx=x+8+(spec.column-plan.minimum)*plan.pitch,sy=y+plan.header+plan.numberFont*1.2+(plan.style.compact?1.2:4)+spec.row*plan.rowPitch+(plan.faceHeight-h)/2,fill=nativeFill(port,palette),outline=palette.aggregates[aggregateKey(port.aggregate)],socketKey=scope+'|port|'+port.id+(spec.suffix?'|'+spec.suffix:'');
   // All bodies and socket anchors are report-local. The topology hardware and
   // its saved anchors are never changed to make a reference sheet fit.
   rect(a,sx,sy,w,h,fill,outline||'#50616c',outline?2.2:.8);Object.assign(a.at(-1),{editKey:socketKey+'|face',reportPort:port.id,reportPortRole:'native',vlanId:port.untaggedVlan,sourceId:item.id,socketForm:spec.media});
@@ -167,7 +171,7 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
   if(!optical)rect(a,sx+w*.32,sy+h-3,w*.36,2,'#4c5c65');else rect(a,sx+3,sy+h-2.1,w-6,.7,'#61727c');
   const markerIds=markerVlans(inv,port),radius=plan.markerRadius??plan.style.markerRadius,step=radius*2+1,cols=Math.max(1,Math.floor((w-4)/step)),bottomReserve=port.disabled||port.taggedVlanPolicy?plan.numberFont*1.2+1:3,availableRows=Math.max(0,Math.floor((h-bottomReserve-radius*2-2.2)/step)+1),markerTop=sy+2.2;
   const drawMarker=(id,cx,cy)=>{const extra={editKey:socketKey+'|vlan|'+id,reportPort:port.id,reportPortRole:voiceVlan(inv,port,id)?'voice':'tagged',vlanId:id,sourceId:item.id,name:'VLAN '+id+(voiceVlan(inv,port,id)?' voice':' tagged')};if(voiceVlan(inv,port,id)){diamond(a,cx-radius-.3,cy-radius-.3,radius*2+.6,'#ffffff','#ffffff',.3);diamond(a,cx-radius,cy-radius,radius*2,palette.vlans[id],'#263c49',.5,extra);}else{ellipse(a,cx-radius-.3,cy-radius-.3,radius*2+.6,radius*2+.6,'#ffffff','#ffffff',.3);ellipse(a,cx-radius,cy-radius,radius*2,radius*2,palette.vlans[id],'#263c49',.5,extra);}};
-  if(plan.markerRadius!=null&&markerIds.length){const grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,bottomReserve),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
+  if(plan.markerRadius!=null&&markerIds.length){const grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont)),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
   else{if(markerIds.length>cols*availableRows)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});
    markerIds.forEach((id,index)=>drawMarker(id,sx+2.6+radius+(index%cols)*step,markerTop+radius+Math.floor(index/cols)*step));}
   if(port.disabled)text(a,sx+w-9,sy+h-plan.numberFont*1.2,8,'!',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'center',{editKey:socketKey+'|disabled',reportPort:port.id,reportPortRole:'disabled'});
@@ -187,14 +191,31 @@ function drawBlock(p,plan,x,y,palette,{bands=plan.bands,continued=false,heading=
  for(const band of bands){drawBand(p,plan,band,x,at,palette);at+=band.height+plan.gap;}return at;}
 function blockHeight(plan){const inv=plan.item.inventory;return Math.max(16.8,wrapPortText(displayName(inv),Math.max(plan.width,260),14,true).length*16.8)+4+Math.max(12,wrapPortText([modelLabel(inv),inv.os,inv.firmware!=='Unknown'?inv.firmware:''].filter(Boolean).join(' | '),Math.max(plan.width,260),10).length*12)+9+plan.height;}
 
+// A port map uses the whole sheet: for each number style it grows the jacks
+// until the map and key fill the page, then keeps the style whose dots come
+// out largest (numbers no smaller than 8 px). Near ties keep larger numbers.
+function mapCandidates(item,palette,request,styles){
+ const sheet=paperOf(request),tops=new Map(),contentTop=compact=>{if(!tops.has(compact))tops.set(compact,page(request,item.id+'|measure',displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),'onePage',[item.id],sheet.width,sheet.height,compact).contentTop);return tops.get(compact);};
+ const fits=(plan,style)=>plan.width<=sheet.width-margin*2&&contentTop(style.compact)+plan.height+(style.compact?4:12)+legendHeight(item.inventory,palette,sheet.width-margin*2,style.compact,true)+(style.compact?49:59)<=sheet.height+.01;
+ const out=[];
+ for(const style of styles){
+  let base;try{base=devicePlan(item,style,null,true);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;continue;}
+  if(!fits(base,style))continue;
+  const at=k=>devicePlan(item,style,base.portWidth*k,true),most=Math.max(1,56/base.portWidth);let lo=1,hi=most;
+  if(fits(at(hi),style))lo=hi;else for(let i=0;i<18;i++){const mid=(lo+hi)/2;if(fits(at(mid),style))lo=mid;else hi=mid;}
+  const plan=at(lo),fit=fillRadius(item.inventory,plan);out.push({style,plan,fit,score:fit??style.markerRadius});
+ }
+ const best=Math.max(0,...out.map(c=>c.score));
+ return out.sort((a,b)=>(b.score>=best*.95)-(a.score>=best*.95)||b.style.numberFont-a.style.numberFont||b.score-a.score);
+}
 export function reportDiagram(item,palette,request,{wall=false}={}){
  if(item.validation&&!item.validation.ok)throw new ReportCapacityError(item.validation.errors.join(' '),{deviceId:item.id});
  let failure;
- for(const style of wall?[normalStyle]:[...(request?.fill?largeStyles:[]),normalStyle,...compactStyles]){
-  const sheet=paperOf(request),plan=devicePlan(item,style),width=wall?Math.max(sheet.width,plan.width+margin*2):sheet.width;
+ const styles=wall?[normalStyle]:[...(request?.fill?largeStyles:[]),normalStyle,...compactStyles];
+ for(const {style,plan,fit} of request?.fill&&!wall?mapCandidates(item,palette,request,styles):styles.map(style=>({style,plan:devicePlan(item,style),fit:null}))){
+  const sheet=paperOf(request),width=wall?Math.max(sheet.width,plan.width+margin*2):sheet.width,radius=fit;
   // A port map (request.fill) draws one dot size, as large as its most
   // filled port allows.
-  const fit=request?.fill&&!wall?fillRadius(item.inventory,plan):null,radius=fit;
   if(radius!=null)for(const band of plan.bands)for(const panel of band.panels)if(panel.plan)panel.plan.markerRadius=radius;
   if(plan.width>width-margin*2){failure=new ReportCapacityError('The complete physical banks of '+displayName(item.inventory)+' exceed readable '+reportPageLabel(request.paper)+' width. Use larger paper or the wall chart.',{deviceId:item.id,requiredWidth:plan.width+margin*2});continue;}
   const p=page(request,item.id+'|'+(wall?'wall':'a4'),displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),wall?'wall':'onePage',[item.id],width,sheet.height,style.compact),keyHeight=legendHeight(item.inventory,palette,width-margin*2,style.compact,!!request?.fill),gap=style.compact?4:12,needed=p.contentTop+plan.height+gap+keyHeight+(style.compact?49:59);

@@ -181,6 +181,11 @@ test('builder port maps grow tagged dots to fill the most filled jack, centered,
    widest=Math.max(widest,Math.max((right-left)/(face.w-4),(bottom-top)/(face.h-5)));
   }
   assert.ok(widest>.85,'the most filled jack is filled');
+  // The jacks grow into the sheet: the map and key reach the page's width or
+  // its footer, and optical cages stay rectangular but a little taller.
+  const panels=page.items.filter(i=>i.reportPanel),right=Math.max(...panels.map(i=>i.x+i.w)),low=Math.max(...page.items.filter(i=>(i.y+(i.h||0))<page.height-45).map(i=>i.y+(i.h||0)));
+  assert.ok(right>page.width-24-40||low>page.height-90,'the map uses the free page space');
+  for(const face of faces.values())if(/^A/.test(face.reportPort))assert.ok(Math.abs(face.h/face.w-19.6/25.2)<.01,'optical faces use the map proportions');
   const d=chassis(page.portMap.device,page.portMap.device==='dense'?14:3);assert.equal(page.items.filter(i=>i.reportPortRole==='tagged').length,d.ports.reduce((n,p)=>n+p.tagged.length,0),'every tagged VLAN is drawn');
  }
 });
