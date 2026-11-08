@@ -2,7 +2,8 @@ import {crossesText} from '../src/web/diagram/labels.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {placeBeside} from '../src/web/arrange.mjs';
-import {scaleDrawingItems,placeDrawingDevices} from '../src/web/drawing-edits.mjs';
+import {scaleDrawingItems,placeDrawingDevices,moveDrawingItems} from '../src/web/drawing-edits.mjs';
+import {mdfLookalike} from './fixtures/mdf-lookalike.mjs';
 import {physicalLink} from '../src/web/physical-links.mjs';
 import {mergeModels} from '../src/web/imports/model.mjs';
 import {buildPages} from '../src/web/diagram/index.mjs';
@@ -27,11 +28,16 @@ test('placement stays near the reference even with tall obstacles and sparse sel
 test('placement pins every other device and generated handoff at each drawing scale',()=>{
  for(const drawingScale of [.5,1,1.5])for(const movingId of ['sw-1','edge']){
   const project=sampleSite();project.layout={presentation:{defaults:{drawingScale}}};
-  const page=buildPages(project)[0],devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),moving=devices.find(i=>i.sourceId===movingId),reference=devices.find(i=>i.sourceId==='sw-2');
+  const page=buildPages(project)[0],devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),moving=devices.find(i=>i.sourceId===movingId),reference=devices.find(i=>i.sourceId==='sw-2'),cards=devices.filter(i=>i.kind==='handoff'&&i.ownerKey===moving.editKey);
   project.layout.drawingEdits=placeDrawingDevices(page,{},[moving.editKey],reference.editKey,'right','compact');
   const rebuilt=buildPages(JSON.parse(JSON.stringify(project)))[0],next=rebuilt.items.find(i=>i.editKey===moving.editKey),ref=rebuilt.items.find(i=>i.editKey===reference.editKey);
-  assert.ok(Math.abs(next.x-ref.x-ref.w-56*drawingScale)<.001);
-  for(const other of devices.filter(i=>i!==moving)){
+  // The moved device and its own WAN cards form one group; the reference
+  // spacing is measured from the group's nearest edge.
+  const group=[next,...cards.map(c=>rebuilt.items.find(i=>i.editKey===c.editKey))],left=Math.min(...group.map(i=>i.x));
+  assert.ok(Math.abs(left-ref.x-ref.w-56*drawingScale)<.001);
+  if(movingId==='edge')assert.ok(cards.length,'the sample firewall has WAN cards');
+  for(const card of cards){const actual=rebuilt.items.find(i=>i.editKey===card.editKey);assert.ok(Math.abs(actual.x-card.x-(next.x-moving.x))<.001&&Math.abs(actual.y-card.y-(next.y-moving.y))<.001,card.name+' follows its firewall');assert.ok(actual.y+actual.h<=next.y,card.name+' stays above its firewall');}
+  for(const other of devices.filter(i=>i!==moving&&!cards.includes(i))){
    const actual=rebuilt.items.find(i=>i.editKey===other.editKey);assert.ok(actual,other.editKey);
    for(const key of ['x','y','w','h'])assert.ok(Math.abs(actual[key]-other[key])<.001,other.name+' '+key+' must stay fixed');
   }
@@ -85,4 +91,48 @@ test('a middle chassis jack exits through the gap between lower jacks',()=>{
  const socket=device.children.find(child=>child.anchorName==='E6');
  assert.ok(socket);
  assert.ok(!crossesText(cable.points,{x:device.x+socket.x*device.w,y:device.y+socket.y*device.h,w:socket.w*device.w,h:socket.h*device.h},2));
+});
+
+// Fictional firewall with several WAN/ISP handoffs, a switch and a server room.
+function wanSite(){
+ const project=mdfLookalike();project.layout||={};const page=buildPages(project).find(p=>p.coreDeviceIds),devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug');
+ const cards=devices.filter(i=>i.kind==='handoff'&&i.ownerKey),owner=devices.find(i=>i.editKey===cards[0]?.ownerKey);
+ return {project,page,devices,cards:cards.filter(c=>c.ownerKey===owner.editKey),owner};
+}
+const rebuild=project=>buildPages(JSON.parse(JSON.stringify(project))).find(p=>p.coreDeviceIds);
+const at=(page,key)=>page.items.find(i=>i.editKey===key);
+test('WAN cards sit above their firewall and follow it when it is moved, nudged or moved again',()=>{
+ const {project,page,cards,owner}=wanSite();assert.ok(cards.length>=2,'the fixture firewall has several WAN cards');
+ for(const card of cards)assert.ok(card.y+card.h<=owner.y,card.name+' starts above its firewall');
+ project.layout.drawingEdits=moveDrawingItems(page,project.layout.drawingEdits,new Map([[owner.editKey,[0,-900]]]));
+ let next=rebuild(project);const moved=at(next,owner.editKey);assert.ok(Math.abs(moved.y-(owner.y-900))<.001);
+ for(const card of cards){const actual=at(next,card.editKey);assert.ok(Math.abs(actual.x-card.x)<.001&&Math.abs(actual.y-(card.y-900))<.001,card.name+' moves with its firewall');}
+ // A card moved on its own keeps that offset from its firewall afterwards.
+ const lone=cards[0];project.layout.drawingEdits=moveDrawingItems(next,project.layout.drawingEdits,new Map([[lone.editKey,[-400,0]]]));next=rebuild(project);
+ const before=at(next,lone.editKey);assert.ok(Math.abs(before.x-(lone.x-400))<.001);
+ project.layout.drawingEdits=moveDrawingItems(next,project.layout.drawingEdits,new Map([[owner.editKey,[30,40]]]));next=rebuild(project);
+ assert.ok(Math.abs(at(next,lone.editKey).x-before.x-30)<.001&&Math.abs(at(next,lone.editKey).y-before.y-40)<.001,'the separately placed card keeps its relative position');
+});
+test('WAN cards can be placed beside other objects, alone or with a multi-selection',()=>{
+ const {project,page,devices,cards,owner}=wanSite(),reference=devices.find(i=>i.kind!=='handoff'&&i!==owner);
+ // One card beside its own firewall.
+ let edits=placeDrawingDevices(page,{},[cards[0].editKey],owner.editKey,'left','compact');project.layout.drawingEdits=edits;let next=rebuild(project);
+ let card=at(next,cards[0].editKey),fw=at(next,owner.editKey);assert.ok(Math.abs(fw.x-card.x-card.w-56)<.001,'the card sits left of its firewall');
+ for(const other of devices.filter(i=>i!==cards[0]))assert.ok(Math.abs(at(next,other.editKey).x-other.x)<.001&&Math.abs(at(next,other.editKey).y-other.y)<.001,other.name+' stays put');
+ // Two cards and a switch selected together keep their arrangement as one group.
+ const chosen=[cards[0],cards[1],reference],target=devices.find(i=>i.kind!=='handoff'&&!chosen.includes(i)&&i!==owner)||owner;
+ project.layout.drawingEdits={};edits=placeDrawingDevices(page,{},chosen.map(i=>i.editKey),target.editKey,'below','compact');project.layout.drawingEdits=edits;next=rebuild(project);
+ const shift=[at(next,chosen[0].editKey).x-chosen[0].x,at(next,chosen[0].editKey).y-chosen[0].y];
+ for(const item of chosen){const actual=at(next,item.editKey);assert.ok(Math.abs(actual.x-item.x-shift[0])<.001&&Math.abs(actual.y-item.y-shift[1])<.001,item.name+' moves with the selection');}
+ const top=Math.min(...chosen.map(i=>at(next,i.editKey).y)),ref=at(next,target.editKey);assert.ok(top>=ref.y+ref.h,'the selection is below the reference');
+ // Placing the firewall carries its cards, keeping them above it.
+ project.layout.drawingEdits={};edits=placeDrawingDevices(page,{},[owner.editKey],reference.editKey,'right','compact');project.layout.drawingEdits=edits;next=rebuild(project);fw=at(next,owner.editKey);
+ for(const c of cards){const actual=at(next,c.editKey);assert.ok(actual.y+actual.h<=fw.y,c.name+' stays above the placed firewall');assert.ok(Math.abs(actual.x-c.x-(fw.x-owner.x))<.001);}
+});
+test('a cable with saved bends moves whole when both of its devices move together',()=>{
+ const {project,page,cards,owner}=wanSite(),cable=page.items.find(i=>i.type==='path'&&[i.from,i.to].some(e=>e.device===cards[0].key));
+ const bent=cable.points.map(p=>[...p]);project.layout.drawingEdits={[cable.editKey]:{points:bent}};
+ const built=rebuild(project);project.layout.drawingEdits=moveDrawingItems(built,project.layout.drawingEdits,new Map([[owner.editKey,[120,-60]]]));
+ assert.deepEqual(project.layout.drawingEdits[cable.editKey].points,bent.map(([x,y])=>[x+120,y-60]));
+ const next=rebuild(project),path=at(next,cable.editKey);assert.deepEqual(path.points,bent.map(([x,y])=>[x+120,y-60]));
 });

@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {portColumnPrefix,portRanges,portNumberBox} from '../src/web/port-table.mjs';
 import {textWidth} from '../src/web/diagram/labels.mjs';
 import {unzip} from '../src/web/zip.mjs';
@@ -14,7 +16,7 @@ const maps=site=>buildPages(site).filter(page=>page.portMap);
 const identities=pages=>new Set(pages.flatMap(page=>page.portMap.portRecords||page.portMap.rowNames.map(name=>({device:page.portMap.device,name}))).map(port=>port.device+'/'+port.name));
 
 test('compact grouped port maps combine panel pairs and a reference-style assignment matrix',()=>{
- const site=fixture();site.layout={portMap:{presentation:'combined'}};const pages=maps(site),first=pages[0],panels=first.items.filter(item=>item.type==='device');
+ const site=fixture();site.layout={pageSetup:{overrides:{ports:{preset:'dynamic'}}},portMap:{presentation:'combined'}};const pages=maps(site),first=pages[0],panels=first.items.filter(item=>item.type==='device');
  assert.equal(panels.length,2);assert.ok(panels.every(panel=>panel.w>1100));assert.ok(panels[0].y+panels[0].h<panels[1].y);
  assert.equal(first.portMap.assignmentMatrix,true);assert.deepEqual(first.portMap.devices,['switch-1','switch-2']);assert.equal(first.portMap.total,104);assert.equal(identities(pages).size,104);assert.ok(pages.length<=2);
  const text=first.items.filter(item=>item.type==='text').map(item=>item.value);for(const title of ['PORT ROLES','LINK STATE','Port assignment','VLANs and link details'])assert.ok(text.includes(title));
@@ -25,10 +27,13 @@ test('compact grouped port maps combine panel pairs and a reference-style assign
  for(const panel of panels){const title=first.items.find(item=>item.editKey===panel.editKey+'|port-map-title|0');assert.ok(title.y+title.h<=panel.y&&panel.y-title.y<40);}
 });
 
-test('port number boxes share one size and font across all RJ45 and optical jacks and wireless pages',()=>{
+test('port numbers share one measured box and font across all RJ45 and optical jacks and wireless pages',()=>{
  const pages=buildPages(fixture());
  for(const page of pages.filter(page=>page.portMap||page.title==='Wireless Connections'))for(const panel of page.items.filter(item=>item.type==='device'&&item.kind==='switch')){
-  const boxes=page.items.filter(item=>item.portNumberRole==='box'&&item.sourceId===panel.sourceId),numbers=page.items.filter(item=>item.portNumberRole==='text'&&item.sourceId===panel.sourceId);
+  // Numbers are plain text without a color block; the measured box stays in metadata.
+  const numbers=page.items.filter(item=>item.portNumberRole==='text'&&item.sourceId===panel.sourceId),boxes=numbers.map(number=>({...number.numberBox,portName:number.portName,socketBounds:number.socketBounds}));
+  assert.ok(!page.items.some(item=>item.portNumberRole==='box'),'No color block behind port numbers');
+  for(const number of numbers)assert.ok(['#111827','#FFFFFF'].includes(number.color),'Numbers use black or white for contrast');
   assert.equal(boxes.length,52);assert.equal(numbers.length,52);assert.equal(new Set(boxes.map(box=>[box.w,box.h].join(','))).size,1);assert.equal(new Set(numbers.map(number=>number.size)).size,1);assert.ok(numbers[0].size>=6);
   assert.ok(numbers.some(number=>number.value==='1'));assert.ok(numbers.some(number=>number.value==='49'));
   for(const box of boxes){const point=panel.ports[box.portName];assert.ok(Math.abs(box.x+box.w/2-panel.x-point[0]*panel.w)<1e-8);const socket=box.socketBounds;if(socket)assert.ok(box.y+box.h<=socket.y-1||box.y>=socket.y+socket.h+1,'number must sit above or below its socket');}
@@ -38,7 +43,7 @@ test('port number boxes share one size and font across all RJ45 and optical jack
 });
 
 test('assignment filters preserve faceplate inventory and expanded or ungrouped details remain available',()=>{
- const site=fixture(),original=identities(maps(site));site.layout={portMap:{detailFilter:'connected'}};const filtered=maps(site);assert.equal(identities(filtered).size,8);assert.equal(filtered[0].items.filter(item=>item.portNumberRole==='box').length,104);assert.equal(filtered[0].portMap.total,104);
+ const site=fixture(),original=identities(maps(site));site.layout={portMap:{detailFilter:'connected'}};const filtered=maps(site);assert.equal(identities(filtered).size,8);assert.equal(filtered.filter(page=>page.portMap.overview).flatMap(page=>page.items.filter(item=>item.portNumberRole==='text')).length,104,'Every socket keeps its number on the one-device builder sheets');assert.equal(filtered.filter(page=>page.portMap.overview).reduce((sum,page)=>sum+page.portMap.total,0),104);
  for(const options of [{density:'expanded'},{groupConsecutive:false}]){site.layout.portMap={...options};const pages=maps(site);assert.deepEqual(identities(pages),original);assert.ok(pages.every(page=>!page.portMap.assignmentMatrix));}
 });
 
@@ -60,12 +65,12 @@ test('numeric assignment ranges retain mixed stack prefixes and disjoint ranges'
 
 test('long device titles and summaries wrap above their panels and existing panel edits retain their keys',()=>{
  const site=fixture();site.layout={coreExclude:['switch-1']};site.devices[0].name=Array.from({length:28},(_,i)=>'Equipment'+i).join(' ');site.devices[0].vendor=Array.from({length:20},(_,i)=>'Vendor'+i).join(' ');let first=maps(site)[0];
- for(const panel of first.items.filter(item=>item.type==='device')){const titles=first.items.filter(item=>item.editKey?.startsWith(panel.editKey+'|port-map-title|')),summary=first.items.filter(item=>item.editKey?.startsWith(panel.editKey+'|port-map-summary'));assert.ok(titles.length);for(const text of [...titles,...summary]){assert.ok(text.y>=146);assert.ok(text.y+text.h<=panel.y);assert.ok(textWidth(text.value,text.size,text.bold)<=text.w);}}
+ for(const panel of first.items.filter(item=>item.type==='device')){const titles=first.items.filter(item=>item.editKey?.startsWith(panel.editKey+'|port-map-title|')),summary=first.items.filter(item=>item.editKey?.startsWith(panel.editKey+'|port-map-summary'));assert.ok(titles.length);for(const text of [...titles,...summary]){assert.ok(text.y>=12,'Titles stay inside the sheet header');assert.ok(text.y+text.h<=panel.y);assert.ok(textWidth(text.value,text.size,text.bold)<=text.w);}}
  const panel=first.items.find(item=>item.type==='device'&&item.sourceId==='switch-1');assert.equal(panel.editKey,'MDF Port Map|switch-1|sheet:0|device|switch-1|body');site.layout.drawingEdits={[panel.editKey]:{x:64,y:300,w:1050,h:100}};first=maps(site)[0];const moved=first.items.find(item=>item.editKey===panel.editKey);assert.deepEqual([moved.x,moved.y,moved.w,moved.h],[64,300,1050,100]);
 });
 
 test('paired bitmap and native stencil panels use distinct scene keys and correct Visio masters',async()=>{
- const site=fixture(),bitmap={id:'bitmap',name:'Lab bitmap panel',view:'front',width:10,height:1,dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5F8AAAAASUVORK5CYII=',anchors:{'1/1/1':[.1,.3],'1/1/49':[.8,.7]}},native={...bitmap,id:'native',name:'Lab native panel',native:{paths:[{commands:[['M',0,0],['L',1,0],['L',1,1],['L',0,1],['Z']],fill:'#EEEEEE',stroke:'#16364A',weight:.001}],texts:[{text:'Native panel artwork',x:.5,y:.5,w:.5,size:.02,angle:0,color:'#16364A'}]}};site.stencils={bitmap,native};site.devices[0].stencilId='bitmap';site.devices[1].stencilId='native';const pages=buildPages(site),panels=pages.find(page=>page.portMap).items.filter(item=>item.type==='device');assert.equal(new Set(panels.map(panel=>panel.key)).size,2);assert.deepEqual(panels.map(panel=>panel.asset.id),['bitmap','native']);
+ const site=fixture(),bitmap={id:'bitmap',name:'Lab bitmap panel',view:'front',width:10,height:1,dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5F8AAAAASUVORK5CYII=',anchors:{'1/1/1':[.1,.3],'1/1/49':[.8,.7]}},native={...bitmap,id:'native',name:'Lab native panel',native:{paths:[{commands:[['M',0,0],['L',1,0],['L',1,1],['L',0,1],['Z']],fill:'#EEEEEE',stroke:'#16364A',weight:.001}],texts:[{text:'Native panel artwork',x:.5,y:.5,w:.5,size:.02,angle:0,color:'#16364A'}]}};site.stencils={bitmap,native};site.devices[0].stencilId='bitmap';site.devices[1].stencilId='native';const pages=buildPages(site),panels=pages.filter(page=>page.portMap?.overview).flatMap(page=>page.items.filter(item=>item.type==='device'));assert.equal(new Set(panels.map(panel=>panel.key)).size,2);assert.deepEqual(panels.map(panel=>panel.asset.id),['bitmap','native']);
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>new TextDecoder().decode(bytes)).join('');assert.ok(xml.includes('Native panel artwork'));assert.ok(xml.includes('ForeignType="Bitmap"'));assert.equal([...parts.keys()].filter(key=>key.startsWith('visio/media/')).length,1);
 });
 
@@ -75,10 +80,10 @@ test('explicit separate booklet sheets retain colored faceplates and complete in
  const inventory=pages.filter(page=>page.portMap.bookletRole==='inventory');
  assert.ok(overviews.length&&inventory.length);
  assert.ok(overviews.every(page=>page.items.some(item=>item.type==='device')&&
-   page.items.some(item=>item.value==='NATIVE VLAN KEY')&&!page.items.some(item=>item.portTableRole)));
+   page.items.some(item=>item.value==='VLAN key')&&!page.items.some(item=>item.portTableRole)));
  assert.ok(inventory.every(page=>page.title==='Port Inventory'&&
    page.items.some(item=>item.portTableRole)&&!page.items.some(item=>item.type==='device')));
  assert.equal(identities(inventory).size,104);
- const ports=overviews.flatMap(page=>page.items.filter(item=>item.portNumberRole==='box'));
+ const ports=overviews.flatMap(page=>page.items.filter(item=>item.portNumberRole==='socket'));
  assert.notEqual(ports.find(port=>port.portName==='1/1/1').fill,ports.find(port=>port.portName==='1/1/50').fill);
 });

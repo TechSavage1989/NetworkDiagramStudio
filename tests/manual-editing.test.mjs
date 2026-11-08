@@ -3,7 +3,9 @@ import {addCableBends,moveCablePoint,removeCablePoint,validCable} from '../src/w
 import {movementStep,selectedInBox,moveAnchors} from '../src/web/point-tools.mjs';
 import {parseHex,rgb,rgbHex,toHSV,hsvHex,toHSL,hslHex} from '../src/web/color-picker.mjs';
 import {comparePorts,hasPortDetails} from '../src/web/port-table.mjs';
-import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {buildPages as buildAllPages,exportVisio} from '../src/web/diagram/index.mjs';
+import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
+const buildPages=withFaceplateMaps(buildAllPages);
 import {cleanLayout} from '../src/web/layout.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
 import {unzip} from '../src/web/zip.mjs';
@@ -43,11 +45,11 @@ test('port details remain in numeric member/slot/port order, with persistent opt
  site.layout=cleanLayout(site.layout,['s']);const maps=buildPages(JSON.parse(JSON.stringify(site))).filter(p=>p.portMap);assert.deepEqual(maps.flatMap(p=>p.portMap.rowNames),['1/1/2','1/1/3','1/1/11']);assert.equal(maps[0].portMap.total,5);assert.equal(maps[0].portMap.shown,3);
  assert.ok(maps.some(p=>p.items.some(i=>i.type==='text'&&i.value.includes('2 hidden by table filter'))));
  site.layout.portMap.detailFilter='connected';assert.deepEqual(buildPages(site).filter(p=>p.portMap).flatMap(p=>p.portMap.rowNames),['1/1/2']);
- site.layout.portMap={detailFilter:'all',groupConsecutive:true};const grouped=buildPages(site).filter(p=>p.portMap).flatMap(p=>p.items.filter(i=>i.portTableRole==='interface').map(i=>i.value));assert.ok(grouped.includes('1, 10'));assert.ok(!grouped.some(n=>n.includes('10, 1')));
+ site.layout.portMap={detailFilter:'all',groupConsecutive:true};const grouped=buildPages(site).filter(p=>p.portMap).flatMap(p=>p.items.filter(i=>i.portTableRole==='interface').map(i=>i.value));assert.deepEqual(grouped,['1','2','3','10','11'],'Rows stay in numeric order; only consecutive identical ports share a row');
 });
 test('compact port maps reduce pages without omitting records and keep the faceplate optional on continuations',()=>{
- const ports=Array.from({length:96},(_,i)=>({name:'1/1/'+(i+1),description:'Workstation '+(i+1),state:'up',speed:'1 Gbps',role:'access',native:8,tagged:[20]})),site={devices:[{id:'s',name:'LAB',kind:'switch',model:'JL675A',ports}],links:[]};
- const maps=()=>buildPages(site).filter(p=>p.portMap),compact=maps();site.layout={portMap:{density:'expanded'}};const expanded=maps();assert.ok(compact.length<expanded.length);assert.ok(compact.filter(p=>p.portMap.bookletRole==='inventory').length<=4);
+ const ports=Array.from({length:96},(_,i)=>({name:'1/1/'+(i+1),description:'Workstation '+(i+1),state:'up',speed:'1 Gbps',role:'access',native:8,tagged:[20]})),site={devices:[{id:'s',name:'LAB',kind:'switch',model:'JL675A',ports}],links:[],layout:{pageSetup:{overrides:{ports:{preset:'dynamic'}}}}};
+ const maps=()=>buildPages(site).filter(p=>p.portMap),compact=maps();site.layout={pageSetup:{overrides:{ports:{preset:'dynamic'}}},portMap:{density:'expanded'}};const expanded=maps();assert.ok(compact.length<expanded.length);assert.ok(compact.filter(p=>p.portMap.bookletRole==='inventory').length<=4);
  assert.deepEqual(compact.flatMap(p=>p.portMap.rowNames),ports.map(p=>p.name));assert.equal(compact[0].portMap.overview,true);assert.ok(compact.slice(1).every(p=>!p.portMap.overview&&!p.items.some(i=>i.type==='device')));
  site.layout=cleanLayout({portMap:{density:'compact',repeatFaceplate:true}},['s']);assert.equal(site.layout.portMap.repeatFaceplate,true);assert.ok(maps().every(p=>p.portMap.overview&&p.items.some(i=>i.type==='device')));
  for(const page of [...compact,...expanded])for(const t of page.items.filter(i=>i.portTableRole)){assert.ok(textWidth(t.value,t.size,t.bold)<=t.w,t.value+' is wider than its column');assert.ok(t.y+t.h<=851);}
@@ -73,8 +75,52 @@ test('endpoint selectors include unused model jacks and reject an occupied port 
 });
 test('crossing hops have visible clearance, scale to nearby crossings, and skip shared endpoints',async()=>{
  const line=(points,color)=>({type:'path',points,color,name:'Test',weight:2.2}),p={title:'Crossing',items:[line([[0,20],[100,20]],'#FF0000'),line([[30,0],[30,60]],'#00B0F0'),line([[34,0],[34,60]],'#00B050'),line([[0,20],[0,60]],'#000000')]};
- bridge(p);assert.ok(p.items[1].commands.some(c=>c[0]==='A'));assert.equal(p.items[3].hops.length,0);assert.match(svgPage(p),/class="link-hop-clearance"/);assert.ok(p.items[1].hops[0].w>5);
+ // By default the red line makes one small hop over each line of the tight
+ // pair, as Visio does; the pair itself never jumps.
+ bridge(p);const single=p.items[0].hops;assert.equal(p.items[0].commands.filter(c=>c[0]==='A').length,2);assert.equal(p.items[1].hops.length,0);assert.equal(p.items[2].hops.length,0);assert.equal(p.items[3].hops.length,0);
+ assert.ok(single[0].x+2<30&&single[0].x+single[0].w-2>30&&single[1].x+2<34&&single[1].x+single[1].w-2>34,'each hop spans its own crossing');assert.ok(single[0].x+single[0].w-2<=single[1].x+2+1e-9,'adjacent hops do not overlap');
+ // The bundle style puts one bridge over both.
+ bridge(p,{style:'bundle'});assert.equal(p.items[0].commands.filter(c=>c[0]==='A').length,1);
+ assert.match(svgPage(p),/class="link-hop-clearance"/);const bridgeHop=p.items[0].hops[0];assert.ok(bridgeHop.x<30&&bridgeHop.x+bridgeHop.w>34,'the bridge spans both crossings');
  p.items[1].points=[[30,0],[30,10]];bridge(p);assert.equal(p.items[1].hops.length,0);
  const site=sampleSite(),files=await unzip(await exportVisio(site,buildPages(site)).arrayBuffer()),pages=new TextDecoder().decode(files.get('visio/pages/pages.xml')),content=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
  assert.match(pages,/<Cell N="LineJumpCode" V="4"/);assert.match(pages,/<Cell N="LineJumpStyle" V="1"/);assert.match(content,/<Cell N="ConLineJumpCode" V="0"/);assert.match(content,/<Cell N="ConLineJumpStyle" V="1"/);
+});
+
+test('dragging a bend onto another bend line merges them into one point',async()=>{
+ const {mergeCablePoints}=await import('../src/web/cable-edit.mjs');
+ // A Z route with two interior elbows and a short jog: [0,0] → [0,40] → [60,40] → [60,44] → [120,44] → [120,100].
+ const points=[[0,0],[0,40],[60,40],[60,44],[120,44],[120,100]];
+ const merged=moveCablePoint(points,3,61,42);assert.ok(merged.length<points.length,'the near-aligned jog is merged');assert.ok(validCable(merged));
+ assert.deepEqual(merged[0],[0,0]);assert.deepEqual(merged.at(-1),[120,100]);
+ for(let i=1;i<merged.length;i++)assert.ok(merged[i][0]===merged[i-1][0]||merged[i][1]===merged[i-1][1],'orthogonal');
+ // Exact moves keep the requested coordinates.
+ const exact=moveCablePoint(points,2,60,30,{merge:0});assert.ok(exact.some(p=>p[0]===60&&p[1]===30));
+ // An interior spike back along the same line collapses; port segments stay.
+ assert.deepEqual(mergeCablePoints([[0,0],[0,20],[50,20],[80,20],[50,20],[50,60],[100,60]]),[[0,0],[0,20],[50,20],[50,60],[100,60]]);
+ assert.deepEqual(mergeCablePoints([[0,0],[0,-10],[0,30],[40,30]]),[[0,0],[0,-10],[0,30],[40,30]],'a reversal at a port is kept');
+});
+
+test('native Visio connectors carry the same jumps as the drawing, so they show on open',async()=>{
+ const {modularRoutingFixture}=await import('./fixtures/modular-routing.mjs'),site=modularRoutingFixture(),pages=buildPages(site),page=pages.find(p=>p.name==='Core Network');
+ const jumps=page.items.filter(i=>i.type==='path'&&i.sourceLink).reduce((n,p)=>n+(p.commands||[]).filter(c=>c[0]==='A').length,0);assert.ok(jumps>0,'the fixture has crossings');
+ const files=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
+ const connectors=xml.split('<Shape ').filter(s=>/NameU="Connector\./.test(s));assert.ok(connectors.length);
+ assert.equal(connectors.reduce((n,s)=>n+(s.match(/T="EllipticalArcTo"/g)||[]).length,0),jumps);
+ assert.ok(!xml.split('<Shape ').filter(s=>/NameU="CableLegend\./.test(s)).some(s=>s.includes('EllipticalArcTo')),'legend samples stay straight');
+});
+
+test('a page drawn above its origin exports connectors that still start and end at their ports',async()=>{
+ // WAN cards above a firewall give this fictional page a negative top, so
+ // the Visio copy is shifted; the drawn path (with its jumps) must shift too.
+ const {mdfLookalike}=await import('./fixtures/mdf-lookalike.mjs'),site=mdfLookalike(),pages=buildPages(site),page=pages.find(p=>p.coreDeviceIds);
+ assert.ok(page.originY<0,'the fixture page starts above zero');
+ const files=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=new TextDecoder().decode(files.get('visio/pages/page1.xml'));
+ const connectors=xml.split('<Shape ').filter(s=>/NameU="Connector\./.test(s));assert.ok(connectors.length>10);
+ const value=(text,name)=>Number(text.match(new RegExp('<Cell N="'+name+'" V="([^"]+)"'))?.[1]);
+ for(const shape of connectors){
+  const rows=[...shape.matchAll(/<Row IX="\d+" T="(?:MoveTo|LineTo|EllipticalArcTo)">(.*?)<\/Row>/g)].map(m=>m[1]),first=rows[0],last=rows.at(-1);
+  assert.ok(Math.abs(value(first,'X'))<1e-3&&Math.abs(value(first,'Y'))<1e-3,'path starts at its begin point');
+  assert.ok(Math.abs(value(last,'X')-value(shape,'Width'))<1e-3&&Math.abs(value(last,'Y')-value(shape,'Height'))<1e-3,'path ends at its end point');
+ }
 });

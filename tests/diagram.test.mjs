@@ -51,7 +51,8 @@ test('native ZIP, true groups, explicit foreign image parts, port glue on switch
 });
 test('pagination and unresolved peer handling keep user interface names',()=>{
   const d={id:'s',name:'Edge',kind:'switch',ports:Array.from({length:96},(_,i)=>({name:'1/1/'+(i+1),state:'up',description:'Test assignment '+i}))};
-  const p={name:'Scale',devices:[d],links:Array.from({length:24},(_,i)=>({a:'s',ap:'1/1/'+(i+1),b:'Other '+i,bp:'U',media:'unknown'}))};
+  // Inventory page counts below are for a growing (dynamic) port-map page.
+  const p={name:'Scale',devices:[d],links:Array.from({length:24},(_,i)=>({a:'s',ap:'1/1/'+(i+1),b:'Other '+i,bp:'U',media:'unknown'})),layout:{pageSetup:{overrides:{ports:{preset:'dynamic'}}}}};
   const pages=buildPages(p),core=pages.filter(p=>p.name.startsWith('Core Network'));
   // A cross-page connection has a continuation at both ends.
   assert.equal(new Set(core.flatMap(p=>p.items).filter(i=>i.type==='path').map(i=>i.name.match(/^L\d+/)?.[0])).size,24);

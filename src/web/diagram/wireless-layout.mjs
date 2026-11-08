@@ -6,6 +6,7 @@ import {deviceModel,macCaption} from '../device-details.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,equipmentGapPlan,canContinueEquipment} from './equipment-layout.mjs';
 import {coreRoutes} from './routing.mjs';
+import {lineSpacing} from '../layout.mjs';
 import {wirelessNumberLeads} from './wireless-number-leads.mjs';
 import {crossesText} from './labels.mjs';
 import {C,addDevice,cableWeight,fresh,getAnchor,label,linkLegend,mediaInfo,physicalPorts,rate,route} from './scene.mjs';
@@ -40,7 +41,7 @@ function measured(project,e,role,value,width,defaults={}){
 }
 function captions(project,db,e,width){
  const ap=db.devices.get(e.apId),register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · '),detail=[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · ');
- const title=measured(project,e,'title',nameOf(ap),width,{key:captionTitleKey(project,db,e),size:18,bold:true,height:26}),registerText=measured(project,e,'register',register,width,{size:13,bold:true,height:21}),detailText=measured(project,e,'detail',detail,width),model=measured(project,e,'model',deviceModel(ap),width),mac=measured(project,e,'mac',macCaption(ap,e.apPort),width),notes=captionFor(project,e)?wrapPortText(captionFor(project,e),width,12):[];
+ const title=measured(project,e,'title',nameOf(ap),width,{key:captionTitleKey(project,db,e),size:18,bold:true,height:26}),registerText=measured(project,e,'register',register,width,{size:13,bold:true,height:21}),detailText=measured(project,e,'detail',detail,width),model=measured(project,e,'model',deviceModel(ap),width),mac=measured(project,e,'mac',macCaption(ap,e.apPort,{counts:false}),width),notes=captionFor(project,e)?wrapPortText(captionFor(project,e),width,12):[];
  return {title,register:registerText,detail:detailText,model,mac,notes,width:Math.max(width,title.w,registerText.w,detailText.w,model.w,mac.w),height:title.height+2+model.height+registerText.height+1+detailText.height+mac.height+2+notes.length*14};
 }
 function captionItems(page,project,db,e,center,y,width,caption){
@@ -111,7 +112,7 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
  }
  portNumbers(page.items,sw,physicalPorts(device),{selected:new Set(edges.map(e=>e.sp.toLowerCase())),fontScale:presentation(project,'Wireless Connections').textScale});
  applyDrawingEdits(page,project);
- const numberBoxes=wirelessNumberLeads(page,sw,endData,project),obstacles=[...numberBoxes.obstacles,...page.items.filter(i=>i.type==='text'&&!i.portNumberRole&&(i.wirelessCaption||!i.deviceTextOwner))],planned=coreRoutes(routed,[],endData,banks,nodes,{left:sw.x,right:sw.x+sw.w,minX:36,maxX:layout.W-36,pitch:layout.pitch,railPitch:layout.pitch,topClearance:12,bottomClearance:12,obstacles});
+ const numberBoxes=wirelessNumberLeads(page,sw,endData,project),obstacles=[...numberBoxes.obstacles,...page.items.filter(i=>i.type==='text'&&!i.portNumberRole&&(i.wirelessCaption||!i.deviceTextOwner))],planned=coreRoutes(routed,[],endData,banks,nodes,{left:sw.x,right:sw.x+sw.w,minX:36,maxX:layout.W-36,pitch:layout.pitch,railPitch:layout.pitch,topClearance:12,bottomClearance:12,obstacles,uniform:lineSpacing(project,page.name)});
  // Validate every complete lead once, including internal number bands.
  planned.cost[0]+=planned.routes.filter(r=>numberBoxes.numbers.some(box=>crossesText(r.points,box,r.weight/2))).length;
  for(const r of planned.routes){const e=edges.find(e=>e.idx===r.e.idx);route(page,r.a.anchor,r.b.anchor,r.points,r.a.info.color,'AP link '+(e.idx+1),r.a.info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status});Object.assign(page.items.at(-1),{editKey:pathKey(project,e),linkId:e.idx,weight:pathWeight(project,e)});}

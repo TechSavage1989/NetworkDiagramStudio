@@ -127,6 +127,22 @@ def check(path):
                         require(prop == reference[2] and target.get('LineStyle') == style_id, 'line and legend must share a line style')
                         style_cell = styles[style_id].find(V+"Cell[@N='"+prop+"']")
                         require(style_cell is not None and cell.get('V') == style_cell.get('V'), 'line cache differs from its legend style')
+                # A connector's drawn path must start at its Begin point and end
+                # at its End point (local 0,0 and Width,Height), or it would be
+                # painted away from the ports it is glued to.
+                for shape in shapes:
+                    if not shape.get('NameU', '').startswith('Connector.'):
+                        continue
+                    size = {c.get('N'): float(c.get('V')) for c in shape.findall(V+'Cell') if c.get('N') in {'Width', 'Height'}}
+                    rows = shape.findall(V+"Section[@N='Geometry']/"+V+'Row')
+                    if len(rows) < 2 or len(size) < 2:
+                        continue
+                    def xy(row):
+                        cells = {c.get('N'): float(c.get('V')) for c in row.findall(V+'Cell') if c.get('N') in {'X', 'Y'}}
+                        return cells.get('X', 0.0), cells.get('Y', 0.0)
+                    first, last = xy(rows[0]), xy(rows[-1])
+                    require(abs(first[0]) < 1e-3 and abs(first[1]) < 1e-3, 'connector path does not start at its begin point')
+                    require(abs(last[0]-size['Width']) < 1e-3 and abs(last[1]-size['Height']) < 1e-3, 'connector path does not end at its end point')
                 for connect in root.iter(V+'Connect'):
                     require(connect.get('FromSheet') in ids and connect.get('ToSheet') in ids, 'connection references an absent shape')
                     match = re.fullmatch(r'Connections.X(\d+)', connect.get('ToCell', ''))

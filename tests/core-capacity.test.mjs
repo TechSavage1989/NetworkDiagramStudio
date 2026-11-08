@@ -65,7 +65,9 @@ test('a dedicated page can hide one off-page connection without changing project
  assert.ok(link);
  project.layout=cleanLayout({corePages:[{id:'dedicated',name:'Distribution',devices:['sw-2']}]},project.devices.map(device=>device.id));
  const dedicated=()=>buildPages(project).find(page=>page.title==='Distribution');
- assert.ok(dedicated().items.some(item=>item.labelRole==='reference'));
+ // An off-page tag names the far device, its port and the page it continues on.
+ const tag=dedicated().items.find(item=>item.offPage),words=tag.children.filter(child=>child.type==='text').map(child=>child.value);
+ assert.equal(words.length,2);assert.match(words[0],/ \S+$/);assert.ok(!words.some(word=>/^L\d+\b/.test(word)),'no link numbers');
  project.layout.corePages[0].hiddenReferences=[coreLinkKey(link)];
  project.layout=cleanLayout(JSON.parse(JSON.stringify(project.layout)),project.devices.map(device=>device.id));
  assert.ok(!dedicated().items.some(item=>item.sourceLink&&coreLinkKey(item.sourceLink)===coreLinkKey(link)));

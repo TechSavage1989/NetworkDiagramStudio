@@ -65,8 +65,27 @@ function moveCable(item,dx,dy){
  for(const [end,adj] of [[0,1],[pts.length-1,pts.length-2]])if(original[end][0]===original[adj][0])pts[adj][0]=original[end][0];else pts[adj][1]=original[end][1];
  return pts;
 }
+// The top-level device that owns a cable end; a plug resolves to its host.
+function endOwner(shapes,end){let shape=shapes.get(end?.device);if(shape?.kind==='plug')shape=shapes.get(shape.host?.device);return shape?.editKey;}
+const sameOffset=(a,b)=>a&&b&&a[0]===b[0]&&a[1]===b[1];
+// Everything one move carries. Generated WAN/ISP/egress cards travel with the
+// device they hand off from, so they stay above it by default and keep any
+// arrangement the user gave them; a card that has its own offset, or is the
+// placement reference (exclude), stays independent. A cable with saved bends
+// whose two ends move together moves with them instead of keeping old bends.
+export function movementOffsets(page,edits,offsets,{exclude=[]}={}){
+ const result=new Map(offsets),skip=new Set(exclude),shapes=new Map(page.items.filter(i=>i.type==='device').map(i=>[i.key,i]));
+ for(const card of page.items)if(card.type==='device'&&card.kind==='handoff'&&card.ownerKey&&result.has(card.ownerKey)&&!result.has(card.editKey)&&!skip.has(card.editKey))result.set(card.editKey,result.get(card.ownerKey));
+ for(const path of page.items){
+  if(path.type!=='path'||!path.from||!path.to||result.has(path.editKey)||!(edits?.[path.editKey]?.points||edits?.[path.legacyEditKey]?.points))continue;
+  const a=result.get(endOwner(shapes,path.from)),b=result.get(endOwner(shapes,path.to));
+  if(sameOffset(a,b)&&(a[0]||a[1]))result.set(path.editKey,a);
+ }
+ return result;
+}
 export function moveDrawingItems(page,edits,offsets){
- const objects=drawingObjects(page),result=cleanDrawingEdits(edits);
+ offsets=movementOffsets(page,edits,offsets);
+ const objects=drawingObjects(page),result=cleanDrawingEdits(edits),shapes=new Map(page.items.filter(i=>i.type==='device').map(i=>[i.key,i]));
  if(page.coreDeviceIds&&objects.some(item=>offsets.has(item.editKey)&&(item.type==='device'||item.parent?.type==='device'))){
   // Any positioned device detail disables automatic core packing. Preserve
   // the visible body positions before that first edit, including WAN cards.
@@ -78,7 +97,8 @@ export function moveDrawingItems(page,edits,offsets){
  for(const [key,[dx,dy]] of offsets){
   const item=objects.find(o=>o.editKey===key);if(!item||item.parent&&offsets.has(item.parent.editKey))continue;
   const localX=item.normalized?dx/item.parent.w:dx,localY=item.normalized?dy/item.parent.h:dy,patch={...(result[key]||{})};
-  if(item.type==='path')patch.points=moveCable(item,dx,dy);
+  // A cable whose two ends move by the same offset is translated whole.
+  if(item.type==='path')patch.points=item.from&&item.to&&sameOffset(offsets.get(endOwner(shapes,item.from)),[dx,dy])&&sameOffset(offsets.get(endOwner(shapes,item.to)),[dx,dy])?item.points.map(([x,y])=>[x+dx,y+dy]):moveCable(item,dx,dy);
   else if(item.type==='vector')patch.commands=item.commands.map(c=>c.length===3?[c[0],c[1]+localX,c[2]+localY]:[...c]);
   else {
    Object.assign(patch,{x:item.x+localX,y:item.y+localY});
@@ -90,8 +110,10 @@ export function moveDrawingItems(page,edits,offsets){
  return cleanDrawingEdits(result);
 }
 export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='auto'){
- const devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),selected=new Set(keys),chosen=devices.filter(i=>selected.has(i.editKey)),reference=devices.find(i=>i.editKey===referenceKey&&!selected.has(i.editKey));
- if(!chosen.length||!reference)throw Error('Choose devices and a different reference device.');
+ const devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),picked=new Set(keys),reference=devices.find(i=>i.editKey===referenceKey&&!picked.has(i.editKey));
+ if(!devices.some(i=>picked.has(i.editKey))||!reference)throw Error('Choose devices and a different reference device.');
+ // WAN/ISP cards of a placed device come along as part of its group.
+ const selected=new Set(movementOffsets({items:devices},{},new Map([...picked].map(k=>[k,[0,0]])),{exclude:[referenceKey]}).keys()),chosen=devices.filter(i=>selected.has(i.editKey));
  const scale=reference.presentation?.scale||1,padding=typeof spacing==='number'?spacing:spacing==='auto'?automaticDeviceGap(page,[...chosen,reference],side):({compact:56,normal:96,wide:160}[spacing]??96)*scale;
  if(!Number.isFinite(padding))throw Error('Choose a valid placement spacing.');
  const others=devices.filter(i=>!selected.has(i.editKey)),offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,others.filter(i=>i!==reference).map(drawingBounds),padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});

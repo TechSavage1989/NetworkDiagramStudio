@@ -30,6 +30,10 @@ export function normalizedPage(page){
   const next={...item};if(Number.isFinite(item.x))next.x+=dx;if(Number.isFinite(item.y))next.y+=dy;
   if(item.points)next.points=item.points.map(([x,y])=>[x+dx,y+dy]);
   if(item.type==='vector')next.commands=item.commands.map(([op,x,y])=>op==='Z'?['Z']:[op,x+dx,y+dy]);
+  // A cable's drawn commands carry its jumps (arc apex and end pairs) and are
+  // what the Visio connector writes; they move with the rest of the page.
+  else if(item.commands)next.commands=item.commands.map(([op,...xy])=>[op,...xy.map((v,i)=>v+(i%2?dy:dx))]);
+  if(item.hops)next.hops=item.hops.map(hop=>({...hop,x:hop.x+dx,y:hop.y+dy}));
   for(const key of ['from','to'])if(item[key])next[key]={...item[key],x:item[key].x+dx,y:item[key].y+dy};
   return next;
  })};

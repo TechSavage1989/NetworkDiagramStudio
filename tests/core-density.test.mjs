@@ -22,7 +22,8 @@ test('full-scale continuation retains readable legends, full module assignments 
 function clear(page){
  const texts=page.items.filter(i=>i.type==='text'),bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path'),segments=[];
  for(const text of texts.filter(i=>i.labelRole||i.titleOwner)){
-  assert.ok(text.size>=12,'readable text size');
+  // Port names may shrink a little to stay beside their own cable.
+  assert.ok(text.size>=(text.labelRole==='port'?9:12),'readable text size');
   for(const other of texts)if(other!==text)assert.ok(!intersects(text,other),'overlapping text');
   for(const body of bodies)assert.ok(!intersects(text,body),'text overlaps equipment');
   for(const path of paths)assert.ok(!pathCrossesText(path,text,1),'text overlaps a cable or hop');
@@ -47,11 +48,11 @@ test('connected switches continue before any device is reduced from the shared w
 
 test('overflow fills later automatic sheets instead of stranding individual devices',()=>{
  const project=chain(8),pages=core(project);assert.ok(pages.length>1&&pages.length<=3);assert.ok(pages[0].coreDeviceIds.length>=4);assert.ok(pages.slice(1).every(p=>p.coreDeviceIds.length>1));assert.deepEqual(pages.flatMap(p=>p.coreDeviceIds),project.devices.map(d=>d.id));for(const page of pages)clear(page);
- const links=new Set(pages.flatMap(p=>p.items.filter(i=>i.sourceLink).map(i=>JSON.stringify(i.sourceLink))));assert.equal(links.size,7);assert.ok(pages.every(p=>p.items.some(i=>i.labelRole==='reference')));
+ const links=new Set(pages.flatMap(p=>p.items.filter(i=>i.sourceLink).map(i=>JSON.stringify(i.sourceLink))));assert.equal(links.size,7);assert.ok(pages.every(p=>p.items.some(i=>i.offPage)));
 });
 
 test('named pages use fit retries without changing assignments or saved edits and export native connections',async()=>{
- const project=fixture();project.layout={order:['edge','sw2','sw1'],corePages:[{id:'primary',name:'Primary core',devices:['edge','sw1','sw2']}]};const initial=core(project),title=initial[0].items.find(i=>i.titleOwner==='edge'&&!i.titleSlot);project.layout.drawingEdits={[title.editKey]:{color:'#2255AA'}};const saved=JSON.stringify(project),pages=core(JSON.parse(saved));assert.equal(pages.length,1);assert.equal(pages[0].name,'Primary core');assert.equal(pages[0].items.find(i=>i.editKey===title.editKey).color,'#2255AA');assert.equal(JSON.stringify(project),saved);clear(pages[0]);
+ const project=fixture();project.layout={cableCaptions:true,order:['edge','sw2','sw1'],corePages:[{id:'primary',name:'Primary core',devices:['edge','sw1','sw2']}]};const initial=core(project),title=initial[0].items.find(i=>i.titleOwner==='edge'&&!i.titleSlot);project.layout.drawingEdits={[title.editKey]:{color:'#2255AA'}};const saved=JSON.stringify(project),pages=core(JSON.parse(saved));assert.equal(pages.length,1);assert.equal(pages[0].name,'Primary core');assert.equal(pages[0].items.find(i=>i.editKey===title.editKey).color,'#2255AA');assert.equal(JSON.stringify(project),saved);clear(pages[0]);
  const parts=await unzip(await exportVisio(project,pages).arrayBuffer()),xml=new TextDecoder().decode(parts.get('visio/pages/page1.xml'));assert.equal((xml.match(/<Connect /g)||[]).length,8);assert.ok(xml.includes('10 Gbps'));assert.ok(xml.includes('Primary core'));
 });
 

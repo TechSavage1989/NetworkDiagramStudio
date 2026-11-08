@@ -5,7 +5,7 @@ import {deviceScale} from '../presentation.mjs';
 import {coreSidebar} from './sidebar.mjs';
 import {deviceFaceplate} from './faceplate.mjs';
 import {editDeviceShape} from '../drawing-edits.mjs';
-import {simplifyRoute} from './routing.mjs';
+import {simplifyRoute,ROUTE_STYLE} from './routing.mjs';
 import {linkDefaults,legendStyleId,cleanLinkStyles} from '../link-styles.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {connectionMediaInfo} from '../connection-types.mjs';
@@ -73,10 +73,10 @@ export function fresh(name,title,subtitle,project){
   const geometry=pageGeometry(project,pageFamily(name));if(project._reportPrefix)name=project._reportPrefix+'|'+name;
   const p={name,title,...geometry,items:[]}, a=p.items,span=p.width-72,nameWidth=Math.max(180,span-308);
   const projectName=project.name||'Network project',nameHeight=Math.max(23,wrapPortText(projectName,nameWidth,15,true).length*18);
-  label(a,36,Math.max(0,39-nameHeight),nameWidth,Math.min(39,nameHeight),projectName,15,true,C.teal);
+  label(a,36,Math.max(0,39-nameHeight),nameWidth,Math.min(39,nameHeight),projectName,15,true,C.teal);a.at(-1).pageHeading='project';
   label(a,p.width-300,18,264,23,'NETWORK DOCUMENTATION',13,true,C.teal,'right');a.at(-1).pageFrame='brand';
-  label(a,36,43,span,48,title,33,true);a.at(-1).pageTitle=true;
-  label(a,36,99,span,36,subtitle,16,false,C.muted);
+  label(a,36,43,span,48,title,33,true);a.at(-1).pageTitle=true;a.at(-1).pageHeading='title';
+  label(a,36,99,span,36,subtitle,16,false,C.muted);a.at(-1).pageHeading='subtitle';
   rect(a,36,138,span,2,C.rule);a.at(-1).pageFrame='rule';
   return p;
 }
@@ -160,15 +160,88 @@ function socketDeparture(device, anchor, socket){
 }
 // A chassis lead may cross its own module horizontally, but its vertical run
 // must use the open center or an exterior side, never the next module/bay.
+// Empty bays the straight lead from (nx, ny) passes through on its side.
+function baysBetween(g,nx,ny,region,top){
+  const between=r=>r!==region&&nx>r.x&&nx<r.x+r.w&&(top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1);
+  return g.panelRegions.some(r=>between(r)&&!r.empty)?null:g.panelRegions.filter(r=>between(r)&&r.empty);
+}
+function recordBayLead(g,nx,ny,region,top){if(baysBetween(g,nx,ny,region,top)?.length)g.bayLeads=[...(g.bayLeads||[]),nx];}
+// The painted span of a bay caption, in normalized device coordinates.
+function bayCaptions(g,bay){
+  return g.children.filter(c=>c.type==='text'&&c.x<bay.x+bay.w&&c.x+c.w>bay.x&&c.y<bay.y+bay.h&&c.y+c.h>bay.y).map(c=>{
+    const {lines,size,lineHeight}=textLayout({...c,w:c.w*g.w,h:c.h*g.h}),w=Math.max(...lines.map(line=>Math.max(0,textWidth(line,size,c.bold)-6)))/g.w,h=lines.length*lineHeight/g.h;
+    const box=Math.max(...lines.map(line=>textWidth(line,size,c.bold)))/g.w+1/g.w;
+    return {child:c,x:c.x+(c.align==='right'?c.w-w:c.align==='center'?(c.w-w)/2:0),y:c.y+(c.h-h)/2,w,h,box};
+  });
+}
+// Slide an empty bay's caption along the bay to the nearest spot clear of
+// every cable rising through it (including this socket's). The moved caption
+// gets its own native master, since the same device elsewhere keeps the default.
+function moveBayCaption(g,nx,ny,region,top,weight){
+  const bays=baysBetween(g,nx,ny,region,top);if(bays?.length!==1)return false;
+  const bay=bays[0],pad=(weight/2+3)/g.w,caption=bayCaptions(g,bay).find(c=>nx>c.x-pad&&nx<c.x+c.w+pad);if(!caption)return false;
+  const columns=[...(g.bayLeads||[]),nx],edge=.012,clear=x=>columns.every(c=>c<x-pad||c>x+caption.w+pad);
+  let best=null;for(let x=bay.x+edge;x<=bay.x+bay.w-edge-caption.box+1e-9;x+=1/g.w)if(clear(x)&&(best===null||Math.abs(x-caption.x)<Math.abs(best-caption.x)))best=x;
+  if(best===null)return false;
+  // The text box keeps its measured width; the painted text starts at best.
+  Object.assign(caption.child,{x:best,w:Math.min(caption.box,bay.x+bay.w-best),align:'left'});
+  g.masterKey=g.masterKey.replace(/:bay-caption:[^:]*$/,'')+':bay-caption:'+Math.round(best*1e4);return true;
+}
+// Sockets under an empty bay's caption share the bay below (or above) the
+// caption. Each takes its own turn row and lane beside the caption edge it is
+// nearer to; nearer sockets turn closest to the row and use the outer lane, so
+// the doglegs nest without crossing. Returns null when the bay lacks room.
+function captionDeparture(g,nx,ny,region,top,weight){
+  const between=r=>r!==region&&nx>r.x&&nx<r.x+r.w&&(top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1);
+  if(g.panelRegions.some(r=>between(r)&&!r.empty))return null;
+  const bays=g.panelRegions.filter(r=>between(r)&&r.empty);if(bays.length!==1)return null;
+  const bay=bays[0],padX=(weight/2+3)/g.w,padY=(weight/2+3)/g.h,stepY=ROUTE_STYLE.modulePitch/g.h;
+  // The rise must not cross another socket of the same module (an inner row).
+  const edge=top?bay.y+bay.h:bay.y,low=Math.min(ny,edge),high=Math.max(ny,edge);
+  if(g.children.some(c=>c.socketPart===0&&!(c.anchorOrigin&&Math.abs(c.anchorOrigin[0]-nx)<1e-6&&Math.abs(c.anchorOrigin[1]-ny)<1e-6)&&nx>c.x-padX&&nx<c.x+c.w+padX&&c.y+c.h>low&&c.y<high))return null;
+  const caption=g.children.filter(c=>c.type==='text'&&c.x<bay.x+bay.w&&c.x+c.w>bay.x&&c.y<bay.y+bay.h&&c.y+c.h>bay.y).map(c=>{
+    const {lines,size,lineHeight}=textLayout({...c,w:c.w*g.w,h:c.h*g.h}),w=Math.max(...lines.map(line=>Math.max(0,textWidth(line,size,c.bold)-6)))/g.w,h=lines.length*lineHeight/g.h;
+    const x=c.x+(c.align==='right'?c.w-w:c.align==='center'?(c.w-w)/2:0);return {x,y:c.y+(c.h-h)/2,w,h};
+  }).find(c=>nx>c.x-padX&&nx<c.x+c.w+padX);
+  if(!caption)return null;
+  const left=nx<caption.x+caption.w/2,same=g.children.filter(c=>c.anchorOrigin&&Math.abs(c.anchorOrigin[1]-ny)<1e-6).map(c=>c.anchorOrigin[0])
+    .filter(x=>x>caption.x-padX&&x<caption.x+caption.w+padX&&(x<caption.x+caption.w/2)===left).sort((a,b)=>left?a-b:b-a);
+  const k=Math.max(0,same.findIndex(x=>Math.abs(x-nx)<1e-6)),n=Math.max(1,same.length);
+  const near=top?bay.y+bay.h-padY:bay.y+padY,far=top?caption.y+caption.h+padY:caption.y-padY,turn=near+(top?-1:1)*k*stepY;
+  if(top?turn<far:turn>far)return null;
+  // Lanes keep a full cable separation from every socket column (a neighbor's
+  // own straight lead) and from each other, scanning outward from the caption.
+  const columns=g.children.filter(c=>c.anchorOrigin&&c.x<region.x+region.w&&c.x+c.w>region.x).map(c=>c.anchorOrigin[0]);
+  const gap=(weight+ROUTE_STYLE.gap)/g.w,lanes=[];
+  for(let x=left?caption.x-padX:caption.x+caption.w+padX;lanes.length<n&&x>bay.x+padX&&x<bay.x+bay.w-padX;x+=(left?-1:1)/g.w)
+   if(columns.every(c=>Math.abs(c-x)>=gap)&&lanes.every(l=>Math.abs(l-x)>=gap))lanes.push(x);
+  const lane=lanes[n-1-k];
+  if(lane===undefined)return null;
+  return [[g.x+nx*g.w,g.y+turn*g.h],[g.x+lane*g.w,g.y+turn*g.h]];
+}
 function modularAnchor(g,id,nx,ny,region,sideHint,socket,options={}){
-  const blocked=top=>g.panelRegions.some(r=>r!==region&&nx>r.x&&nx<r.x+r.w&&
-    (top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1));
+  // An empty bay is open faceplate unless its own caption sits on the lead.
+  const captionOn=r=>g.children.some(c=>{
+    if(c.type!=='text'||c.x+c.w<=r.x||c.x>=r.x+r.w||c.y+c.h<=r.y||c.y>=r.y+r.h)return false;
+    const {lines,size}=textLayout({...c,w:c.w*g.w,h:c.h*g.h}),w=Math.max(...lines.map(line=>Math.max(0,textWidth(line,size,c.bold)-6)))/g.w,pad=((options.weight||cableWeight)/2+2)/g.w;
+    const left=c.x+(c.align==='right'?c.w-w:c.align==='center'?(c.w-w)/2:0);return nx>left-pad&&nx<left+w+pad;
+  });
+  // Empty bays only open the way toward the peer; they never turn a lead away.
+  const blocked=(top,open=true)=>g.panelRegions.some(r=>r!==region&&nx>r.x&&nx<r.x+r.w&&
+    (top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1)&&(!open||!r.empty||captionOn(r)));
   let top=sideHint==='top'||sideHint!=='bottom'&&ny<=.5;
   // An exposed outer row can leave directly even when its peer is above it.
   // Turning outside the chassis is preferable to crossing every inner row.
-  if(blocked(top)&&!blocked(!top))top=!top;
+  if(blocked(top)&&!blocked(!top,false))top=!top;
   const side=top?'top':'bottom',weight=options.weight||cableWeight,anchor={device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+(top?0:g.h),weight};
-  if(!blocked(top)){const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
+  if(!blocked(top)){recordBayLead(g,nx,ny,region,top);const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
+  // Only an empty bay's caption is in the way. Slide the caption clear of every
+  // cable rising through the bay so this socket also leaves straight; when no
+  // clear spot exists, rise into the bay, turn under the caption and leave
+  // beside it, rather than crossing the module's rows.
+  if(moveBayCaption(g,nx,ny,region,top,weight)){recordBayLead(g,nx,ny,region,top);const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
+  const bayTurn=captionDeparture(g,nx,ny,region,top,weight);
+  if(bayTurn){g.bayLeads=[...(g.bayLeads||[]),(bayTurn[1][0]-g.x)/g.w];anchor.departure=bayTurn;return anchor;}
   const center=(g.moduleChannel.left+g.moduleChannel.right)/2,column=nx<center?'left':'right';
   const pad=(weight/2+.01)/g.h,xPad=(weight/2+.01)/g.w,lo=region.y+pad,hi=region.y+region.h-pad;
   const details=g.children.filter(c=>(c.socketPart===0||c.type==='text')&&c.x+c.w>region.x&&c.x<region.x+region.w&&c.y+c.h>region.y&&c.y<region.y+region.h).map(c=>{
@@ -206,8 +279,11 @@ export function getAnchor(g,raw,sideHint,unique,options={}){
   if(id==null && k && !k.includes('/') && !isNaN(+k)) id=keys.find(a=>a===k);
   if(id==null){
     // An unmatched port on a real front has no known jack coordinates. Give it a perimeter attachment.
-    id='uplink.'+unique;const frac=.14+.72*((unique%7)+1)/8;
-    g.ports[id]=[frac,sideHint==='top'?0:1];
+    // Another unmatched port on the same side takes the next free slot, so
+    // two cables never share one attachment point.
+    id='uplink.'+unique;const y=sideHint==='top'?0:1,slot=n=>.14+.72*(n+1)/8,taken=Object.entries(g.ports).filter(([key,p])=>key!==id&&key.startsWith('uplink.')&&p[1]===y).map(([,p])=>p[0]);
+    let frac=slot(unique%7);for(let n=0;n<7&&taken.some(x=>Math.abs(x-frac)<1e-6);n++)frac=slot((unique+n+1)%7);
+    g.ports[id]=[frac,y];
   }
   const [nx,ny]=g.ports[id];
   const regions=g.panelRegions||[],region=regions.find(r=>nx>=(r.x??0)-1e-8&&nx<=(r.x??0)+(r.w??1)+1e-8&&ny>=r.y-1e-8&&ny<=r.y+r.h+1e-8);
@@ -259,38 +335,55 @@ export function route(page,from,to,points,color,name,linkType='Link',sourceLink=
   if(pts.length<2)return;
   page.items.push({type:'path',from,to,points:pts,color,name,linkType,sourceLink,generatedDevice,weight:cableWeight});
 }
-export function bridge(page){
-  const routes=page.items.filter(i=>i.type==='path'), prior=[];
+export function bridge(page,{style='single'}={}){
+  const routes=page.items.filter(i=>i.type==='path'),segments=[];
+  routes.forEach((r,order)=>r.points.slice(1).forEach((b,j)=>{const a=r.points[j];segments.push({r,order,j,a,b,h:a[1]===b[1],marks:[]});}));
+  // Every crossing between two cables gets one jump. A cable crossing a
+  // bundle of close parallel cables makes the jump (one bridge over all of
+  // them); otherwise the later-drawn cable jumps, as before.
+  const between=(v,c,d)=>v>Math.min(c,d)&&v<Math.max(c,d),crossings=[];
+  for(const hs of segments.filter(s=>s.h))for(const vs of segments.filter(s=>!s.h)){
+    if(hs.r===vs.r)continue;const p=[vs.a[0],hs.a[1]];
+    if(!between(p[0],hs.a[0],hs.b[0])||!between(p[1],vs.a[1],vs.b[1]))continue;
+    const margin=Math.min(Math.abs(p[0]-hs.a[0]),Math.abs(p[0]-hs.b[0]),Math.abs(p[1]-vs.a[1]),Math.abs(p[1]-vs.b[1]));if(margin<=2)continue;
+    crossings.push({p,hs,vs,margin});
+  }
+  const near=(segment,p,axis)=>crossings.filter(c=>(c.hs===segment||c.vs===segment)&&Math.abs(c.p[axis]-p[axis])<30).length;
+  for(const c of crossings){
+    const along=near(c.hs,c.p,0),across=near(c.vs,c.p,1),owner=along>across?c.hs:across>along?c.vs:c.hs.order>c.vs.order?c.hs:c.vs;
+    owner.marks.push({p:c.p,rad:Math.min(Math.max(7,(owner.r.weight||cableWeight)*2+2),c.margin*.40)});
+  }
   for(const r of routes){
     r.commands=[['M',...r.points[0]]];r.hops=[];
-    for(let j=1;j<r.points.length;j++){
-      const a=r.points[j-1],b=r.points[j],h=a[1]===b[1],axis=h?0:1,dir=Math.sign(b[axis]-a[axis]);
-      const marks=[];
-      for(const s of prior){
-        if(s.h===h)continue;
-        const x=h?s.a[0]:a[0],y=h?a[1]:s.a[1],p=[x,y];
-        const margin=Math.min(Math.abs(p[axis]-a[axis]),Math.abs(p[axis]-b[axis]),Math.abs(p[1-axis]-s.a[1-axis]),Math.abs(p[1-axis]-s.b[1-axis]));
-        const between=(v,c,d)=>v>Math.min(c,d)&&v<Math.max(c,d);
-        if(margin>2 && between(p[axis],a[axis],b[axis])&&between(p[1-axis],s.a[1-axis],s.b[1-axis]))marks.push({p,rad:Math.min(Math.max(7,(r.weight||cableWeight)*2+2),margin*.40)});
-      }
-      marks.sort((m,n)=>dir*(m.p[axis]-n.p[axis]));
+    for(const segment of segments.filter(s=>s.r===r)){
+      const {a,b,h}=segment,axis=h?0:1,dir=Math.sign(b[axis]-a[axis]),marks=segment.marks.sort((m,n)=>dir*(m.p[axis]-n.p[axis]));
+      // Single style: one hop per crossed line, made smaller where crossings
+      // are close, as Visio draws them. Bundle style: crossings closer than
+      // two jumps share one wider bridge.
+      const groups=[];
+      for(const mark of marks){const last=groups.at(-1);if(style==='bundle'&&last&&Math.abs(mark.p[axis]-last.at(-1).p[axis])<2*Math.max(mark.rad,last.at(-1).rad)+6)last.push(mark);else groups.push([mark]);}
       let end=a[axis];
-      for(let k=0;k<marks.length;k++){
-        const {p,rad}=marks[k],next=marks[k+1]?.p[axis]??b[axis];
-        const radius=Math.min(rad,Math.abs(p[axis]-end)*.46,Math.abs(next-p[axis])*.46);if(radius<1)continue;
-        const before=[...p],after=[...p],mid=[...p];before[axis]-=dir*radius;after[axis]+=dir*radius;mid[1-axis]-=radius;
+      for(let k=0;k<groups.length;k++){
+        const group=groups[k],first=group[0].p,last=group.at(-1).p,rad=Math.min(...group.map(m=>m.rad)),next=groups[k+1]?.[0].p[axis]??b[axis];
+        // A single hop shares the room to each neighboring crossing equally,
+        // so a tight bundle still shows one small hop per line.
+        const prevMark=k?groups[k-1].at(-1).p[axis]:null,nextMark=groups[k+1]?.[0].p[axis];
+        const radius=style==='bundle'?Math.min(rad,Math.abs(first[axis]-end)*.46,Math.abs(next-last[axis])*.46):
+          Math.min(rad,prevMark==null?Math.abs(first[axis]-a[axis])*.46:Math.abs(first[axis]-prevMark)/2-.5,nextMark==null?Math.abs(b[axis]-last[axis])*.46:Math.abs(nextMark-last[axis])/2-.5);
+        if(radius<1)continue;
+        const before=[...first],after=[...last],mid=[...first];before[axis]-=dir*radius;after[axis]+=dir*radius;mid[axis]=(before[axis]+after[axis])/2;mid[1-axis]-=radius;
         r.commands.push(['L',...before],['A',...mid,...after]);r.hops.push({x:Math.min(before[0],mid[0],after[0])-2,y:Math.min(before[1],mid[1],after[1])-2,w:Math.max(before[0],mid[0],after[0])-Math.min(before[0],mid[0],after[0])+4,h:Math.max(before[1],mid[1],after[1])-Math.min(before[1],mid[1],after[1])+4});end=after[axis];
       }
       r.commands.push(['L',...b]);
     }
-    r.points.slice(1).forEach((b,i)=>prior.push({a:r.points[i],b,h:r.points[i][1]===b[1]}));
   }
 }
 function svgText(i){
   const {lines,size,lineHeight}=textLayout(i),anchor=i.align==='right'?'end':i.align==='center'?'middle':'start',x=round(i.x+(i.align==='right'?i.w:i.align==='center'?i.w/2:0)),y=i.y+(i.h-lines.length*lineHeight)/2+lineHeight/2+size*.34;
   const rotation=i.angle?' transform="rotate('+round(-i.angle*180/Math.PI)+' '+round(i.x+i.w/2)+' '+round(i.y+i.h/2)+')"':'';
   const content=lines.length===1?xml(lines[0]):lines.map((line,n)=>'<tspan x="'+x+'" y="'+round(y+n*lineHeight)+'">'+xml(line)+'</tspan>').join('');
-  return '<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
+  const background=i.background?'<rect x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+xml(i.background)+'"'+rotation+' pointer-events="none"/>':'';
+  return background+'<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
 }
 export function svgPage(p){
   const W=p.width||1200,H=p.height||975;
@@ -304,14 +397,16 @@ export function svgPage(p){
       const artwork=a?.native?a.native.paths.filter(p=>!p.hidden).map((p,n)=>'<path data-drawing-key="'+xml(i.editKey+'|vector|'+n)+'" d="'+p.commands.map(([op,x,y])=>op==='Z'?'Z':op+' '+round(i.x+x*i.w)+' '+round(i.y+y*i.h)).join(' ')+'" fill="'+xml(p.fill)+'" stroke="'+xml(p.stroke)+'" stroke-width="'+round(p.weight*i.w)+'"/>').join('')+a.native.texts.filter(t=>!t.hidden).map((t,n)=>svgText({x:i.x+t.x*i.w-t.w*i.w/2,y:i.y+t.y*i.h-t.size*i.w*.7,w:t.w*i.w,h:t.size*i.w*1.4,size:t.size*i.w,value:t.text,color:t.color,bold:t.bold||false,align:t.align||'center',angle:t.angle,full:true,editKey:i.editKey+'|arttext|'+n})).join(''):a?'<image x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" href="'+a.dataUrl+'"/>':child;
       return '<g'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.sourceId?' data-device-id="'+xml(i.sourceId)+'" tabindex="0" role="button" aria-label="Find stencil for '+xml(i.name)+'"':'')+'><title>'+xml(i.name+(i.fallback&&i.kind!=='plug'?' (schematic)':''))+'</title>'+artwork+'</g>';
     }
-    // Convert three-point semicircles to precise SVG arcs.
+    // Convert three-point jumps to precise SVG arcs: a semicircle for one
+    // crossing, a flatter half-ellipse when one bridge spans several.
     let last=null;const hopPaths=[];
     const path=i.commands.map(cmd=>{
       const [t,x,y,ex,ey]=cmd;
       if(t==='A'){
-        const dx=ex-last[0],dy=ey-last[1],rad=Math.hypot(dx,dy)/2;
+        const dx=ex-last[0],dy=ey-last[1],rx=Math.hypot(dx,dy)/2,ry=Math.hypot(x-(last[0]+ex)/2,y-(last[1]+ey)/2);
         const sweep=dx*(y-last[1])-dy*(x-last[0])<0?1:0;
-        const arc='A '+round(rad)+' '+round(rad)+' 0 0 '+sweep+' '+round(ex)+' '+round(ey);hopPaths.push('M '+last.map(round).join(' ')+' '+arc);last=[ex,ey];return arc;
+        // SVG radii follow the page axes: a vertical cable's bridge is tall.
+        const vertical=Math.abs(dy)>Math.abs(dx),arc='A '+round(vertical?ry:rx)+' '+round(vertical?rx:ry)+' 0 0 '+sweep+' '+round(ex)+' '+round(ey);hopPaths.push('M '+last.map(round).join(' ')+' '+arc);last=[ex,ey];return arc;
       }
       last=[x,y];return t+' '+round(x)+' '+round(y);
     }).join(' ');

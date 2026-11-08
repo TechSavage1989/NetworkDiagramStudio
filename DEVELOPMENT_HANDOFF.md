@@ -1,3 +1,176 @@
+## Preview.34: configurable report paper, outside port numbering and compact network sheets
+
+Version 0.1.0-preview.34 combines the fully validated paper-size implementation from PR #33 with the active port-map/network-layout changes in PR #32. The former PR was merged into the latter, then the version and release intent were updated on the combined branch. Merge only after the exact version commit passes all Windows/browser/native tests. The final merged-main release workflow must pass, publish an immutable preview.34 prerelease, and have its public GitHub release, updater feed and asset checksums verified before announcing publication.
+
+The Switchport Reports dialog supports Letter, Legal, Tabloid/Ledger, A5, A4, A3 and A2, landscape or portrait; layout.switchport.paper saves the independent choice with A4 landscape as the backwards-compatible default. Browser report scenes and tables use chosen sheet geometry and paginate. The native report exporter preserves the existing A4 scene and fits it uniformly to the PDF/PNG media selected, without stretching or cropping ports; small sizes can reduce printed readability. Explicit non-default output names identify size and orientation, and validation/manifest metadata records the choice. Port maps in the drawing set retain their own page-family paper choice.
+
+The integrated port-map work keeps VLAN fills/markers, numbered sockets and port inventory data together, while the drawing route/caption planner reserves outside port-label space and organizes cables into clear, even lanes. Preserve edit identities, PDF/PNG/Visio exports and actual host-port geometry.
+
+Tests: node --test, Windows executable build, portable packaging, the real native GUI/update lifecycle smoke and tests/report-paper-native (Skia PDF media boxes), plus report-paper.test.mjs (real jsPDF Letter/A3 media boxes, settings/save and archives). All fixtures synthetic. Interactive Microsoft Visio inspection remains unverified. Never include any actual customer data.
+
+## Configurable switchport report paper (feature under review, after preview.33)
+
+The Switchport Reports options dialog now offers Letter, Legal, Tabloid/Ledger, A5, A4, A3, and A2 with portrait/landscape orientation. Saved as layout.switchport.paper independently from drawing layout.pageSetup, with A4 landscape as the backwards-compatible default. The browser engine reflows report diagrams, legends and inventory tables and paginates at the chosen physical size, using embedded vector PDF and 300dpi PNG exports. The Windows native engine retains the established A4 scene for internal drawing and fits it proportionally into the chosen PDF/PNG media size without crop (which may make small-paper text less readable); dimensions/format are reported accurately. The file naming uses an 'a4' stem for the unchanged default and a size-orientation stem for other presets. Port-map drawing sheets continue using their own page family sizes and dense faceplate styles; do not override those with report settings.
+
+Synthetic regressions: tests/report-paper.test.mjs for settings persistence, real jsPDF media boxes, preview page sizing and browser archive filenames; tests/report-paper-native for Skia native PDF media boxes and 300dpi dimensions. Run node --test, the native report test, npm repo checks, Windows build and native app smoke on the exact final branch before merge. Only fictional data is used. A stale report-options screenshot must not be represented as updated; capture from a real built app if available before release.
+
+## Compact network page arrangements (unreleased, after preview.33)
+
+Owner request: by default, network devices should take the least space possible. There should be an option to arrange them in a particular way, for example a vertical stack or a compact square, while the existing orientation and alignment tools stay. Placement follows the order configured with the existing tools. It must work for any device that configurations are provided for.
+
+Layout (compact-layout.mjs, core.mjs, layout.mjs, core-arrangement.mjs):
+- columnLayouts partitions the saved order into balanced columns, reading down each column and then across. Bodies share their column's left edge.
+- Compact scores the finished sheet's estimated area, including the legend column, heading, left rail reserve, column gaps and exterior rails. Strips wider than about 3:1 are penalized, and cable length is a small extra term.
+- Fixed choices are Vertical stack and 2, 3 or 4 columns.
+- On a capacity error, Compact tries its next two ranked arrangements at the standard rail pitch before widening rails. A fixed choice that cannot be routed falls back to Compact, then to one column, and sets arrangementFallback.
+- Multi-column pages reserve left rails only for the first column. Dynamic headings shrink to their text after labels are placed, so sheets end at their content.
+
+Routing (routing.mjs, labels.mjs):
+- Cross-column cables start in the gap between their columns.
+- A final repair separates rows and rails left closer than the visible gap, or rails too close to equipment. It may trade one crossing for a merged segment.
+- A cable's rows and rail stay outside its own modular chassis, even through empty slots.
+- Interior collinear spikes are collapsed.
+- Center-corridor tracks with overlapping channels are spread together.
+- Media captions gain a stacked two-line inline candidate after the existing callouts.
+
+Editor:
+- Edit drawing has an Arrange selector, and Pages & layout has Network page arrangement (Drawing defaults) and Device arrangement (named pages).
+- Changing an arrangement clears device, caption, label and bend positions on the affected pages, keeping sizes, text and styles, as one Undo step.
+- tests/browser-core-arrangement.mjs covers the toolbar, Undo/Redo and the dialog.
+
+Measured on fictional fixtures (page size; previous default → Compact):
+
+| Fixture | Previous default | Compact |
+| --- | --- | --- |
+| Sample | 1200×897 | 1200×897, one column |
+| Modular lab | 1608×2148 | 2008×1369, two columns |
+| Campus lab | 2208×2393 | 2832×1041, three columns |
+| 16-device lab | 3196×2767 | 3012×1581, three columns |
+
+On the 16-device lab:
+- hop arcs fall from 134 to 72;
+- close parallels fall from 2 to 0;
+- cable length falls by about a third.
+
+Owner review of the first build (Visio export and a real MDF import, reproduced with tests/fixtures/mdf-lookalike.mjs):
+- Inline connector captions now paint their white background in Visio. The text geometry is filled and has no line.
+- Cables no longer thread through the gaps between another stack's members; unrelated equipment is solid.
+- Socket leads of vertically stacked devices no longer overlap.
+- Module turns stay off the socket edges. The preferred module pitch is the standard separation (10).
+- Overlapping module bands and corridor channels are no longer re-spread separately.
+- Generic symbols give each unmatched port its own attachment point.
+- The left reserve for multi-column pages counts every cable on the first column.
+
+Owner follow-up (editing, snapping, speed and spacing):
+- Edits were being refused with "This change overlaps a link label" on pages with connector text on its own cable. Edit validation and Organize analysis now exempt that text, except where its own cable jumps, and allow a host's own leads through empty bays.
+- Snapping is a one-click on/off button; Snap options... holds the grid and alignment settings.
+- Dragging a bend near a neighboring bend's line merges the points, and interior collinear spikes collapse. Exact keyboard and dialog moves keep their coordinates.
+- Faster rebuilds:
+  - coreRoutes is memoized on its exact inputs;
+  - identical device measurements are reused within a build;
+  - faceplates are memoized.
+  - On a large fictional project, a core cable edit rebuild went from about 1.0 s to 0.5 s, and a browser bend commit from 0.93 s to 0.63 s. A warm rebuild is byte-identical to a cold one.
+- Organize connections has Even line spacing with a spacing value, saved per page in layout.lineSpacing and also used by wireless pages.
+
+Owner follow-up (captions and remaining overlaps):
+- Cable type and speed text on lines is off by default (layout.cableCaptions); Pages & layout has the option. Explicitly edited captions stay.
+- Collinear runs of different cables (for example vertically aligned ports on stacked devices) keep at least the standard clearance between their ends.
+- The final repair counts runs hugging equipment, so no repair adds one.
+
+Owner suggestion: a socket under the empty MM2 bay's caption now rises into the bay and turns under the caption, rather than running between the module's port rows. Its lane stays clear of neighboring socket columns.
+
+Owner follow-up: device captions no longer show MAC addresses or counts ("417 MAC addresses"); the address panel and device editor keep the full list. The MM2 bay caption slides clear of rising cables, and port labels prefer a spot clearly nearest their own cable near the port.
+
+Owner follow-up (crowding, highlight, lag):
+- A cable crossing a tight bundle draws one bridge instead of stacked jumps.
+- Cables highlight under the pointer outside Edit drawing too.
+- Snapping, arrangement, cable text and line spacing no longer invalidate unrelated page families.
+- Arrange, Pages & layout and Page options validate through the page cache and reuse that build.
+- The Arrange control re-enables after busy work.
+- On a large fictional project: a snapping toggle takes 0.3 s and Arrange 0.3-0.4 s (it was 1.3 s); a device move or undo still re-plans the core page (about 0.6 s).
+
+Owner follow-up (Visio jumps, WAN cards, labels, off-page links, editor space):
+- Native Visio connectors carry the planner's jumps as EllipticalArcTo rows, so hops show as soon as the file opens. Before this, Visio drew them only after it rerouted an edited line.
+- WAN/ISP/egress cards stay above their firewall or router by default and move with it when it is dragged, nudged, aligned or placed beside something (movementOffsets in drawing-edits.mjs). A card can still be moved or placed on its own, keeps that offset from its owner afterwards, and can be the moving item or the reference in Place beside, alone or in a Shift selection. A cable with saved bends whose two ends move together is translated whole.
+- A port label stays on the half of the visible cable nearer its own port, measured from where the cable leaves its equipment to where it enters the far equipment. When that half is crowded, the name sits on its own cable with a white background. Only after that may it take any clear spot. This keeps a far end's port name (5/50) from sitting next to the near end's port (E8).
+- Off-page connections end in one aligned column of white tags reading "far device and port, then page", with no L-numbers. All tags on a page share one width and sit left of every rail and every other off-page lane. Dynamic pages reserve the measured tag width. On fixed paper a tag wraps between words, up to three lines, and stacks without overlapping while still touching its own cable; past three lines it shows only the page.
+- Editor chrome: a slimmer header; page groups on the title row; page tabs, status text, page picker and import notes on one row; and edit, placement and cable tools in one wrapping bar. With fictional data at 1920x1080 the canvas starts at 185 px instead of 362 px; at 1366x768 it is 499 px tall instead of 336 px.
+
+Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
+- Visio: on a page drawn above its origin (WAN cards above a firewall), connector paths were written 20 units higher than the device shapes. Cables then missed their ports, and stack leads looked as if they ran through the members. normalizedPage now translates cable commands and hops, and scripts/check-visio-package.py checks every connector's path against its Begin and End points. A LibreOffice render of the fictional MDF lookalike shows the leads leaving below each member into the gap.
+- Line jumps default to one hop per crossed line, Visio's usual look. Pages & layout > Line jumps can switch back to one bridge over close lines (layout.hopStyle 'bundle').
+- Port names of leads leaving the same side of a device sit in one row: beside their leads, or on their own line where there is no room. This includes leads leaving a left or right side (A1, A3 and C2 on the fictional MDF).
+- Device order, Connections, Add, Reports and Hardware moved to the header, so the device list is the sidebar's only scrolling area.
+- Port maps now follow the Switchport Diagram Builder:
+  - The AOS-Switch parser joins port lists that a backup wraps onto the next line, even inside a port name. This was the main reason chassis ports were missing: 104 of 184 on the owner's MDF.
+  - The parser applies 'no untagged' and 'no tagged', gives trunk members the trunk's VLANs, and marks the voice VLAN only when exactly one applies.
+  - Sockets are white for "No native VLAN" and gray for "Native not supplied", including sockets with no configuration record.
+  - Tagged dots keep a minimum radius of 1.5. Dynamic pages widen the whole port-map family until every dot fits. Fixed paper shows a "+" marker and lists the full VLAN set.
+
+Owner follow-up (printable port maps, port names and off-page tags):
+- Owner preference: keep the realistic faceplates.
+  - Port maps use the faceplate artwork on a US Letter sheet by default.
+  - Jack faces on built-in plates take the Switchport builder's shapes: copper 25.2 x 23.2 and optical 25.2 x 16.2. Each media type shares one width, and faces grow away from their port numbers until rows meet edge to edge. Where a plate has no room for that shape (tight rows on a 48-port stack member), copper keeps its own proportions. The plate keeps its shape.
+  - Module, bay and model captions on the plate grow to a readable size (up to 11 px) after the port numbers and faces are placed, so they never push a map off Letter.
+  - The VLAN key moves under the hardware when that leaves fewer '+' markers.
+  - The builder sheet described below is now the Port map options > Port map style choice "Switchport builder sheet".
+- Builder sheet details (now optional):
+  - Fitted to US Letter landscape (or a fixed port-map paper choice).
+  - Jacks, dots and numbers grow to fill the sheet.
+  - Undeclared slots are slim bands, and the VLAN key uses the builder's dense one-line, five-column layout.
+  - A fictional 9-module 5412R-style chassis with 28 VLANs fits on one sheet.
+  - Port map options > Port map style can switch back to the device faceplate artwork.
+  - Port Inventory tables are unchanged.
+- Port names take the spot nearest their own port (C2), on the line when the nearest clear spot beside it is farther away.
+- Off-page cables from one side of a device trade rows so they reach the tag column without crossing each other.
+
+Known limits:
+- With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
+- Fixed paper keeps the existing column pagination.
+
+## Even cable rhythm and switchport-style port sheets (unreleased, after preview.33)
+
+Owner request: core connections were too close in horizontal parallel, ran tight against devices (especially on the left), were unevenly and often widely spaced, and could leave through the empty top module or split between sides. Port maps should drop the color blocks behind port numbers and follow the Switchport Diagram Builder sheets as Configuration Inspector draws them.
+
+Routing (routing.mjs, scene.mjs, faceplate.mjs, labels.mjs, index.mjs wireless lanes):
+- ROUTE_STYLE sets a 24-unit device clearance, a 6-unit visible gap between parallels, an 18-unit rail pitch and a 20-unit row pitch. Wireless lanes use the same rhythm.
+- Scoring adds a soft penalty for crowded parallels and device-hugging rails.
+- neatChannels redistributes rows, rails and chassis exterior lanes on even tracks, and untangle reorders tracks when that removes crossings (see AGENTS.md for the rules).
+- Chassis center tracks keep the visible gap and spread evenly, and module turns balance between the bands above and below the sockets. Empty slots and the optional MM2 bay pass leads toward their peer; the bay caption is now a short right-aligned "Optional MM2 bay".
+- Media captions fall back to inline connector text with a white background, which is also written as a filled Visio text shape.
+
+Port maps (index.mjs):
+- Port numbers are plain black or white text.
+- Booklet maps carry device bars and builder VLAN marks from the shared report palette, then a VLAN key, Trunks / LAGs, port descriptions and a symbol key.
+- Port Inventory pages are builder-style tables, one per device.
+- The Automatic layout from preview.33 compares page counts against a merged builder sheet instead of the role matrix: faceplates, VLAN key and the start of each inventory table share a page when they fit.
+- An explicitly chosen Combined presentation and the expanded tables are unchanged apart from the number text.
+
+Measured on fictional fixtures (sample, modular routing lab, campus lab), original code → this change:
+- Exterior runs within 20 units of a device: 2/6/12 → 0/0/0.
+- Minimum parallel spacing: 21/4.25/4.25 → 20/14.5/5.5. The 5.5 is inside a chassis module band, where module height is the limit.
+- Hops: 0/23/15 → 0/17/19.
+
+Merged with preview.33 (#31):
+- Wireless pages now use coreRoutes, so they inherit the clearance and neat channels. On the 8-member/28-AP fixture, wireless runs within 20 units of the stack drop from 12 to 0 and parallels under 12 units from 16 to 9; the remaining 7-unit pairs are stack-gap tracks.
+- wireless-number-leads.mjs reads the number text items (numberSide, numberBox, socketBounds) because number boxes no longer exist.
+- The Automatic merged sheet is measured at the initial hardware width only, preserving the rule that text scale never changes hardware size.
+- The inventory shows every interface address under its mode.
+- hero.png, port-map.png and organize-connections.png were recaptured; compact-wireless.png was re-rendered from the fixture.
+
+After owner review of Configuration Inspector's sheets, booklet port maps became Configuration Inspector builder sheets:
+- one device per sheet with a dark header block;
+- stack members drawn individually under member bars;
+- every socket numbered, and chassis modules numbered 1..n under a slot caption;
+- a right-hand VLAN key column, with Trunks / LAGs and descriptions beside or under the hardware;
+- a footer symbol key.
+
+Whole devices are drawn once (no planner member ranges), and members continue onto another sheet at the common width. Visio exports gain one master per drawn stack member.
+
+New tests: tests/route-rhythm.test.mjs and tests/portmap-sheets.test.mjs. Tests that asserted the old tight geometry or number boxes were updated to the new rules: modular center/exterior counts, empty-bay crossing, local corridor bound, inline caption exemption, grouped inventory rows and the VLAN key heading.
+
+Local validation: all Node tests, the seven Python package tests, node scripts/check-repo.mjs, node scripts/build-web.mjs, and the nine fictional Visio packages from scripts/export-test-fixtures.mjs checked with scripts/check-visio-package.py. Rendered SVG pages and the offline app were inspected in Chromium. hero.png and port-map.png were recaptured from the built offline app with the fictional sample. Still required: Windows build, native checks on the hosted runner, and opening an export in desktop Visio. Release intent and version are unchanged.
+
 ## Preview.33 candidate: compact organization, concise documentation and cable selection
 
 Prepared from published preview.32 at 8e2e066152990141a171da4326eac573b75703eb. The native export follow-up in PR #30 passed exact-head Windows validation 42449689029 and merged-main publication 42450293968; its public tag, feed, checksums, downloaded executable version and offline package were verified. Standing authorization covers this implementation and release. Preview.33 still requires green exact-head Windows/native validation and merged-main publication, followed by anonymous feed/tag/download verification before announcing availability. Do not restart or replace the user's running application.

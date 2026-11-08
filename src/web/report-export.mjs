@@ -23,10 +23,11 @@ function pdfPath(commands,scale,ox,oy){
  for(const [op,x,y,ex,ey] of commands||[]){
   if(op==='Z'){result.push({op:'h',c:[]});continue;}
   if(op==='A'&&last){
-   const a=last,b=[ex,ey],center=[(a[0]+b[0])/2,(a[1]+b[1])/2],middle=[x,y],r=Math.hypot(b[0]-a[0],b[1]-a[1])/2;
-   const normal=[(middle[0]-center[0])/r,(middle[1]-center[1])/r],tangent=[(b[0]-a[0])/(2*r),(b[1]-a[1])/(2*r)],k=.5522847498*r;
-   result.push({op:'c',c:[...point(a[0]+normal[0]*k,a[1]+normal[1]*k),...point(middle[0]-tangent[0]*k,middle[1]-tangent[1]*k),...point(...middle)]});
-   result.push({op:'c',c:[...point(middle[0]+tangent[0]*k,middle[1]+tangent[1]*k),...point(b[0]+normal[0]*k,b[1]+normal[1]*k),...point(...b)]});last=b;continue;
+   // A jump is a half-ellipse: rx along the cable, ry to its apex (equal for one crossing).
+   const a=last,b=[ex,ey],center=[(a[0]+b[0])/2,(a[1]+b[1])/2],middle=[x,y],rx=Math.hypot(b[0]-a[0],b[1]-a[1])/2,ry=Math.hypot(middle[0]-center[0],middle[1]-center[1])||rx;
+   const normal=[(middle[0]-center[0])/ry,(middle[1]-center[1])/ry],tangent=[(b[0]-a[0])/(2*rx),(b[1]-a[1])/(2*rx)],kx=.5522847498*rx,ky=.5522847498*ry;
+   result.push({op:'c',c:[...point(a[0]+normal[0]*ky,a[1]+normal[1]*ky),...point(middle[0]-tangent[0]*kx,middle[1]-tangent[1]*kx),...point(...middle)]});
+   result.push({op:'c',c:[...point(middle[0]+tangent[0]*kx,middle[1]+tangent[1]*kx),...point(b[0]+normal[0]*ky,b[1]+normal[1]*ky),...point(...b)]});last=b;continue;
   }
   result.push({op:op==='M'?'m':'l',c:point(x,y)});last=[x,y];
  }

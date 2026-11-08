@@ -15,9 +15,11 @@ const lineWeight=pixels=>cell('LineWeight',inch(pixels),round(pixels*72/96)+' pt
 function box(x,y,w,h,H){return cell('PinX',inch(x+w/2))+cell('PinY',inch(H-y-h/2))+size(w,h);}
 function size(w,h){return cell('Width',inch(w))+cell('Height',inch(h))+cell('LocPinX',inch(w/2),'Width*0.5')+cell('LocPinY',inch(h/2),'Height*0.5')+cell('Angle',0);}
 function xyRow(ix,t,x,y,fx,fy,a){return '<Row IX="'+ix+'" T="'+t+'">'+cell('X',x,fx)+cell('Y',y,fy)+(a==null?'':cell('A',a))+'</Row>';}
-function outline(w,h,hidden=false){
+// A hidden outline draws nothing unless filled: connector text on its own
+// cable needs its white background painted, still without a border.
+function outline(w,h,hidden=false,filled=false){
   const uv=[[0,0],[1,0],[1,1],[0,1],[0,0]];
-  return '<Section N="Geometry" IX="0">'+cell('NoFill',hidden?1:0)+cell('NoLine',hidden?1:0)+uv.map(([x,y],i)=>xyRow(i+1,i?'LineTo':'MoveTo',inch(x*w),inch(y*h),'Width*'+x,'Height*'+y)).join('')+'</Section>';
+  return '<Section N="Geometry" IX="0">'+cell('NoFill',hidden&&!filled?1:0)+cell('NoLine',hidden?1:0)+uv.map(([x,y],i)=>xyRow(i+1,i?'LineTo':'MoveTo',inch(x*w),inch(y*h),'Width*'+x,'Height*'+y)).join('')+'</Section>';
 }
 function ellipseOutline(w,h){
   return '<Section N="Geometry" IX="0"><Row IX="1" T="Ellipse">'+cell('X',inch(w/2),'Width*0.5')+cell('Y',inch(h/2),'Height*0.5')+cell('A',inch(w),'Width')+cell('B',inch(h/2),'Height*0.5')+cell('C',inch(w/2),'Width*0.5')+cell('D',inch(h),'Height')+'</Row></Section>';
@@ -35,10 +37,10 @@ function vectorShape(i,id,H){
 function textShape(i,id,H,masterChild,relative){
   const {lines,size:fontSize}=textLayout(i),shown=lines.join('\n');
   const transform=relative||box(i.x,i.y,i.w,i.h,H).replace(cell('Angle',0),cell('Angle',i.angle||0));
-  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',0)+
+  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',i.background?1:0)+(i.background?cell('FillForegnd',i.background):'')+
     ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+
     '<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(fontSize))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
-    '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true)+
+    '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true,!!i.background)+
     '<Text><cp IX="0"/><pp IX="0"/>'+xml(shown)+'</Text></Shape>';
 }
 function connectionRows(ports,w,h,keys){
@@ -111,10 +113,21 @@ function connector(i,id,H,byKey,connects,styleId,sampleId){
     data+=cell('LineColor',i.color.toUpperCase(),ref+'LineColor')+cell('LineColorTrans',1-(i.opacity??1),ref+'LineColorTrans')+
       cell('LineWeight',inch(i.weight),ref+'LineWeight','PT')+cell('LinePattern',1,ref+'LinePattern');
   }
-  const commands=i.points.map((p,j)=>[j?'L':'M',...p]);
+  // The planner's jumps are written into the connector geometry, as Visio
+  // saves its own routed connectors, so they show on open. Each jump is an
+  // EllipticalArcTo through its apex: a semicircle for one crossing, a flatter
+  // bridge over a tight bundle. Visio replaces the geometry (and draws its own
+  // jumps) only when it reroutes the connector.
+  const commands=i.commands?.length&&!i.legendEntry?i.commands:i.points.map((p,j)=>[j?'L':'M',...p]);
+  let previous=null;
   const geom=commands.map(([t,x,y,ex,ey],j)=>{
-    const pt=[x,y], ox=pt[0]-x0,oy=y0-pt[1],end=j===commands.length-1;
-    const follow=(d,total,dim)=>end?dim:Math.abs(d-total)<Math.abs(d)?dim+(d>=total?'+':'')+round(inch(d-total)):undefined;
+    const end=j===commands.length-1,follow=(d,total,dim)=>end?dim:Math.abs(d-total)<Math.abs(d)?dim+(d>=total?'+':'')+round(inch(d-total)):undefined;
+    if(t==='A'&&previous){
+      const chord=Math.hypot(ex-previous[0],ey-previous[1])/2,apex=Math.hypot(x-(previous[0]+ex)/2,y-(previous[1]+ey)/2)||chord,vertical=Math.abs(ey-previous[1])>Math.abs(ex-previous[0]);
+      const ratio=vertical?apex/chord:chord/apex,ox=ex-x0,oy=y0-ey;previous=[ex,ey];
+      return '<Row IX="'+(j+1)+'" T="EllipticalArcTo">'+cell('X',inch(ox),follow(ox,w,'Width'))+cell('Y',inch(oy),follow(oy,h,'Height'))+cell('A',inch(x-x0))+cell('B',inch(y0-y))+cell('C',0)+cell('D',round(ratio))+'</Row>';
+    }
+    const ox=x-x0,oy=y0-y;previous=[x,y];
     return xyRow(j+1,t==='M'?'MoveTo':'LineTo',inch(ox),inch(oy),follow(ox,w,'Width'),follow(oy,h,'Height'));
   }).join('');
   return '<Shape ID="'+id+'" NameU="'+(i.legendEntry?'CableLegend.':'Connector.')+id+'" Name="'+xml(i.name)+'" Type="Shape" LineStyle="'+styleId+'" FillStyle="0" TextStyle="0">'+data+'<Section N="Geometry" IX="0">'+cell('NoFill',1)+geom+'</Section></Shape>';

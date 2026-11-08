@@ -2,7 +2,7 @@ export function parallelUplinks(textScale=1){
  const devices=[5,8].map((count,i)=>({id:i?'b':'a',name:'LAB-STACK-'+(i?'B':'A'),kind:'switch',model:'JL558A',stackMembers:Array.from({length:count},(_,j)=>({id:String(j+1),model:'JL558A'})),ports:[]}));
  const links=Array.from({length:8},(_,i)=>({a:'a',ap:Math.floor(i/4)+1+'/'+(49+i%4),b:'b',bp:Math.floor(i/4)+1+'/'+(49+i%4),media:'unknown',speed:'10 Gbps'}));
  devices.forEach(d=>d.ports=links.map(e=>({name:d.id==='a'?e.ap:e.bp})));
- return {name:'Parallel uplinks lab',devices,links,layout:{presentation:{defaults:{textScale}}}};
+ return {name:'Parallel uplinks lab',devices,links,layout:{cableCaptions:true,presentation:{defaults:{textScale}}}};
 }
 
 export function tallWirelessCaptions(){

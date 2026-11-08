@@ -18,12 +18,19 @@ export function cableGeometry(path){
    const end=[+tokens[i++],+tokens[i++]];if(!end.every(Number.isFinite))return null;
    if(op==='L'&&previous)segments.push({a:previous,b:end,bounds:bound([previous,end])});previous=end;
   }else if(op==='A'&&previous){
-   const [rx,ry,rotation,large,sweep,x,y]=tokens.slice(i,i+7).map(Number);i+=7;
-   if(![rx,ry,rotation,large,sweep,x,y].every(Number.isFinite)||rx<=0||Math.abs(rx-ry)>.02||rotation||large||![0,1].includes(sweep))return null;
-   const end=[x,y],center=[(previous[0]+x)/2,(previous[1]+y)/2],radius=Math.hypot(x-previous[0],y-previous[1])/2;
-   if(Math.abs(radius-rx)>.03)return null;
-   const start=Math.atan2(previous[1]-center[1],previous[0]-center[0]),arc={center,radius,start,sweep},samples=Array.from({length:33},(_,n)=>{const angle=start+(sweep?1:-1)*Math.PI*n/32;return [center[0]+radius*Math.cos(angle),center[1]+radius*Math.sin(angle)];});
-   segments.push({a:previous,b:end,arc,samples,bounds:bound(samples)});previous=end;
+   let [rx,ry,rotation,large,sweep,x,y]=tokens.slice(i,i+7).map(Number);i+=7;
+   if(![rx,ry,rotation,large,sweep,x,y].every(Number.isFinite)||rx<=0||ry<=0||rotation||large||![0,1].includes(sweep))return null;
+   const end=[x,y],center=[(previous[0]+x)/2,(previous[1]+y)/2],radius=Math.hypot(x-previous[0],y-previous[1])/2,vertical=Math.abs(y-previous[1])>Math.abs(x-previous[0]);
+   // SVG radii follow the page axes: along a vertical cable the chord uses ry.
+   [rx,ry]=vertical?[ry,rx]:[rx,ry];
+   // Jumps are semicircles or flatter bridges; anything taller fails closed.
+   if(Math.abs(radius-rx)>.03||ry>rx+.02)return null;
+   // One crossing is a semicircle; a bridge over several is a half-ellipse
+   // with its rx along the cable and ry toward the apex.
+   const start=Math.atan2(previous[1]-center[1],previous[0]-center[0]),turn=sweep?1:-1,u=[Math.cos(start),Math.sin(start)],v=[Math.cos(start+turn*Math.PI/2),Math.sin(start+turn*Math.PI/2)];
+   const samples=Array.from({length:33},(_,n)=>{const t=Math.PI*n/32;return [center[0]+u[0]*rx*Math.cos(t)+v[0]*ry*Math.sin(t),center[1]+u[1]*rx*Math.cos(t)+v[1]*ry*Math.sin(t)];});
+   const arc=Math.abs(rx-ry)<=.02?{center,radius,start,sweep}:null;
+   segments.push({a:previous,b:end,arc,samples,bounds:bound(samples),...(arc?{}:{ellipse:true})});previous=end;
   }else return null;
  }
  if(!segments.length)return null;
@@ -48,7 +55,7 @@ export function closestCable(candidates,point,matrix,{radius=cablePickRadius}={}
   if(uniform&&boxDistance(p,geometry.bounds)*scale>limit)continue;
   let distance=Infinity;
   for(const segment of geometry.segments){
-   if(uniform){if(boxDistance(p,segment.bounds)*scale>Math.min(limit,distance))continue;distance=Math.min(distance,(segment.arc?arcDistance(p,segment):segmentDistance(p,segment.a,segment.b))*scale);}
+   if(uniform){if(boxDistance(p,segment.bounds)*scale>Math.min(limit,distance))continue;distance=Math.min(distance,(segment.arc?arcDistance(p,segment):segment.ellipse?Math.min(...segment.samples.slice(1).map((q,n)=>segmentDistance(p,segment.samples[n],q))):segmentDistance(p,segment.a,segment.b))*scale);}
    else{const points=segment.samples||[segment.a,segment.b];for(let n=1;n<points.length;n++)distance=Math.min(distance,segmentDistance([point.x,point.y],transformed(points[n-1],matrix),transformed(points[n],matrix)));}
   }
   // Distance is measured from the painted edge. Ties follow SVG paint order,
@@ -59,7 +66,9 @@ export function closestCable(candidates,point,matrix,{radius=cablePickRadius}={}
  return best?{...best,distance:bestDistance}:null;
 }
 
-export function cableProximity(canvas,{enabled=()=>false}={}){
+// enabled: cables can be selected and focused (Edit drawing). highlight: the
+// nearest cable glows under the pointer, which also helps while only viewing.
+export function cableProximity(canvas,{enabled=()=>false,highlight=enabled}={}){
  let svg=null,candidates=[],hover=null,halo=null,frame=null,pending=null,active=false;
  const windowFor=()=>canvas.ownerDocument?.defaultView;
  function clear(){
@@ -67,7 +76,7 @@ export function cableProximity(canvas,{enabled=()=>false}={}){
   hover?.classList.remove('cable-hover');hover=null;halo?.remove();halo=null;canvas.classList.remove('near-cable');
  }
  function setHover(path){
-  if(path===hover)return;clear();if(!path||!svg||!enabled())return;
+  if(path===hover)return;clear();if(!path||!svg||!highlight())return;
   hover=path;path.classList.add('cable-hover');canvas.classList.add('near-cable');
   halo=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','g');halo.setAttribute('class','cable-proximity-halo');halo.setAttribute('data-editor-only','cable-hover');halo.setAttribute('aria-hidden','true');halo.setAttribute('pointer-events','none');
   const matrix=svg.getScreenCTM(),scale=Math.hypot(matrix.a,matrix.b),paintedWidth=Number(path.getAttribute('stroke-width'))||0;
@@ -76,8 +85,8 @@ export function cableProximity(canvas,{enabled=()=>false}={}){
   for(const padding of [12,6]){const line=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path');for(const [key,value] of Object.entries({d:path.getAttribute('d'),fill:'none',stroke:'#16839a','stroke-width':paintedWidth+padding/scale,'stroke-opacity':padding===12?.16:.3,'stroke-linejoin':'round','stroke-linecap':'round','pointer-events':'none'}))line.setAttribute(key,String(value));halo.append(line);}
   path.before(halo);
  }
- function resolve(event){
-  if(!svg||!enabled()||event.altKey)return null;
+ function resolve(event,forHover=false){
+  if(!svg||!(forHover?highlight():enabled())||event.altKey)return null;
   const target=event.target;if(!target?.closest)return null;
   // Existing artwork and edit controls always take priority. A background
   // click may find a nearby cable, but may never reach through another object.
@@ -94,7 +103,7 @@ export function cableProximity(canvas,{enabled=()=>false}={}){
   clear,
   sync,
   resolve,
-  hover(event){if(!svg||!enabled()){clear();return;}pending=event;if(frame!=null)return;const win=windowFor();if(!win)return;frame=win.requestAnimationFrame(()=>{frame=null;const next=pending;pending=null;setHover(next?resolve(next):null);});},
+  hover(event){if(!svg||!highlight()){clear();return;}pending=event;if(frame!=null)return;const win=windowFor();if(!win)return;frame=win.requestAnimationFrame(()=>{frame=null;const next=pending;pending=null;setHover(next?resolve(next,true):null);});},
   focus(target){sync();setHover(active&&target?.matches?.('path.diagram-cable')?target:null);},
   reset(){clear();svg=null;candidates=[];active=false;}
  };

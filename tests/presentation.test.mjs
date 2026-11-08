@@ -16,7 +16,7 @@ test('shared styles recolor matching cables and legends across sheets, retain ca
  const files=await unzip(await exportVisio(site,pages).arrayBuffer());assert.ok([...files].some(([name,data])=>name.startsWith('visio/pages/page')&&new TextDecoder().decode(data).includes('<Cell N="LineColor" V="#815AC0"')));
 });
 test('link and legend edits share one undoable style and preserve moved or renamed legend entries',()=>{
- const site=sampleSite(),first=buildPages(site),sr=first[0].items.find(i=>i.type==='path'&&i.linkType==='SR fiber');site.layout={drawingEdits:{[sr.editKey]:{color:'#815AC0'}}};let pages=buildPages(site),legend=pages[0].items.find(i=>i.legendEntry&&i.type==='text'&&i.linkType==='SR fiber');
+ const site=sampleSite();site.layout={cableCaptions:true};const first=buildPages(site),sr=first[0].items.find(i=>i.type==='path'&&i.linkType==='SR fiber');site.layout={cableCaptions:true,drawingEdits:{[sr.editKey]:{color:'#815AC0'}}};let pages=buildPages(site),legend=pages[0].items.find(i=>i.legendEntry&&i.type==='text'&&i.linkType==='SR fiber');
  site.layout.drawingEdits[legend.editKey]={x:108,y:250,color:'#C32B65'};const history=new ProjectHistory(site);
  Object.assign(site.layout,changeLinkStyle(site,pages,'SR fiber',{color:'#006775',title:'Building backbone',lineDescription:'Optical uplink'}));history.record(site,'link-style');pages=buildPages(site);
  assert.ok(pages[0].items.filter(i=>i.type==='path'&&i.linkType==='SR fiber').every(i=>i.color==='#006775'));legend=pages[0].items.find(i=>i.legendEntry&&i.type==='text'&&i.linkType==='SR fiber');assert.equal(legend.value,'Building backbone');assert.equal(legend.x,108);assert.equal(legend.color,'#C32B65');assert.ok(pages[0].items.some(i=>i.labelRole==='media'&&i.value.includes('Optical')));

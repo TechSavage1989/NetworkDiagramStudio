@@ -35,6 +35,9 @@ jobs:
       - name: Publish and verify Windows executable
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Verify native switchport report paper media boxes
+        shell: pwsh
+        run: dotnet run --project tests/report-paper-native/ReportPaperChecks.csproj --configuration Release
       - name: Package portable web and Windows assets
         run: python scripts/package-release.py
       - name: Exercise native window, timers, update and rollback

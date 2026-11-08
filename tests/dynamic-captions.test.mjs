@@ -17,7 +17,7 @@ test('dynamic parallel stack uplinks keep complete readable labels, clear routes
   const page=core[0],paths=page.items.filter(i=>i.type==='path'),texts=page.items.filter(i=>i.type==='text'),labels=texts.filter(i=>i.labelRole),bodies=page.items.filter(i=>i.type==='device');
   assert.equal(paths.length,8);assert.deepEqual(page.coreDeviceIds,['a','b']);assert.ok(bodies.filter(i=>i.kind==='switch').every(i=>i.w===700));
   for(const path of paths){const media=labels.filter(i=>i.linkId===path.linkId&&i.labelRole==='media');assert.equal(media.map(i=>i.value).join('').replace(/\s/g,''),'Mediaunspecified10Gbps');assert.equal(labels.filter(i=>i.linkId===path.linkId&&i.labelRole==='port').length,2);}
-  for(const label of labels){assert.equal(label.size,12*scale);assert.ok(!texts.some(other=>other!==label&&intersects(label,other)));assert.ok(!paths.some(path=>pathCrossesText(path,label,1)));assert.ok(!bodies.some(body=>intersects(label,body)));const b=textFootprint(label);assert.ok(b.x>=page.originX&&b.y>=page.originY&&b.x+b.w<=page.originX+page.width&&b.y+b.h<=page.originY+page.height);}
+  for(const label of labels){assert.equal(label.size,12*scale);assert.ok(!texts.some(other=>other!==label&&intersects(label,other)));assert.ok(!paths.some(path=>label.background&&path.linkId===label.linkId?(path.hops||[]).some(hop=>intersects(hop,label,1)):pathCrossesText(path,label,1)),'Only inline connector text may sit on its own cable');assert.ok(!bodies.some(body=>intersects(label,body)));const b=textFootprint(label);assert.ok(b.x>=page.originX&&b.y>=page.originY&&b.x+b.w<=page.originX+page.width&&b.y+b.h<=page.originY+page.height);}
   glued(page);assert.equal(JSON.stringify(project),saved);assert.equal(buildPages(JSON.parse(saved))[0].svg,page.svg);
  }
 });
