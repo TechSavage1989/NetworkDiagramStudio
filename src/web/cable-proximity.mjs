@@ -66,7 +66,9 @@ export function closestCable(candidates,point,matrix,{radius=cablePickRadius}={}
  return best?{...best,distance:bestDistance}:null;
 }
 
-export function cableProximity(canvas,{enabled=()=>false}={}){
+// enabled: cables can be selected and focused (Edit drawing). highlight: the
+// nearest cable glows under the pointer, which also helps while only viewing.
+export function cableProximity(canvas,{enabled=()=>false,highlight=enabled}={}){
  let svg=null,candidates=[],hover=null,halo=null,frame=null,pending=null,active=false;
  const windowFor=()=>canvas.ownerDocument?.defaultView;
  function clear(){
@@ -74,7 +76,7 @@ export function cableProximity(canvas,{enabled=()=>false}={}){
   hover?.classList.remove('cable-hover');hover=null;halo?.remove();halo=null;canvas.classList.remove('near-cable');
  }
  function setHover(path){
-  if(path===hover)return;clear();if(!path||!svg||!enabled())return;
+  if(path===hover)return;clear();if(!path||!svg||!highlight())return;
   hover=path;path.classList.add('cable-hover');canvas.classList.add('near-cable');
   halo=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','g');halo.setAttribute('class','cable-proximity-halo');halo.setAttribute('data-editor-only','cable-hover');halo.setAttribute('aria-hidden','true');halo.setAttribute('pointer-events','none');
   const matrix=svg.getScreenCTM(),scale=Math.hypot(matrix.a,matrix.b),paintedWidth=Number(path.getAttribute('stroke-width'))||0;
@@ -83,8 +85,8 @@ export function cableProximity(canvas,{enabled=()=>false}={}){
   for(const padding of [12,6]){const line=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path');for(const [key,value] of Object.entries({d:path.getAttribute('d'),fill:'none',stroke:'#16839a','stroke-width':paintedWidth+padding/scale,'stroke-opacity':padding===12?.16:.3,'stroke-linejoin':'round','stroke-linecap':'round','pointer-events':'none'}))line.setAttribute(key,String(value));halo.append(line);}
   path.before(halo);
  }
- function resolve(event){
-  if(!svg||!enabled()||event.altKey)return null;
+ function resolve(event,forHover=false){
+  if(!svg||!(forHover?highlight():enabled())||event.altKey)return null;
   const target=event.target;if(!target?.closest)return null;
   // Existing artwork and edit controls always take priority. A background
   // click may find a nearby cable, but may never reach through another object.
@@ -101,7 +103,7 @@ export function cableProximity(canvas,{enabled=()=>false}={}){
   clear,
   sync,
   resolve,
-  hover(event){if(!svg||!enabled()){clear();return;}pending=event;if(frame!=null)return;const win=windowFor();if(!win)return;frame=win.requestAnimationFrame(()=>{frame=null;const next=pending;pending=null;setHover(next?resolve(next):null);});},
+  hover(event){if(!svg||!highlight()){clear();return;}pending=event;if(frame!=null)return;const win=windowFor();if(!win)return;frame=win.requestAnimationFrame(()=>{frame=null;const next=pending;pending=null;setHover(next?resolve(next,true):null);});},
   focus(target){sync();setHover(active&&target?.matches?.('path.diagram-cable')?target:null);},
   reset(){clear();svg=null;candidates=[];active=false;}
  };

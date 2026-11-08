@@ -44,7 +44,7 @@ import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reope
 // Keep browser navigation/debug actions out of the drawing workspace.
 document.addEventListener('contextmenu',event=>event.preventDefault());
 const $=id=>document.getElementById(id);
-const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{if(editDrawing){if(besidePick){pickBesideReference(key);return true;}if(cableControlClick(key,e,target))return true;selectDrawingItem(key,e.shiftKey||e.ctrlKey||e.metaKey);return true;}return false;},onBeforeInteraction:commitInlineEdit,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!besidePick&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!besidePick&&!target.closest('.cable-controls'))editOnDoubleClick(key);}});
+const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{if(editDrawing){if(besidePick){pickBesideReference(key);return true;}if(cableControlClick(key,e,target))return true;selectDrawingItem(key,e.shiftKey||e.ctrlKey||e.metaKey);return true;}return false;},onBeforeInteraction:commitInlineEdit,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!besidePick&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!besidePick&&!target.closest('.cable-controls'))editOnDoubleClick(key);}});
 const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
 const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false}});
 let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0;const stencilIndexes=new Map(),openCatalogs=new Map();
@@ -68,7 +68,9 @@ function download(content,name,mime='application/json'){
   const a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);
 }
 const slug=s=>String(s||'Network').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').slice(0,90)||'Network';
-function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','export-menu','switchport-reports','drawing-organize','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','export-menu','print','svg'].includes(id)&&(!pages.length||!drawingReady))||(id==='drawing-organize'&&!pages[active]?.items.some(i=>i.type==='path'));}
+function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','export-menu','switchport-reports','drawing-organize','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','export-menu','print','svg'].includes(id)&&(!pages.length||!drawingReady))||(id==='drawing-organize'&&!pages[active]?.items.some(i=>i.type==='path'));
+ // The Arrange control depends on the active page; recompute it after busy work.
+ if($('drawing-arrange'))$('drawing-arrange').disabled=on||!(pages[active]?.coreDeviceIds&&pages[active]?.dynamic);}
 async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.error');if(!node){node=el('p','','error');$('dialog-body').prepend(node);}node.textContent=e?.message||'The operation failed.';}}finally{busy(false);}}
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
 function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
@@ -183,8 +185,9 @@ $('drawing-snap').onclick=()=>task(toggleSnapping);$('drawing-snap-options').onc
 $('drawing-arrange').onchange=()=>task(()=>{
  const page=pages[active],mode=$('drawing-arrange').value;if(!page?.coreDeviceIds)return;
  const previous=project;project={...project,layout:cleanLayout(arrangeCoreLayout(project,pages,{mode,corePageId:page.corePageId}),project.devices.map(d=>d.id))};
- try{buildPages(scoped());}catch(error){project=previous;$('drawing-arrange').value=pageArrangement(project,page);throw error;}
- drawingSelection.clear();perform('arrange');viewport.fit();
+ // Validate through the page cache and reuse that build for the redraw.
+ let prepared;try{prepared=buildDrawing();}catch(error){project=previous;$('drawing-arrange').value=pageArrangement(project,page);throw error;}
+ drawingSelection.clear();perform('arrange',prepared);viewport.fit();
  const now=pages.find(p=>p.name===page.name);say(now?.arrangementFallback?'That arrangement could not fit the cables here, so this page uses a compact arrangement instead. Undo is available.':'Devices re-arranged in their saved order. Undo is available.');
 });
 function startDrawingMove(key,event){
@@ -377,8 +380,8 @@ $('link-styles').onclick=()=>task(()=>linkStyleOptions());
 function layoutOptions(selected=pages[active]?.name){
  pageLayoutEditor({project,pages:buildPages(scoped(),{includeHidden:true}),selected,modal,field,button,close,apply(layout,include=[]){
   const previous=project;project={...project,devices:project.devices.map(d=>include.includes(d.id)?{...d,hidden:false,scopeOverride:true}:d),layout:cleanLayout(layout,project.devices.map(d=>d.id))};
-  try{buildPages(scoped());}catch(error){project=previous;throw error;}
-  perform('page-layout');viewport.fit();say('Page names, device selections and layout saved. Undo is available.');
+  let prepared;try{prepared=buildDrawing();}catch(error){project=previous;throw error;}
+  perform('page-layout',prepared);viewport.fit();say('Page names, device selections and layout saved. Undo is available.');
  }});
 }
 $('page-layout').onclick=()=>task(()=>layoutOptions());
@@ -412,8 +415,8 @@ function pageOptions(){
   if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value})};
-  try{buildPages(scoped());}catch(error){project.layout=before;throw error;}
-  perform('page-options');close();viewport.fit();say('Drawing size, print paper and page numbering saved.');
+  let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
+  perform('page-options',prepared);close();viewport.fit();say('Drawing size, print paper and page numbering saved.');
  },'primary');
 }
 $('page-options').onclick=()=>task(pageOptions);
@@ -451,8 +454,8 @@ function changeCoreLayout(update){
  const previous=project.layout,next=structuredClone(previous||{});
  update(next);
  project.layout=next;
- try{buildPages(scoped());}catch(error){project.layout=previous;throw error;}
- perform();arrange();
+ let prepared;try{prepared=buildDrawing();}catch(error){project.layout=previous;throw error;}
+ perform('project',prepared);arrange();
 }
 function arrange(){
  const body=modal('Device order and core pages');project.layout||=cleanLayout({},project.devices.map(d=>d.id));const layout=project.layout;

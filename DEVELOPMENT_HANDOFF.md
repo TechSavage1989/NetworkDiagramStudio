@@ -65,6 +65,14 @@ Owner suggestion: a socket under the empty MM2 bay's caption now rises into the 
 
 Owner follow-up: device captions no longer show MAC addresses or counts ("417 MAC addresses"); the address panel and device editor keep the full list. The MM2 bay caption slides clear of rising cables, and port labels prefer a spot clearly nearest their own cable near the port.
 
+Owner follow-up (crowding, highlight, lag):
+- A cable crossing a tight bundle draws one bridge instead of stacked jumps.
+- Cables highlight under the pointer outside Edit drawing too.
+- Snapping, arrangement, cable text and line spacing no longer invalidate unrelated page families.
+- Arrange, Pages & layout and Page options validate through the page cache and reuse that build.
+- The Arrange control re-enables after busy work.
+- On a large fictional project: a snapping toggle takes 0.3 s and Arrange 0.3-0.4 s (it was 1.3 s); a device move or undo still re-plans the core page (about 0.6 s).
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.
