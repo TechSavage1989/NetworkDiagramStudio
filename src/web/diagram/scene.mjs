@@ -112,7 +112,7 @@ export function addDevice(page,project,d,bounds,key,opts={}){
   if(asset){
     for(const [k,v] of Object.entries(asset.anchors||{}))addAnchor(k,Array.isArray(v)?v:[v?.x,v?.y]);
   } else if(panel){
-    Object.assign(g.ports,panel.ports);g.children=panel.children;g.panelRegions=panel.regions;g.physicalLayout=panel.verified;g.layoutSource=panel.source;
+    Object.assign(g.ports,panel.ports);g.children=panel.children;g.panelRegions=panel.regions;g.moduleChannel=panel.moduleChannel;g.physicalLayout=panel.verified;g.layoutSource=panel.source;
   } else if(symbol){
     g.children=symbol.children;g.genericSymbol=true;
   } else if(d.kind==='handoff'){
@@ -157,6 +157,48 @@ function socketDeparture(device, anchor, socket){
       Math.max(x,anchor.x)>box.x-clearance&&Math.min(x,anchor.x)<box.x+box.w+clearance));
   return exit===undefined?undefined:[[anchor.x,turnY],[exit,turnY]];
 }
+// A chassis lead may cross its own module horizontally, but its vertical run
+// must use the open center or an exterior side, never the next module/bay.
+function modularAnchor(g,id,nx,ny,region,sideHint,socket){
+  const blocked=top=>g.panelRegions.some(r=>r!==region&&nx>r.x&&nx<r.x+r.w&&
+    (top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1));
+  let top=sideHint==='top'||sideHint!=='bottom'&&ny<=.5;
+  // An exposed outer row can leave directly even when its peer is above it.
+  // Turning outside the chassis is preferable to crossing every inner row.
+  if(blocked(top)&&!blocked(!top))top=!top;
+  const side=top?'top':'bottom',anchor={device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+(top?0:g.h)};
+  if(!blocked(top)){const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
+  const center=(g.moduleChannel.left+g.moduleChannel.right)/2,column=nx<center?'left':'right';
+  const pad=Math.min(2/g.h,region.h/12),xPad=Math.min(2/g.w,region.w/12),lo=region.y+pad,hi=region.y+region.h-pad;
+  const details=g.children.filter(c=>(c.socketPart===0||c.type==='text')&&c.x+c.w>region.x&&c.x<region.x+region.w&&c.y+c.h>region.y&&c.y<region.y+region.h).map(c=>{
+    if(c.type!=='text')return c;
+    const {lines,size,lineHeight}=textLayout({...c,w:c.w*g.w,h:c.h*g.h}),w=Math.max(...lines.map(line=>textWidth(line,size,c.bold)-6))/g.w,h=lines.length*lineHeight/g.h;
+    return {...c,x:c.x+(c.align==='right'?c.w-w:c.align==='center'?(c.w-w)/2:0),y:c.y+(c.h-h)/2,w,h};
+  });
+  const bandsFor=exit=>{
+    const left=Math.min(nx,exit),right=Math.max(nx,exit),blocked=details.filter(c=>c.x+c.w>left&&c.x<right)
+      .map(c=>[Math.max(lo,c.y-pad),Math.min(hi,c.y+c.h+pad)]).filter(([a,b])=>b>a).sort((a,b)=>a[0]-b[0]);
+    const free=[];let cursor=lo;
+    for(const [a,b] of blocked){if(a>cursor)free.push([cursor,a]);cursor=Math.max(cursor,b);}
+    if(cursor<hi)free.push([cursor,hi]);
+    return free.filter(([a,b])=>{
+      const turn=Math.max(a,Math.min(b,ny)),low=Math.min(ny,turn),high=Math.max(ny,turn);
+      return !details.some(c=>c!==socket&&nx>c.x-xPad&&nx<c.x+c.w+xPad&&Math.min(high,c.y+c.h+pad)>Math.max(low,c.y-pad));
+    }).map(([a,b])=>[g.y+a*g.h,g.y+b*g.h]).sort((a,b)=>(b[1]-b[0])-(a[1]-a[0])||Math.abs((a[0]+a[1])/2-anchor.y)-Math.abs((b[0]+b[1])/2-anchor.y));
+  };
+  const bands=bandsFor(center),outerBands=bandsFor(column==='left'?0:1);
+  if(!bands.length&&!outerBands.length)throw Object.assign(Error('This module has no clear cable departure. Move the edited socket or enlarge the device.'),{code:'CORE_LAYOUT_CAPACITY',owner:g.sourceId,port:id});
+  let left=g.moduleChannel.left,right=g.moduleChannel.right;
+  // Management bays project slightly farther into the upper center. Derive
+  // the usable rail from every bay along this lead rather than a guessed x.
+  const lower=top?0:region.y,upper=top?region.y+region.h:1;
+  for(const r of g.panelRegions)if(r.y<upper&&r.y+r.h>lower){
+    if(r.x<center)left=Math.max(left,r.x+r.w);else right=Math.min(right,r.x);
+  }
+  anchor.moduleEscape={owner:g.key,region:region.id,column,channel:[g.x+left*g.w,g.x+right*g.w],
+    outer:g.x+(column==='left'?0:g.w),bands,outerBands};
+  return anchor;
+}
 export function getAnchor(g,raw,sideHint,unique){
   const k=String(raw??''), keys=Object.keys(g.ports);
   let id=keys.find(a=>a.toLowerCase()===k.toLowerCase());
@@ -167,7 +209,9 @@ export function getAnchor(g,raw,sideHint,unique){
     g.ports[id]=[frac,sideHint==='top'?0:1];
   }
   const [nx,ny]=g.ports[id];
-  const regions=g.panelRegions||[],region=regions.find(r=>ny>=r.y-1e-8&&ny<=r.y+r.h+1e-8);
+  const regions=g.panelRegions||[],region=regions.find(r=>nx>=(r.x??0)-1e-8&&nx<=(r.x??0)+(r.w??1)+1e-8&&ny>=r.y-1e-8&&ny<=r.y+r.h+1e-8);
+  const socket=g.children.find(c=>c.anchorOrigin&&Math.abs(c.x+c.w/2-nx)<1e-7&&Math.abs(c.y+c.h/2-ny)<1e-7);
+  if(g.moduleChannel&&region)return modularAnchor(g,id,nx,ny,region,sideHint,socket);
   const top=region?ny<=region.y+region.h/2:ny<=.5;
   const side=top?'top':'bottom',edge=region?(top?region.y:region.y+region.h):(top?0:1);
   const anchor={device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+edge*g.h};
@@ -179,7 +223,6 @@ export function getAnchor(g,raw,sideHint,unique){
       anchor.escapeRange=[g.y+Math.min(edge,other)*g.h,g.y+Math.max(edge,other)*g.h];
     }
   }
-  const socket=g.children.find(c=>c.anchorOrigin&&Math.abs(c.x+c.w/2-nx)<1e-7&&Math.abs(c.y+c.h/2-ny)<1e-7);
   const departure=socketDeparture(g,anchor,socket);
   if(departure)anchor.departure=departure;
   return anchor;

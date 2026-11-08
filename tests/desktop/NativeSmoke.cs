@@ -163,20 +163,24 @@ internal sealed partial class Studio
         await RequireEditor("if(document.getElementById('drawing-selection').textContent!=='2 selected'||document.getElementById('dialog').open)throw Error('Shift selection failed')","Shift multi-selection");
         await ClickEditorTarget("#drawing-clear");
         await ClickEditorTarget(sw);
-        var raw=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const b=document.querySelector(\""+sw+"\").getBoundingClientRect();window.__gestureBefore={x:b.x,y:b.y,w:b.width};return {x:b.x+5,y:b.y+5};})()");
+        var raw=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const b=document.querySelector(\""+sw+"\").getBoundingClientRect();window.__gestureBefore={x:b.x,y:b.y,w:b.width,h:b.height};const x=b.x+Math.min(5,b.width/2),y=b.y+Math.min(5,b.height/2),hit=document.elementFromPoint(x,y)?.closest('[data-device-id]');return {x,y,device:hit?.getAttribute('data-device-id')};})()");
         using(var point=JsonDocument.Parse(raw)){
+            if(!point.RootElement.TryGetProperty("device",out var hit)||hit.GetString()!="sw-1")throw new Exception("Shift drag must start inside SW-1: "+raw);
             var x=point.RootElement.GetProperty("x").GetDouble();var y=point.RootElement.GetProperty("y").GetDouble();
             foreach(var (type,dx,dy) in new[]{("mousePressed",0,0),("mouseMoved",30,4),("mouseMoved",60,25),("mouseReleased",60,25)})
                 await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x=x+dx,y=y+dy,button="left",buttons=type=="mouseReleased"?0:1,modifiers=8,clickCount=1}));
         }
         await Task.Delay(100); // Allow the viewport resize observer to settle after feedback reflow.
-        await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect(),a=window.__gestureBefore;if(Math.abs(b.y-a.y)>.1||b.x<a.x+50)throw Error('Shift did not hold the initial horizontal axis')","Shift drag axis");
+        await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect(),a=window.__gestureBefore;if(Math.abs(b.y-a.y)>.1||b.x<a.x+50)throw Error('Shift did not hold the initial horizontal axis: '+JSON.stringify({before:a,after:{x:b.x,y:b.y,w:b.width},viewport:{width:innerWidth,height:innerHeight,ratio:devicePixelRatio},canvas:{x:document.getElementById('canvas').getBoundingClientRect().x,y:document.getElementById('canvas').getBoundingClientRect().y,scrollLeft:document.getElementById('canvas').scrollLeft,scrollTop:document.getElementById('canvas').scrollTop},viewBox:document.querySelector('#canvas svg').getAttribute('viewBox'),transform:document.querySelector('#canvas svg').style.transform,feedback:document.getElementById('feedback').textContent}))","Shift drag axis");
         await ClickEditorTarget("#drawing-undo");
         await ClickEditorTarget("#drawing-smaller");
         await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect();if(Math.abs(b.width/window.__gestureBefore.w-.9)>.001)throw Error('Quick scale failed')","quick item scale");
         await ClickEditorTarget("#drawing-undo");
-        await ClickEditorTarget("#drawing-beside");
-        await RequireEditor("if(!document.getElementById('dialog-body').textContent.includes('Moving device: SW-1'))throw Error('Missing moving device');[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Right →').click();if(!document.getElementById('canvas').classList.contains('picking-reference'))throw Error('Reference picking did not start')","choose placement direction");
+        await ClickEditorTarget("#drawing-clear");
+        await RequireEditor("const tools=document.getElementById('drawing-beside');if(tools.hidden||tools.querySelector('[data-place=right]').disabled)throw Error('Placement must be visible and usable without a selection')","persistent placement tools");
+        await ClickEditorTarget("#drawing-beside [data-place='right']");
+        await ClickEditorTarget(sw);
+        await RequireEditor("if(document.getElementById('dialog').open||!document.getElementById('canvas').classList.contains('picking-reference')||!document.getElementById('placement-status').textContent.includes('reference device'))throw Error('Reference picking did not start')","choose moving device without a dialog");
         await ClickEditorTarget("#canvas g[data-device-id='sw-2'][data-drawing-key$='|body']");
         await RequireEditor("if(!document.getElementById('feedback').textContent.includes('placed right SW-2'))throw Error('Place beside failed')","pick reference device on drawing");
         await ClickEditorTarget("#drawing-undo");
@@ -215,10 +219,14 @@ internal sealed partial class Studio
     async Task ClickEditorTarget(string selector,int clicks=1,int modifiers=0)
     {
         var query=JsonSerializer.Serialize(selector);
-        var raw=await browser.CoreWebView2.ExecuteScriptAsync($"(() => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()");
+        // Measure the visible target after scroll and resize callbacks settle.
+        var raw=await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new{
+            expression=$"(async () => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()",
+            awaitPromise=true,returnByValue=true}));
         using var doc=JsonDocument.Parse(raw);
-        if(doc.RootElement.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector);
-        var x=doc.RootElement.GetProperty("x").GetDouble();var y=doc.RootElement.GetProperty("y").GetDouble();
+        var result=doc.RootElement.GetProperty("result");
+        if(!result.TryGetProperty("value",out var point)||point.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector+" "+raw);
+        var x=point.GetProperty("x").GetDouble();var y=point.GetProperty("y").GetDouble();
         for(int click=1;click<=clicks;click++)foreach(var type in new[]{"mousePressed","mouseReleased"})
             await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=click,modifiers}));
     }

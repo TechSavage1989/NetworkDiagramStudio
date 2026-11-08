@@ -29,13 +29,30 @@ export function arrangeAnchors(anchors,keys,action,reference=keys[0]){
  }
  return out;
 }
-export function placeBeside(boxes,target,side,obstacles=[],padding=72){
+export function placeBeside(boxes,target,side,obstacles=[],padding=72,{clearance=Math.min(24,padding),maxAdjustment=Math.max(160,padding*2)}={}){
  if(!boxes.length||!target||!['left','right','above','below'].includes(side))throw Error('Choose devices and a reference device.');
+ if(![padding,clearance,maxAdjustment].every(n=>Number.isFinite(n)&&n>=0))throw Error('Choose a valid placement gap.');
  const x=Math.min(...boxes.map(b=>b.x)),y=Math.min(...boxes.map(b=>b.y)),w=Math.max(...boxes.map(b=>b.x+b.w))-x,h=Math.max(...boxes.map(b=>b.y+b.h))-y;
- const horizontal=side==='left'||side==='right',axis=horizontal?'y':'x',size=horizontal?'h':'w';
+ const horizontal=side==='left'||side==='right',direction=side==='left'||side==='above'?-1:1;
  const base={x:side==='left'?target.x-w-padding:side==='right'?target.x+target.w+padding:target.x+(target.w-w)/2,y:side==='above'?target.y-h-padding:side==='below'?target.y+target.h+padding:target.y+(target.h-h)/2,w,h};
- const offsets=[0,...obstacles.flatMap(b=>[b[axis]-padding-base[size]-base[axis],b[axis]+b[size]+padding-base[axis]])].sort((a,b)=>Math.abs(a)-Math.abs(b)||a-b);
- const position=offsets.map(offset=>({...base,[axis]:base[axis]+offset})).find(b=>obstacles.every(o=>b.x+b.w+padding<=o.x||b.x>=o.x+o.w+padding||b.y+b.h+padding<=o.y||b.y>=o.y+o.h+padding));
- if(!position)throw Error('No clear position beside this device. Move nearby devices first.');
- return new Map(boxes.map(b=>[b.key,[position.x-x,position.y-y]]));
+ const moved=boxes.map(b=>({...b,x:base.x+b.x-x,y:base.y+b.y-y})),queue=[],seen=new Set(),epsilon=.00001;
+ // Search close to the requested side in both axes. A crowded drawing must not
+ // turn a local placement into an unbounded sideways jump. Empty space inside a
+ // multi-device selection is not an obstacle.
+ const push=(dx,dy)=>{const outward=(horizontal?dx:dy)*direction,distance=dx*dx+dy*dy,key=dx.toFixed(5)+','+dy.toFixed(5);
+  if(outward<-epsilon||distance>maxAdjustment*maxAdjustment+epsilon||seen.has(key))return;
+  seen.add(key);queue.push({dx,dy,distance,across:Math.abs(horizontal?dy:dx)});
+ };
+ push(0,0);
+ for(let attempt=0;queue.length&&attempt<1024;attempt++){
+  queue.sort((a,b)=>a.distance-b.distance||a.across-b.across||a.dx-b.dx||a.dy-b.dy);const at=queue.shift();let blocked=false;
+  for(const b of moved)for(const o of obstacles){
+   if(b.x+at.dx+b.w+clearance<=o.x+epsilon||b.x+at.dx>=o.x+o.w+clearance-epsilon||b.y+at.dy+b.h+clearance<=o.y+epsilon||b.y+at.dy>=o.y+o.h+clearance-epsilon)continue;
+   blocked=true;
+   push(o.x-clearance-b.w-b.x,at.dy);push(o.x+o.w+clearance-b.x,at.dy);
+   push(at.dx,o.y-clearance-b.h-b.y);push(at.dx,o.y+o.h+clearance-b.y);
+  }
+  if(!blocked)return new Map(boxes.map(b=>[b.key,[base.x-x+at.dx,base.y-y+at.dy]]));
+ }
+ throw Error('There is no nearby clear position on this side. Move nearby devices or choose another side.');
 }

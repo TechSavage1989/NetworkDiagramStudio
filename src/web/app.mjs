@@ -8,9 +8,9 @@ import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
 import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
 import {diagramViewport} from './viewport.mjs';
-import {arrangeAnchors,arrangeBoxes,placeBeside} from './arrange.mjs';
+import {arrangeAnchors,arrangeBoxes} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
-import {drawingObjects,drawingBounds,moveDrawingItems,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
+import {drawingObjects,drawingBounds,moveDrawingItems,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
@@ -80,7 +80,7 @@ function syncDrawingSelection(){
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');
- const selectedDevices=selectedDrawingDevices();$('drawing-beside').disabled=!selectedDevices.length;$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
+ const selectedDevices=selectedDrawingDevices();syncBesideTools();$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
  const cable=selectedCable();$('cable-tools').hidden=!editDrawing;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
  if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
  else $('cable-point-info').textContent='Select a cable to edit its bend points or endpoints.';
@@ -192,54 +192,49 @@ $('drawing-size').onclick=()=>task(()=>{
  },'primary');
 });
 let besidePick=null;
+function syncBesideTools(){
+ $('drawing-beside').hidden=!editDrawing;
+ const devices=pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug')||[],chosen=selectedDrawingDevices(),available=devices.some(i=>!chosen.includes(i))&&(chosen.length||devices.length>1);
+ for(const button of $('drawing-beside').querySelectorAll('[data-place]')){button.disabled=!available;button.setAttribute('aria-pressed',String(besidePick?.side===button.dataset.place));}
+ $('placement-cancel').disabled=!besidePick;$('placement-spacing').disabled=!!besidePick;
+ $('placement-status').textContent=besidePick?(besidePick.chosen.length?'Click the reference device.':'Click the device to move, then the reference device.'):chosen.length?'Choose a side, then click the reference device.':'Choose a side, then click the device to move.';
+}
 function cancelBesidePick(){
  if(!besidePick)return;
  besidePick=null;
  $('canvas').classList.remove('picking-reference');
+ syncBesideTools();
 }
 function pickBesideReference(key){
  const {page,chosen,side,spacing}=besidePick;
  const reference=page.items.find(item=>item.editKey===key&&item.type==='device'&&item.kind!=='plug');
+ if(!chosen.length){
+  if(!reference||!project.devices.some(d=>d.id===reference.sourceId)){say('Click the device you want to move, or press Esc to cancel.');return;}
+  besidePick.chosen=[reference];drawingSelection.clear();drawingSelection.add(reference.editKey);syncDrawingSelection();
+  say('Click the reference device to place '+reference.name+' '+side+' it. Press Esc to cancel.');return;
+ }
  if(!reference||chosen.includes(reference)){
   say('Click a different device on the drawing, or press Esc to cancel.');
   return;
  }
  cancelBesidePick();
  task(()=>{
-  const others=page.items.filter(item=>item.type==='device'&&item.kind!=='plug'&&!chosen.includes(item));
-  const deviceIds=new Set([...chosen,reference].map(item=>item.sourceId));
-  const incident=page.items.filter(item=>item.type==='path'&&
-    (deviceIds.has(item.sourceLink?.a)||deviceIds.has(item.sourceLink?.b))).length;
-  const padding=spacing==='compact'?56:spacing==='wide'?160:Math.max(80,48+incident*12);
-  const envelope=device=>({...drawingBounds(device),y:device.y-40,h:device.h+68});
-  const offsets=placeBeside(chosen.map(envelope),envelope(reference),side,
-    others.filter(device=>device!==reference).map(envelope),padding);
-  const edits=project.layout?.drawingEdits;
-  try{setDrawingEdits(moveDrawingItems(page,edits,offsets));}
-  catch(error){
-   if(error.code!=='CORE_LAYOUT_CAPACITY'||!page.coreDeviceIds)throw error;
-   // Keep visible references in place if the automatic packing pass shifts them.
-   for(const device of others)if(page.coreDeviceIds.includes(device.sourceId))offsets.set(device.editKey,[0,0]);
-   setDrawingEdits(moveDrawingItems(page,edits,offsets));
-  }
-  viewport.fit();say('Devices placed '+side+' '+reference.name+'. Connections rerouted.');
+  const edits=placeDrawingDevices(page,project.layout?.drawingEdits,chosen.map(i=>i.editKey),reference.editKey,side,spacing);
+  viewport.preserve();
+  try{setDrawingEdits(edits);}catch(error){if(error.code==='CORE_LAYOUT_CAPACITY'&&!error.owner)throw Error('The connections or labels need more room here. Choose Extra room or another side.');throw error;}
+  say('Devices placed '+side+' '+reference.name+'. Connections rerouted.');
  });
 }
-$('drawing-beside').onclick=()=>task(()=>{
+for(const button of $('drawing-beside').querySelectorAll('[data-place]'))button.onclick=()=>task(()=>{
+ if(!commitInlineEdit())return;
  cancelBesidePick();
  const page=pages[active],chosen=selectedDrawingDevices();
- if(!page.items.some(item=>item.type==='device'&&item.kind!=='plug'&&!chosen.includes(item)))throw Error('This page needs another device to place beside.');
- const body=modal('Place devices beside another');
- body.append(el('p',(chosen.length===1?'Moving device: ':'Moving devices: ')+chosen.map(device=>device.name).join(', '),'hint'));
- const gap=field(body,'Space for connections','auto',[['auto','Automatic spacing'],['compact','Compact'],['wide','Extra room']]);
- body.append(el('p','Choose a direction, then click the reference device on the drawing.','hint'));
- const bar=actions(body);
- for(const [side,label] of [['left','← Left'],['right','Right →'],['above','↑ Above'],['below','↓ Below']])button(bar,label,()=>{
-  besidePick={page,chosen,side,spacing:gap.value};
-  close();$('canvas').classList.add('picking-reference');$('canvas').focus({preventScroll:true});
-  say('Click the reference device to place '+chosen.map(device=>device.name).join(', ')+' '+side+' it. Press Esc to cancel.');
- });
+ if(!page||!page.items.some(item=>item.type==='device'&&item.kind!=='plug'&&!chosen.includes(item)))throw Error('This page needs another device to place beside.');
+ besidePick={page,chosen,side:button.dataset.place,spacing:$('placement-spacing').value};
+ viewport.preserve();$('canvas').classList.add('picking-reference');$('canvas').focus({preventScroll:true});syncBesideTools();
+ say(chosen.length?'Click the reference device to place '+chosen.map(device=>device.name).join(', ')+' '+besidePick.side+' it. Press Esc to cancel.':'Click the device to move, then click the reference device. Press Esc to cancel.');
 });
+$('placement-cancel').onclick=()=>{cancelBesidePick();say('Placement cancelled.');};
 $('drawing-page').onclick=()=>task(()=>{
  const chosen=selectedDrawingDevices(),ids=new Set(chosen.map(d=>d.sourceId)),body=modal('Move devices to page'),choices=corePageChoices().filter(([id])=>!['exclude','auto'].includes(id));
  const target=field(body,'Destination page','new',choices),name=field(body,'New page name','Network page');name.maxLength=80;const update=()=>name.hidden=name.previousElementSibling.hidden=target.value!=='new';target.onchange=update;update();

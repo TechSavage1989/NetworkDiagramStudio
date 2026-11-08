@@ -1,5 +1,6 @@
 import {textFootprint} from './diagram/labels.mjs';
 import {applyLinkStyles} from './link-styles.mjs';
+import {placeBeside} from './arrange.mjs';
 import {unpresentPatch} from './presentation.mjs';
 const keyOk=s=>typeof s==='string'&&s.length<=500&&!/^(?:__proto__|constructor|prototype)$/.test(s);
 const colors=/^(?:#[0-9a-f]{3}|#[0-9a-f]{6}|none)$/i;
@@ -78,6 +79,17 @@ export function moveDrawingItems(page,edits,offsets){
   result[key]={...(result[key]||{}),...unpresentPatch(item,changed)};
  }
  return cleanDrawingEdits(result);
+}
+export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='normal'){
+ const devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),selected=new Set(keys),chosen=devices.filter(i=>selected.has(i.editKey)),reference=devices.find(i=>i.editKey===referenceKey&&!selected.has(i.editKey));
+ if(!chosen.length||!reference)throw Error('Choose devices and a different reference device.');
+ const scale=reference.presentation?.scale||1,padding=({compact:56,normal:96,wide:160})[spacing]*scale;
+ if(!Number.isFinite(padding))throw Error('Choose a valid placement spacing.');
+ const others=devices.filter(i=>!selected.has(i.editKey)),offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,others.filter(i=>i!==reference).map(drawingBounds),padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});
+ // Pin every visible reference, including generated WAN cards, before core
+ // routing retries can choose a new automatic arrangement. This is one edit.
+ for(const item of others)offsets.set(item.editKey,[0,0]);
+ return moveDrawingItems(page,edits,offsets);
 }
 export function scaleDrawingItems(page,edits,keys,factor){
  if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Choose a size from 10 to 400 percent.');
