@@ -2,17 +2,18 @@ import {physicalInventory} from '../physical-links.mjs';
 import {cachedDraftPages} from './page-cache.mjs';
 import {buildSwitchportReports,sharedReportPalette,aggregateKey,cleanSwitchportSettings} from '../reports/index.mjs';
 import {luminance} from '../reports/palette.mjs';
-import {portLabelLayout} from './port-label-layout.mjs';
+import {portLabelLayout,portLabelText} from './port-label-layout.mjs';
 import {informationPanel} from './information-panel.mjs';
 import {presentation,scaleText,scalePage,displayPageName,cleanReportPages,deviceScale} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {deviceModel,deviceDetails,macCaption} from '../device-details.mjs';
 import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,canContinueEquipment} from './equipment-layout.mjs';
+import {deviceFaceplate} from './faceplate.mjs';
 import {logicalPages} from './logical.mjs';
 import {documentationMode,documentationSections,includeTrunkReference,interfaceAddresses,savedReportLayout,logicalInventoryColumns,logicalInventoryName} from './documentation.mjs';
 import {corePages} from './core.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
-import {applyDrawingEdits,drawingObjects} from '../drawing-edits.mjs';
+import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
 import {pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles} from '../page-options.mjs';
 import {applyLinkStyles} from '../link-styles.mjs';
 import {orderedDevices} from '../layout.mjs';
@@ -112,19 +113,19 @@ function diamond(items,x,y,size,fill,stroke,weight=.5){items.push({type:'vector'
 // the faceplate behind them. Role or VLAN color stays on the socket itself.
 // Optional marks follow the switchport builder: a dot per tagged VLAN along
 // the top of the jack, a diamond for the voice VLAN and the trunk's outline.
-function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null}={}){
- const size=10*(fontScale??1),minimum=8*(fontScale??1);
- let layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,measureRequired:false});
- if(!layout.readable)layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,vertical:true});
+function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null,format=null}={}){
+ const size=10*(fontScale??1),minimum=8*(fontScale??1),formatting=format?{format}:{};
+ let layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,measureRequired:false,...formatting});
+ if(!layout.readable)layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,vertical:true,...formatting});
  if(!layout.readable){const alternatives=[false,true].map(vertical=>portLabelLayout(g,ports,{fontSize:minimum,minFontSize:minimum,minWidth:0,vertical})),required=alternatives.map(v=>v.requiredWidth).filter(Number.isFinite);throw Object.assign(Error('This port map needs a wider device to keep the port numbers readable. Use a wider page or the Switchport report layout.'),{code:'PORT_LABEL_CAPACITY',requiredWidth:required.length?Math.min(...required):null,sourceId:g.sourceId});}
- for(const {port,text,number:box,content,editKey:key,socket} of layout.entries){const active=selected?.has(port.name.toLowerCase()),color=selected?(active?referencePortFills.ap:null):fill(port),metadata={portName:port.name,sourceId:g.sourceId},mark=marks?.(port);
+ for(const {port,text,number:box,content,editKey:key,socket} of layout.entries){const active=selected?.has(port.name.toLowerCase()),color=port.unconfigured?null:selected?(active?referencePortFills.ap:null):fill(port),metadata={portName:port.name,sourceId:g.sourceId},mark=port.unconfigured?null:marks?.(port);
   if(content&&color){const outline=mark?.lag;rect(items,content.x,content.y,content.w,content.h,mark?.stack?'#111827':color,outline||'none',outline?Math.max(1.2,Math.min(2,content.w*.12)):0);Object.assign(items.at(-1),{...metadata,editKey:key+'|socket-fill',portNumberRole:'socket'});}
   if(content&&mark&&!mark.stack){
    const r=Math.max(.9,Math.min(2,content.w*.09)),step=r*2+.8,per=Math.max(1,Math.floor((content.w-1)/step)),dots=mark.tagged.slice(0,per*2);
    dots.forEach((dot,i)=>{const row=Math.floor(i/per),n=Math.min(per,dots.length-row*per),x0=content.x+content.w/2-n*step/2+step/2;items.push({type:'ellipse',x:x0+(i%per)*step-r,y:content.y+1+row*step,w:r*2,h:r*2,fill:dot.color,stroke:'#374151',weight:.3,...metadata,editKey:key+'|vlan|'+dot.id,portNumberRole:'tagged'});});
    if(mark.voice){const size=Math.max(2.5,Math.min(6,content.h*.42,content.w*.42));diamond(items,content.x+(content.w-size)/2,content.y+content.h-size-Math.min(2.5,content.h/4),size,mark.voice,'#374151',.35);Object.assign(items.at(-1),{...metadata,editKey:key+'|voice',portNumberRole:'voice'});}
   }
-  if(stateKey&&content){rect(items,content.x,content.y+content.h-Math.min(2,content.h/3),content.w,Math.min(2,content.h/3),portStateFills[state(port.state)]);Object.assign(items.at(-1),{...metadata,editKey:key+'|state',portNumberRole:'state'});}
+  if(stateKey&&content&&!port.unconfigured){rect(items,content.x,content.y+content.h-Math.min(2,content.h/3),content.w,Math.min(2,content.h/3),portStateFills[state(port.state)]);Object.assign(items.at(-1),{...metadata,editKey:key+'|state',portNumberRole:'state'});}
   const textBox=box.vertical?{x:box.x+(box.w-box.h)/2,y:box.y+(box.h-box.w)/2,w:box.h,h:box.w}:box;
   label(items,textBox.x,textBox.y,textBox.w,textBox.h,text,box.size,true,readableOn(surfaceAt(g,box.x+box.w/2,box.y+box.h/2)),'center');Object.assign(items.at(-1),{...metadata,editKey:key+'|text',portNumberRole:'text',numberSide:box.side,numberBox:{x:box.x,y:box.y,w:box.w,h:box.h},socketBounds:socket,full:true,...(fontScale!=null?{_textFactor:fontScale}:{}),...(box.vertical?{angle:Math.PI/2}:{})});
  }return layout;
@@ -227,54 +228,126 @@ function portEquipmentPlan(project,switches,requestedWidth){
 }
 // Switchport-builder sheet sections: a light section bar, then compact rows.
 function sectionBar(items,x,y,w,title,key){rect(items,x,y,w,20,'#E3ECF5','#C4D3E3',.75);items.at(-1).editKey=key+'|bar';label(items,x+8,y+1,w-16,18,title,12,true,'#1B3A4B');Object.assign(items.at(-1),{editKey:key+'|title',full:true});return y+26;}
-function bookletKey(page,top,devices,palette,project,{descriptions:withDescriptions=true,note:withNote=true}={}){
- const span=page.width-76,continuations=[],scope=page.editScope||page.name;
- let target=page,y=top;
- const reserve=height=>{
-  if(!target.dynamic&&y+height>target.height-64){
-   target=fresh('MDF Port Map VLAN Key','MDF Port Map VLAN Key',devices.map(nameOf).join(' / '),project);
-   target.portMap={device:devices[0].id,devices:devices.map(d=>d.id),rowNames:[],bookletRole:'key'};
-   bookletHeader(target);continuations.push(target);y=156;
-  }
-  return target.items;
- };
- const grid=(entries,columns,draw)=>{const width=span/columns;for(let i=0;i<entries.length;i+=columns){const row=entries.slice(i,i+columns).map(entry=>({...entry,lines:wrapPortText(entry.text,width-(entry.indent??40),12)})),height=Math.max(22,...row.map(entry=>entry.lines.length*15+6)),items=reserve(height);row.forEach((entry,column)=>{const x=38+column*width;draw(items,entry,x,y);entry.lines.forEach((line,n)=>{label(items,x+(entry.indent??40),y+n*15,width-(entry.indent??40)-6,17,line,12,false,C.ink);Object.assign(items.at(-1),{editKey:scope+'|key|'+entry.key+'|line:'+n,full:true});});});y+=height;}};
- // VLAN key: native fill, tagged dot and voice diamond share the VLAN's color.
- const vlans=new Map(),voices=new Set(),ports=devices.flatMap(d=>physicalPorts(d));
- for(const device of devices)for(const port of physicalPorts(device))for(const id of [port.native,...(port.tagged||[]),port.voice]){const n=Number(id);if(Number.isInteger(n)&&n>0&&!vlans.has(n))vlans.set(n,devices.map(d=>d.vlans?.find(v=>Number(v.id)===n)?.name).find(Boolean)||'');}
- for(const port of ports)if(Number(port.voice)>0)voices.add(Number(port.voice));
- y=sectionBar(reserve(48),38,y,span,'VLAN key',scope+'|key|vlans');
- const vlanEntries=[...vlans].sort(([a],[b])=>a-b).map(([id,name])=>({key:'vlan:'+id,id,text:'VLAN '+id+(name?' · '+name:'')+(voices.has(id)?' (voice)':'')}));
- vlanEntries.push({key:'none',id:null,text:'No native VLAN'});
- grid(vlanEntries,Math.max(1,Math.floor(span/220)),(items,entry,x,top)=>{const color=entry.id?palette.vlan(entry.id):'#FFFFFF';rect(items,x,top+3,14,13,color,'#5B6B82',.6);items.at(-1).editKey=scope+'|key|'+entry.key+'|swatch';if(entry.id){items.push({type:'ellipse',x:x+19,y:top+6,w:7,h:7,fill:color,stroke:'#374151',weight:.35,editKey:scope+'|key|'+entry.key+'|dot'});if(voices.has(entry.id)){diamond(items,x+29,top+5,9,color,'#374151',.35);items.at(-1).editKey=scope+'|key|'+entry.key+'|voice';}}});
- // Trunks / LAGs: the outline color of every member jack.
- const lags=new Map();
- for(const device of devices)for(const port of physicalPorts(device).sort(comparePorts))if(port.lag){const key=String(port.lag);if(!lags.has(key))lags.set(key,[]);lags.get(key).push({device,name:port.name});}
- if(lags.size){y+=6;y=sectionBar(reserve(48),38,y,span,'Trunks / LAGs',scope+'|key|lags');
-  grid([...lags].map(([key,members])=>({key:'lag:'+key,lag:key,text:'LAG '+key+': '+devices.map(d=>{const names=members.filter(m=>m.device===d).map(m=>m.name);return names.length?(devices.length>1?nameOf(d)+' ':'')+portRanges(names,portColumnPrefix(physicalPorts(d).map(p=>p.name))):'';}).filter(Boolean).join('; ')})),Math.max(1,Math.floor(span/320)),(items,entry,x,top)=>{rect(items,x,top+3,26,13,'#FFFFFF',palette.lag(entry.lag),2);items.at(-1).editKey=scope+'|key|'+entry.key+'|swatch';});}
- // Port descriptions, grouped by text.
- const descriptions=new Map();
- for(const device of devices)for(const port of physicalPorts(device).sort(comparePorts)){const text=String(port.description||'').trim();if(!text)continue;const key=JSON.stringify([device.id,text]);if(!descriptions.has(key))descriptions.set(key,{device,text,names:[]});descriptions.get(key).names.push(port.name);}
- if(withDescriptions&&descriptions.size){y+=6;y=sectionBar(reserve(48),38,y,span,'Port descriptions',scope+'|key|descriptions');
-  grid([...descriptions.values()].map(({device,text,names},i)=>({key:'description:'+i,indent:0,text:(devices.length>1?nameOf(device)+' ':'')+portRanges(names,portColumnPrefix(physicalPorts(device).map(p=>p.name)))+': '+text})),Math.max(1,Math.floor(span/330)),()=>{});}
- // Symbol key and the builder's safety note.
- y+=8;let items=reserve(46),x=38;
- const symbol=(title,paint)=>{const width=textWidth(title,12)+46;if(x>38&&x+width>page.width-38){x=38;y+=22;items=reserve(22);}paint(x);label(items,x+22,y,textWidth(title,12)+4,18,title,12,false,C.muted);Object.assign(items.at(-1),{editKey:scope+'|key|symbol|'+title,full:true});x+=width;};
- const sample=palette.vlan([...vlans.keys()][0]||10),outline=palette.lag([...lags.keys()][0]||'1');
- symbol('Native VLAN',x=>{rect(items,x,y+3,14,12,sample,'#5B6B82',.6);});
- symbol('Tagged VLAN',x=>{items.push({type:'ellipse',x:x+3,y:y+5,w:8,h:8,fill:sample,stroke:'#374151',weight:.35});});
- symbol('Voice VLAN',x=>{diamond(items,x+2,y+4,10,sample,'#374151',.35);});
- symbol('LAG / trunk',x=>{rect(items,x,y+3,14,12,'#FFFFFF',outline,2);});
- symbol('Link state strip: up / down / unknown',x=>{rect(items,x,y+12,5,3,portStateFills.up);rect(items,x+5,y+12,5,3,portStateFills.down,'#5B6B82',.3);rect(items,x+10,y+12,5,3,portStateFills.unknown);});
- y+=22;
- if(withNote){const note=wrapPortText('Confirm live link, LLDP/CDP and MAC address tables before moving production cables.',span,11);items=reserve(note.length*15);
-  note.forEach((text,line)=>{label(items,38,y+line*15,span,15,text,11,false,C.muted);Object.assign(items.at(-1),{editKey:scope+'|key|note'+(line?'|'+line:''),full:true});});y+=note.length*15;}
- continuations.bottom=y;continuations.target=target;
- return continuations;
-}
 // Port inventory sheets follow the switchport builder: a dark device bar,
 // then every port record in one table. Ports with identical configuration
 // share a row (port count in brackets); live state and peers stay per port.
+// Builder port-map sheet (Configuration Inspector / Switchport Diagram Builder
+// layout): one device per sheet under a dark header block, each stack member
+// under its own slim bar, the VLAN key down the right, trunks and port
+// descriptions beside or under the hardware, and a symbol key at the foot.
+const memberOf=name=>String(name).match(/^(?:(?:GigabitEthernet|TenGigabitEthernet|Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i)?.[1];
+function socketSummary(view){
+ const counts=new Map();
+ for(const s of deviceFaceplate(view,{padding:equipmentPadding})?.sockets||[]){if(s.primary===false)continue;const form=String(s.form||'Port').replace(/^RJ45$/,'RJ-45');counts.set(form,(counts.get(form)||0)+1);}
+ return [...counts].sort((a,b)=>b[1]-a[1]).map(([form,n])=>n+' '+form).join(' + ');
+}
+function keySections(devices,palette,{lags=true,descriptions=true,names=devices}={}){
+ const vlans=new Map(),voices=new Set(),sections=[];
+ for(const device of devices)for(const port of physicalPorts(device)){for(const id of [port.native,...(port.tagged||[]),port.voice]){const n=Number(id);if(Number.isInteger(n)&&n>0&&!vlans.has(n))vlans.set(n,[...devices,...names].map(d=>d.vlans?.find(v=>Number(v.id)===n)?.name).find(Boolean)||'');}if(Number(port.voice)>0)voices.add(Number(port.voice));}
+ sections.push({key:'vlans',title:'VLAN key',width:220,entries:[...[...vlans].sort(([a],[b])=>a-b).map(([id,name])=>({key:'vlan:'+id,indent:40,text:id+(name?'  '+name:'')+(voices.has(id)?' (voice)':''),paint:(items,x,y,key)=>{const color=palette.vlan(id);rect(items,x,y+3,14,13,color,'#5B6B82',.6);items.at(-1).editKey=key+'|swatch';items.push({type:'ellipse',x:x+19,y:y+6,w:7,h:7,fill:color,stroke:'#374151',weight:.35,editKey:key+'|dot'});if(voices.has(id)){diamond(items,x+29,y+5,9,color,'#374151',.35);items.at(-1).editKey=key+'|voice';}}})),
+  {key:'none',indent:40,text:'No native VLAN',paint:(items,x,y,key)=>{rect(items,x,y+3,14,13,'#FFFFFF','#5B6B82',.6);items.at(-1).editKey=key+'|swatch';}}]});
+ const lagMembers=new Map();
+ for(const device of devices)for(const port of physicalPorts(device).sort(comparePorts))if(port.lag){const key=String(port.lag);if(!lagMembers.has(key))lagMembers.set(key,[]);lagMembers.get(key).push({device,name:port.name});}
+ if(lags&&lagMembers.size)sections.push({key:'lags',title:'Trunks / LAGs',width:300,entries:[...lagMembers].map(([lag,members])=>({key:'lag:'+lag,indent:36,text:(/^\d+$/.test(lag)?'LAG '+lag:lag.replace(/^trk/i,'Trk'))+': '+devices.map(d=>{const names=members.filter(m=>m.device===d).map(m=>m.name);return names.length?(devices.length>1?nameOf(d)+' ':'')+portRanges(names,portColumnPrefix(physicalPorts(d).map(p=>p.name))):'';}).filter(Boolean).join('; '),paint:(items,x,y,key)=>{rect(items,x,y+3,26,13,'#FFFFFF',palette.lag(lag),2);items.at(-1).editKey=key+'|swatch';}}))});
+ const notes=new Map();
+ for(const device of devices)for(const port of physicalPorts(device).sort(comparePorts)){const text=String(port.description||'').trim();if(!text)continue;const key=JSON.stringify([device.id,text]);if(!notes.has(key))notes.set(key,{device,text,names:[]});notes.get(key).names.push(port.name);}
+ if(descriptions&&notes.size)sections.push({key:'descriptions',title:'Port descriptions',width:320,entries:[...notes.values()].map(({device,text,names},i)=>({key:'description:'+i,indent:0,text:(devices.length>1?nameOf(device)+' ':'')+portRanges(names,portColumnPrefix(physicalPorts(device).map(p=>p.name)))+': '+text}))});
+ return sections;
+}
+// Lays out sections in a box; draw=false only measures. Returns the bottom.
+function drawSections(items,sections,x,y,width,scope,draw=true,columns=null){
+ for(const section of sections){
+  if(draw)sectionBar(items,x,y,width,section.title,scope+'|key|'+section.key);y+=26;
+  const cols=columns??Math.max(1,Math.floor(width/section.width)),cell=width/cols;
+  for(let i=0;i<section.entries.length;i+=cols){
+   const row=section.entries.slice(i,i+cols).map(entry=>({...entry,lines:wrapPortText(entry.text,cell-entry.indent-6,12)})),height=Math.max(20,...row.map(entry=>entry.lines.length*15+5));
+   if(draw)row.forEach((entry,column)=>{const cx=x+column*cell,key=scope+'|key|'+entry.key;entry.paint?.(items,cx,y,key);entry.lines.forEach((line,n)=>{label(items,cx+entry.indent,y+n*15,cell-entry.indent-6,17,line,12,false,C.ink);Object.assign(items.at(-1),{editKey:key+'|line:'+n,full:true});});});
+   y+=height;
+  }
+  y+=8;
+ }
+ return y;
+}
+function builderFooter(page,palette,scope,sheet,sampleVlan){
+ const a=page.items,H=page.height,W=page.width,sample=sampleVlan?palette.vlan(sampleVlan):'#CDEBAD',outline=palette.lag('1');let x=38,y=H-98;
+ const symbol=(title,paint)=>{const width=textWidth(title,12)+46;if(x>38&&x+width>W-38){x=38;y+=20;}paint(x);label(a,x+22,y,textWidth(title,12)+4,18,title,12,false,C.ink);Object.assign(a.at(-1),{editKey:scope+'|legend|'+title,full:true});x+=width;};
+ symbol('Native VLAN',x=>{rect(a,x,y+3,14,12,sample,'#5B6B82',.6);});
+ symbol('Tagged VLAN',x=>{a.push({type:'ellipse',x:x+3,y:y+5,w:8,h:8,fill:sample,stroke:'#374151',weight:.35});});
+ symbol('Voice VLAN',x=>{diamond(a,x+2,y+4,10,'#E8705F','#374151',.35);});
+ symbol('LAG / trunk',x=>{rect(a,x,y+3,14,12,'#FFFFFF',outline,2);});
+ symbol('Stack / VSF',x=>{rect(a,x,y+3,14,12,'#111827');});
+ symbol('Link state strip',x=>{rect(a,x,y+12,5,3,portStateFills.up);rect(a,x+5,y+12,5,3,portStateFills.down,'#5B6B82',.3);rect(a,x+10,y+12,5,3,portStateFills.unknown);});
+ const note=wrapPortText('Confirm live link, LLDP/CDP and MAC address tables before moving production cables.  |  Sheet '+sheet,W-76,11);
+ note.forEach((text,line)=>{label(a,38,y+22+line*15,W-76,15,text,11,false,C.muted);a.at(-1).editKey=scope+'|legend|note'+(line?'|'+line:'');});
+}
+function builderSheets(project,db,info,palette,plan,settings={}){
+ // A sheet too narrow for readable numbers beside the key column puts the key
+ // under the hardware instead, before the common width is widened.
+ try{return builderLayout(project,db,info,palette,plan,settings,true);}
+ catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;return builderLayout(project,db,info,palette,plan,settings,false);}
+}
+function builderLayout(project,db,info,palette,plan,{sheetLabel='1 / 1'}={},column=true){
+ const {width:W,height:H}=pageGeometry(project,'ports'),d=info.device,prefix=project._reportPrefix?project._reportPrefix+'|':'',keyW=column&&W>=1000?Math.min(230,Math.max(190,W*.17)):0,mainW=W-72-(keyW?keyW+16:0),hw=Math.min(plan.width,mainW),footerTop=H-108;
+ const ports=info.ports,up=ports.filter(port=>state(port.state)==='up').length,stackPart=canContinueEquipment(project,d);
+ const parts=stackPart?[...d.stackMembers].sort((a,b)=>Number(a.id)-Number(b.id)).map(member=>{const ids=String(member.id),known=new Set(d.stackMembers.map(m=>String(m.id))),physical=new Set(physicalPorts(d).map(p=>p.name)),first=member===d.stackMembers.slice().sort((a,b)=>Number(a.id)-Number(b.id))[0];
+  const view={...d,stackMembers:[member],ports:(d.ports||[]).filter(p=>!physical.has(p.name)||memberOf(p.name)===ids||first&&!known.has(memberOf(p.name))),stackContinuation:true,equipmentPart:ids};
+  return {view,member,bar:['Member '+member.id,member.model||d.model,socketSummary(view)].filter(Boolean).join('  |  ')};}):[{view:d}];
+ const models=stackPart?[...new Set(d.stackMembers.map(m=>m.model).filter(Boolean))].join(' / ')||d.model:d.model;
+ const bodyKey=deviceEditKey({editScope:prefix+'MDF Port Map|'+equipmentScope(d)+'|sheet:0'},{sourceId:d.id});
+ const out=[];let sheet=0;
+ const newSheet=()=>{
+  const p=fresh('MDF Port Map','MDF port map','Switch front panel, VLAN membership, trunks and link state',project),a=p.items,scope=prefix+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+sheet;
+  p.items.splice(0,5);p.editScope=scope;p.title='MDF Port Map';
+  const blockW=W-72-(keyW?keyW+16:0),half=(blockW-40)/2,title=nameOf(d)+(sheet?' (continued)':''),site=wrapPortText(project.name||'Network project',half,10,true),model=wrapPortText(String(models||''),half,14,true);
+  let titleSize=22,titleLines=wrapPortText(title,half,titleSize,true);while(titleLines.length>2&&titleSize>15)titleLines=wrapPortText(title,half,--titleSize,true);const pitch=Math.ceil(titleSize*1.25);
+  const sub=wrapPortText([...deviceDetails(d).split(' | ').filter(part=>part&&part!==String(models)&&part!==d.model),ports.length+' interfaces',up+' of '+ports.length+' up'].join('  |  '),half,12);
+  const right=20+site.length*13+model.length*19+sub.length*16,height=Math.max(36+titleLines.length*pitch,right)+10;
+  rect(a,36,12,blockW,height,'#14283D');a.at(-1).editKey=scope+'|sheet-header';
+  label(a,52,18,half,15,'NETWORK PORT MAP',10,true,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|sheet-kicker',full:true});
+  titleLines.forEach((text,line)=>{label(a,52,36+line*pitch,half,pitch,text,titleSize,true,C.white);Object.assign(a.at(-1),{editKey:bodyKey+'|port-map-title|'+line,full:true});});
+  let ry=18;
+  // The project name stays on every sheet.
+  label(a,52+half+20,ry,half,site.length*13,project.name||'Network project',10,true,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|sheet-site',full:true});ry+=site.length*13;
+  model.forEach((text,line)=>{label(a,52+half+20,ry+2,half,19,text,14,true,C.white);Object.assign(a.at(-1),{editKey:bodyKey+'|port-map-model'+(line?'|line:'+line:''),full:true});ry+=19;});
+  sub.forEach((text,line)=>{label(a,52+half+20,ry+3,half,16,text,12,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:bodyKey+'|port-map-summary'+(line?'|line:'+line:''),full:true});ry+=16;});
+  p.portMap={device:d.id,devices:[d.id],shown:info.shown.length,total:ports.length,rowNames:[],portRecords:[],density:'compact',overview:false,bookletRole:sheet?'key':'map'};
+  out.push(p);sheet++;return {p,top:12+height+14};
+ };
+ let {p,top:y}=newSheet(),hasPlate=false;
+ // Hardware, member by member, continuing onto another sheet only when needed.
+ for(const part of parts){
+  const barH=part.bar?17:0,size=equipmentSize(project,part.view,hw);
+  if(hasPlate&&y+barH+size.h>footerTop-8)({p,top:y}=newSheet());
+  if(part.bar){rect(p.items,36,y,hw,barH-2,'#14283D');p.items.at(-1).editKey=bodyKey+'|member-bar|'+part.member.id;label(p.items,42,y,hw-12,barH-2,part.bar,10,true,C.white);Object.assign(p.items.at(-1),{editKey:bodyKey+'|member-bar|'+part.member.id+'|text',full:true});}
+  p.editScope=prefix+'MDF Port Map|'+equipmentScope(part.view)+'|sheet:0';
+  p.portMap.overview=true;p.portMap.bookletRole='map';
+  const g=addDevice(p,project,part.view,[36,y+barH,hw,1],'panel:'+d.id+(part.member?':'+part.member.id:''),{fitWidth:true,padding:equipmentPadding});p.editScope=prefix+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+(sheet-1);
+  // Every socket is numbered, as on the builder sheet; only configured ports
+  // carry VLAN fills and marks. Chassis modules number their own ports 1..n.
+  const known=physicalPorts(part.view),names=new Set(known.map(port=>port.name.toLowerCase())),sockets=Object.keys(g.ports).filter(name=>!/^uplink\./.test(name)&&!names.has(name.toLowerCase())).map(name=>({name,unconfigured:true}));
+  const numbering={fill:palette.native,marks:palette.marks,stateKey:true,...(d.modules?.length&&!stackPart?{format:name=>portLabelText(name).replace(/^[A-Z]{1,2}(?=\d+$)/,'')}:{})};
+  try{portNumbers(p.items,g,[...known,...sockets],numbering);}catch(error){if(error.code!=='PORT_LABEL_CAPACITY'||!sockets.length)throw error;portNumbers(p.items,g,known,numbering);}
+  y=g.y+g.h+(part.bar?4:10);hasPlate=true;
+ }
+ // A chassis names each slot's module under the hardware.
+ if(!stackPart&&d.modules?.length){const sockets=deviceFaceplate(d,{padding:equipmentPadding})?.sockets||[],slots=d.modules.filter(m=>!m.member).map(m=>{const counts=new Map();for(const s of sockets.filter(s=>s.primary!==false&&new RegExp('^'+m.slot+'\\d+$','i').test(s.name))){const form=String(s.form).replace(/^RJ45$/,'RJ-45');counts.set(form,(counts.get(form)||0)+1);}return 'Slot '+m.slot+': '+[m.model,[...counts].map(([f,n])=>n+' '+f).join(' + ')].filter(Boolean).join(' ');});
+  const lines=wrapPortText(slots.join('   ·   '),hw,11);lines.forEach((text,line)=>{label(p.items,36,y+line*14,hw,14,text,11,false,C.muted);Object.assign(p.items.at(-1),{editKey:bodyKey+'|slots'+(line?'|'+line:''),full:true});});y+=lines.length*14+6;}
+ // The VLAN key down the right; lists beside it when they fit, else under the hardware.
+ const scope=prefix+'MDF Port Map|'+equipmentScope(d),[vlanSection,...lists]=keySections([d],palette,{names:[...db.devices.values()]});
+ let columnBottom=0,listsDrawn=false;
+ if(keyW){const first=out[0];columnBottom=drawSections(first.items,[vlanSection],W-36-keyW,12,keyW,scope);
+  if(lists.length&&p===first&&drawSections([],lists,W-36-keyW,columnBottom,keyW,scope,false,1)<=footerTop){columnBottom=drawSections(first.items,lists,W-36-keyW,columnBottom,keyW,scope,true,1);listsDrawn=true;}
+  if(out.length>1&&lists.length&&!listsDrawn&&drawSections([],lists,W-36-keyW,12,keyW,scope,false,1)<=footerTop){drawSections(p.items,lists,W-36-keyW,12,keyW,scope,true,1);listsDrawn=true;}}
+ const under=keyW?lists:[vlanSection,...lists];
+ if(!listsDrawn&&under.length){
+  y+=6;if(drawSections([],under,36,y,mainW,scope,false)>footerTop)({p,top:y}=newSheet());
+  y=drawSections(p.items,under,36,y,keyW?mainW:W-72,scope);
+ }
+ const sampleVlan=Number(String(vlanSection.entries[0]?.key||'').replace('vlan:',''))||null;
+ out.forEach((page,index)=>builderFooter(page,palette,scope+'|sheet:'+index,sheetLabel+(out.length>1?' ('+(index+1)+' of '+out.length+')':''),sampleVlan));
+ out.contentBottom=Math.max(y,p===out[0]?columnBottom:0);out.last=p;
+ return out;
+}
 function bookletInventory(project,db,device,ports,options,palette,grouped,start=null){
  // Natural order keeps chassis slots together (A1-A8, then B1) and numeric member/port order.
  const {width:W,height:H}=pageGeometry(project,'ports'),filter=options.detailFilter||'all',sorted=ports.slice().sort((a,b)=>cmp(a.name,b.name)||comparePorts(a,b)),prefix=portColumnPrefix(sorted.map(p=>p.name));
@@ -318,7 +391,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   // heading and first row fit there; the rest continues on inventory pages.
   // On a combined sheet the faceplate bar already names the device, so its
   // table opens with a slim section bar instead of a second dark bar.
-  const filterLine=sheet===0&&shown<ports.length?22:0,slim=26,host=sheet===0&&start&&start.top+slim+filterLine+header+(rows[0]?.height||22)<=H-124?start.page:null,bar=host?slim-8:barHeight;
+  const filterLine=sheet===0&&shown<ports.length?22:0,slim=26,slimFits=wrapPortText(nameOf(device)+'  /  Port inventory  |  Ports '+ports.length+'-'+ports.length+' of '+ports.length,W-88,12,true).length===1,host=sheet===0&&start&&slimFits&&start.top+slim+filterLine+header+(rows[0]?.height||22)<=H-124?start.page:null,bar=host?slim-8:barHeight;
   const p=host||fresh('MDF Port Map','MDF port map','Port assignments, descriptions, VLANs and link state',project),a=p.items,scope=scopeBase+'|sheet:'+sheet;if(!host)p.editScope=scope;
   let y=host?start.top:150;const barTop=y,tableTop=barTop+bar+8+filterLine;y=tableTop;
   if(sheet===0&&shown<ports.length){label(a,38,barTop+bar+6,W-80,18,shown+' of '+ports.length+' port records in details | '+(ports.length-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
@@ -342,7 +415,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   for(const item of a.slice(tableStart))item.tableContent=true;
   const pageNames=new Set(members),records=sorted.filter(port=>pageNames.has(port.name)).map(port=>({device:device.id,name:port.name}));
   const first=records.length?sorted.findIndex(port=>port.name===records[0].name)+1:0,last=records.length?sorted.findIndex(port=>port.name===records.at(-1).name)+1:0;
-  if(host){const title=nameOf(device)+'  /  Port inventory  |  '+(records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'),lines=wrapPortText(title,W-88,12,true);sectionBar(a,36,barTop,W-72,lines.length>1?nameOf(device)+'  /  Port inventory':title,scope+'|section');}
+  if(host)sectionBar(a,36,barTop,W-72,nameOf(device)+'  /  Port inventory  |  '+(records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'),scope+'|section');
   else{
    rect(a,36,barTop,W-72,barHeight,'#14283D');a.at(-1).editKey=scope+'|bar';
    barTitle.forEach((text,line)=>{label(a,50,barTop+5+line*20,W-100,20,text,17,true,C.white);Object.assign(a.at(-1),{editKey:scope+'|bar-title'+(line?'|'+line:''),full:true});});
@@ -350,7 +423,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
    detail.slice(0,barDetailLines).forEach((text,line)=>{label(a,50,barTop+7+barTitle.length*20+line*15,W-100,15,text,12,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|bar-detail'+(line?'|'+line:''),full:true});});
   }
   const note=wrapPortText('Confirm live link, LLDP/CDP and MAC address tables before moving production cables.'+(grouped?' Ports with the same settings share a row (port count in brackets).':''),W-76,11);
-  const noted=(!host||start.last)&&y+12+note.length*15<=H-75;if(noted)note.forEach((text,line)=>{label(a,38,y+12+line*15,W-76,15,text,11,false,C.muted);a.at(-1).editKey=scope+'|note'+(line?'|'+line:'');});
+  const noted=(!host||start.last&&start.note!==false)&&y+12+note.length*15<=H-75;if(noted)note.forEach((text,line)=>{label(a,38,y+12+line*15,W-76,15,text,11,false,C.muted);a.at(-1).editKey=scope+'|note'+(line?'|'+line:'');});
   out.end={page:p,y:y+(noted?12+note.length*15:0),hosted:!!host};
   if(host)out.hosted={records,shown};
   else{p.portMap={device:device.id,devices:[device.id],shown,total:ports.length,rowNames:records.map(r=>r.name),portRecords:records,density:'compact',overview:false,bookletRole:'inventory',inventoryTable:true};namePortInventory(p);out.push(p);}
@@ -368,14 +441,6 @@ function bookletHeader(page){
  title.x+=12;title.w-=24;
  page.items.unshift(...banner);
 }
-function detachPortOverview(page,frameCount,out,devices,shown,total,density){
- const map={...page,items:page.items.map((item,index)=>index<frameCount?{...item}:item),
-  portMap:{device:devices[0].id,devices:devices.map(d=>d.id),shown,total,
-   rowNames:[],portRecords:[],density,overview:true,bookletRole:'map'}};
- bookletHeader(map);
- out.push(map);
- page.items.splice(frameCount);
-}
 function namePortInventory(page){
  page.name=page.name.replace(/MDF Port Map$/,'Port Inventory');
  page.title='Port Inventory';
@@ -388,6 +453,21 @@ function referencePortMaps(project,db,switches,options,plan){
  const separate=options.presentation!=='combined'&&(options.presentation==='separate'||options.repeatFaceplate!==true);
  const filter=options.detailFilter||'all',repeat=!separate&&options.repeatFaceplate===true,out=[];
  const palette=separate?portMapPalette(project,db):null;
+ // Booklet sheets: one builder sheet per whole device (members continue onto
+ // another sheet only when they do not fit), then its inventory. The
+ // Automatic merged sheet hosts the table under that device's own lists.
+ if(separate){
+  const seen=new Set(),devices=plan.views.filter(v=>!seen.has(v.id)&&seen.add(v.id)).map(v=>switches.find(d=>d.id===v.id)||v);
+  devices.forEach((d,index)=>{
+   const ports=physicalPorts(d).sort(comparePorts),shown=ports.filter(port=>{const o=uplinkSettings(db.devices.get(d.id)||d,port);return hasPortDetails(o,db.links.some(l=>l.a===d.id&&l.ap.toLowerCase()===o.name.toLowerCase()||l.b===d.id&&l.bp.toLowerCase()===o.name.toLowerCase()),filter);}).map(port=>port.name);
+   const sheets=builderSheets(project,db,{device:d,ports,shown},palette,plan,{sheetLabel:(index+1)+' / '+devices.length});out.push(...sheets);
+   if(options.mergeSheets===true&&sheets.length===1){
+    const map=sheets[0],pages=bookletInventory(project,db,d,ports,options,palette,true,{page:map,top:sheets.contentBottom+16,last:true,note:false}),records=pages.hosted?.records||[];out.push(...pages);
+    if(pages.hosted){map.portMap={...map.portMap,rowNames:records.map(r=>r.name),portRecords:records,mergedInventory:true};delete map.portMap.bookletRole;}
+   }else out.push(...bookletInventory(project,db,d,ports,options,palette,true));
+  });
+  return out;
+ }
  // Pack measured panels first; keep their member-local assignment data with them.
  for(const devices of plan.groups){
   const columns=fitColumns([['Port assignment',230],...devices.map(d=>[nameOf(d)+' ports',devices.length===2?190:260]),['VLANs and link details',devices.length===2?518:638]],W-72),records=new Map(),data=devices.map(d=>({device:d,ports:physicalPorts(d).sort(comparePorts)}));
@@ -416,34 +496,13 @@ function referencePortMaps(project,db,switches,options,plan){
    const shown=data.reduce((sum,info)=>sum+info.shown.length,0),total=data.reduce((sum,info)=>sum+info.ports.length,0);
    const used=new Set(data.flatMap(info=>info.ports.map(port=>info.assignment(port)[1])));
    if(overview){let bottom=150,nextTitle=151;data.forEach(info=>{const d=info.device,{titleLines,titleSize,titleLineHeight,summaryLines,textHeight}=portPanelCaption(d,info.ports,W);
-     // Booklet sheets name each device on a dark switchport-builder bar.
-     const pad=separate?16:8;
-     p.editScope=(project._reportPrefix?project._reportPrefix+'|':'')+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+sheet;const g=addDevice(p,project,d,[(W-plan.width)/2,nextTitle+textHeight+pad,plan.width,1],'panel:'+d.id,{fitWidth:true,padding:equipmentPadding});p.editScope=scope;
-     const textTop=g.y-pad-textHeight>=146?g.y-pad-textHeight:g.y+g.h+pad;
-     if(separate){rect(a,36,textTop-6,W-72,textHeight+12,'#14283D');a.at(-1).editKey=g.editKey+'|port-map-bar';}
-     titleLines.forEach((text,line)=>{label(a,41,textTop+line*titleLineHeight,(half-23),titleLineHeight,text,titleSize,true,separate?C.white:C.ink);Object.assign(a.at(-1),{editKey:g.editKey+'|port-map-title|'+line,full:true});});
-     summaryLines.forEach((text,line)=>{label(a,(41+half),textTop+line*16,half,16,text,13,false,separate?'#C7D4E2':C.muted,'right');Object.assign(a.at(-1),{editKey:g.editKey+'|port-map-summary'+(line?'|line:'+line:''),full:true});});
-     portNumbers(a,g,info.ports,{fill:separate?palette.native:port=>referencePortFills[info.assignment(port)[1]],marks:separate?palette.marks:null,stateKey:true});bottom=Math.max(bottom,g.y+g.h,textTop+textHeight+(separate?6:0));nextTitle=bottom+18;
+     p.editScope=(project._reportPrefix?project._reportPrefix+'|':'')+'MDF Port Map|'+equipmentScope(d)+'|sheet:'+sheet;const g=addDevice(p,project,d,[(W-plan.width)/2,nextTitle+textHeight+8,plan.width,1],'panel:'+d.id,{fitWidth:true,padding:equipmentPadding});p.editScope=scope;
+     const textTop=g.y-8-textHeight>=146?g.y-8-textHeight:g.y+g.h+8;
+     titleLines.forEach((text,line)=>{label(a,41,textTop+line*titleLineHeight,(half-23),titleLineHeight,text,titleSize,true,C.ink);Object.assign(a.at(-1),{editKey:g.editKey+'|port-map-title|'+line,full:true});});
+     summaryLines.forEach((text,line)=>{label(a,(41+half),textTop+line*16,half,16,text,13,false,C.muted,'right');Object.assign(a.at(-1),{editKey:g.editKey+'|port-map-summary'+(line?'|line:'+line:''),full:true});});
+     portNumbers(a,g,info.ports,{fill:port=>referencePortFills[info.assignment(port)[1]],stateKey:true});bottom=Math.max(bottom,g.y+g.h,textTop+textHeight);nextTitle=bottom+18;
     });
-    if(separate){
-     // Automatic layout may merge the builder sheet: faceplates, VLAN key and
-     // the start of each inventory table share one page when they fit.
-     const merge=options.mergeSheets===true,keys=bookletKey(p,bottom+15,devices,palette,project,merge?{descriptions:false,note:false}:{});
-     detachPortOverview(p,frameCount,out,devices,shown,total,'compact');
-     if(merge&&!keys.length){
-      const map=out.at(-1),records=[];let start={page:map,top:keys.bottom+16};
-      for(const info of data){
-       const pages=bookletInventory(project,db,info.device,info.ports,options,palette,true,start&&{...start,last:info===data.at(-1)});
-       if(pages.hosted)records.push(...pages.hosted.records);out.push(...pages);
-       start=pages.end?.page===map?{page:map,top:pages.end.y+18}:null;
-      }
-      map.portMap={...map.portMap,rowNames:records.map(r=>r.name),portRecords:records,mergedInventory:true};delete map.portMap.bookletRole;
-      break;
-     }
-     out.push(...keys);
-     for(const info of data)out.push(...bookletInventory(project,db,info.device,info.ports,options,palette,true));
-     break;
-    }else{
+    {
      const probe={...p,items:[]},end=referencePortLegend(probe,bottom+15,used)+10;
     if(end<=H-75){a.push(...probe.items);start=end;legendPending=false;}else{start=H;legendPending=true;repeatFits=false;}
     }
@@ -501,6 +560,7 @@ function portMapsAtScale(project,db,plan){
  if(compact&&group)return referencePortMaps(project,db,switches,options,plan);
  const palette=separate?portMapPalette(project,db):null;
  const columns=fitColumns(compact?[['INTERFACE',110],['CONNECTION / PURPOSE / DESCRIPTION',574],['LINK',130],['MODE / VLANS',314]]:[['INTERFACE',120],['CONNECTION / ASSIGNMENT',284],['LINK',140],['VLAN CONFIGURATION',272],['DESCRIPTION',312]],W-72),lineHeight=compact?14:16;
+ const drawn=new Set();
  for(const d of plan.views){
   const ports=physicalPorts(d).sort(comparePorts),assignment=portAssignments(project,db,d,ports),records=[];let shown=0;
   for(const port of ports){
@@ -519,16 +579,15 @@ function portMapsAtScale(project,db,plan){
   do{
    const p=fresh('MDF Port Map','MDF Port Map',nameOf(d)+'  |  '+deviceDetails(d)+(sheet?'  |  details continued':''),project),a=p.items,overview=sheet===0||repeat&&repeatFits;p.editScope=p.name+'|'+equipmentScope(d)+'|sheet:'+sheet;
    let summary=156,start=190;const frameCount=a.length;
-   if(overview){
-    const g=addDevice(p,project,d,[(W-plan.width)/2,159,plan.width,1],'panel',{fitWidth:true,padding:equipmentPadding});portNumbers(a,g,ports,{fill:separate?palette.native:port=>portFills[assignment(port)[1]],marks:separate?palette.marks:null,stateKey:true});
-    if(separate){
-     const keys=bookletKey(p,g.y+g.h+14,[d],palette,project);
-     detachPortOverview(p,frameCount,out,[d],shown,ports.length,compact?'compact':'expanded');
-     out.push(...keys);
-     // One row per interface uses the switchport inventory table; the expanded
-     // density keeps its multi-line detail table.
-     if(compact){out.push(...bookletInventory(project,db,d,ports,options,palette,false));break;}
-    }else{
+   if(overview&&separate){
+    // Builder sheet first (whole device, once). One row per interface uses the
+    // switchport inventory table; the expanded density keeps its detail table.
+    if(!drawn.has(d.id)){drawn.add(d.id);const whole=switches.find(x=>x.id===d.id)||d,wholePorts=physicalPorts(whole).sort(comparePorts),shownNames=wholePorts.filter(port=>{const o=uplinkSettings(db.devices.get(whole.id)||whole,port);return hasPortDetails(o,db.links.some(l=>l.a===whole.id&&l.ap.toLowerCase()===o.name.toLowerCase()||l.b===whole.id&&l.bp.toLowerCase()===o.name.toLowerCase()),filter);}).map(port=>port.name);
+     out.push(...builderSheets(project,db,{device:whole,ports:wholePorts,shown:shownNames},palette,plan,{sheetLabel:drawn.size+' / '+new Set(plan.views.map(v=>v.id)).size}));}
+    if(compact){out.push(...bookletInventory(project,db,d,ports,options,palette,false));break;}
+   }else if(overview){
+    const g=addDevice(p,project,d,[(W-plan.width)/2,159,plan.width,1],'panel',{fitWidth:true,padding:equipmentPadding});portNumbers(a,g,ports,{fill:port=>portFills[assignment(port)[1]],stateKey:true});
+    {
      const legendTop=g.y+g.h+10,probe={...p,items:[]},end=referencePortLegend(probe,legendTop,new Set(ports.map(port=>assignment(port)[1])));
     if(end+40<=H-75){a.push(...probe.items);summary=end;start=summary+40;legendPending=false;}else{summary=H;start=H;legendPending=true;repeatFits=false;}
     }

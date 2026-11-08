@@ -28,6 +28,15 @@ Merged with preview.33 (#31):
 - The inventory shows every interface address under its mode.
 - hero.png, port-map.png and organize-connections.png were recaptured; compact-wireless.png was re-rendered from the fixture.
 
+After owner review of Configuration Inspector's sheets, booklet port maps became Configuration Inspector builder sheets:
+- one device per sheet with a dark header block;
+- stack members drawn individually under member bars;
+- every socket numbered, and chassis modules numbered 1..n under a slot caption;
+- a right-hand VLAN key column, with Trunks / LAGs and descriptions beside or under the hardware;
+- a footer symbol key.
+
+Whole devices are drawn once (no planner member ranges), and members continue onto another sheet at the common width. Visio exports gain one master per drawn stack member.
+
 New tests: tests/route-rhythm.test.mjs and tests/portmap-sheets.test.mjs. Tests that asserted the old tight geometry or number boxes were updated to the new rules: modular center/exterior counts, empty-bay crossing, local corridor bound, inline caption exemption, grouped inventory rows and the VLAN key heading.
 
 Local validation: all Node tests, the seven Python package tests, node scripts/check-repo.mjs, node scripts/build-web.mjs, and the nine fictional Visio packages from scripts/export-test-fixtures.mjs checked with scripts/check-visio-package.py. Rendered SVG pages and the offline app were inspected in Chromium. hero.png and port-map.png were recaptured from the built offline app with the fictional sample. Still required: Windows build, native checks on the hosted runner, and opening an export in desktop Visio. Release intent and version are unchanged.

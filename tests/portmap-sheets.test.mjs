@@ -16,7 +16,7 @@ function lab(){
 const maps=site=>buildPages(site).filter(page=>page.portMap);
 
 test('port numbers are plain black or white text chosen for the faceplate, with no color block',()=>{
- const overview=maps(lab()).filter(page=>page.portMap.bookletRole==='map');
+ const overview=maps(lab()).filter(page=>page.portMap.overview);
  const numbers=overview.flatMap(page=>page.items.filter(item=>item.portNumberRole==='text'));
  assert.ok(numbers.length);assert.ok(!overview.some(page=>page.items.some(item=>item.portNumberRole==='box')));
  const light=numbers.filter(n=>n.sourceId==='access'),dark=numbers.filter(n=>n.sourceId==='stack');
@@ -25,21 +25,24 @@ test('port numbers are plain black or white text chosen for the faceplate, with 
 });
 
 test('booklet jacks carry native fills, tagged dots, voice diamonds and LAG outlines from one shared palette',()=>{
- const pages=maps(lab()),overview=pages.find(page=>page.portMap.bookletRole==='map'),items=overview.items;
+ const pages=maps(lab()),overview=pages.find(page=>page.portMap.overview&&page.portMap.device==='access'),items=overview.items;
  const fill=name=>items.find(i=>i.portNumberRole==='socket'&&i.portName===name&&i.sourceId==='access');
  assert.equal(fill('1/1/1').fill,fill('1/1/20').fill);assert.notEqual(fill('1/1/1').fill,fill('1/1/21').fill,'Native VLANs have distinct fills');
  const tagged=name=>items.filter(i=>i.portNumberRole==='tagged'&&i.portName===name&&i.sourceId==='access');
  assert.equal(tagged('1/1/1').length,1,'Voice and native VLANs are not repeated as tagged dots');assert.equal(tagged('1/1/25').length,3);assert.equal(tagged('1/1/21').length,0);
  assert.ok(items.some(i=>i.portNumberRole==='voice'&&i.portName==='1/1/1'));assert.ok(!items.some(i=>i.portNumberRole==='voice'&&i.portName==='1/1/25'));
  const lag=fill('1/1/27');assert.notEqual(lag.stroke,'none');assert.equal(fill('1/1/28').stroke,lag.stroke);assert.equal(fill('1/1/26').stroke,'none');
- const texts=pages.filter(page=>['map','key'].includes(page.portMap.bookletRole)).flatMap(page=>page.items.filter(i=>i.type==='text').map(i=>i.value));
- for(const value of ['VLAN key','VLAN 10 · Data','VLAN 20 · Voice (voice)','Trunks / LAGs','LAG 7: LAB-ACCESS 27-28','Port descriptions','LAB-ACCESS 25: Core uplink','Tagged VLAN','Voice VLAN','LAG / trunk'])assert.ok(texts.includes(value),value);
+ const texts=pages.filter(page=>page.portMap.device==='access').flatMap(page=>page.items.filter(i=>i.type==='text').map(i=>i.value));
+ for(const value of ['NETWORK PORT MAP','LAB-ACCESS','VLAN key','10  Data','20  Voice (voice)','Trunks / LAGs','LAG 7: 27-28','Port descriptions','25: Core uplink','Native VLAN','Tagged VLAN','Voice VLAN','LAG / trunk','Stack / VSF'])assert.ok(texts.includes(value),value);
+ // Stack members each sit under their own bar.
+ const stack=pages.find(page=>page.portMap.overview&&page.portMap.device==='stack');assert.ok(stack.items.some(i=>i.value?.startsWith('Member 1  |  JL558A  |')));assert.ok(stack.items.some(i=>i.value?.startsWith('Member 2  |  JL558A  |')));
+ assert.equal(stack.items.filter(i=>i.type==='device'&&i.kind==='switch').length,2,'Each member is drawn as its own faceplate');
  // The key swatch for a VLAN uses the jack's fill.
  const swatch=items.find(i=>i.editKey?.endsWith('|key|vlan:10|swatch'));assert.equal(swatch.fill,fill('1/1/1').fill);
 });
 
 test('port inventory tables follow the switchport builder and keep every record',()=>{
- const pages=maps(lab()),inventory=pages.filter(page=>page.portMap.bookletRole==='inventory');
+ const site=lab();site.layout={portMap:{presentation:'separate'}};const pages=maps(site),inventory=pages.filter(page=>page.portMap.bookletRole==='inventory');
  assert.deepEqual(inventory.map(page=>page.portMap.device),['access','stack']);
  for(const page of inventory){
   const text=page.items.filter(i=>i.type==='text').map(i=>i.value);

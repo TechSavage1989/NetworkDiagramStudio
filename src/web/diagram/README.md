@@ -30,7 +30,12 @@ Module center tracks, exterior fans and socket departures account for each cable
 
 After the bounded search, a neat-channel pass gives the drawing one rhythm (ROUTE_STYLE). Rails, departure rows and chassis exterior lanes move onto evenly pitched tracks inside each clear channel, at least the standard clearance from every device side and with a visible gap between parallel strokes. Overlapping runs keep their order, and track swaps are kept only when they remove crossings. Each change is checked for obstructions, merged segments and crossings before it is kept. Leads of a modular chassis may pass through an empty slot or the empty second management bay toward their peer. A media caption that would otherwise force wider rails is drawn on its own cable as single-line connector text with a white background.
 
-Port numbers on every faceplate are plain black or white text chosen against the faceplate color. The default booklet port map follows the Switchport Diagram Builder sheet with the app's own faceplates: native VLAN fills, tagged dots, voice diamonds and LAG outlines from the shared report palette, followed by a VLAN key, Trunks / LAGs and port descriptions. Port Inventory pages are one builder-style table per device.
+Port numbers on every faceplate are plain black or white text chosen against the faceplate color. Booklet port maps follow the Configuration Inspector / Switchport Diagram Builder sheet with the app's own faceplates:
+- one device per sheet under a dark header block, with each stack member under its own bar;
+- native VLAN fills, tagged dots, voice diamonds and LAG outlines from the shared report palette;
+- the VLAN key in a right-hand column, with Trunks / LAGs and port descriptions beside or under the hardware, and a symbol key at the foot.
+
+Port Inventory pages are one builder-style table per device. The Automatic layout may place that table on the device's own sheet when this saves pages.
 
 Drawing overrides live under layout.drawingEdits. Device groups keep port glue, and normalized native details remain separately editable. Continued hardware sheets have individual edit scopes. The editor supports direct drag, multiple selection, alignment/distribution and bounded undo histories. Native artwork text keeps weight and alignment in SVG/Visio. Rectangles, connector names and native path names retain their object names in Visio. Source artwork and private site examples stay outside the repository.
 
