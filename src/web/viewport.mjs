@@ -1,9 +1,9 @@
 export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,onBeforeInteraction,onMoveStart,onBoxStart,onBackground,onEdit}={}){
- const views=new Map();let current=null,svg=null,drag=null,space=false,clickTimer=null,clickTarget=null;
+ const views=new Map();let current=null,svg=null,drag=null,space=false,clickTimer=null,clickTarget=null,lastBox=null;
  const clamp=v=>Math.max(.0001,Math.min(6,v)),textInput=target=>target.closest('[data-inline-editor]');
  const itemKey=(target,event)=>((!event.altKey&&target.closest('[data-device-id]'))||target.closest('[data-drawing-key]'))?.getAttribute('data-drawing-key');
  const point=e=>{const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());return [p.x,p.y];};
- function apply(){if(!svg||!current)return;svg.style.transform='translate('+current.x+'px,'+current.y+'px) scale('+current.scale+')';if(percent)percent.textContent=(current.scale<.01?(current.scale*100).toFixed(2):Math.round(current.scale*100))+'%';}
+ function apply(){if(!svg||!current)return;lastBox=canvas.getBoundingClientRect();svg.style.transform='translate('+current.x+'px,'+current.y+'px) scale('+current.scale+')';if(percent)percent.textContent=(current.scale<.01?(current.scale*100).toFixed(2):Math.round(current.scale*100))+'%';}
  function fitPage(){if(!svg||!current)return;const width=svg.viewBox.baseVal.width,height=svg.viewBox.baseVal.height,scale=clamp(Math.min((canvas.clientWidth-36)/width,(canvas.clientHeight-36)/height));Object.assign(current,{userSized:false,scale,x:(canvas.clientWidth-width*scale)/2,y:(canvas.clientHeight-height*scale)/2});apply();}
  function zoom(factor,x=canvas.clientWidth/2,y=canvas.clientHeight/2){if(!current)return;const before=current.scale,scale=clamp(before*factor);current.x=x-(x-current.x)*scale/before;current.y=y-(y-current.y)*scale/before;current.scale=scale;current.userSized=true;apply();}
  if(out)out.onclick=()=>zoom(1/1.25);if(inside)inside.onclick=()=>zoom(1.25);if(fit)fit.onclick=fitPage;
@@ -20,6 +20,6 @@ export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,
  canvas.addEventListener('dragstart',e=>{if(svg&&!textInput(e.target))e.preventDefault();});
  canvas.addEventListener('keydown',e=>{if(!svg||textInput(e.target))return;if(e.key===' '){space=true;e.preventDefault();}else if(e.key==='+'||e.key==='='){e.preventDefault();zoom(1.25);}else if(e.key==='-'){e.preventDefault();zoom(1/1.25);}else if(e.key==='0'){e.preventDefault();fitPage();}else if(e.key==='Enter'){const id=e.target.closest('[data-device-id]')?.getAttribute('data-device-id');if(id)onDevice?.(id);}});
  canvas.addEventListener('keyup',e=>{if(e.key===' ')space=false;});canvas.addEventListener('blur',()=>space=false);
- const observer=new ResizeObserver(()=>{if(svg&&current&&!current.userSized)fitPage();});observer.observe(canvas);
+ const observer=new ResizeObserver(()=>{if(!svg||!current)return;if(!current.userSized)fitPage();else{const box=canvas.getBoundingClientRect();if(lastBox){current.x+=lastBox.left-box.left;current.y+=lastBox.top-box.top;}apply();}});observer.observe(canvas);
  return {show(key,element){clearTimeout(clickTimer);svg=element;svg.style.width=svg.viewBox.baseVal.width+'px';svg.style.height=svg.viewBox.baseVal.height+'px';canvas.classList.add('diagram-view');let fresh=false;if(!views.has(key)){views.set(key,{x:0,y:0,scale:1});fresh=true;}current=views.get(key);canvas.replaceChildren(element);if(fresh)fitPage();else apply();},clear(){clearTimeout(clickTimer);svg=null;current=null;canvas.classList.remove('diagram-view');if(percent)percent.textContent='';},reset(){views.clear();},fit:fitPage};
 }

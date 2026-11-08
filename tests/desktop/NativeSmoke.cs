@@ -169,6 +169,7 @@ internal sealed partial class Studio
             foreach(var (type,dx,dy) in new[]{("mousePressed",0,0),("mouseMoved",30,4),("mouseMoved",60,25),("mouseReleased",60,25)})
                 await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x=x+dx,y=y+dy,button="left",buttons=type=="mouseReleased"?0:1,modifiers=8,clickCount=1}));
         }
+        await Task.Delay(100); // Allow the viewport resize observer to settle after feedback reflow.
         await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect(),a=window.__gestureBefore;if(Math.abs(b.y-a.y)>.1||b.x<a.x+50)throw Error('Shift did not hold the initial horizontal axis')","Shift drag axis");
         await ClickEditorTarget("#drawing-undo");
         await ClickEditorTarget("#drawing-smaller");
