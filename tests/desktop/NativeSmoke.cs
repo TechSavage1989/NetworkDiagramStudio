@@ -163,14 +163,15 @@ internal sealed partial class Studio
         await RequireEditor("if(document.getElementById('drawing-selection').textContent!=='2 selected'||document.getElementById('dialog').open)throw Error('Shift selection failed')","Shift multi-selection");
         await ClickEditorTarget("#drawing-clear");
         await ClickEditorTarget(sw);
-        var raw=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const b=document.querySelector(\""+sw+"\").getBoundingClientRect();window.__gestureBefore={x:b.x,y:b.y,w:b.width};return {x:b.x+5,y:b.y+5};})()");
+        var raw=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const b=document.querySelector(\""+sw+"\").getBoundingClientRect();window.__gestureBefore={x:b.x,y:b.y,w:b.width,h:b.height};const x=b.x+Math.min(5,b.width/2),y=b.y+Math.min(5,b.height/2),hit=document.elementFromPoint(x,y)?.closest('[data-device-id]');return {x,y,device:hit?.getAttribute('data-device-id')};})()");
         using(var point=JsonDocument.Parse(raw)){
+            if(!point.RootElement.TryGetProperty("device",out var hit)||hit.GetString()!="sw-1")throw new Exception("Shift drag must start inside SW-1: "+raw);
             var x=point.RootElement.GetProperty("x").GetDouble();var y=point.RootElement.GetProperty("y").GetDouble();
             foreach(var (type,dx,dy) in new[]{("mousePressed",0,0),("mouseMoved",30,4),("mouseMoved",60,25),("mouseReleased",60,25)})
                 await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x=x+dx,y=y+dy,button="left",buttons=type=="mouseReleased"?0:1,modifiers=8,clickCount=1}));
         }
         await Task.Delay(100); // Allow the viewport resize observer to settle after feedback reflow.
-        await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect(),a=window.__gestureBefore;if(Math.abs(b.y-a.y)>.1||b.x<a.x+50)throw Error('Shift did not hold the initial horizontal axis')","Shift drag axis");
+        await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect(),a=window.__gestureBefore;if(Math.abs(b.y-a.y)>.1||b.x<a.x+50)throw Error('Shift did not hold the initial horizontal axis: '+JSON.stringify({before:a,after:{x:b.x,y:b.y,w:b.width},viewport:{width:innerWidth,height:innerHeight,ratio:devicePixelRatio},canvas:{x:document.getElementById('canvas').getBoundingClientRect().x,y:document.getElementById('canvas').getBoundingClientRect().y,scrollLeft:document.getElementById('canvas').scrollLeft,scrollTop:document.getElementById('canvas').scrollTop},viewBox:document.querySelector('#canvas svg').getAttribute('viewBox'),transform:document.querySelector('#canvas svg').style.transform,feedback:document.getElementById('feedback').textContent}))","Shift drag axis");
         await ClickEditorTarget("#drawing-undo");
         await ClickEditorTarget("#drawing-smaller");
         await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect();if(Math.abs(b.width/window.__gestureBefore.w-.9)>.001)throw Error('Quick scale failed')","quick item scale");
