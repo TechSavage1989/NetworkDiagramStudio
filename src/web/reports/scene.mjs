@@ -2,7 +2,7 @@ import {label,rect} from '../diagram/scene.mjs';
 import {textWidth,intersects} from '../diagram/labels.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {portLabelLayout,portLabelText} from '../diagram/port-label-layout.mjs';
-import {aggregateKey,markerVlans,nativeFill,vlanIds,voiceVlan} from './palette.mjs';
+import {aggregateKey,markerVlans,nativeFill,vlanIds,voiceVlan,luminance} from './palette.mjs';
 import {taggedText,reportText} from './model.mjs';
 import {reportPageGeometry,reportPageLabel} from './paper.mjs';
 
@@ -127,9 +127,13 @@ function devicePlan(item,style=normalStyle){
  }else for(const plan of plans)bands.push({panels:[{plan,x:0,w:plan.width,h:plan.height}],width:plan.width,height:plan.height});
  return {item,portWidth,bands,style,gap:style.compact?2:8,width:Math.max(200,...bands.map(band=>band.width)),height:bands.reduce((height,band)=>height+band.height+(style.compact?2:8),0)};
 }
+// A port map may carry the device's core-diagram artwork colors (item.artwork):
+// slot panels take the plate or module-bay color, a chassis frame shows
+// between its slots, and numbers and captions stay readable on either.
+const panelColors=item=>{const art=item.artwork||{},body=art.body||'#edf1f2',dark=luminance(body)<.4;return {body,stroke:art.stroke||(art.body?'#5d7079':'#a8b7be'),empty:art.body||'#f4f6f7',emptyStroke:art.stroke||(art.body?'#5d7079':'#bdc8cc'),text:dark?'#ffffff':ink,muted:dark?'#d6dee2':muted,frame:art.frame||null,frameStroke:art.frameStroke||art.frame||null};};
 function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
  const inv=item.inventory,group=plan.group,a=p.items,scope='Switchport reports|'+p.role+'|'+item.id+'|group|'+group.id;
- rect(a,x,y,width,height,'#edf1f2','#a8b7be',.7);Object.assign(a.at(-1),{editKey:scope+'|body',reportPanel:true,reportGroup:group.id,sourceId:item.id});rect(a,x,y,width,plan.header||24,navy);
+ const colors=panelColors(item);rect(a,x,y,width,height,colors.body,colors.stroke,.7);Object.assign(a.at(-1),{editKey:scope+'|body',reportPanel:true,reportGroup:group.id,sourceId:item.id});rect(a,x,y,width,plan.header||24,navy);
  text(a,x+7,y+(plan.style?.compact?1:4),width-14,groupTitle(inv,group),plan.style?.groupFont||11,true,'#ffffff','left',{editKey:scope+'|title'});
  if(plan.configured){let at=y+29;for(const port of plan.ports){text(a,x+8,at,width-16,port.id+' | '+port.media+' | configured alternative',10,false,ink,'left',{reportPort:port.id,editKey:scope+'|configured|'+port.id});at+=22;}return;}
  const sockets=[],portEntries=[];
@@ -151,12 +155,15 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
  }
  const labelGroup={x,y,w:width,h:height,editKey:scope,sourceId:item.id,ports:Object.fromEntries(sockets.map(socket=>[socket.name,[(socket.x+socket.w/2-x)/width,(socket.y+socket.h/2-y)/height]])),children:sockets.map(socket=>({type:'rect',socketPart:0,socketForm:socket.form,x:(socket.x-x)/width,y:(socket.y-y)/height,w:socket.w/width,h:socket.h/height})),panelRegions:[{x:0,y:0,w:1,h:1}]},numbers=portLabelLayout(labelGroup,portEntries,{fontSize:plan.numberFont,format:(_name,port)=>port.display,measureRequired:false,minWidth:plan.style.compact?0:Math.min(18,plan.portWidth),gap:plan.style.compact?1:2});
  if(!numbers.readable)throw new ReportCapacityError('The port numbers need more room in '+group.id+'.',{deviceId:item.id,group:group.id});
- for(const entry of numbers.entries){const b=entry.number;label(a,b.x,b.y,b.w,b.h,entry.text,b.size,true,ink,'center');Object.assign(a.at(-1),{editKey:entry.editKey+'|text',portNumberRole:'text',reportPortRole:'number',reportPort:entry.port.source.id,portName:entry.port.source.id,sourceId:item.id,full:true});}
+ for(const entry of numbers.entries){const b=entry.number;label(a,b.x,b.y,b.w,b.h,entry.text,b.size,true,colors.text,'center');Object.assign(a.at(-1),{editKey:entry.editKey+'|text',portNumberRole:'text',reportPortRole:'number',reportPort:entry.port.source.id,portName:entry.port.source.id,sourceId:item.id,full:true});}
  p.reportSockets??=[];p.reportSockets.push(...sockets.map(socket=>({...socket,deviceId:item.id,group:group.id})));p.reportNumberBoxes??=[];p.reportNumberBoxes.push(...numbers.labelObstacles);
 }
-function drawBand(p,plan,band,x,y,palette){for(const panel of band.panels){if(panel.plan)drawPanel(p,plan.item,palette,panel.plan,x+panel.x,y,panel.w,panel.h);else{rect(p.items,x+panel.x,y,panel.w,panel.h,'#f4f6f7','#bdc8cc',.7);text(p.items,x+panel.x+8,y+Math.min(8,(panel.h-14)/2),panel.w-16,'Slot '+panel.empty+' / Not declared',11,false,muted);}}}
+function drawBand(p,plan,band,x,y,palette){const colors=panelColors(plan.item);for(const panel of band.panels){if(panel.plan)drawPanel(p,plan.item,palette,panel.plan,x+panel.x,y,panel.w,panel.h);else{rect(p.items,x+panel.x,y,panel.w,panel.h,colors.empty,colors.emptyStroke,.7);text(p.items,x+panel.x+8,y+Math.min(8,(panel.h-14)/2),panel.w-16,'Slot '+panel.empty+' / Not declared',11,false,colors.muted);}}}
 function blockHeading(p,item,x,y,width,continued=false){const inv=item.inventory,title=displayName(inv)+(continued?' / continued':''),description=[modelLabel(inv),inv.os,inv.firmware!=='Unknown'?inv.firmware:''].filter(Boolean).join(' | '),height=text(p.items,x,y,width,title,14,true,ink,'left',{editKey:p.name+'|'+item.id+'|device-title'});return y+height+4+text(p.items,x,y+height+4,width,description,10,false,muted)+9;}
-function drawBlock(p,plan,x,y,palette,{bands=plan.bands,continued=false,heading=true}={}){let at=heading?blockHeading(p,plan.item,x,y,Math.max(plan.width,260),continued):y;for(const band of bands){drawBand(p,plan,band,x,at,palette);at+=band.height+plan.gap;}return at;}
+function drawBlock(p,plan,x,y,palette,{bands=plan.bands,continued=false,heading=true}={}){let at=heading?blockHeading(p,plan.item,x,y,Math.max(plan.width,260),continued):y;
+ // A chassis shows its frame color around and between its slots.
+ const colors=panelColors(plan.item);if(colors.frame&&plan.item.inventory.chassisSlots&&bands.length){const m=Math.min(3,plan.gap/2+1),h=bands.reduce((sum,band)=>sum+band.height,0)+plan.gap*(bands.length-1),w=Math.max(...bands.map(band=>band.width));rect(p.items,x-m,at-m,w+m*2,h+m*2,colors.frame,colors.frameStroke,.8);Object.assign(p.items.at(-1),{editKey:'Switchport reports|'+p.role+'|'+plan.item.id+'|frame',reportFrame:true,sourceId:plan.item.id});}
+ for(const band of bands){drawBand(p,plan,band,x,at,palette);at+=band.height+plan.gap;}return at;}
 function blockHeight(plan){const inv=plan.item.inventory;return Math.max(16.8,wrapPortText(displayName(inv),Math.max(plan.width,260),14,true).length*16.8)+4+Math.max(12,wrapPortText([modelLabel(inv),inv.os,inv.firmware!=='Unknown'?inv.firmware:''].filter(Boolean).join(' | '),Math.max(plan.width,260),10).length*12)+9+plan.height;}
 
 export function reportDiagram(item,palette,request,{wall=false}={}){

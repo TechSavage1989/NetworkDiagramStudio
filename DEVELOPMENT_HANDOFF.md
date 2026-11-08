@@ -108,13 +108,15 @@ Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
   - Tagged dots keep a minimum radius of 1.5. Dynamic pages widen the whole port-map family until every dot fits. Fixed paper shows a "+" marker and lists the full VLAN set.
 
 Owner follow-up (printable port maps, port names and off-page tags):
-- Owner preference: keep the realistic faceplates.
-  - Port maps use the faceplate artwork on a US Letter sheet by default.
+- Owner decision (latest): port maps use the Switchport builder sheet by default, painted in each device's core-diagram artwork colors. This gives the most room and the builder's exact jack, number and key proportions.
+  - Slot panels take the device's plate color; a chassis shows its frame color around and between module-bay-colored slots. Numbers and slot captions turn white on dark plates.
+  - Port map options > Port map style > "Realistic device faceplate artwork" (layout.portMap.mapStyle 'faceplate') keeps the faceplate sheet described next. Its chassis slot line now moves to the next sheet instead of running into the footer key.
+- Realistic faceplate style (now optional):
+  - Uses the faceplate artwork on a US Letter sheet.
   - Jack faces on built-in plates take the Switchport builder's shapes: copper 25.2 x 23.2 and optical 25.2 x 16.2. Each media type shares one width, and faces grow away from their port numbers until rows meet edge to edge. Where a plate has no room for that shape (tight rows on a 48-port stack member), copper keeps its own proportions. The plate keeps its shape.
   - Module, bay and model captions on the plate grow to a readable size (up to 11 px) after the port numbers and faces are placed, so they never push a map off Letter.
   - The VLAN key moves under the hardware when that leaves fewer '+' markers.
-  - The builder sheet described below is now the Port map options > Port map style choice "Switchport builder sheet".
-- Builder sheet details (now optional):
+- Builder sheet details (the default):
   - Fitted to US Letter landscape (or a fixed port-map paper choice).
   - Jacks, dots and numbers grow to fill the sheet.
   - Undeclared slots are slim bands, and the VLAN key uses the builder's dense one-line, five-column layout.

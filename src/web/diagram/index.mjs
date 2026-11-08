@@ -416,7 +416,10 @@ function builderLayout(project,db,info,palette,plan,{sheetLabel='1 / 1'}={},colu
  }
  // A chassis names each slot's module under the hardware.
  if(!stackPart&&d.modules?.length){const sockets=deviceFaceplate(d,{padding:equipmentPadding})?.sockets||[],slots=d.modules.filter(m=>!m.member).map(m=>{const counts=new Map();for(const s of sockets.filter(s=>s.primary!==false&&new RegExp('^'+m.slot+'\\d+$','i').test(s.name))){const form=String(s.form).replace(/^RJ45$/,'RJ-45');counts.set(form,(counts.get(form)||0)+1);}return 'Slot '+m.slot+': '+[m.model,[...counts].map(([f,n])=>n+' '+f).join(' + ')].filter(Boolean).join(' ');});
-  const lines=wrapPortText(slots.join('   ·   '),hw,11);lines.forEach((text,line)=>{label(p.items,36,y+line*14,hw,14,text,11,false,C.muted);Object.assign(p.items.at(-1),{editKey:bodyKey+'|slots'+(line?'|'+line:''),full:true});});y+=lines.length*14+6;}
+  const lines=wrapPortText(slots.join('   ·   '),hw,11);
+  // The slot line never runs into the footer key; a full sheet continues.
+  if(y+lines.length*14>footerTop-8)({p,top:y}=newSheet());
+  lines.forEach((text,line)=>{label(p.items,36,y+line*14,hw,14,text,11,false,C.muted);Object.assign(p.items.at(-1),{editKey:bodyKey+'|slots'+(line?'|'+line:''),full:true});});y+=lines.length*14+6;}
  // The VLAN key down the right; lists beside it when they fit, else under the hardware.
  const scope=prefix+'MDF Port Map|'+equipmentScope(d),[vlanSection,...lists]=keySections([d],palette,{names:[...db.devices.values()],unsupplied,overflow});
  // Hardware too small for every tagged dot asks the planner for a width.
@@ -610,17 +613,36 @@ function referencePortMaps(project,db,switches,options,plan){
  }
  return out;
 }
+// The builder sheet is painted in the colors of each device's core-diagram
+// artwork: its plate, or a chassis frame with its module bays. Vector stencils
+// give their largest filled shape; raster-only artwork keeps the builder's own.
+const solidColor=fill=>typeof fill==='string'&&/^#[0-9a-f]{6}$/i.test(fill);
+function artworkColors(project,d){
+ let g;try{g=addDevice({items:[]},project,d,[0,0,400,1],'artwork-colors',{fitWidth:true,padding:equipmentPadding});}catch{return null;}
+ if(g.asset){
+  let best=null;
+  for(const path of g.asset.native?.paths||[]){
+   if(path.hidden||!solidColor(path.fill))continue;const points=path.commands.filter(c=>c.length>=3).map(([,x,y])=>[x,y]).filter(([x,y])=>Number.isFinite(x)&&Number.isFinite(y));if(!points.length)continue;
+   const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]),area=(Math.max(...xs)-Math.min(...xs))*(Math.max(...ys)-Math.min(...ys));if(!best||area>best.area)best={area,fill:path.fill,stroke:path.stroke};
+  }
+  return best?{body:best.fill,stroke:solidColor(best.stroke)?best.stroke:null}:null;
+ }
+ const rects=(g.children||[]).filter(c=>c.type==='rect'&&solidColor(c.fill)&&c.w>0&&c.h>0);if(!rects.length)return null;
+ const plate=rects.reduce((a,b)=>b.w*b.h>a.w*a.h?b:a),slots=(g.panelRegions||[]).filter(r=>/^[A-L]$/.test(String(r.id??''))),near=(a,b)=>Math.abs(a-b)<1e-6;
+ const bay=slots.length?rects.find(c=>slots.some(r=>near(c.x,r.x)&&near(c.y,r.y)&&near(c.w,r.w)&&near(c.h,r.h))):null;
+ return bay?{frame:plate.fill,frameStroke:solidColor(plate.stroke)?plate.stroke:null,body:bay.fill,stroke:solidColor(bay.stroke)?bay.stroke:null}:{body:plate.fill,stroke:solidColor(plate.stroke)?plate.stroke:null};
+}
 function portMaps(project,db){
  const switches=[...db.devices.values()].filter(d=>d.kind==='switch'),interfaces=documentationSections(project,db.devices.values()).filter(section=>section.inventory),extra=interfaces.length?logicalPages(project,interfaces,{name:logicalInventoryName,family:'ports',columns:logicalInventoryColumns,compact:true,omitEmpty:true,subtitle:'Logical and routed interfaces, observed state and configured membership'}):[];
  for(const page of extra){page.interfaceInventory=true;page.interfaceSections=page.logicalSections;delete page.logicalSections;page.tableTop=160;for(const item of page.items)if(item.y>=160)item.tableContent=true;bookletHeader(page);}
  if(!switches.length)return [...(extra.length&&documentationMode(project)==='concise'?[]:portMapsAtScale(project,db)),...extra];
  const savedKeys=Object.keys(project.layout?.drawingEdits||{}).filter(key=>/(?:^|\|)(?:MDF Port Map|Port Inventory)(?:\b|\|)/.test(key)&&!key.includes(logicalInventoryName)),retention=new WeakMap(),retained=pages=>{if(!savedKeys.length)return 0;if(!retention.has(pages)){const keys=new Set(pages.flatMap(page=>drawingObjects(page).flatMap(item=>[item.editKey,item.legacyEditKey])));retention.set(pages,savedKeys.filter(key=>keys.has(key)).length);}return retention.get(pages);};
- // Port maps keep the device faceplate artwork by default. The switchport
- // builder's sheet, fitted to US Letter (or the chosen fixed port-map
- // paper), is a choice in Port map options.
+ // Port maps use the switchport builder's sheet by default, fitted to US
+ // Letter (or the chosen fixed port-map paper) and painted in each device's
+ // artwork colors. The realistic faceplate is a choice in Port map options.
  const mapOptions=project.layout?.portMap||{},sheetGeometry=pageGeometry(project,'ports');
  const paper=sheetGeometry.dynamic?{width:1056,height:816,preset:'letter',widthMm:279.4,heightMm:215.9}:{width:sheetGeometry.width,height:sheetGeometry.height,preset:'page',widthMm:sheetGeometry.width*25.4/96,heightMm:sheetGeometry.height*25.4/96};paper.fill=true;
- const sheets=mapOptions.mapStyle!=='switchport'||mapOptions.presentation==='combined'?new Map():portMapSheets(project,switches,paper);
+ const sheets=mapOptions.mapStyle==='faceplate'||mapOptions.presentation==='combined'?new Map():portMapSheets(project,switches,paper,new Map(switches.map(d=>[d.id,artworkColors(project,d)])));
  let initial=portEquipmentPlan(project,switches),best;
  // A narrower common scale may change stack member ranges. An existing
  // edited range takes priority over a page-count saving, including edits
