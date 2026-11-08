@@ -2,7 +2,7 @@ import {crossesText} from '../src/web/diagram/labels.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {placeBeside} from '../src/web/arrange.mjs';
-import {scaleDrawingItems} from '../src/web/drawing-edits.mjs';
+import {scaleDrawingItems,placeDrawingDevices} from '../src/web/drawing-edits.mjs';
 import {physicalLink} from '../src/web/physical-links.mjs';
 import {mergeModels} from '../src/web/imports/model.mjs';
 import {buildPages} from '../src/web/diagram/index.mjs';
@@ -14,7 +14,29 @@ test('placement supports every side, keeps group offsets and clears other equipm
   const offsets=placeBeside(boxes,target,side,[],80),[dx,dy]=offsets.get('a');assert.deepEqual(offsets.get('b'),[dx,dy]);
   assert.equal(side==='left'?target.x-(dx+100):side==='right'?dx-(target.x+target.w):side==='above'?target.y-(dy+110):dy-(target.y+target.h),80);
  }
- const [x,y]=placeBeside(boxes,target,'right',[{x:580,y:295,w:100,h:110}],80).get('a');assert.equal(x,580);assert.ok(y+110+80<=295||y>=485);
+ const [x,y]=placeBeside(boxes,target,'right',[{x:580,y:295,w:100,h:110}],80).get('a');assert.equal(x,704);assert.equal(y,295,'a small outward adjustment is closer than a sideways jump');
+});
+test('placement stays near the reference even with tall obstacles and sparse selections',()=>{
+ const boxes=[{key:'a',x:0,y:0,w:100,h:100}],target={x:300,y:300,w:200,h:100};
+ const [dx,dy]=placeBeside(boxes,target,'right',[{x:590,y:-10000,w:20,h:20000}],80).get('a');
+ assert.equal(dx,634);assert.equal(dy,300,'a tall obstacle must not send the device thousands of units vertically');
+ const group=[{key:'a',x:0,y:0,w:100,h:40},{key:'b',x:0,y:200,w:100,h:40}],gapObstacle={x:580,y:300,w:100,h:40};
+ const sparse=placeBeside(group,target,'right',[gapObstacle],80);assert.deepEqual(sparse.get('a'),[580,230]);assert.deepEqual(sparse.get('a'),sparse.get('b'),'empty selection space does not need to move away from equipment');
+ assert.throws(()=>placeBeside(boxes,target,'below',[{x:-1000,y:450,w:4000,h:5000}],56),/no nearby clear position/,'blocked placement must not teleport the device');
+});
+test('placement pins every other device and generated handoff at each drawing scale',()=>{
+ for(const drawingScale of [.5,1,1.5])for(const movingId of ['sw-1','edge']){
+  const project=sampleSite();project.layout={presentation:{defaults:{drawingScale}}};
+  const page=buildPages(project)[0],devices=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),moving=devices.find(i=>i.sourceId===movingId),reference=devices.find(i=>i.sourceId==='sw-2');
+  project.layout.drawingEdits=placeDrawingDevices(page,{},[moving.editKey],reference.editKey,'right','compact');
+  const rebuilt=buildPages(JSON.parse(JSON.stringify(project)))[0],next=rebuilt.items.find(i=>i.editKey===moving.editKey),ref=rebuilt.items.find(i=>i.editKey===reference.editKey);
+  assert.ok(Math.abs(next.x-ref.x-ref.w-56*drawingScale)<.001);
+  for(const other of devices.filter(i=>i!==moving)){
+   const actual=rebuilt.items.find(i=>i.editKey===other.editKey);assert.ok(actual,other.editKey);
+   for(const key of ['x','y','w','h'])assert.ok(Math.abs(actual[key]-other[key])<.001,other.name+' '+key+' must stay fixed');
+  }
+  for(const cable of rebuilt.items.filter(i=>i.type==='path')){assert.deepEqual(cable.points[0],[cable.from.x,cable.from.y]);assert.deepEqual(cable.points.at(-1),[cable.to.x,cable.to.y]);}
+ }
 });
 test('quick scaling respects page transforms and native child selection, preserving cable glue after reopen',()=>{
  const project=sampleSite();project.layout={presentation:{defaults:{drawingScale:1.5}}};const page=buildPages(project)[0],device=page.items.find(i=>i.sourceId==='sw-1'&&i.type==='device');

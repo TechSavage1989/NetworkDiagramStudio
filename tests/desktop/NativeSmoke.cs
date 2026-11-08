@@ -175,8 +175,11 @@ internal sealed partial class Studio
         await ClickEditorTarget("#drawing-smaller");
         await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect();if(Math.abs(b.width/window.__gestureBefore.w-.9)>.001)throw Error('Quick scale failed')","quick item scale");
         await ClickEditorTarget("#drawing-undo");
-        await ClickEditorTarget("#drawing-beside");
-        await RequireEditor("if(!document.getElementById('dialog-body').textContent.includes('Moving device: SW-1'))throw Error('Missing moving device');[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Right →').click();if(!document.getElementById('canvas').classList.contains('picking-reference'))throw Error('Reference picking did not start')","choose placement direction");
+        await ClickEditorTarget("#drawing-clear");
+        await RequireEditor("const tools=document.getElementById('drawing-beside');if(tools.hidden||tools.querySelector('[data-place=right]').disabled)throw Error('Placement must be visible and usable without a selection')","persistent placement tools");
+        await ClickEditorTarget("#drawing-beside [data-place='right']");
+        await ClickEditorTarget(sw);
+        await RequireEditor("if(document.getElementById('dialog').open||!document.getElementById('canvas').classList.contains('picking-reference')||!document.getElementById('placement-status').textContent.includes('reference device'))throw Error('Reference picking did not start')","choose moving device without a dialog");
         await ClickEditorTarget("#canvas g[data-device-id='sw-2'][data-drawing-key$='|body']");
         await RequireEditor("if(!document.getElementById('feedback').textContent.includes('placed right SW-2'))throw Error('Place beside failed')","pick reference device on drawing");
         await ClickEditorTarget("#drawing-undo");
