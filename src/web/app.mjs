@@ -1,4 +1,8 @@
 import {physicalLink} from './physical-links.mjs';
+import {importSwitchportWorkspace,enrichSwitchportSources} from './switchport-import.mjs';
+import {reportDetailFields} from './report-details.mjs';
+import {reportTools} from './report-ui.mjs';
+import {switchportCatalog} from './reports/catalog-data.mjs';
 import {pageLayoutEditor} from './page-layout-ui.mjs';
 import {displayPageName,unpresentPatch,cleanPresentation,presentation} from './presentation.mjs';
 import {withoutDevices} from './device-actions.mjs';
@@ -17,13 +21,13 @@ import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
 import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
-import {cleanPageNumbers,pageNumber,cleanPageSetup,cleanPaper,paperSizes,pageFamilies,pageGeometry,printPageStyles} from './page-options.mjs';
+import {cleanPageNumbers,pageNumber,cleanPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles} from './page-options.mjs';
 import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
 import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
 import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
-import {importFiles,mergeModels,deviceId,hardwareCatalog} from './imports/index.mjs';
+import {importFiles,mergeModels,deviceId,hardwareCatalog,findDeviceIdentity} from './imports/index.mjs';
 import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
 import {buildPages,exportVisio,exportStencil} from './diagram/index.mjs';
@@ -32,7 +36,7 @@ import {stencilFiles,visioFile,filePath,droppedFiles} from './stencil-files.mjs'
 import {cleanNativeArt} from './native-art.mjs';
 import {sampleSite} from './sample.mjs';
 import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
-import {categories,readSources,ensureEvidence,captureEdits,composeEvidence} from './evidence.mjs';
+import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reopenEvidence} from './evidence.mjs';
 
 // Keep browser navigation/debug actions out of the drawing workspace.
 document.addEventListener('contextmenu',event=>event.preventDefault());
@@ -42,6 +46,7 @@ const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textConten
 const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false}});
 let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0;const stencilIndexes=new Map(),openCatalogs=new Map();
 let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=false,drawingReady=false,displayedProject=null;
+const pageCache=new Map(),buildDrawing=(source=scoped(),options={})=>buildPages(source,{...options,cache:pageCache});
 const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
 let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null;
 let cablePoint=-1;
@@ -50,13 +55,17 @@ const modelKinds=deviceKinds;
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
 const safeKey=s=>typeof s==='string'&&s.length>0&&s.length<=300&&!['__proto__','constructor','prototype'].includes(s);
 const say=message=>{$('feedback').textContent=message;};
+const reports=reportTools({getProject:()=>scoped(),getPages:()=>pages,getActive:()=>pages[active],modal,el,field,button,actions,close,download,say,editDevice,run:task,
+ saveSettings(settings,updates={}){const before={layout:project.layout,devices:project.devices};project.layout={...before.layout,switchport:settings};project.devices=project.devices.map(device=>updates[device.id]?{...device,...updates[device.id]}:device);try{const prepared=validateDrawing();perform('reports',prepared);}catch(error){Object.assign(project,before);throw error;}},
+ showPage(family){const index=pages.findIndex(page=>familyOf(page)===family);if(index>=0){active=index;draw(pages);}},
+ async visio(selected=pages){download(await exportVisio(scoped(),selected),slug(project.name)+'.vsdx');say('Editable Visio drawing exported.');}});
 desktopUpdates({help:$('desktop-help'),modal});
 function download(content,name,mime='application/json'){
   const url=URL.createObjectURL(content instanceof Blob?content:new Blob([content],{type:mime}));
   const a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);
 }
 const slug=s=>String(s||'Network').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').slice(0,90)||'Network';
-function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','print','svg'].includes(id)&&(!pages.length||!drawingReady));}
+function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','export-menu','switchport-reports','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','export-menu','print','svg'].includes(id)&&(!pages.length||!drawingReady));}
 async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.error');if(!node){node=el('p','','error');$('dialog-body').prepend(node);}node.textContent=e?.message||'The operation failed.';}}finally{busy(false);}}
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
 function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
@@ -72,8 +81,8 @@ function field(parent,labelText,value='',opts=null){
  else{input=el(opts==='multiline'?'textarea':'input');input.value=value??'';if(opts==='multiline')input.className='mono';}
  input.id='setting-'+(++fieldCount);label.htmlFor=input.id;parent.append(label,input);return input;
 }
-function perform(scope='project'){captureEdits(project,evidenceSnapshot);if(project.evidence)evidenceSnapshot=snapshot();projectHistory.record(project,scope);dirty=projectHistory.dirty;draw();}
-function resetDrawingHistory(){inlineCancel?.();drawingSelection.clear();projectHistory.reset(project);cablePoint=-1;}
+function perform(scope='project',prepared){captureEdits(project,evidenceSnapshot);if(project.evidence)evidenceSnapshot=snapshot();projectHistory.record(project,scope);dirty=projectHistory.dirty;draw(prepared);}
+function resetDrawingHistory(){inlineCancel?.();drawingSelection.clear();projectHistory.reset(project);cablePoint=-1;pageCache.clear();reports.reset();}
 function syncDrawingSelection(){
  const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls'))n.remove();
  const objects=pages[active]?drawingObjects(pages[active]):[],known=new Set(objects.map(o=>o.editKey));for(const key of drawingSelection)if(!known.has(key))drawingSelection.delete(key);
@@ -81,7 +90,7 @@ function syncDrawingSelection(){
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');
  const selectedDevices=selectedDrawingDevices();syncBesideTools();$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
- const cable=selectedCable();$('cable-tools').hidden=!editDrawing;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
+ const cable=selectedCable();$('cable-tools').hidden=!editDrawing||!cable;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
  if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
  else $('cable-point-info').textContent='Select a cable to edit its bend points or endpoints.';
 }
@@ -96,13 +105,13 @@ function cableControlClick(key,event,target=event.target){
 }
 function connectSelectedCable(item=selectedCable()){if(item?.sourceLink)editLink(project.links.findIndex(l=>sameConnection(l,item.sourceLink)),item);}
 function removeSelectedCablePoint(){const item=selectedCable();if(!item||cablePoint<1)return;const points=removeCablePoint(item.points,cablePoint);cablePoint=-1;changeCablePoints(item,points);say('Bend removed and adjacent segments straightened.');}
-function validateDrawing(){for(const p of buildPages(scoped()).filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&intersects(a,b,0))||paths.some(r=>pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}}
+function validateDrawing(){const rebuilt=buildDrawing();for(const p of rebuilt.filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&intersects(a,b,0))||paths.some(r=>pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}return rebuilt;}
 function setDrawingEdits(next){
  project.layout||={};const previous=project.layout.drawingEdits||{};project.layout.drawingEdits=cleanDrawingEdits(next);
  // Validation has not changed the displayed SVG. Keep its editor and draft
  // attached when rejecting an edit, rather than leaving an invisible input lock.
- try{validateDrawing();}catch(error){project.layout.drawingEdits=previous;throw error;}
- perform('drawing');
+ let prepared;try{prepared=validateDrawing();}catch(error){project.layout.drawingEdits=previous;throw error;}
+ perform('drawing',prepared);
 }
 function setLinkStyle(type,change,extraEdits={}){
  project.layout||={};const before=project.layout,next=changeLinkStyle(project,pages,type,change);project.layout={...before,...next,drawingEdits:cleanDrawingEdits({...next.drawingEdits,...extraEdits})};
@@ -484,22 +493,32 @@ function evidence(){
  }
 }
 const warningText=x=>typeof x==='string'?x:(x?.message||x?.text||'Review imported evidence.');
-function draw(){
+function familyOf(page){return page?.family||pageFamily(page?.title||page?.name||'');}
+function pageNavigation(){
+ const navigation=$('page-navigation'),families=$('page-families'),picker=$('page-select');navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
+ const current=familyOf(pages[active]),labels=[...pageFamilies,['switchports','Switchport reports']],groups=[...new Set(pages.map(familyOf))];
+ for(const group of groups){const entries=pages.map((p,i)=>({page:p,index:i})).filter(({page})=>familyOf(page)===group),title=labels.find(([id])=>id===group)?.[1]||group,b=el('button',title+' ('+entries.length+')');b.type='button';b.setAttribute('role','tab');b.setAttribute('aria-selected',String(group===current));b.classList.toggle('active',group===current);b.onclick=()=>{if(!commitInlineEdit())return;active=entries[0].index;draw(pages);};families.append(b);
+  const options=el('optgroup');options.label=title;for(const {page,index} of entries){const option=el('option',page.displayName||page.name);option.value=index;options.append(option);}picker.append(options);
+ }
+ picker.value=String(active);picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};$('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
+}
+function draw(prepared){
  cancelBesidePick();
  $('site').value=project.name;$('heading').textContent=project.name;deviceList();
  const subset=scoped();const live=subset.devices.length>0;
  $('link-count').textContent='('+project.links.length+')';$('stats').textContent=subset.devices.length+' of '+project.devices.length+' devices   /   '+subset.links.length+' links';
  $('art-count').textContent=Object.keys(project.stencils).length+' local hardware shapes';
  const tabs=$('tabs'),canvas=$('canvas');
- try{const rebuilt=live?buildPages(subset):[];pages=rebuilt;drawingReady=pages.length>0;displayedProject=project;}catch(e){drawingReady=false;for(const id of ['export','print','svg'])$(id).disabled=true;say('Diagram could not be rebuilt: '+e.message+(displayedProject===project&&pages.length?' The last valid drawing is retained. Undo the last change or correct its settings.':''));if(displayedProject===project&&pages.length){syncDrawingSelection();return;}pages=[];viewport.clear();canvas.replaceChildren(el('p','The drawing needs a layout correction. '+e.message,'error'));tabs.replaceChildren();return;}
+ try{const rebuilt=prepared||(live?buildDrawing(subset):[]);pages=rebuilt;drawingReady=pages.length>0;displayedProject=project;}catch(e){drawingReady=false;for(const id of ['export','export-menu','print','svg'])$(id).disabled=true;say('Diagram could not be rebuilt: '+e.message+(displayedProject===project&&pages.length?' The last valid drawing is retained. Undo the last change or correct its settings.':''));if(displayedProject===project&&pages.length){syncDrawingSelection();return;}pages=[];viewport.clear();canvas.replaceChildren(el('p','The drawing needs a layout correction. '+e.message,'error'));tabs.replaceChildren();pageNavigation();return;}
  tabs.replaceChildren();
  $('warnings').hidden=!project.warnings.length;$('warnings').textContent='Review '+project.warnings.length+' import '+(project.warnings.length===1?'note':'notes');
  active=Math.max(0,Math.min(active,pages.length-1));
- pages.forEach((page,i)=>{const b=el('button',page.displayName||page.name);b.title='Double-click to rename or customize this page';b.ondblclick=()=>task(()=>layoutOptions(page.name));b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{active=i;draw();};tabs.append(b);});
+ pageNavigation();
+ pages.forEach((page,i)=>{if(familyOf(page)!==familyOf(pages[active]))return;const b=el('button',page.displayName||page.name);b.title='Double-click to rename or customize this page';b.ondblclick=()=>task(()=>layoutOptions(page.name));b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{if(!commitInlineEdit())return;active=i;draw(pages);};tabs.append(b);});
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
   if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true));}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
- for(const id of ['export','print','svg'])$(id).disabled=!pages.length||working;
+ for(const id of ['export','export-menu','print','svg'])$(id).disabled=!pages.length||working;
  $('port-map-options').hidden=!pages[active]?.portMap;syncDrawingSelection();
 }
 function cleanStencil(s){
@@ -528,7 +547,12 @@ async function ingest(files){
  const list=Array.from(files);if(!list.length)return;
  if(list.some(f=>f.size>160*1024*1024)||list.reduce((s,f)=>s+f.size,0)>300*1024*1024)throw Error('Choose a smaller batch (160 MB per file, 300 MB total).');
  say('Importing '+list.length+' file(s)…');await new Promise(r=>setTimeout(r,0));
- captureEdits(project,evidenceSnapshot);const inputs=await readSources(list);ensureEvidence(project).sources.push(...inputs);
+ const workspaces=list.filter(file=>/\.spworkspace\.json$/i.test(file.name)),ordinary=list.filter(file=>!workspaces.includes(file)),inputs=await readSources(ordinary);
+ await enrichSwitchportSources(ordinary,inputs,project.devices);
+ const importedWorkspaces=[];for(const file of workspaces){const imported=await importSwitchportWorkspace(file);inputs.push({id:'input-'+crypto.randomUUID(),name:file.name,kind:'Configuration',enabled:true,categories:[...categories],model:imported.model});importedWorkspaces.push(imported);}
+ captureEdits(project,evidenceSnapshot);
+ for(const imported of importedWorkspaces){project.layout||={};project.layout.switchport={...project.layout.switchport,...imported.settings,deviceIds:[...new Set([...(project.layout.switchport?.deviceIds||[]),...imported.settings.deviceIds])]};}
+ ensureEvidence(project).sources.push(...inputs);
  active=0;close();rebuildEvidence();say('Imported '+list.length+' file(s). Review categories under Imported data.');
 }
 function newProject(){if(!checkDiscard())return;viewport.reset();project=emptyProject();resetDrawingHistory();evidenceSnapshot=null;active=0;dirty=false;$('filter').value='';say('');draw();}
@@ -590,12 +614,12 @@ function devicePortFields(parent,device){
   });
  };
 }
-function editDevice(current){
+function editDevice(current,afterSave){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
  const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip),addresses=deviceMacs(d);
  let addressFields=body;if(addresses.length>1){addressFields=el('details');addressFields.append(el('summary','MAC addresses ('+addresses.length+')'));body.append(addressFields);addressFields.append(el('p','The diagram shows a count for multiple addresses. Review or edit the full list here.','hint'));}
  const mac=field(addressFields,'MAC address(es)',addresses.join(addresses.length>1?'\n':', '),addresses.length>1?'multiline':null);if(addresses.length>1)mac.rows=5;
- const models=el('datalist');models.id='known-hardware-models';const suggestions=new Map([...hardwareCatalog,...endpointHardwareCatalog.flatMap(entry=>entry.aliases.map(model=>({model,vendor:entry.vendor})))].map(entry=>[entry.sku||entry.model,entry]));for(const p of suggestions.values()){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
+ const models=el('datalist');models.id='known-hardware-models';const suggestions=new Map([...hardwareCatalog,...switchportCatalog.models.map(entry=>({sku:entry.sku,model:entry.name,vendor:entry.os})),...switchportCatalog.additionalModels.map(entry=>({sku:entry.sku,model:entry.name,vendor:entry.os})),...switchportCatalog.modules.map(entry=>({sku:entry.sku,model:entry.name,vendor:''})),...endpointHardwareCatalog.flatMap(entry=>entry.aliases.map(model=>({model,vendor:entry.vendor})))].map(entry=>[entry.sku||entry.model,entry]));for(const p of suggestions.values()){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
  const platform=field(body,'Platform / technology',d.technology||''),platforms=el('datalist');platforms.id='known-device-platforms';for(const technology of [...new Set(endpointHardwareCatalog.map(entry=>entry.technology).filter(value=>value!=='Physical server'))]){const option=el('option');option.value=technology;platforms.append(option);}body.append(platforms);platform.setAttribute('list',platforms.id);
  const knowledge=el('p','','hint');body.insertBefore(knowledge,ip.previousElementSibling);let kindEdited=false;kind.onchange=()=>kindEdited=true;
  function hardwareKnowledge(fill=false){const known=matchEndpointHardware(model.value,vendor.value);const inferred=d.hardwareEvidence?.model===model.value.trim()?d.hardwareEvidence:null;knowledge.hidden=!known&&!inferred;knowledge.textContent=known?known.family+'. '+known.moduleGuidance:inferred?'Shared family layout: '+inferred.basis+'. Exact SKU is unconfirmed. Select the model from its hardware label when available.':'';if(known&&fill){if(!kindEdited&&(!current||kind.value==='unknown'))kind.value=known.kind;if(!vendor.value.trim())vendor.value=known.vendor;if(!platform.value.trim())platform.value=known.technology;}}
@@ -604,7 +628,7 @@ function editDevice(current){
  const shape=field(body,'Front-panel stencil',d.stencilId||'',options);
  const scale=field(body,'Device scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=10;scale.max=400;scale.step=5;
  const hardware=el('details');hardware.append(el('summary','Stack members and installed modules'));body.append(hardware);
- hardware.append(el('p','Confirm each member model and installed card. For 2920 rear bays A/B use J9731A (SFP+) or J9732A (copper). For 3560-E uplink slots X2-1/X2-2 use CVR-X2-SFP or the installed X2 transceiver model. Leave unknown cards unassigned.','hint'));
+ hardware.append(el('p','Confirm each member model and installed card. For 2920 rear bays A/B use J9731A (SFP+) or J9732A (copper). For Cisco network modules use slot NM. For 3560-E X2-1/X2-2 slots use CVR-X2-SFP or the installed X2 transceiver model. Leave unknown cards unassigned.','hint'));
  const memberRows=[],moduleRows=[],memberList=el('div'),moduleList=el('div');hardware.append(memberList);
  const hardwareRow=(parent,rows,values,columns)=>{
   const box=el('div','','hardware-row'),row={box};
@@ -615,6 +639,12 @@ function editDevice(current){
  for(const m of d.stackMembers||[])memberRow(m);button(hardware,'Add stack member',()=>memberRow({}));hardware.append(moduleList);
  const moduleRow=m=>hardwareRow(moduleList,moduleRows,m,[['member','Module member (blank for chassis)'],['slot','Module slot'],['model','Module model']]);
  for(const m of d.modules||[])moduleRow(m);button(hardware,'Add module',()=>moduleRow({}));
+ const reportDetails=reportDetailFields(body,d,{el,field,members:()=>memberRows.filter(r=>!r.removed).map(r=>({id:r.id.value,model:r.model.value})),modules:()=>moduleRows.filter(r=>!r.removed).map(r=>({member:r.member.value,slot:r.slot.value,model:r.model.value}))});
+ if(current&&project.evidence)button(hardware,'Use imported hardware',()=>{
+  const original={evidence:structuredClone(project.evidence),devices:[],links:[],warnings:[]};original.evidence.edits={};composeEvidence(original);const imported=findDeviceIdentity(original.devices,d.id);
+  if(!imported)throw Error('No enabled source contains hardware details for this device.');
+  reportDetails();model.value=imported.model||'';vendor.value=imported.vendor||vendor.value;memberRows.splice(0);moduleRows.splice(0);memberList.replaceChildren();moduleList.replaceChildren();for(const member of imported.stackMembers||[])memberRow(member);for(const module of imported.modules||[])moduleRow(module);hardwareKnowledge();reportDetails.refresh();say('Imported hardware restored in this draft. Save device to apply it.');
+ });
  const pageChoice=field(body,'Core page',assignedCorePage(d.id),corePageChoices());
  const readPorts=devicePortFields(body,d);
  let vlans,routes,bridges;
@@ -623,18 +653,18 @@ function editDevice(current){
  routes=field(details,'Routes',JSON.stringify(d.routes||[],null,2),'multiline');bridges=field(details,'Virtual wire pairs / bridges',JSON.stringify(d.bridges||[],null,2),'multiline');
  const a=actions(body);button(a,'Save device',()=>{
   const n=name.value.trim();if(!n)throw Error('Enter a device name.');
-  const id=d.id||deviceId(n);if(!safeKey(id)||project.devices.some(old=>old!==current&&deviceId(old.name)===deviceId(n)))throw Error('Use a unique device name.');
+  const id=d.id||deviceId(n);if(!safeKey(id)||(!current||n!==d.name)&&project.devices.some(old=>old!==current&&deviceId(old.name)===deviceId(n)))throw Error('Use a unique device name.');
   let data;try{data=[vlans,routes,bridges].map(input=>JSON.parse(input.value));}catch{throw Error('VLAN, route and bridge data must be valid JSON.');}
   if(data.some(arr=>!Array.isArray(arr)||arr.some(x=>!object(x))))throw Error('Use arrays of objects for VLANs, routes and bridges.');
   if(!(Number(scale.value)>=10&&Number(scale.value)<=400))throw Error('Use a device scale from 10 to 400 percent.');
   const composition=hardwareComposition(memberRows.filter(r=>!r.removed).map(r=>({id:r.id.value,model:r.model.value})),moduleRows.filter(r=>!r.removed).map(r=>({member:r.member.value,slot:r.slot.value,model:r.model.value})));
   const macValue=inputMacAddresses(mac.value);
-  const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),mac:macValue,stencilId:shape.value,scale:Number(scale.value)/100,ports:readPorts(),vlans:data[0],routes:data[1],bridges:data[2]};for(const alias of ['macs','macAddress','macAddresses','mac_address','mac_address(es)'])delete next[alias];if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareEvidence;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
+  const next={...d,...composition,id,name:n,kind:kind.value,vendor:vendor.value.trim(),model:model.value.trim(),technology:platform.value.trim(),ip:ip.value.trim(),mac:macValue,stencilId:shape.value,scale:Number(scale.value)/100,reportDetails:reportDetails(),ports:readPorts(),vlans:data[0],routes:data[1],bridges:data[2]};for(const alias of ['macs','macAddress','macAddresses','mac_address','mac_address(es)'])delete next[alias];if(model.value.trim()!==d.model){delete next.sku;delete next.hardwareEvidence;delete next.hardwareFamily;delete next.family;}const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}if(!current)next.scopeOverride=true;
   const before={devices:project.devices,stencils:project.stencils,layout:project.layout};
   try{project.devices=project.devices.map(old=>old===current?next:{...old});if(!current)project.devices.push(next);project.stencils=Object.fromEntries(Object.entries(project.stencils).map(([id,s])=>[id,{...s,models:[...(s.models||[])]}]));
    const key=modelKey(next.vendor,next.model);if(key&&shape.value){for(const s of Object.values(project.stencils))s.models=s.models.filter(k=>k!==key);project.stencils[shape.value].models.push(key);assignMatching(project.stencils[shape.value]);}
    if(pageChoice.value!==assignedCorePage(d.id)){project.layout=structuredClone(project.layout||{});assignCorePage(project.layout,next,pageChoice.value);}
-   validateDrawing();perform();close();say('Device saved.');
+   const prepared=validateDrawing();perform('devices',prepared);close();say('Device saved.');afterSave?.();
   }catch(error){Object.assign(project,before);throw error;}
  },'primary');
  if(current)button(a,'Remove device',()=>{removeDevices([d.id]);close();});
@@ -642,7 +672,7 @@ function editDevice(current){
 function reviewLinks(){
  const body=modal('Connections');const accounts=new Map(project.devices.map(d=>[d.id,d.name]));button(body,'Add connection',()=>editLink());
  if(!project.links.length)body.append(el('p','No links imported. Add a connection using the local and remote interface names.','hint'));
- project.links.forEach((l,i)=>{const text=el('div');text.append(el('strong',(accounts.get(l.a)||l.a)+' '+l.ap+'  /  '+(accounts.get(l.b)||l.b)+' '+l.bp),el('div',[l.media||'Media unspecified',l.speed,l.status,!physicalLink(l,project.devices)?'Logical observation — retained in data tables':'' ].filter(Boolean).join('  |  '),'asset-info'));const row=line(body,text);button(row,'Edit',()=>editLink(i));});
+ project.links.forEach((l,i)=>{const text=el('div');text.append(el('strong',(accounts.get(l.a)||l.a)+' '+l.ap+'  /  '+(accounts.get(l.b)||l.b)+' '+l.bp),el('div',[l.media||'Media unspecified',l.speed,l.status,l.physicalEvidence?.kind==='alternate-interface'?'Alternate observation: '+l.physicalEvidence.reason:!physicalLink(l,project.devices)?'Logical observation - retained in data tables':'' ].filter(Boolean).join('  |  '),'asset-info'));const row=line(body,text);button(row,'Edit',()=>editLink(i));});
 }
 function connectionFields(parent,link,{onMediaChange,mixed=false}={}){
  const keep='__keep_connection_value__',choices=(catalog,value)=>mixed&&value===null?[[keep,'Mixed - keep existing'],...connectionChoices(catalog,'')]:connectionChoices(catalog,value),initial=(catalog,value)=>mixed&&value===null?keep:connectionValue(catalog,value);
@@ -867,6 +897,7 @@ $('filter').oninput=deviceList;$('close').onclick=close;
 $('matches').onclick=()=>{if(!$('filter').value.trim()){say('Enter a device name or model filter first.');return;}for(const d of project.devices){d.scopeOverride=matchName(d);d.hidden=!d.scopeOverride;}perform();};
 $('all').onclick=()=>{for(const d of project.devices){d.scopeOverride=true;d.hidden=false;}perform();};
 $('new').onclick=newProject;$('auto-scope').onclick=()=>{for(const d of project.devices)delete d.scopeOverride;initialScope();perform();};
+$('switchport-reports').onclick=()=>task(reports.options);$('export-menu').onclick=()=>task(reports.exportMenu);
 $('sample').onclick=sample;$('hardware').onclick=hardware;$('review-links').onclick=reviewLinks;
 $('arrange').onclick=arrange;$('evidence').onclick=evidence;
 $('add-link').onclick=()=>editLink();$('add-device').onclick=()=>editDevice();
@@ -875,7 +906,7 @@ $('open').onclick=()=>$('project-file').click();$('save').onclick=()=>{download(
 $('import').onclick=()=>$('data-files').click();
 $('paste').onclick=()=>{const b=modal('Paste configuration / commands');const n=field(b,'Device name or filename hint','device.cfg');const t=field(b,'Configuration or show-command output','','multiline');button(actions(b),'Import text',()=>ingest([new File([t.value],n.value||'device.cfg',{type:'text/plain'})]),'primary');};
 $('data-files').onchange=e=>{const fs=Array.from(e.target.files);e.target.value='';task(()=>ingest(fs));};
-$('project-file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f||!checkDiscard())return;task(async()=>{if(f.size>160*1024*1024)throw Error('Project exceeds 160 MB.');const p=loadProject(JSON.parse(await f.text()));viewport.reset();project=p;if(project.evidence){composeEvidence(project);initialScope();for(const shape of Object.values(project.stencils))assignMatching(shape);}evidenceSnapshot=project.evidence?snapshot():null;resetDrawingHistory();active=0;dirty=false;draw();say('Project opened.');});};
+$('project-file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f||!checkDiscard())return;task(async()=>{if(f.size>160*1024*1024)throw Error('Project exceeds 160 MB.');let p,reportFocus=null;if(/\.spworkspace\.json$/i.test(f.name)){const imported=await importSwitchportWorkspace(f);reportFocus=imported.selectedId||'';p={...emptyProject(),...imported.model,name:imported.settings.outputLabel||'Switchport workspace',layout:{...emptyProject().layout,switchport:imported.settings}};}else p=loadProject(JSON.parse(await f.text()));viewport.reset();project=p;if(project.evidence){reopenEvidence(project);initialScope();for(const shape of Object.values(project.stencils))assignMatching(shape);}evidenceSnapshot=project.evidence?snapshot():null;resetDrawingHistory();active=0;dirty=false;draw();if(reportFocus!==null){const reportIndex=pages.findIndex(page=>familyOf(page)==='switchports'&&(!reportFocus||page.sourceDeviceIds?.includes(reportFocus)));if(reportIndex>=0){active=reportIndex;draw(pages);}}say('Project opened.');});};
 function discoverStencils(files){
  const found=stencilFiles(files),known=new Set(discoveredStencils.map(f=>filePath(f)+'|'+f.size+'|'+f.lastModified));
  for(const f of found){const key=filePath(f)+'|'+f.size+'|'+f.lastModified;if(!known.has(key)){discoveredStencils=discoveredStencils.filter(old=>filePath(old)!==filePath(f));stencilIndexes.delete(filePath(f));openCatalogs.delete(filePath(f));discoveredStencils.push(f);known.add(key);}}
@@ -905,7 +936,7 @@ $('print').onclick=()=>{
 window.addEventListener('afterprint',()=>$('print-set').replaceChildren());
 for(const ev of ['dragover','drop'])document.addEventListener(ev,e=>{
  if(![...e.dataTransfer.types].includes('Files'))return;e.preventDefault();$('drop').classList.toggle('dragover',ev==='dragover');
- if(ev==='drop'){const items=Array.from(e.dataTransfer.items),fallback=Array.from(e.dataTransfer.files);task(async()=>{const files=await droppedFiles(items,fallback),art=files.filter(f=>visioFile(f.name)),data=files.filter(f=>!visioFile(f.name)&&/\.(txt|cfg|conf|config|log|rsc|cli|xml|exp|csv|xlsx)$/i.test(f.name));if(data.length)await ingest(data);if(art.length)discoverStencils(art);else if(!data.length)say('No supported site data or Visio stencils were found.');});}
+ if(ev==='drop'){const items=Array.from(e.dataTransfer.items),fallback=Array.from(e.dataTransfer.files);task(async()=>{const files=await droppedFiles(items,fallback),art=files.filter(f=>visioFile(f.name)),data=files.filter(f=>!visioFile(f.name)&&/\.(txt|cfg|conf|config|log|rsc|cli|xml|exp|backup|csv|xlsx|spworkspace\.json)$/i.test(f.name));if(data.length)await ingest(data);if(art.length)discoverStencils(art);else if(!data.length)say('No supported site data or Visio stencils were found.');});}
 });
 document.addEventListener('dragleave',()=> $('drop').classList.remove('dragover'));
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});

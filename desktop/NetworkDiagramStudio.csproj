@@ -6,8 +6,8 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.1.0-preview.31</Version>
-    <FileVersion>0.1.0.31</FileVersion>
+    <Version>0.1.0-preview.32</Version>
+    <FileVersion>0.1.0.32</FileVersion>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <Product>NetworkDiagramStudio</Product>
     <Company>TechSavage1989</Company>
@@ -26,9 +26,13 @@
     <DefineConstants>$(DefineConstants);NDS_TEST_HOST</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="SwitchportReports/**/*.cs" />
+    <ProjectReference Include="SwitchportReports/NetworkDiagramStudio.SwitchportReports.csproj" />
     <Compile Include="../tests/desktop/NativeSmoke.cs" Condition="'$(NativeSmokeBuild)' == 'true'" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <EmbeddedResource Include="../docs/THIRD_PARTY_NOTICES.md" LogicalName="notices/Components.md" />
+    <EmbeddedResource Include="SwitchportReports/Fonts/LICENSE.txt" LogicalName="notices/Report fonts license.txt" />
+    <EmbeddedResource Include="SwitchportReports/Notices/*" LogicalName="notices/Switchport/%(Filename)%(Extension)" />
     <EmbeddedResource Include="$(NuGetPackageRoot)/microsoft.web.webview2/1.0.4314.35/LICENSE.txt" LogicalName="notices/WebView2 SDK license.txt" />
     <EmbeddedResource Include="$(NuGetPackageRoot)/microsoft.web.webview2/1.0.4314.35/NOTICE.txt" LogicalName="notices/WebView2 SDK notice.txt" />
     <EmbeddedResource Include="$(NuGetPackageRoot)/microsoft.netcore.app.runtime.win-x64/**/LICENSE.TXT;$(NuGetPackageRoot)/microsoft.netcore.app.runtime.win-x64/**/THIRD-PARTY-NOTICES.TXT" LogicalName="notices/Dotnet/%(RecursiveDir)%(Filename)%(Extension)" />

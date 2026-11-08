@@ -1,12 +1,17 @@
 <p align="center"><img src="src/web/assets/app-icon.svg" width="112" alt="NetworkDiagramStudio icon"></p>
 <h1 align="center">NetworkDiagramStudio</h1>
-<p align="center">Build editable site network diagrams from switch and firewall configurations, Auvik reports, and your own hardware stencils.</p>
+<p align="center">Build editable network diagrams, switchport charts and technician reports from local site data.</p>
 <p align="center"><a href="#download">Download</a> | <a href="#getting-started">Get started</a> | <a href="#features">Features</a> | <a href="#screenshots">Screenshots</a> | <a href="#updates-and-settings">Updates</a> | <a href="#development">Development</a></p>
 <p align="center"><img src="docs/images/hero.png" width="900" alt="Core topology of the fictional Harbor Workshop site in the browser editor"></p>
 
 ## Features
 
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
+
+- Build Switchport Diagram Builder reports inside the same project: wall charts, A4 sheets and complete inventory booklets, with native/tagged/voice VLAN symbols, LAG outlines, stack markers and readable numbers outside the ports.
+- Export each device's eight-file report package, shared multi-device sheets, vector PDF, 300 dpi PNG, SVG and editable Visio. Keep one shared VLAN/LAG palette, report title, optional logo, serial numbers, asset tags and notes.
+- Open existing Switchport Diagram Builder workspaces and supported unencrypted RouterOS backups. Keep supplementary observations independently selectable and separate from configuration intent.
+- Navigate large drawing sets by page group and page picker. Moving equipment reroutes affected drawings with short local paths, nearby outside approaches and cable spacing based on painted line thickness.
 
 - Recognize shared Cisco 9500/3560-E and Aruba 6000/6100 family layouts when a complete configuration identifies the geometry but omits its SKU. Confirm exact models and removable modules in Device details. See the [hardware research and coverage notes](docs/HARDWARE_RESEARCH_22.md).
 - Import supported configurations, Base64 SonicWall EXP settings, Auvik XLSX/CSV reports and show-command captures. Enable each file and choose identity, ports, links, VLANs, routes and bridges separately.
@@ -22,7 +27,7 @@ Network engineers can use the Windows application or the offline browser edition
 - Select cables using a wider invisible target around the painted line. Logical VLAN/aggregate observations remain in the data tables and connection review without appearing as duplicate physical cables. Edit cable bends directly, reconnect either end to a selected device/port, and customize line color/opacity or text color with a visual selector, HEX field and standard swatches. Link styles shares colors and titles/descriptions between cables and their legend entries. Legends include only the styles used on each sheet. Automatic cables and their color keys use a consistent standard thickness; exported Visio line widths are explicit and editable.
 - Zoom into port mapping, box-select sockets, move a group with the mouse or arrow keys, and align or distribute the selection. Port maps keep a shared hardware scale, consistent port-number boxes and an assignment matrix with one port column per switch. The default booklet layout gives faceplates and inventory tables separate sheets. Larger stacks continue by member range. Expanded tables, individual rows and optional empty-record filtering remain available.
 - Show manufacturer/model and available MAC addresses on wireless AP captions and other device diagrams. Edit device and interface addresses through readable form fields; single addresses remain visible; long lists become a compact count. Full address lists remain in Device details and the optional information panel.
-- Save and reopen projects, export editable Visio drawings, save the current page as SVG, or print the drawing set to PDF.
+- Save and reopen the complete project, including report selections, colors, metadata, imported evidence and drawing edits.
 - Keep complete diagram captions with measured wrapping in both SVG and Visio. Port modules use editable gray optic faces with dark sockets and dark DAC ends with a horizontal insert, matching the Configuration Inspector style. Framed module keys expand or continue onto a module sheet; duplicate wording such as Port port1 is avoided.
 - Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and compact WAN/circuit cards. Circuit cards fit the actual stack width, use extra rows on narrow devices and retain complete provider/gateway text. Routes use available space inside the stack width when port orientation and clearances permit. Configure page-number visibility, starting values, padding and format.
 
@@ -30,17 +35,17 @@ Network engineers can use the Windows application or the offline browser edition
 
 ## Screenshots
 
-**A dynamic canvas keeps the complete core network together.**
-<p align="center"><img src="docs/images/hero.png" width="900" alt="Fictional Harbor Workshop core network on a dynamic canvas"></p>
+**Keep the core network and editing tools together.**
+<p align="center"><img src="docs/images/hero.png" width="900" alt="Fictional Harbor Workshop network with grouped page navigation and visible placement controls"></p>
 
-**Name pages and choose the devices they contain.**
-<p align="center"><img src="docs/images/pages-layout.png" width="900" alt="Pages and layout controls with a named page and selected devices"></p>
+**Build shared switchport sheets with readable port numbers and one VLAN key.**
+<p align="center"><img src="docs/images/switchport-reports.png" width="900" alt="Two fictional switches on a shared A4 switchport report"></p>
 
-**Choose and resize useful information beside the drawing.**
-<p align="center"><img src="docs/images/information-panel.png" width="900" alt="Fictional network drawing with a customizable information panel"></p>
+**Choose report devices, metadata and shared colors in one place.**
+<p align="center"><img src="docs/images/report-options.png" width="900" alt="Switchport report options and editable VLAN and LAG colors"></p>
 
-**Keep placement controls visible and route connections around modular hardware.**
-<p align="center"><img src="docs/images/editor-tools.png" width="900" alt="Fictional modular chassis with separated center-channel connections and permanent Place beside controls"></p>
+**Export the drawing or a complete technician report package.**
+<p align="center"><img src="docs/images/export-options.png" width="900" alt="Unified documentation export choices and switchport package tools"></p>
 
 ## Download
 
@@ -74,7 +79,7 @@ The releases index includes published previews. A pull request or local build ma
 - **Physical links.** Review both endpoint ports, speed and media. A port's SFP capability alone does not establish whether an SR, LR or DAC module is installed.
 - **Hardware.** Open **Hardware** and select **Manage** to import supported VSSX/VSDX masters, a front-view image, or a saved hardware pack. Recognized front views can match a model or SKU. Assign a front to a device to reuse it on matching models. **Map ports** shows existing jack markers and allows point placement or numeric coordinates. **Core faceplate scale** in device details adjusts size while retaining proportions. Save a hardware pack to carry artwork, model assignments and optic choices to another project. Use only artwork you are authorized to use and share.
 - **Local stencil search.** Click a diagram device to open its stencil picker. **Search selected vendor files** filters files from folders you already selected by vendor-related filenames. **Search all selected folders** searches the full selected collection. Neither button searches the internet. Empty results explain whether folders or matching files are missing.
-- **Deliverables.** Use **Export Visio** for an editable drawing, **Save page SVG** for a single page, and **Print / PDF** for the entire set. For a reusable Visio stencil containing the hardware used in the current drawing, select **Hardware**, **Manage**, then **Export Visio stencil**. **Open project** restores a saved project for further changes.
+- **Deliverables.** Open **Export** and choose the current page, current page group or all pages, then Visio, vector PDF, 300 dpi PNG or SVG. The quick **Visio**, **Save page SVG** and **Print / PDF** controls remain available. For a reusable Visio stencil containing the hardware used in the current drawing, select **Hardware**, **Manage**, then **Export Visio stencil**. **Open project** restores a saved project for further changes.
 
 The hardware reference lists the supported syntax, report types and layout limits. [Hardware and configuration support](docs/HARDWARE_SUPPORT.md) · [Server, storage and virtualization catalogue with official references](docs/ENDPOINT_HARDWARE.md). Endpoint family recognition does not establish installed NIC/HBA sockets. Map the actual adapters with interface inventory and a verified stencil. The physical catalog has 314 verified bank profiles covering 423 model identifiers, including new UniFi, Netgate and PA-455 layouts and corrected PA-415 combo sockets. Unknown models have editable base drawings for every inventory role, with boundary connections until their actual ports are mapped.
 
@@ -83,6 +88,20 @@ VLANs and routing are grouped under each device's header. Complete device sectio
 The Connection Types and Port Modules sidebar can shrink in width and spacing when the core diagram needs more room. Cable and legend line weights remain identical, captions wrap in full, and readable font sizes are retained. Explicit sidebar position/size edits preserve its original width.
 
 The app disables browser right-click menus so browser navigation and inspection commands do not cover the drawing. Keyboard editing shortcuts remain available.
+
+## Switchport reports
+
+Open **Switchport reports** in the sidebar. Select the switches or firewalls, choose shared A4 sheets, separate sheets, wall charts or full booklets, then select **Build reports**. The new **Switchport reports** page group appears beside the network views. Report settings, device details, colors, logo and selected observations are saved in the normal project file and use the same Undo history.
+
+**Device details** includes per-device, stack-member and module names, serial numbers, asset tags and notes. Choose supported models and installed cards in the existing hardware fields. Unsupported or contradictory hardware remains qualified; the report does not invent sockets. Unknown models and oversized unreadable layouts produce a validation result with the available inventory data.
+
+**VLAN and LAG colors** uses one color per VLAN ID and one outline per normalized LAG name across the selected workspace. The key retains different names used for the same VLAN ID. Native VLAN, tagged circles, voice diamonds, LAG outlines, stack links, disabled ports and unknown/explicitly absent native VLANs remain distinct. Colors do not establish connectivity.
+
+**Supplementary observations** accepts Auvik workbooks and operational captures for selected devices. Each source can be disabled or removed without rewriting configured VLANs, administrative state or hardware. Ordinary topology imports remain available under **Imported data**. An existing **.spworkspace.json** file can be opened or added through **Import files**; only normalized inventory and evidence are retained in a saved NetworkDiagramStudio project.
+
+**Export switchport package** creates these files for every supported device: wall-chart.png, a4-one-page.png, a4-one-page.pdf, a4-booklet.pdf, port-map.csv, inventory.json, technician-summary.txt and validation-report.txt. Multi-device exports add shared A4 diagram/booklet PDFs, sheet PNGs and workspace layout, palette and export records. Selected supplementary sources add their own CSV/JSON records. The Windows edition remembers the chosen output location and writes a new folder without overwriting earlier reports; the offline browser downloads a ZIP. The export dialog can open the latest native chart, PDF or folder and copy its summary. A failed export keeps the last successful result available.
+
+Reports use A4 landscape and readable measured typography. Dense devices can use compact proportional geometry; unusually large inventories or legends continue in booklets or return a clear capacity result. A failed visual format does not discard another device's successful package or its inventory and validation files. See the [integration and verification reference](docs/SWITCHPORT_INTEGRATION.md) for supported syntax and deliberate differences from the standalone application.
 
 ## Drawing and port alignment
 

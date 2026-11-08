@@ -31,7 +31,7 @@ test('port number boxes share one size and font across all RJ45 and optical jack
   const boxes=page.items.filter(item=>item.portNumberRole==='box'&&item.sourceId===panel.sourceId),numbers=page.items.filter(item=>item.portNumberRole==='text'&&item.sourceId===panel.sourceId);
   assert.equal(boxes.length,52);assert.equal(numbers.length,52);assert.equal(new Set(boxes.map(box=>[box.w,box.h].join(','))).size,1);assert.equal(new Set(numbers.map(number=>number.size)).size,1);assert.ok(numbers[0].size>=6);
   assert.ok(numbers.some(number=>number.value==='1'));assert.ok(numbers.some(number=>number.value==='49'));
-  for(const box of boxes){const point=panel.ports[box.portName];assert.ok(Math.abs(box.x+box.w/2-panel.x-point[0]*panel.w)<1e-8);assert.ok(Math.abs(box.y+box.h/2-panel.y-point[1]*panel.h)<1e-8);}
+  for(const box of boxes){const point=panel.ports[box.portName];assert.ok(Math.abs(box.x+box.w/2-panel.x-point[0]*panel.w)<1e-8);const socket=box.socketBounds;if(socket)assert.ok(box.y+box.h<=socket.y-1||box.y>=socket.y+socket.h+1,'number must sit above or below its socket');}
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];assert.ok(a.x+a.w<=b.x+.01||b.x+b.w<=a.x+.01||a.y+a.h<=b.y+.01||b.y+b.h<=a.y+.01,'number boxes overlap');}
  }
  const box=portNumberBox([{text:'1',x:10,y:10},{text:'52',x:35,y:10},{text:'2',x:10,y:30}]);assert.ok(box.readable);assert.ok(box.w<=23&&box.h<=18);

@@ -31,7 +31,7 @@ function localLeads(model,ports,side,width=700){
  return {g,leads};
 }
 
-test('modular core uses five separate center leads and direct exposed bottom sockets',()=>{
+test('modular core uses separate short center or exterior leads and direct exposed bottom sockets',()=>{
  const site=modularRoutingFixture(),page=buildPages(site).find(p=>p.name==='Core Network'),g=page.items.find(i=>i.sourceId==='chassis'&&i.kind==='switch'),paths=page.items.filter(i=>i.type==='path');
  assert.equal(paths.length,8);assert.deepEqual(g.panelRegions.map(r=>r.id),['management','management-bay','A','B','C','D','E','F']);
  for(const region of g.panelRegions)assert.ok(g.children.some(c=>c.type==='rect'&&c.x===region.x&&c.y===region.y&&c.w===region.w&&c.h===region.h),'Bay bounds must match the native artwork');
@@ -40,8 +40,9 @@ test('modular core uses five separate center leads and direct exposed bottom soc
   const port=path.sourceLink.ap;attached(page,path);clearModule(g,port,path.points);
   const plug=page.items.find(i=>i.key===path.from.device);assert.equal(plug.host.port,port);assert.equal(plug.host.device,g.key);
   if(['A3','A5','A6','C6','C7'].includes(port)){
-   assert.ok(path.points[1][1]<path.points[0][1],'Interior socket must turn above its own row');
-   const x=path.points[2][0];assert.ok(x>=channel[0]+2-1e-7&&x<=channel[1]-2+1e-7);rails.push(x);
+   const own=g.panelRegions.find(region=>region.id===port[0]),turn=path.points[1][1];
+   assert.ok(turn>g.y+own.y*g.h&&turn<g.y+(own.y+own.h)*g.h,'Interior socket turns in clear space inside its own module');
+   const x=path.points[2][0];assert.ok(x<g.x-1.9||x>=channel[0]+2-1e-7&&x<=channel[1]-2+1e-7,'Interior lead uses a clear center or exterior lane');rails.push(x);
   }else{close(path.points[0][0],path.points[1][0]);assert.ok(path.points[1][1]>g.y+g.h,'Exposed bottom socket should leave directly');}
  }
  rails.sort((a,b)=>a-b);for(let i=1;i<rails.length;i++)assert.ok(rails[i]-rails[i-1]>=4.25-1e-7,'Painted center leads merge');

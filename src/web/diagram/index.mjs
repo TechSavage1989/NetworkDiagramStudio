@@ -1,4 +1,7 @@
 import {physicalInventory} from '../physical-links.mjs';
+import {cachedDraftPages} from './page-cache.mjs';
+import {buildSwitchportReports} from '../reports/index.mjs';
+import {portLabelLayout} from './port-label-layout.mjs';
 import {informationPanel} from './information-panel.mjs';
 import {presentation,scaleText,scalePage,displayPageName,cleanReportPages,deviceScale} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
@@ -92,13 +95,16 @@ const referencePortFills={wired:'#8294B3',ap:'#7FD3AD',profile:'#B9DFCF',uplink:
 const portStateFills={up:'#829AA6',down:'#FFFFFF',unknown:'#C1A36E'};
 
 function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false}={}){
- const entries=ports.flatMap(port=>{const match=Object.entries(g.ports).find(([name])=>name.toLowerCase()===port.name.toLowerCase());return match?[{port,text:portNumber(port.name),x:g.x+match[1][0]*g.w,y:g.y+match[1][1]*g.h}]:[];}),box=portNumberBox(entries);
- if(!box.readable||box.size<8)return;
- for(const {port,text,x,y} of entries){const active=selected?.has(port.name.toLowerCase()),key=g.editKey+'|port-number|'+port.name;
-  rect(items,x-box.w/2,y-box.h/2,box.w,box.h,selected?(active?referencePortFills.ap:C.pale):fill(port),'#617480',.6);Object.assign(items.at(-1),{editKey:key+'|box',portNumberRole:'box',portName:port.name,sourceId:g.sourceId});
-  if(stateKey){rect(items,x-box.w/2+1,y+box.h/2-3,box.w-2,2,portStateFills[state(port.state)]);Object.assign(items.at(-1),{editKey:key+'|state',portNumberRole:'state',portName:port.name,sourceId:g.sourceId});}
-  label(items,x-box.w/2,y-box.h/2,box.w,box.h,text,box.size,true,C.ink,'center');Object.assign(items.at(-1),{editKey:key+'|text',portNumberRole:'text',portName:port.name,sourceId:g.sourceId,full:true});
- }
+ let layout=portLabelLayout(g,ports,{fontSize:10,minFontSize:8,minWidth:0,measureRequired:false});
+ if(!layout.readable)layout=portLabelLayout(g,ports,{fontSize:10,minFontSize:8,minWidth:0,vertical:true});
+ if(!layout.readable){const alternatives=[false,true].map(vertical=>portLabelLayout(g,ports,{fontSize:8,minFontSize:8,minWidth:0,vertical})),required=alternatives.map(v=>v.requiredWidth).filter(Number.isFinite);throw Object.assign(Error('This port map needs a wider device to keep the port numbers readable. Use a wider page or the Switchport report layout.'),{code:'PORT_LABEL_CAPACITY',requiredWidth:required.length?Math.min(...required):null,sourceId:g.sourceId});}
+ for(const {port,text,number:box,content,editKey:key,socket} of layout.entries){const active=selected?.has(port.name.toLowerCase()),color=selected?(active?referencePortFills.ap:C.pale):fill(port),metadata={portName:port.name,sourceId:g.sourceId};
+  if(content){rect(items,content.x,content.y,content.w,content.h,color,'none');Object.assign(items.at(-1),{...metadata,editKey:key+'|socket-fill',portNumberRole:'socket'});}
+  rect(items,box.x,box.y,box.w,box.h,color,'none');Object.assign(items.at(-1),{...metadata,editKey:key+'|box',portNumberRole:'box',numberSide:box.side,socketBounds:socket});
+  if(stateKey&&content){rect(items,content.x,content.y+content.h-Math.min(2,content.h/3),content.w,Math.min(2,content.h/3),portStateFills[state(port.state)]);Object.assign(items.at(-1),{...metadata,editKey:key+'|state',portNumberRole:'state'});}
+  const textBox=box.vertical?{x:box.x+(box.w-box.h)/2,y:box.y+(box.h-box.w)/2,w:box.h,h:box.w}:box;
+  label(items,textBox.x,textBox.y,textBox.w,textBox.h,text,box.size,true,C.ink,'center');Object.assign(items.at(-1),{...metadata,editKey:key+'|text',portNumberRole:'text',full:true,...(box.vertical?{angle:Math.PI/2}:{})});
+ }return layout;
 }
 
 function portAssignments(project,db,device,ports){
@@ -317,10 +323,18 @@ function referencePortMaps(project,db,switches,options,plan){
 }
 function portMaps(project,db){
  const switches=[...db.devices.values()].filter(d=>d.kind==='switch');if(!switches.length)return portMapsAtScale(project,db);
- const initial=portEquipmentPlan(project,switches);let best;
- for(const scale of switches.some(d=>deviceScale(project,d)!==1)?[1]:[1,.9,.8]){const plan=scale===1?initial:portEquipmentPlan(project,switches,initial.width*scale),pages=portMapsAtScale(project,db,plan);
-  if(!best||pages.length<best.length)best=pages;if(best.length===1)break;
- }return best;
+ let initial=portEquipmentPlan(project,switches),best;
+ for(let attempt=0;attempt<4;attempt++){
+  try{best=portMapsAtScale(project,db,initial);break;}
+  catch(error){if(error.code!=='PORT_LABEL_CAPACITY'||!Number.isFinite(error.requiredWidth))throw error;
+   const d=switches.find(d=>d.id===error.sourceId),width=Math.max(initial.width+1,error.requiredWidth/(d?deviceScale(project,d):1)+2),geometry=pageGeometry(project,'ports');
+   if(width>geometry.width-82){if(!geometry.dynamic)throw error;project={...project,_pageGeometry:{...project._pageGeometry,ports:{width:Math.ceil(width+82),height:geometry.height}}};}
+   initial=portEquipmentPlan(project,switches,width);
+  }
+ }
+ if(!best)throw Error('The port labels need more space. Choose a wider port-map page.');
+ for(const scale of switches.some(d=>deviceScale(project,d)!==1)?[]:[.9,.8]){try{const plan=portEquipmentPlan(project,switches,initial.width*scale),pages=portMapsAtScale(project,db,plan);if(pages.length<best.length)best=pages;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;}}
+ return best;
 }
 function portMapsAtScale(project,db,plan){
  const {width:W,height:H}=pageGeometry(project,'ports');
@@ -375,7 +389,7 @@ function portMapsAtScale(project,db,plan){
  return out;
 }
 function wireless(project,db){
-  const {width:W,height:H,dynamic}=pageGeometry(project,'wireless'),short=H<850,bankStart=short?204:216,gutter=short?24:44;
+  let {width:W,height:H,dynamic}=pageGeometry(project,'wireless');const short=H<850,bankStart=short?204:216,gutter=short?24:44;
   const apIds=new Set([...db.devices.keys()].filter(id=>db.devices.get(id).kind==='ap')),linked=new Set(),groups=new Map();
   for(const e of db.links){
     const left=apIds.has(e.a),right=apIds.has(e.b);if(left===right)continue;
@@ -384,7 +398,20 @@ function wireless(project,db){
     const arr=groups.get(sw)||[];arr.push(record);groups.set(sw,arr);linked.add(record.apId);
   }
   const sourceDevices=[...groups.keys()].map(id=>db.devices.get(id)),span=W-202;
-  const width=Math.min(span,...sourceDevices.filter(d=>!canContinueEquipment(project,d)).map(d=>span*Math.max(90,H-500)/(equipmentSize(project,d,span).h/deviceScale(project,d)))),apSize=72*width/998;
+  let width=Math.min(span,...sourceDevices.filter(d=>!canContinueEquipment(project,d)).map(d=>span*Math.max(90,H-500)/(equipmentSize(project,d,span).h/deviceScale(project,d))));
+  // External number bands have a readable minimum independent of the chosen
+  // device scale. Reserve that common width before AP banks and leads are laid out.
+  for(let attempt=0;attempt<4;attempt++){
+    let required=width;
+    for(const source of sourceDevices)for(const part of equipmentViews(project,source,width,Math.max(80,width/7))){
+      const probe=addDevice({items:[]},project,part,[0,0,width,1],'inspect',{fitWidth:true,padding:equipmentPadding});
+      try{portNumbers([],probe,physicalPorts(part));}catch(error){if(error.code!=='PORT_LABEL_CAPACITY'||!Number.isFinite(error.requiredWidth))throw error;required=Math.max(required,error.requiredWidth/deviceScale(project,part)+2);}
+    }
+    if(required<=width)break;width=required;
+    const actual=Math.max(0,...sourceDevices.map(device=>equipmentSize(project,device,width).w));
+    if(actual>W-202){if(!dynamic)throw Object.assign(Error('This wireless sheet needs a wider page for readable port numbers.'),{code:'PORT_LABEL_CAPACITY'});W=actual+202;project={...project,_pageGeometry:{...project._pageGeometry,wireless:{width:W,height:H}}};}
+  }
+  const apSize=72*width/998;
   const out=[],views=[];
   for(const [sw,items] of groups){const source=db.devices.get(sw),parts=equipmentViews(project,source,width,Math.max(80,width/7)),owners=parts.map(d=>new Set([...physicalPorts(d).map(p=>p.name),...Object.keys(addDevice({items:[]},project,d,[0,0,width,1],'inspect',{fitWidth:true,padding:equipmentPadding}).ports)].map(n=>n.toLowerCase()))),assigned=parts.map(()=>[]);
    for(const edge of items){const owner=owners.findIndex(ports=>ports.has(edge.sp.toLowerCase()));assigned[Math.max(0,owner)].push(edge);}
@@ -557,7 +584,7 @@ function logical(project,db){
     ...(matrix.length?matrix:tablePages(project,'Trunk VLANs','Native and tagged VLAN membership on trunks and aggregates',[['Device',243],['Interface',164],['Native VLAN',145],['Tagged VLANs',235],['LAG',94],['Description',247]],trunks,'No trunk, tagged-port or aggregate records were supplied.'))];
 }
 export function buildPages(project={},options={}){
-  const db=inventory(project),pages=[...corePages(project,physicalInventory(db)),...portMaps(project,db),...wireless(project,physicalInventory(db)),...logical(project,db)];
+  const db=inventory(project),cached=(family,build)=>cachedDraftPages(options.cache,family,project,build),pages=[...cached('core',()=>corePages(project,physicalInventory(db))),...cached('ports',()=>portMaps(project,db)),...cached('wireless',()=>wireless(project,physicalInventory(db))),...cached('logical',()=>logical(project,db)),...cached('switchports',()=>buildSwitchportReports(project))];
   for(const report of cleanReportPages(project.layout?.reportPages,(project.devices||[]).map(d=>d.id))){
     const selected=new Set(report.devices),copy={...project,devices:(project.devices||[]).filter(d=>selected.has(d.id)),links:(project.links||[]).filter(l=>selected.has(l.a)&&selected.has(l.b)),_reportPrefix:'report:'+report.id},data=inventory(copy);
     const generated=report.family==='ports'?portMaps(copy,data):report.family==='wireless'?wireless(copy,physicalInventory(data)):logical(copy,data).filter(p=>pageFamily(p.title)===report.family);
@@ -572,6 +599,10 @@ export function buildPages(project={},options={}){
   const visible=pages.filter(p=>!presentation(project,p).hidden);
   pages.forEach(p=>{
     applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??p.displayName;item.w=Math.max(item.w,textWidth(item.value,item.size,true));}
+    // Switchport sheets already reserve measured headers, keys and footers.
+    // Keep their readable number/marker layout intact while allowing ordinary
+    // object edits and uniform drawing scale like the other page families.
+    if(p.switchportReport){scalePage(p,project);p.svg=svgPage({...p,title:p.displayName});return;}
     if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p);fitDynamicPage(p,project);
     const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
     rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}

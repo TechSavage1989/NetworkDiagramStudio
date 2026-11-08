@@ -38,15 +38,15 @@ function* children(s,tag) {
   for(const m of s.matchAll(re)) yield [m[0],m[1]||''];
 }
 function richText(xml) { return [...children(xml,'t')].map(t=>unescapeXML(t[1])).join(''); }
-function readRows(xml,strings) {
+function readRows(xml,strings,{maxRows=200000,maxColumns=1024}={}) {
   const rows=[];
   for(const match of children(xml,'row')){
-    if(rows.length>200000)throw new Error('Worksheet exceeds the row limit.');
+    if(rows.length>=maxRows)throw new Error('Worksheet exceeds the row limit.');
     const row=[];
     for(const c of match[1].matchAll(/<(?:\w+:)?c(?=[\s>])([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g)){
       const a=attrs(c[1]);let col=0;const letters=/^([A-Z]+)\d+$/.exec(a.r||'')?.[1];
       if(letters)for(const ch of letters)col=col*26+ch.charCodeAt(0)-64;
-      col=letters?col-1:row.length;if(col>=1024)continue;
+      col=letters?col-1:row.length;if(col>=maxColumns)continue;
       const body=c[2]||'', value=children(body,'v').next().value?.[1]||'';
       row[col]=a.t==='s'?strings[Number(value)]||'':a.t==='inlineStr'?richText(body):unescapeXML(value);
     }
@@ -54,21 +54,24 @@ function readRows(xml,strings) {
   }
   return rows;
 }
-export async function workbookTables(file) {
-  const files=await unzip(file,{maxBytes:128*1024*1024,maxEntries:3000});const decoder=new TextDecoder();
-  const xml=path=>{const value=files.get(path);if(!value)return '';const text=decoder.decode(value);if(/<!DOCTYPE|<!ENTITY/i.test(text))throw new Error('DTD declarations are unsupported.');return text;};
+export async function workbookTables(file,worksheetNames=['Devices','Interfaces','Routes'],limits={}) {
+  const {maxBytes=128*1024*1024,maxEntries=3000,maxPartBytes=128*1024*1024}=limits;
+  const selected=new Set(worksheetNames.map(name=>String(name).toLowerCase()));
+  const files=await unzip(file,{maxBytes,maxEntries});const decoder=new TextDecoder();
+  const xml=path=>{const value=files.get(path);if(!value)return '';if(value.length>maxPartBytes)throw new Error('Workbook section is too large.');const text=decoder.decode(value);if(/<!DOCTYPE|<!ENTITY/i.test(text))throw new Error('DTD declarations are unsupported.');return text;};
   const wb=xml('xl/workbook.xml');if(!wb)throw new Error('Missing XLSX workbook.');
   const rids=new Map();
   for(const m of xml('xl/_rels/workbook.xml.rels').matchAll(/<(?:\w+:)?Relationship\s([^>]+)>/g)){
     const a=attrs(m[1]);if(a.TargetMode==='External'||!a.Target||a.Target.includes('..'))continue;
-    rids.set(a.Id,a.Target.startsWith('/')?a.Target.slice(1):'xl/'+a.Target);
+    const part=a.Target.startsWith('/')?a.Target.slice(1):a.Target.startsWith('xl/')?a.Target:'xl/'+a.Target;
+    if(part.startsWith('xl/worksheets/'))rids.set(a.Id,part);
   }
   const strings=[...children(xml('xl/sharedStrings.xml'),'si')].map(m=>richText(m[1]));
   const tables=[];
   for(const m of wb.matchAll(/<(?:\w+:)?sheet\s([^>]+)>/g)){
-    const a=attrs(m[1]);if(!/^(Devices|Interfaces|Routes)$/i.test(a.name||''))continue;
+    const a=attrs(m[1]);if(!selected.has((a.name||'').toLowerCase()))continue;
     const rid=a['r:id']??Object.entries(a).find(([k])=>k.endsWith(':id'))?.[1];
-    const content=xml(rids.get(rid));if(content) tables.push({name:a.name,rows:readRows(content,strings)});
+    const content=xml(rids.get(rid));if(content) tables.push({name:a.name,rows:readRows(content,strings,limits)});
   }
   return tables;
 }

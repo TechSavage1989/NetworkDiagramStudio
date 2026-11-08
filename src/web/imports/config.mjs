@@ -2,6 +2,7 @@ import {cidr, device, empty, ensurePort, ensureVlan, portName, vlans} from './mo
 import {identify} from './hardware.mjs';
 import {parseFirewall} from './firewalls.mjs';
 import {completeConfigHardware} from './config-hardware.mjs';
+import {routerosSnapshotModel} from './routeros-backup.mjs';
 
 const words = s => [...String(s).matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2] ?? m[3]);
 const scalar = s => words(s).join(' ');
@@ -111,6 +112,7 @@ function switchCLI(text,filename) {
     if(/^(?:exit|quit|!|#)$/.test(s)){section='';ports=[];vids=[];continue;}
     if(!/^\s/.test(raw) && /^(?:hostname|router |line |spanning-tree|snmp|aaa |ntp |ip dns|https-|vlan batch)/i.test(s)){section='';ports=[];vids=[];continue;}
     if(section==='vlan' || section==='svi'){
+      if(/^(?:no )?voice$/i.test(s))vids.forEach(id=>{ensureVlan(d,id).voice=!/^no /i.test(s);});
       if((m=/^(?:name|description)\s+(.+)$/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).name=scalar(m[1]);});
       if((m=/^ip address\s+(\d[\d./]*)(?:\s+(\d[\d.]*))?/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).ip=cidr(m[1],m[2]);});
       if((m=/^(tagged|untagged)\s+(.+)$/i.exec(s)))for(const n of ranges(m[2])){const p=ensurePort(d,n);if(m[1]==='untagged')p.native=vids[0];else p.tagged=[...new Set([...(p.tagged||[]),...vids])];}
@@ -198,6 +200,7 @@ function routerOS(text,filename){
 
 export function parseConfig(text,filename='configuration.txt') {
   const s=String(text).replace(/^\uFEFF/,'');
+  if(s.startsWith('# Switchport ROUTEROS INVENTORY\n')){try{return routerosSnapshotModel(JSON.parse(s.slice(s.indexOf('\n')+1)),filename);}catch(error){return {devices:[],links:[],warnings:[filename+': '+error.message]};}}
   if(s.includes('\0'))return {devices:[],links:[],warnings:[filename+': '+(/r5\/version|net\/devices/.test(s.slice(0,65536))?'MikroTik binary backup detected. In RouterOS, run /export file=diagram and import diagram.rsc. Keep sensitive-data export disabled.':'Binary configuration detected. Export a readable text configuration instead of a device restore backup.')]};
   if(/^#config-version=/im.test(s) && !/^\s*config (?:system |vdom|global)/im.test(s))
     return {devices:[],links:[],warnings:[filename+': FortiOS header without clear-text configuration blocks. Supply an unencrypted export, Auvik report, or manual device.']};

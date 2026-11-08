@@ -81,3 +81,9 @@ test('core and wireless stack leads use separate inter-panel lanes instead of cr
   const labels=page.items.filter(i=>i.type==='text');for(const a of labels.filter(i=>i.labelRole||i.titleOwner)){for(const b of labels)if(a!==b)assert.ok(!intersects(a,b,0));for(const p of paths)assert.ok(!crossesText(p.points,a,0));}
  }
 });
+
+
+test('classic Aruba VLAN voice intent remains explicit through report imports',()=>{
+ const parsed=parseConfig('; J9776A Configuration Editor\nhostname LAB-VOICE\nvlan 20\n name Voice\n tagged 1-24\n voice\n exit\nvlan 30\n no voice\n exit\nvlan 40\n name Data\n exit');
+ const device=parsed.devices[0];assert.equal(device.vlans.find(v=>v.id===20).voice,true);assert.equal(device.vlans.find(v=>v.id===30).voice,false);assert.ok(!Object.hasOwn(device.vlans.find(v=>v.id===40),'voice'));
+});

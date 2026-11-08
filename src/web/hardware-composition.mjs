@@ -8,7 +8,7 @@ export function hardwareComposition(members=[],modules=[]){
  }).sort((a,b)=>Number(a.id)-Number(b.id));
  const cards=modules.map(row=>{
   const member=String(row.member??'').trim()?memberId(row.member):'',slot=String(row.slot??'').trim().toUpperCase();
-  if(!/^(?:[A-L]|X2-[12])$/.test(slot))throw Error('Use a module slot from A to L, or X2-1 / X2-2.');
+  if(!/^(?:[A-L]|NM|X2-[12])$/.test(slot))throw Error('Use a module slot from A to L, NM, or X2-1 / X2-2.');
   if(stackMembers.length&&(!member||!seenMembers.has(member)))throw Error('Choose an existing stack member for each module.');
   const key=member+'/'+slot;if(seenSlots.has(key))throw Error('Each member and module slot must be unique.');seenSlots.add(key);
   return {member,slot,model:model(row.model)};

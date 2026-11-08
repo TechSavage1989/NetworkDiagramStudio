@@ -11,9 +11,25 @@ import {applyDrawingEdits,editDeviceShape} from '../drawing-edits.mjs';
 import {linkCaption} from '../link-styles.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
 import {wrapPortText} from '../port-table.mjs';
-import {C,addDevice,bridge,displayPortCaption,fresh,getAnchor,label,linkLegend,mediaInfo,optic,physicalPorts,portList,rate,rect,route} from './scene.mjs';
+import {C,addDevice,bridge,cableWeight,displayPortCaption,fresh,getAnchor,label,linkLegend,mediaInfo,optic,physicalPorts,portList,rate,rect,route} from './scene.mjs';
 
 const name=d=>d?.name||d?.id||'Device';
+function cableName(db,e){return 'L'+(e.idx+1)+' '+name(db.devices.get(e.a))+' '+e.ap+' / '+name(db.devices.get(e.b))+' '+e.bp;}
+function cablePatch(project,page,name){
+ let hash=0;for(const c of JSON.stringify([name.replace(/^L\d+ /,'')]))hash=Math.imul(hash,31)+c.charCodeAt(0)|0;
+ return project.layout?.drawingEdits?.[page.name+'|path|'+hash+'|0'];
+}
+function captionReserve(project,sheet,edges,db){
+ const font=12*presentation(project,sheet.name).textScale,counts=new Map();let pitch=12;
+ for(const edge of edges){
+  if(!sheet.ids.includes(edge.a)&&!sheet.ids.includes(edge.b))continue;
+  for(const id of [edge.a,edge.b])if(sheet.ids.includes(id))counts.set(id,(counts.get(id)||0)+1);
+  const info=mediaInfo(edge.media,db.devices.get(edge.a)?.kind==='ap'||db.devices.get(edge.b)?.kind==='ap');
+  const lines=linkCaption(project,info.name,rate(edge.speed)).filter(Boolean).reduce((n,text)=>n+wrapPortText(text,90,font,true).length,0);
+  pitch=Math.max(pitch,lines*(font+4)+12);
+ }
+ return Math.max(0,20+(Math.max(1,...counts.values())-1)*pitch-124);
+}
 
 const TOP=164,BOTTOM=901,GAP=24,LEFT=430,WIDTH=700;
 // Try readable layouts before continuing a page. Extra rail clearance resolves
@@ -133,7 +149,8 @@ export function corePages(project,inventory){
   const expansion=sheet.expansion||0,railPitch=dynamic?Math.max(12,sheet.labelClearance||0):FITS[sheet.fit||0].railPitch;
   // A taller canvas cannot open the gap between parallel cable rails. Reserve
   // both route spacing and horizontal room when a measured caption needs it.
-  const railReserve=Math.max(0,edges.length-8)*24+Math.max(0,edges.length-1)*(railPitch-12);
+  const stableReserve=dynamic?Math.max(Math.max(0,edges.length-8)*24,captionReserve(aliasProject,sheet,edges,db)):0;
+  const railReserve=Math.max(stableReserve,Math.max(0,edges.length-8)*24+Math.max(0,edges.length-1)*(railPitch-12));
   const measuredHeight=dynamic?sheet.ids.reduce((sum,id)=>sum+measurement(aliasProject,viewDevice(sheet,id),edges.filter(e=>e.a===id||e.b===id),positions,(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH).height+expansion,0):0;
   const W=dynamic?baseW+expansion+railReserve*2+WIDTH*Math.max(0,...sheet.ids.map(id=>deviceScale(aliasProject,viewDevice(sheet,id))-1)):baseW,H=dynamic?Math.max(baseH,TOP+measuredHeight+110,520+edges.length*110):baseH,BOTTOM=H-74;
   const pageProject=dynamic?{...aliasProject,_pageGeometry:{...aliasProject._pageGeometry,core:{width:W,height:H}}}:aliasProject;
@@ -141,7 +158,9 @@ export function corePages(project,inventory){
   const panelOptions=presentation(pageProject,sheet.name).panel;
   if(panelOptions.width!==244||panelOptions.scale!==1||!panelOptions.visible||panelOptions.position!=='left'){const reserve=panelOptions.visible&&panelOptions.position==='left'?panelOptions.width*panelOptions.scale:0;sidebar.width=panelOptions.width;sidebar.contentLeft=reserve?62+reserve:38;sidebar.divider=reserve?56+reserve:38;sidebar.bodyLeft=sidebar.contentLeft+124;}
   sidebar.textScale=panelOptions.textScale*presentation(pageProject,sheet.name).textScale;
-  if(dynamic)sidebar.bodyLeft+=railReserve;
+  // Label retries can expand the canvas, but must not move every unedited
+  // device sideways while the user is moving one selected device.
+  if(dynamic)sidebar.bodyLeft+=stableReserve;
   if(W<1200)sidebar.bodyLeft=Math.max(sidebar.contentLeft+38,Math.min(sidebar.bodyLeft,W-738));
   const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;page.corePageId=sheet.corePageId;
   const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);rect(items,sidebar.divider,145,1,H-214,C.rule);items.at(-1).pageFrame='sidebar';
@@ -182,10 +201,12 @@ export function corePages(project,inventory){
   for(const e of used)for(const [id,port,other,which] of [[e.a,e.ap,e.b,'a'],[e.b,e.bp,e.a,'b']]){
    if(!nodes.has(id)||!localPort(sheet,id,port))continue;
    const node=nodes.get(id),info=mediaInfo(e.media,db.devices.get(e.a).kind==='ap'||db.devices.get(e.b).kind==='ap');
-   const preferred=positions.get(other)<positions.get(id)?'top':'bottom';
-   let anchor=getAnchor(node,port,preferred,e.idx*2+(which==='b'?1:0));
+   const peer=nodes.get(other),preferred=peer?(peer.y+peer.h/2<node.y+node.h/2?'top':'bottom'):positions.get(other)<positions.get(id)?'top':'bottom';
+   const peerPort=which==='a'?e.bp:e.ap,peerPoint=peer&&Object.entries(peer.ports).find(([name])=>name.toLowerCase()===String(peerPort).toLowerCase())?.[1];
+   const weight=cablePatch(pageProject,page,cableName(db,e))?.weight||cableWeight,anchorOptions={weight,...(peer?{peer:{x:peer.x+(peerPoint?.[0]??.5)*peer.w,y:peer.y+(peerPoint?.[1]??.5)*peer.h}}:{})};
+   let anchor=getAnchor(node,port,preferred,e.idx*2+(which==='b'?1:0),anchorOptions);
    if(node.kind==='ap'){
-    const k='uplink.core.'+which+e.idx,side=preferred;node.ports[k]=[.5,side==='top'?0:1];anchor=getAnchor(node,k,side,0);
+    const k='uplink.core.'+which+e.idx,side=preferred;node.ports[k]=[.5,side==='top'?0:1];anchor=getAnchor(node,k,side,0,anchorOptions);
    }
    if(node.kind!=='handoff'&&node.kind!=='ap'&&info.plug&&!anchor.port.startsWith('uplink.'))anchor=optic(page,pageProject,db.devices.get(id),node,anchor,info);
    const data={e,id,which,node,anchor,info},key=id+'/'+anchor.side;
@@ -193,8 +214,8 @@ export function corePages(project,inventory){
   }
   const pinnedTitles=new Set(items.filter(i=>i.titleOwner&&(Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.x)||Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.y))).map(i=>i.titleOwner));
   const obstacles=[...items.filter(i=>i.type==='text'&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>b.x<b.owner.x||b.y<b.owner.y||b.x+b.w>b.owner.x+b.owner.w||b.y+b.h>b.owner.y+b.owner.h)];
-  const stack=[...nodes.values()].filter(n=>n.kind!=='handoff'),withinPage=stack.length&&stack.every(n=>n.x>=sidebar.contentLeft+18&&n.x+n.w<=(W-56));
-  const routingBounds=withinPage?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
+  const stack=[...nodes.values()].filter(n=>n.kind!=='handoff');
+  const routingBounds=stack.length?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
   let planned;
   try{planned=coreRoutes(internal,external,endData,banks,nodes,{...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding),railPitch,scale,obstacles});}
   catch(error){if(error.code==='CORE_LAYOUT_CAPACITY')error.page=page.name;throw error;}
@@ -202,7 +223,7 @@ export function corePages(project,inventory){
   const outer={left:Math.min(routingBounds.left-18,...planned.routes.filter(r=>r.side==='left').map(r=>r.rail)),right:Math.max(routingBounds.right+18,...planned.routes.filter(r=>r.side==='right').map(r=>r.rail))},requests=[];
   for(const r of planned.routes.filter(r=>!r.v)){
    const {e,a,b}=r;
-   route(page,a.anchor,b.anchor,r.points,a.info.color,'L'+(e.idx+1)+' '+name(db.devices.get(e.a))+' '+e.ap+' / '+name(db.devices.get(e.b))+' '+e.bp,a.info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status},[e.a,e.b].map(id=>db.devices.get(id)).find(d=>d.kind==='handoff'&&!project.devices.some(p=>p.id===d.id)));
+   route(page,a.anchor,b.anchor,r.points,a.info.color,cableName(db,e),a.info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status},[e.a,e.b].map(id=>db.devices.get(id)).find(d=>d.kind==='handoff'&&!project.devices.some(p=>p.id===d.id)));
    page.items.at(-1).linkId=e.idx;
    const y=(a.ay+b.ay)/2,text=linkCaption(project,a.info.name,rate(e.speed));
    const horizontal=r.points.slice(1).map((p,i)=>[r.points[i],p]).filter(([a,b])=>a[1]===b[1]).sort((a,b)=>Math.abs(b[1][0]-b[0][0])-Math.abs(a[1][0]-a[0][0]))[0];

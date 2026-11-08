@@ -19,10 +19,18 @@ function outline(w,h,hidden=false){
   const uv=[[0,0],[1,0],[1,1],[0,1],[0,0]];
   return '<Section N="Geometry" IX="0">'+cell('NoFill',hidden?1:0)+cell('NoLine',hidden?1:0)+uv.map(([x,y],i)=>xyRow(i+1,i?'LineTo':'MoveTo',inch(x*w),inch(y*h),'Width*'+x,'Height*'+y)).join('')+'</Section>';
 }
+function ellipseOutline(w,h){
+  return '<Section N="Geometry" IX="0"><Row IX="1" T="Ellipse">'+cell('X',inch(w/2),'Width*0.5')+cell('Y',inch(h/2),'Height*0.5')+cell('A',inch(w),'Width')+cell('B',inch(h/2),'Height*0.5')+cell('C',inch(w/2),'Width*0.5')+cell('D',inch(h),'Height')+'</Row></Section>';
+}
 function rectShape(i,id,H,masterChild,relative){
   return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+ (relative||box(i.x,i.y,i.w,i.h,H))+
     cell('LinePattern',i.stroke==='none'?0:1)+cell('LineColor',i.stroke==='none'?'#FFFFFF':i.stroke)+lineWeight(i.weight||1)+
-    cell('FillPattern',i.fill==='none'?0:1)+cell('FillForegnd',i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+outline(i.w,i.h)+'</Shape>';
+    cell('FillPattern',i.fill==='none'?0:1)+cell('FillForegnd',i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+(i.type==='ellipse'?ellipseOutline(i.w,i.h):outline(i.w,i.h))+'</Shape>';
+}
+function vectorShape(i,id,H){
+  const points=i.commands.filter(command=>command.length===3).map(command=>command.slice(1)),x=Math.min(...points.map(point=>point[0])),y=Math.min(...points.map(point=>point[1])),w=Math.max(.001,Math.max(...points.map(point=>point[0]))-x),h=Math.max(.001,Math.max(...points.map(point=>point[1]))-y);let first=null,row=0;
+  const geometry=i.commands.map(([op,px,py])=>{if(op==='Z'){if(!first)return '';[px,py]=first;op='L';}else if(op==='M')first=[px,py];return xyRow(++row,op==='M'?'MoveTo':'LineTo',inch(px-x),inch(h-py+y),'Width*'+round((px-x)/w),'Height*'+round((h-py+y)/h));}).join('');
+  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+'>'+box(x,y,w,h,H)+cell('LinePattern',!i.stroke||i.stroke==='none'?0:1)+cell('LineColor',!i.stroke||i.stroke==='none'?'#FFFFFF':i.stroke)+lineWeight(i.weight||1)+cell('FillPattern',!i.fill||i.fill==='none'?0:1)+cell('FillForegnd',!i.fill||i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+'<Section N="Geometry" IX="0">'+geometry+'</Section></Shape>';
 }
 function textShape(i,id,H,masterChild,relative){
   const {lines,size:fontSize}=textLayout(i),shown=lines.join('\n');
@@ -185,7 +193,8 @@ function writePackage(pages,stencil){
         const y=i.y+i.h/2,styleId=lineStyles.get(lineStyleKey(i)).id;
         return connector({...i,points:[[i.x,y],[i.x+i.w,y]]},j+1,p.height,byKey,connect,styleId);
       }
-      if(i.type==='rect')return rectShape(i,j+1,p.height);
+      if(i.type==='rect'||i.type==='ellipse')return rectShape(i,j+1,p.height);
+      if(i.type==='vector')return vectorShape(i,j+1,p.height);
       if(i.type==='text')return textShape(i,j+1,p.height);
       if(i.type==='path'){const key=lineStyleKey(i);return connector(i,j+1,p.height,byKey,connect,lineStyles.get(key).id,legendIds.get(key));}
       const m=byKey.get(i.key).m;
