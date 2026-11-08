@@ -53,12 +53,14 @@ test('edited long AP identity captions wrap and preserve stable keys through pag
  const pages=buildPages(reopened).filter(p=>p.title==='Wireless Connections'),edited=pages.flatMap(p=>p.items).filter(i=>i.editKey===item.editKey);assert.equal(edited.length,1);assert.equal(edited[0].value,value);assert.equal(edited[0].color,'#224466');pages.forEach(assertClear);
 });
 
-test('phones, printers and servers show editable model and MAC details in native diagrams and Visio',async()=>{
+test('phones, printers and servers show editable model details in native diagrams and Visio, with MACs in the address panel',async()=>{
  const site={name:'Endpoint lab',devices:['phone','printer','server'].map((kind,i)=>({id:kind,name:'LAB-'+kind.toUpperCase(),kind,vendor:'Example',model:'Lab '+kind,ip:'192.0.2.'+(10+i),mac:'02:00:00:00:01:0'+i,ports:[]})),links:[]};
  const pages=buildPages(site),items=pages.flatMap(p=>p.items);
- for(const d of site.devices){const detail=items.find(i=>i.titleOwner===d.id&&i.titleSlot==='detail');assert.ok(detail.editKey);assert.ok(detail.value.includes(d.model));assert.ok(detail.value.includes('MAC '+d.mac));assert.equal(textLayout(detail).size,12);}
+ for(const d of site.devices){const detail=items.find(i=>i.titleOwner===d.id&&i.titleSlot==='detail');assert.ok(detail.editKey);assert.ok(detail.value.includes(d.model));assert.ok(!detail.value.includes(d.mac),'no MAC text under the device');assert.equal(textLayout(detail).size,12);}
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=[...parts].filter(([path])=>/^visio\/pages\/page\d+\.xml$/.test(path)).map(([,b])=>new TextDecoder().decode(b)).join('');
- for(const d of site.devices){assert.ok(xml.includes(d.model));assert.ok(xml.includes(d.mac));}
+ for(const d of site.devices){assert.ok(xml.includes(d.model));assert.ok(!xml.includes(d.mac));}
+ const withPanel={...site,layout:{presentation:{defaults:{panel:{sections:['addresses']}}}}},panelText=buildPages(withPanel).flatMap(p=>p.items).filter(i=>i.editKey?.includes('|info-panel|addresses|')).map(i=>i.value).join(' ');
+ for(const d of site.devices)assert.ok(panelText.includes(d.mac),'the address panel keeps each MAC');
  const wireless=wirelessSite(),wirelessPages=buildPages(wireless),wirelessParts=await unzip(await exportVisio(wireless,wirelessPages).arrayBuffer()),wirelessXml=[...wirelessParts].filter(([path])=>/^visio\/pages\/page\d+\.xml$/.test(path)).map(([,b])=>new TextDecoder().decode(b)).join('');
  assert.ok(wirelessXml.includes('AP-515'));assert.ok(wirelessXml.includes(wireless.devices[1].mac));
 });
@@ -78,12 +80,12 @@ test('operational chassis and interface MACs are assigned to the right device, n
 
 const manyMacs=()=>Array.from({length:512},(_,i)=>'02:00:00:'+i.toString(16).padStart(6,'0').match(/../g).join(':').toUpperCase());
 
-test('aggregated inventory MACs stay complete in saved data but use a compact diagram caption',async()=>{
+test('aggregated inventory MACs stay complete in saved data and stay out of the device caption',async()=>{
  const addresses=manyMacs(),imported=parseTable(readCSV('Device Name,Type,Make & Model,IP Address(es),MAC Address(es)\nLAB-STACK,Switch,HPE JL558A,192.0.2.10,"'+addresses.join(', ')+'"'));
  const project={name:'Address summary lab',...imported},saved=JSON.stringify(project),d=project.devices[0],pages=buildPages(project),detail=pages[0].items.find(i=>i.titleOwner===d.id&&i.titleSlot==='detail');
- assert.equal(deviceMacs(d).length,512);assert.equal(macCaption(d),'512 MAC addresses');assert.ok(deviceDetails(d).includes('192.0.2.10'));assert.ok(detail.h<50);assert.ok(detail.value.includes('512 MAC addresses'));assert.ok(!detail.value.includes(addresses[0]));assert.equal(textLayout(detail).size,12);
+ assert.equal(deviceMacs(d).length,512);assert.equal(macCaption(d),'512 MAC addresses');assert.ok(deviceDetails(d).includes('192.0.2.10'));assert.ok(detail.h<50);assert.ok(!/MAC/.test(detail.value),'no MAC text under the device');assert.ok(detail.value.includes('192.0.2.10'));assert.equal(textLayout(detail).size,12);
  const reopened=JSON.parse(saved);assert.deepEqual(deviceMacs(reopened.devices[0]),addresses);assert.equal(buildPages(reopened)[0].svg,pages[0].svg);assert.equal(JSON.stringify(project),saved);
- const files=await unzip(await exportVisio(project,pages).arrayBuffer()),xml=new TextDecoder().decode(files.get('visio/pages/page1.xml'));assert.ok(xml.includes('512 MAC addresses'));assert.ok(!xml.includes(addresses.at(-1)));
+ const files=await unzip(await exportVisio(project,pages).arrayBuffer()),xml=new TextDecoder().decode(files.get('visio/pages/page1.xml'));assert.ok(!xml.includes('MAC addresses'));assert.ok(!xml.includes(addresses.at(-1)));
 });
 
 test('interface address summaries retain the named connected-interface fallback and full details',()=>{
@@ -97,7 +99,7 @@ test('full address lists appear only in the selected address panel and keep manu
  const addresses=manyMacs(),project={name:'Address panel lab',devices:[{id:'sw',name:'LAB-SW',kind:'switch',model:'JL558A',macAddresses:addresses,ports:[]}],links:[]},plain=buildPages(project)[0],detail=plain.items.find(i=>i.titleSlot==='detail');
  assert.ok(!plain.svg.includes(addresses.at(-1)));project.layout={presentation:{defaults:{panel:{position:'right',sections:['addresses','models']}}},drawingEdits:{[detail.editKey]:{value:'Approved device caption'}}};
  const page=buildPages(project)[0],addressRow=page.items.find(i=>i.editKey?.includes('|info-panel|addresses|0')),modelRow=page.items.find(i=>i.editKey?.includes('|info-panel|models|0'));
- assert.ok(addressRow);for(const mac of addresses)assert.ok(addressRow.value.includes(mac));assert.ok(modelRow.value.includes('512 MAC addresses'));assert.ok(!modelRow.value.includes(addresses.at(-1)));assert.equal(page.items.find(i=>i.editKey===detail.editKey).value,'Approved device caption');assert.deepEqual(deviceMacs(project.devices[0]),addresses);
+ assert.ok(addressRow);for(const mac of addresses)assert.ok(addressRow.value.includes(mac));assert.ok(!modelRow.value.includes('MAC'));assert.ok(!modelRow.value.includes(addresses.at(-1)));assert.equal(page.items.find(i=>i.editKey===detail.editKey).value,'Approved device caption');assert.deepEqual(deviceMacs(project.devices[0]),addresses);
 });
 
 test('twelve ordinary AP uplinks fit on a single dynamic wireless sheet',()=>{

@@ -63,6 +63,8 @@ Owner follow-up (captions and remaining overlaps):
 
 Owner suggestion: a socket under the empty MM2 bay's caption now rises into the bay and turns under the caption, rather than running between the module's port rows. Its lane stays clear of neighboring socket columns.
 
+Owner follow-up: device captions no longer show MAC addresses or counts ("417 MAC addresses"); the address panel and device editor keep the full list. The MM2 bay caption slides clear of rising cables, and port labels prefer a spot clearly nearest their own cable near the port.
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.

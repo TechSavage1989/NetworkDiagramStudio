@@ -20,17 +20,21 @@ export function deviceModel(device){
  const vendor=text(device?.vendor),model=text(device?.model);
  return [vendor&&(!model||!model.toLowerCase().includes(vendor.toLowerCase()))?vendor:'',model].filter(Boolean).join(' | ');
 }
-export function macCaption(device,port,{full=false}={}){
- const caption=(values,prefix='MAC ')=>full||values.length===1?prefix+values.join(', '):values.length+' MAC addresses';
+// counts:false leaves out summaries such as "417 MAC addresses" (drawing captions
+// show a single identifying address only).
+export function macCaption(device,port,{full=false,counts=true}={}){
+ const caption=(values,prefix='MAC ')=>full||values.length===1?prefix+values.join(', '):counts?values.length+' MAC addresses':'';
  const direct=deviceMacs(device);if(direct.length)return caption(direct);
  const ports=(device?.ports||[]).filter(p=>port==null||text(p.name).toLowerCase()===text(port).toLowerCase());
  const known=ports.map(p=>({port:p,values:deviceMacs(p)})).filter(p=>p.values.length);
  // Inventory reports may aggregate hundreds of local interface addresses.
  // Keep all records, without treating the first as a primary device identity.
- if(!full&&known.length>1){const count=new Set(known.flatMap(p=>p.values)).size;return count+' interface MAC address'+(count===1?'':'es');}
- return known.map(p=>caption(p.values,'MAC '+(port==null?p.port.name+' ':''))).join(' | ');
+ if(!full&&known.length>1){if(!counts)return '';const count=new Set(known.flatMap(p=>p.values)).size;return count+' interface MAC address'+(count===1?'':'es');}
+ return known.map(p=>caption(p.values,'MAC '+(port==null?p.port.name+' ':''))).filter(Boolean).join(' | ');
 }
+// Device captions carry model, platform and address. MAC addresses stay in the
+// device editor and the full-list information panel, not under every device.
 export function deviceDetails(device){
  const platform=text(device?.technology),model=deviceModel(device);
- return [model,platform&&platform.toLowerCase()!==text(device?.model).toLowerCase()?platform:'',text(device?.ip),macCaption(device)].filter(Boolean).join('  |  ');
+ return [model,platform&&platform.toLowerCase()!==text(device?.model).toLowerCase()?platform:'',text(device?.ip)].filter(Boolean).join('  |  ');
 }

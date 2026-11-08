@@ -41,7 +41,7 @@ function measured(project,e,role,value,width,defaults={}){
 }
 function captions(project,db,e,width){
  const ap=db.devices.get(e.apId),register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · '),detail=[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · ');
- const title=measured(project,e,'title',nameOf(ap),width,{key:captionTitleKey(project,db,e),size:18,bold:true,height:26}),registerText=measured(project,e,'register',register,width,{size:13,bold:true,height:21}),detailText=measured(project,e,'detail',detail,width),model=measured(project,e,'model',deviceModel(ap),width),mac=measured(project,e,'mac',macCaption(ap,e.apPort),width),notes=captionFor(project,e)?wrapPortText(captionFor(project,e),width,12):[];
+ const title=measured(project,e,'title',nameOf(ap),width,{key:captionTitleKey(project,db,e),size:18,bold:true,height:26}),registerText=measured(project,e,'register',register,width,{size:13,bold:true,height:21}),detailText=measured(project,e,'detail',detail,width),model=measured(project,e,'model',deviceModel(ap),width),mac=measured(project,e,'mac',macCaption(ap,e.apPort,{counts:false}),width),notes=captionFor(project,e)?wrapPortText(captionFor(project,e),width,12):[];
  return {title,register:registerText,detail:detailText,model,mac,notes,width:Math.max(width,title.w,registerText.w,detailText.w,model.w,mac.w),height:title.height+2+model.height+registerText.height+1+detailText.height+mac.height+2+notes.length*14};
 }
 function captionItems(page,project,db,e,center,y,width,caption){
