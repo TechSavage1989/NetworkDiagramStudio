@@ -116,3 +116,31 @@ test('choosing an arrangement replaces moved positions, keeps styles and survive
 test('an arrangement that cannot be routed falls back instead of failing the drawing',()=>{
  const page=core(arranged(modularRoutingFixture(),'columns-4'));assert.ok(page);assert.ok(page.connectionLayout.columns<4);assert.equal(page.arrangementFallback,true);
 });
+
+// Parallel runs anywhere outside equipment keep the visible gap, including
+// socket leads, and turns inside a module stay clear of other sockets.
+test('an MDF-shaped site keeps every cable apart and off the socket edges in each arrangement',async()=>{
+ const {mdfLookalike}=await import('./fixtures/mdf-lookalike.mjs');
+ for(const mode of ['compact','vertical','columns-2']){
+  const page=core(arranged(mdfLookalike(),mode)),equipment=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path'&&i.sourceLink),segments=[];
+  for(const path of paths)for(let i=1;i<path.points.length;i++){const a=path.points[i-1],b=path.points[i],h=a[1]===b[1];segments.push({path,h,c:h?a[1]:a[0],lo:Math.min(h?a[0]:a[1],h?b[0]:b[1]),hi:Math.max(h?a[0]:a[1],h?b[0]:b[1]),weight:path.weight||4});}
+  const inside=([x,y])=>equipment.some(n=>x>n.x&&x<n.x+n.w&&y>n.y&&y<n.y+n.h);
+  for(let i=0;i<segments.length;i++)for(let j=i+1;j<segments.length;j++){
+   const s=segments[i],t=segments[j];if(s.path===t.path||s.h!==t.h)continue;const lo=Math.max(s.lo,t.lo),hi=Math.min(s.hi,t.hi);if(hi-lo<=.5)continue;
+   const mid=(lo+hi)/2;if(inside(s.h?[mid,s.c]:[s.c,mid]))continue;
+   assert.ok(Math.abs(s.c-t.c)>=(s.weight+t.weight)/2+ROUTE_STYLE.gap-1e-6,mode+': '+s.path.name+' and '+t.path.name+' run '+Math.abs(s.c-t.c).toFixed(1)+' apart');
+  }
+  // Module turns keep a visible gap from the sockets they pass (a socket is about 14 units tall).
+  for(const s of segments.filter(s=>s.h))for(const n of equipment)for(const [name,[px,py]] of Object.entries(n.ports||{})){
+   const x=n.x+px*n.w,y=n.y+py*n.h;if(x<s.lo-2||x>s.hi+2||[s.path.from,s.path.to].some(e=>e?.device===n.key&&e.port===name))continue;
+   assert.ok(Math.abs(s.c-y)>=9,mode+': '+s.path.name+' runs '+Math.abs(s.c-y).toFixed(1)+' from socket '+name);
+  }
+ }
+});
+
+test('generic symbols give each unmatched port its own attachment point',()=>{
+ for(const mode of ['compact','columns-2','columns-3']){
+  const page=core(arranged(mixed(),mode)),ends=page.items.filter(i=>i.type==='path'&&i.sourceLink).flatMap(p=>[p.from,p.to]).filter(e=>/^uplink\./.test(e.port));
+  const points=ends.map(e=>e.device+'@'+e.x.toFixed(2)+','+e.y.toFixed(2));assert.equal(new Set(points).size,points.length,mode+': two cables share an attachment point');
+ }
+});

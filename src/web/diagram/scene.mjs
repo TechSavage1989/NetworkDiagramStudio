@@ -213,8 +213,11 @@ export function getAnchor(g,raw,sideHint,unique,options={}){
   if(id==null && k && !k.includes('/') && !isNaN(+k)) id=keys.find(a=>a===k);
   if(id==null){
     // An unmatched port on a real front has no known jack coordinates. Give it a perimeter attachment.
-    id='uplink.'+unique;const frac=.14+.72*((unique%7)+1)/8;
-    g.ports[id]=[frac,sideHint==='top'?0:1];
+    // Another unmatched port on the same side takes the next free slot, so
+    // two cables never share one attachment point.
+    id='uplink.'+unique;const y=sideHint==='top'?0:1,slot=n=>.14+.72*(n+1)/8,taken=Object.entries(g.ports).filter(([key,p])=>key!==id&&key.startsWith('uplink.')&&p[1]===y).map(([,p])=>p[0]);
+    let frac=slot(unique%7);for(let n=0;n<7&&taken.some(x=>Math.abs(x-frac)<1e-6);n++)frac=slot((unique+n+1)%7);
+    g.ports[id]=[frac,y];
   }
   const [nx,ny]=g.ports[id];
   const regions=g.panelRegions||[],region=regions.find(r=>nx>=(r.x??0)-1e-8&&nx<=(r.x??0)+(r.w??1)+1e-8&&ny>=r.y-1e-8&&ny<=r.y+r.h+1e-8);

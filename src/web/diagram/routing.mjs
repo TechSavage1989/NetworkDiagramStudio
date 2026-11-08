@@ -26,7 +26,7 @@ const clean=points=>collapseSpikes(simplifyRoute(points));
 // Shared drawing rhythm (scene units, 96 dpi). Parallel cables keep a visible
 // white gap, cable rails keep clear of every device body, and finished routes
 // are redistributed onto evenly pitched tracks inside each open channel.
-export const ROUTE_STYLE=Object.freeze({clearance:24,gap:6,pitch:18,rowPitch:20,titleReserve:34,detailReserve:26,modulePitch:9});
+export const ROUTE_STYLE=Object.freeze({clearance:24,gap:6,pitch:18,rowPitch:20,titleReserve:34,detailReserve:26,modulePitch:10});
 const separation=(a,b)=>(a+b)/2+ROUTE_STYLE.gap;
 function segments(points){return points.slice(1).map((b,i)=>({a:points[i],b,h:points[i][1]===b[1]})).filter(s=>s.a[0]!==s.b[0]||s.a[1]!==s.b[1]);}
 import {crossesText} from './labels.mjs';
@@ -38,7 +38,9 @@ function crossesPanel(route,node){
   const middle=[[route.a.exitX,route.a.ay],[route.rail,route.a.ay],[route.rail,route.b.ay],[route.b.exitX,route.b.ay]];
   if(crossesText(middle,{x:node.x,y:node.y,w:node.w,h:node.h},(route.weight||4)/2-.01))return true;
  }
- const regions=node.moduleChannel&&!route.hosts.includes(node.key)?[{y:0,h:1}]:node.panelRegions?.length?node.panelRegions.filter(region=>!region.empty||!route.hosts.includes(node.key)):[{y:0,h:1}];
+ // Equipment a cable does not connect to is solid: its own member or module
+ // gaps are corridors only for its own leads.
+ const regions=!route.hosts.includes(node.key)?[{y:0,h:1}]:node.panelRegions?.length?node.panelRegions.filter(region=>!region.empty||!route.hosts.includes(node.key)):[{y:0,h:1}];
  return regions.some(region=>{
   const box={x:node.x+(region.x??0)*node.w,y:node.y+region.y*node.h,w:(region.w??1)*node.w,h:region.h*node.h};
   const inside=([x,y])=>x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h;
@@ -169,6 +171,9 @@ export function planModuleEscapes(anchors,{weight=4,pitch=6,minX=-Infinity,maxX=
    if(group){group.list.push(t);group.lo=Math.max(group.lo,c0);group.hi=Math.min(group.hi,c1);}else byChannel.push({list:[t],lo:c0,hi:c1});
   }
   for(const {list,lo:c0,hi:c1} of byChannel){
+   // Mixed channels keep the planned tracks, which already hold the gap
+   // across both directions; re-spreading would squeeze the wider channel.
+   if(new Set(list.map(t=>t.anchor.moduleEscape.channel.join('/'))).size>1)continue;
    const sorted=list.slice().sort((a,b)=>a.x-b.x),touch=(a,b)=>Math.min(a.high,b.high)>Math.max(a.low,b.low);
    for(const [i,t] of sorted.entries()){t.layer=0;for(const prior of sorted.slice(0,i))if(touch(prior,t))t.layer=Math.max(t.layer,prior.layer+1);}
    const layers=Math.max(...sorted.map(t=>t.layer))+1,width=Math.max(...sorted.map(t=>t.weight));
@@ -185,15 +190,21 @@ export function planModuleEscapes(anchors,{weight=4,pitch=6,minX=-Infinity,maxX=
   for(const group of groups.values()){
    const order=group.slice().sort((a,b)=>Math.abs(result.get(a).x-a.x)-Math.abs(result.get(b).x-b.x)||a.y-b.y||a.port.localeCompare(b.port));
    let chosen;
-   // Prefer a readable module pitch; tighter levels only when the bay is small.
-   for(const level of [ROUTE_STYLE.modulePitch,7,5.5,0]){
+   // Prefer a readable module pitch with clear socket edges; tighter levels
+   // and the full band only when the bay is small.
+   for(const [inset,level] of [true,false].flatMap(inset=>[ROUTE_STYLE.modulePitch,7,5.5,0].map(level=>[inset,level]))){
+    if(chosen)break;
     const placed=[];
     for(const anchor of order){
      const target=result.get(anchor),spec=anchor.moduleEscape,bands=target.via==='center'?spec.bands:spec.outerBands;
      // Use the band above or below the sockets with the most room per lead,
      // so a busy module splits its turns instead of crowding one band.
      let best;
-     for(const [index,[lo,hi]] of bands.entries()){
+     // Bands run edge to edge between module frames and socket rows. Keep a
+     // visible gap from both edges; a band too small for it uses its middle.
+     const pad=inset?(anchor.weight||weight)/2+3:0;
+     for(const [index,band] of bands.entries()){
+      const [lo,hi]=!pad?band:band[1]-band[0]>2*pad?[band[0]+pad,band[1]-pad]:[(band[0]+band[1])/2,(band[0]+band[1])/2];
       const separation=p=>Math.max(level,((anchor.weight||weight)+(p.anchor.weight||weight))/2+.25);
       const candidates=[lo,hi,...placed.flatMap(p=>[p.y-separation(p),p.y+separation(p)])].filter(y=>y>=lo-1e-7&&y<=hi+1e-7).sort((a,b)=>Math.abs(a-anchor.y)-Math.abs(b-anchor.y));
       const y=candidates.find(y=>!placed.some(p=>overlap(anchor.x,target.x,p.anchor.x,p.x)>.01&&Math.abs(y-p.y)<separation(p)-1e-7));
@@ -208,12 +219,17 @@ export function planModuleEscapes(anchors,{weight=4,pitch=6,minX=-Infinity,maxX=
    }
    if(!chosen)throw Object.assign(Error('This module needs more room for separate cables. Enlarge the device or move some connections to another page.'),{code:'CORE_LAYOUT_CAPACITY',owner:order[0].moduleEscape.owner,port:order[0].port});
    // Even spacing inside each band, keeping the chosen order of overlapping turns.
+   // Center and exterior turns can use overlapping bands of the same module;
+   // those keep their first placement, which already holds every separation.
    const bands=new Map();for(const p of chosen){const key=p.band.join('/');if(!bands.has(key))bands.set(key,[]);bands.get(key).push(p);}
-   for(const list of bands.values()){
+   const shared=key=>{const [lo,hi]=key.split('/').map(Number);return [...bands.keys()].some(other=>{if(other===key)return false;const [a,b]=other.split('/').map(Number);return Math.min(hi,b)>Math.max(lo,a)+1e-7;});};
+   for(const [key,list] of bands.entries()){
+    if(shared(key))continue;
     const sorted=list.slice().sort((a,b)=>a.y-b.y),touch=(a,b)=>overlap(a.anchor.x,a.x,b.anchor.x,b.x)>.01;
     for(const [i,p] of sorted.entries()){p.layer=0;for(const prior of sorted.slice(0,i))if(touch(prior,p))p.layer=Math.max(p.layer,prior.layer+1);}
     const layers=Math.max(...sorted.map(p=>p.layer))+1,[lo,hi]=sorted[0].band;
-    if(layers<2)continue;
+    // A lone turn runs along the middle of its band, clear of the socket edges.
+    if(layers<2){for(const p of sorted)p.y=(lo+hi)/2;continue;}
     const step=Math.min(ROUTE_STYLE.rowPitch,(hi-lo)/(layers-1)),start=(lo+hi)/2-step*(layers-1)/2;
     if(step+1e-7<Math.max(...sorted.map(p=>(p.anchor.weight||weight)+.25)))continue;
     for(const p of sorted)p.y=start+p.layer*step;
@@ -499,6 +515,17 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch}){
  // Final repair: a run left closer than the visible gap to a parallel cable
  // moves to the nearest clear coordinate inside its channel, validated like
  // every other change. Bounded by a small budget per page.
+ const leadConflicts=r=>{
+  let count=0;const own=segments(r.points);
+  for(const o of routes)if(o!==r)for(const t of segments(o.points))for(const q of own){
+   if(q.h!==t.h)continue;const along=q.h?0:1,c1=q.a[q.h?1:0],c2=t.a[t.h?1:0];
+   const lo=Math.max(Math.min(q.a[along],q.b[along]),Math.min(t.a[along],t.b[along])),hi=Math.min(Math.max(q.a[along],q.b[along]),Math.max(t.a[along],t.b[along]));
+   if(hi-lo<=.5||Math.abs(c1-c2)>=separation(r.weight||4,o.weight||4)-.001)continue;
+   const mid=(lo+hi)/2,[x,y]=q.h?[mid,c1]:[c1,mid];
+   if(![...nodes.values()].some(n=>x>n.x&&x<n.x+n.w&&y>n.y&&y<n.y+n.h))count++;
+  }
+  return count;
+ };
  const repair=kind=>{
   const row=kind==='row';let budget=Math.max(40,routes.length*4);
   for(const group of prepare(kind))for(const item of group){
@@ -507,10 +534,14 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch}){
    // Rails also keep the standard clearance from equipment they run beside.
    const beside=c=>!row&&!item.lane&&[...nodes.values()].some(n=>overlap(item.lo,item.hi,n.y,n.y+n.h)>1&&(c<n.x?n.x-c:c>n.x+n.w?c-n.x-n.w:-1)>=0&&(c<n.x?n.x-c:c-n.x-n.w)<ROUTE_STYLE.clearance-item.w/2-.01);
    const crowded=c=>beside(c)||lines.some(l=>overlap(item.lo,item.hi,l.lo,l.hi)>.01&&Math.abs(l.c-c)<separation(item.w,l.w)-.001);
-   if(!crowded(item.c))continue;
+   // Moving a row also moves the ends of its leads: count every parallel
+   // overlap of the whole cable outside equipment, before and after.
+   const touching=c=>{const saved=snapshot([item.r]);item.set(c);item.r.points=composeRoute(item.r);const n=leadConflicts(item.r);restore(saved);return n;};
+   const base=leadConflicts(item.r);
+   if(!base&&!crowded(item.c))continue;
    const options=[];for(let k=1;k<=30;k++)options.push(item.c+k*2,item.c-k*2);
    for(const c of options){
-    if(c<item.bounds.hardMin-.001||c>item.bounds.hardMax+.001||crowded(c))continue;
+    if(c<item.bounds.hardMin-.001||c>item.bounds.hardMax+.001||crowded(c)||base&&touching(c)>=base)continue;
     if((item.joints||[]).some(j=>j.item&&(Math.sign(j.x-item.c)!==Math.sign(j.item.c-c)||Math.abs(j.item.c-c)<separation(item.w,j.item.w)-.001)))continue;
     budget--;if(apply([[item,c]],'separate')){item.c=c;break;}
     if(budget<=0)return;

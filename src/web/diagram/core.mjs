@@ -193,7 +193,9 @@ export function corePages(project,inventory){
   // spread over the gaps. One column keeps the full measured reserve. Later
   // capacity retries widen this reserve with the canvas.
   const away=edges.filter(e=>sheet.ids.includes(e.a)!==sheet.ids.includes(e.b)).length;
-  const reserveFor=layout=>{if(layout.columns<2)return stableReserve;const first=new Set(layout.ids[0]),inside=measuredEdges.filter(e=>first.has(e.a)&&first.has(e.b)).length;return ROUTE_STYLE.pitch*Math.max(0,Math.ceil(inside/2)+away-4)+expansion/2;};
+  // Any cable of a first-column device may take the left exterior: chassis
+  // modules turn out to their nearest side and continuation links leave left.
+  const reserveFor=layout=>{if(layout.columns<2)return stableReserve;const first=new Set(layout.ids[0]),touching=measuredEdges.filter(e=>first.has(e.a)||first.has(e.b)||first.has(db.devices.get(e.a)?.owner)||first.has(db.devices.get(e.b)?.owner)).length;return Math.max(ROUTE_STYLE.pitch,railPitch)*Math.max(0,Math.ceil(touching/2)+away-4)+expansion/2;};
   const choices=dynamic&&!hasPositions?arrangeCore(owners.map(id=>({id,w:measured.get(id).width,h:measured.get(id).height+expansion})),measuredEdges,{mode:arrangement,weight:cableWeight,extraTracks:sheet.columnTracks||0,reserve:reserveFor}):[];
   const packing=choices[Math.min(sheet.rank||0,choices.length-1)]||null;sheet.choices=choices.length;
   sheet.packedColumns=packing?.columns||1;

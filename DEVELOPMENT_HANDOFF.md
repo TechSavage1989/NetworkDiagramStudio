@@ -36,6 +36,15 @@ On the 16-device lab:
 - close parallels fall from 2 to 0;
 - cable length falls by about a third.
 
+Owner review of the first build (Visio export and a real MDF import, reproduced with tests/fixtures/mdf-lookalike.mjs):
+- Inline connector captions now paint their white background in Visio. The text geometry is filled and has no line.
+- Cables no longer thread through the gaps between another stack's members; unrelated equipment is solid.
+- Socket leads of vertically stacked devices no longer overlap.
+- Module turns stay off the socket edges. The preferred module pitch is the standard separation (10).
+- Overlapping module bands and corridor channels are no longer re-spread separately.
+- Generic symbols give each unmatched port its own attachment point.
+- The left reserve for multi-column pages counts every cable on the first column.
+
 Known limits:
 - With many leads from one chassis module, explicit Vertical or 2-column choices can still carry the module band's tighter pitch a short way outside the chassis. This was pre-existing.
 - Fixed paper keeps the existing column pagination.

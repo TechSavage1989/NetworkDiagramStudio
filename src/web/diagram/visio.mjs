@@ -15,9 +15,11 @@ const lineWeight=pixels=>cell('LineWeight',inch(pixels),round(pixels*72/96)+' pt
 function box(x,y,w,h,H){return cell('PinX',inch(x+w/2))+cell('PinY',inch(H-y-h/2))+size(w,h);}
 function size(w,h){return cell('Width',inch(w))+cell('Height',inch(h))+cell('LocPinX',inch(w/2),'Width*0.5')+cell('LocPinY',inch(h/2),'Height*0.5')+cell('Angle',0);}
 function xyRow(ix,t,x,y,fx,fy,a){return '<Row IX="'+ix+'" T="'+t+'">'+cell('X',x,fx)+cell('Y',y,fy)+(a==null?'':cell('A',a))+'</Row>';}
-function outline(w,h,hidden=false){
+// A hidden outline draws nothing unless filled: connector text on its own
+// cable needs its white background painted, still without a border.
+function outline(w,h,hidden=false,filled=false){
   const uv=[[0,0],[1,0],[1,1],[0,1],[0,0]];
-  return '<Section N="Geometry" IX="0">'+cell('NoFill',hidden?1:0)+cell('NoLine',hidden?1:0)+uv.map(([x,y],i)=>xyRow(i+1,i?'LineTo':'MoveTo',inch(x*w),inch(y*h),'Width*'+x,'Height*'+y)).join('')+'</Section>';
+  return '<Section N="Geometry" IX="0">'+cell('NoFill',hidden&&!filled?1:0)+cell('NoLine',hidden?1:0)+uv.map(([x,y],i)=>xyRow(i+1,i?'LineTo':'MoveTo',inch(x*w),inch(y*h),'Width*'+x,'Height*'+y)).join('')+'</Section>';
 }
 function ellipseOutline(w,h){
   return '<Section N="Geometry" IX="0"><Row IX="1" T="Ellipse">'+cell('X',inch(w/2),'Width*0.5')+cell('Y',inch(h/2),'Height*0.5')+cell('A',inch(w),'Width')+cell('B',inch(h/2),'Height*0.5')+cell('C',inch(w/2),'Width*0.5')+cell('D',inch(h),'Height')+'</Row></Section>';
@@ -38,7 +40,7 @@ function textShape(i,id,H,masterChild,relative){
   return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',i.background?1:0)+(i.background?cell('FillForegnd',i.background):'')+
     ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+
     '<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(fontSize))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
-    '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true)+
+    '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true,!!i.background)+
     '<Text><cp IX="0"/><pp IX="0"/>'+xml(shown)+'</Text></Shape>';
 }
 function connectionRows(ports,w,h,keys){

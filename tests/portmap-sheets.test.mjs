@@ -62,3 +62,11 @@ test('inline connector captions and booklet marks remain editable native Visio s
  const xml=[...parts].filter(([key])=>/^visio\/pages\/page\d+\.xml$/.test(key)).map(([,bytes])=>new TextDecoder().decode(bytes)).join('');
  assert.ok(xml.includes('Trunks / LAGs'));assert.ok(xml.includes('Port inventory'));
 });
+
+test('inline connector text paints its white background in native Visio',async()=>{
+ const site=lab(),pages=buildPages(site),page=pages[0];
+ page.items.push({type:'text',x:600,y:300,w:80,h:16,value:'Inline caption',size:12,bold:true,color:'#111827',align:'center',background:'#FFFFFF',full:true,labelRole:'media',editKey:page.name+'|media|inline-test'});
+ const parts=await unzip(await exportVisio(site,pages).arrayBuffer()),xml=new TextDecoder().decode(parts.get('visio/pages/page1.xml'));
+ const shape=xml.split('<Shape ').find(s=>s.includes('Inline caption'));assert.ok(shape);
+ assert.match(shape,/N="FillPattern" V="1"/);assert.match(shape,/N="NoFill" V="0"/);assert.match(shape,/N="NoLine" V="1"/);
+});
