@@ -11,7 +11,7 @@ const sha256=async value=>{
 // Build each file independently so a capacity or encoding failure cannot discard
 // another device's complete package. The manifest records the actual outcomes.
 export async function browserReportPackage(project,{png,pdf,progress=()=>{}}){
- const request=reportRequest(project),report=buildReportPackage(project),parts={},used=new Set(),items=[],stem=reportFileStem(request.paper);
+ const request=reportRequest(project),report=buildReportPackage(project),parts={},used=new Set(),items=[],paperStem=reportFileStem(request.paper);
  for(const [index,item] of report.items.entries()){
   const stem=safe(item.folder||item.name);let directory=stem;for(let suffix=2;used.has(directory.toLowerCase());suffix++)directory=stem+'-'+suffix;used.add(directory.toLowerCase());
   const base=directory+'/',errors=[],written=[];
@@ -21,8 +21,8 @@ export async function browserReportPackage(project,{png,pdf,progress=()=>{}}){
   const attempt=async(name,render)=>{try{put(name,await render());}catch(error){errors.push(name+': '+error.message);}};
   progress('Exporting '+(index+1)+' of '+report.items.length+': '+item.name);
   if(item.pages.wall.length)await attempt('wall-chart.png',()=>png(item.pages.wall[0]));
-  if(item.pages.onePage.length){await attempt(stem+'-one-page.png',()=>png(item.pages.onePage[0]));await attempt(stem+'-one-page.pdf',()=>pdf(item.pages.onePage,{title:item.name}));}
-  if(item.pages.booklet.length)await attempt(stem+'-booklet.pdf',()=>pdf(item.pages.booklet,{title:item.name}));
+  if(item.pages.onePage.length){await attempt(paperStem+'-one-page.png',()=>png(item.pages.onePage[0]));await attempt(paperStem+'-one-page.pdf',()=>pdf(item.pages.onePage,{title:item.name}));}
+  if(item.pages.booklet.length)await attempt(paperStem+'-booklet.pdf',()=>pdf(item.pages.booklet,{title:item.name}));
   if(item.capacityError)errors.push(item.capacityError);
   errors.push(...item.validation.errors);
   const complete=item.filenames.filter(name=>name!=='validation-report.txt').every(name=>written.includes(name));
@@ -34,9 +34,9 @@ export async function browserReportPackage(project,{png,pdf,progress=()=>{}}){
  const shared=report.combined,combinedErrors=[];
  const combinedAttempt=async(name,render)=>{try{parts[name]=await render();}catch(error){combinedErrors.push(name+': '+error.message);}};
  if(shared.pages.length){
-  await combinedAttempt('workspace-'+stem+'-diagrams.pdf',()=>pdf(shared.pages,{title:request.title||project.name}));
+  await combinedAttempt('workspace-'+paperStem+'-diagrams.pdf',()=>pdf(shared.pages,{title:request.title||project.name}));
   for(const [index,page] of shared.pages.entries())await combinedAttempt('workspace-sheet-'+String(index+1).padStart(3,'0')+'.png',()=>png(page));
-  if(shared.booklet.length)await combinedAttempt('workspace-'+stem+'-booklets.pdf',()=>pdf(shared.booklet,{title:request.title||project.name}));
+  if(shared.booklet.length)await combinedAttempt('workspace-'+paperStem+'-booklets.pdf',()=>pdf(shared.booklet,{title:request.title||project.name}));
   parts['workspace-layout.json']=json(shared.pages.map(page=>({name:page.name,width:page.width,height:page.height,deviceIds:page.sourceDeviceIds,role:page.role})));
   parts['workspace-palette.json']=json(request.palette);
  }
