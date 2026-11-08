@@ -43,8 +43,13 @@ test('quick scaling respects page transforms and native child selection, preserv
  project.layout.drawingEdits=scaleDrawingItems(page,{},[device.editKey,device.children[0].editKey],.75);
  assert.equal(Object.keys(project.layout.drawingEdits).length,1);
  const rebuilt=buildPages(JSON.parse(JSON.stringify(project)))[0],actual=rebuilt.items.find(i=>i.editKey===device.editKey);assert.equal(actual.w,device.w*.75);assert.equal(actual.h,device.h*.75);
- for(const cable of rebuilt.items.filter(i=>i.type==='path')){assert.deepEqual(cable.points[0],[cable.from.x,cable.from.y]);assert.deepEqual(cable.points.at(-1),[cable.to.x,cable.to.y]);}
- assert.match(rebuilt.svg,/class="cable-hit-target"/);assert.match(rebuilt.svg,/stroke-width="16" vector-effect="non-scaling-stroke"/);
+ const cables=rebuilt.items.filter(i=>i.type==='path');
+ for(const cable of cables)for(const [end,point] of [[cable.from,cable.points[0]],[cable.to,cable.points.at(-1)]]){
+  assert.deepEqual(point,[end.x,end.y]);const owner=rebuilt.items.find(item=>item.key===end.device),port=owner.ports[end.port];
+  assert.ok(Math.abs(point[0]-owner.x-port[0]*owner.w)<.001);assert.ok(Math.abs(point[1]-owner.y-port[1]*owner.h)<.001);
+ }
+ const widths=[...rebuilt.svg.matchAll(/class="diagram-cable"[^>]*stroke-width="([\d.]+)"/g)].map(match=>Number(match[1]));assert.deepEqual(widths,cables.map(cable=>cable.weight));
+ assert.doesNotMatch(rebuilt.svg,/cable-hit-target|cable-proximity-halo|cable-hover|data-editor-only|vector-effect="non-scaling-stroke"/);
 });
 test('logical adjacency stays available without conflicting with or duplicating physical cables',()=>{
  const devices=['a','b'].map(id=>({id,name:'LAB-'+id,kind:'switch',model:'JL558A',ports:[{name:'1/50'},{name:'VLAN20',type:'logical'},{name:'uplink-vlan',parent:'1/50'},{name:'Trk1',type:'aggregate'}]}));

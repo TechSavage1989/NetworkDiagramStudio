@@ -17,4 +17,4 @@ test('long trunk labels wrap fully and spill only when measured content needs an
 });
 
 // Fixed-paper regression coverage; new projects use a dynamic canvas.
-function buildPages(project){return buildPaperPages({...project,layout:{...project.layout,pageSetup:project.layout?.pageSetup||{default:{preset:'original'}}}});}
+function buildPages(project){return buildPaperPages({...project,layout:{...project.layout,documentation:'full',pageSetup:project.layout?.pageSetup||{default:{preset:'original'}}}});}
