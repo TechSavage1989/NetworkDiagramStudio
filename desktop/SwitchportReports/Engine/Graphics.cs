@@ -636,14 +636,19 @@ public static class Png
 }
 public static class Pdf
 {
-    public static void Save(List<Scene> scenes,string path)
+    public static void Save(List<Scene> scenes,string path,ReportPaper? paper=null)
     {
+        var chosen=paper??ReportPaper.Default;
         using var document=SkiaSharp.SKDocument.CreatePdf(path);
         foreach(var scene in scenes)
         {
-            var canvas=document.BeginPage(841.89f,595.28f);canvas.Clear(SkiaSharp.SKColors.White);
-            float scale=(float)Math.Min(805.89/scene.Width,559.28/scene.Height);
-            canvas.Translate((float)(841.89-scene.Width*scale)/2,18);canvas.Scale(scale);ReportRenderer.Draw(canvas,scene);document.EndPage();
+            var canvas=document.BeginPage((float)chosen.WidthPt,(float)chosen.HeightPt);
+            canvas.Clear(SkiaSharp.SKColors.White);
+            // Keep every native RJ45/SFP socket proportional. Choose the largest
+            // uniform fit with an 18-point printable margin on every side.
+            float scale=(float)Math.Min((chosen.WidthPt-36)/scene.Width,(chosen.HeightPt-36)/scene.Height);
+            canvas.Translate((float)((chosen.WidthPt-scene.Width*scale)/2),(float)((chosen.HeightPt-scene.Height*scale)/2));
+            canvas.Scale(scale);ReportRenderer.Draw(canvas,scene);document.EndPage();
         }
         document.Close();
     }

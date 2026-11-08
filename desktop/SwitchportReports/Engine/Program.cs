@@ -4,7 +4,7 @@ using System.Text.Json;
 using SwitchportGenerator;
 public static class GeneratorEntry
 {
-    static readonly string[] Visuals={"wall-chart.png","a4-one-page.png","a4-one-page.pdf","a4-booklet.pdf"};
+    static string[] VisualsFor(ReportPaper paper)=>new[]{"wall-chart.png",paper.Stem+"-one-page.png",paper.Stem+"-one-page.pdf",paper.Stem+"-booklet.pdf"};
     static readonly JsonSerializerOptions JsonOptions=new(){WriteIndented=true};
     static string Hash(byte[] bytes)=>Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     static int Main(string[] args)=>Run(args);
@@ -93,28 +93,30 @@ public static class GeneratorEntry
         }
     }
     /// <summary>Render a normalized typed inventory without accepting or writing a raw configuration.</summary>
-    public static int RunInventory(Inventory inv,string output,ReportLogo? reportLogo=null,IReadOnlyList<SupplementarySource>? sources=null,RenderPalette? renderPalette=null)
+    public static int RunInventory(Inventory inv,string output,ReportLogo? reportLogo=null,IReadOnlyList<SupplementarySource>? sources=null,RenderPalette? renderPalette=null,ReportPaper? paper=null)
     {
+        var chosen=paper??ReportPaper.Default;
         output=Path.GetFullPath(output);
         Directory.CreateDirectory(output);
         if(Directory.EnumerateFileSystemEntries(output).Any())throw new InvalidOperationException("Output directory must be empty. Existing files were not modified.");
         var supplementary=(sources??Array.Empty<SupplementarySource>()).ToList();
         SupplementaryData.Validate(supplementary);
         SupplementaryData.Apply(inv,supplementary);
-        try{return RenderInventory(inv,output,reportLogo,supplementary,renderPalette);}
+        try{return RenderInventory(inv,output,reportLogo,supplementary,renderPalette,chosen);}
         catch(OnePageCapacityException ex)
         {
-            inv.Blockers.Add(ex.Message);WriteReport(output,inv,"",false);
+            inv.Blockers.Add(ex.Message);WriteReport(output,inv,"",false,paper:chosen);
             return 3;
         }
         catch
         {
-            foreach(string file in Visuals)File.Delete(Path.Combine(output,file));
+            foreach(string file in VisualsFor(chosen))File.Delete(Path.Combine(output,file));
             throw;
         }
     }
-    static int RenderInventory(Inventory inv,string output,ReportLogo? reportLogo,List<SupplementarySource> supplementary,RenderPalette? renderPalette)
+    static int RenderInventory(Inventory inv,string output,ReportLogo? reportLogo,List<SupplementarySource> supplementary,RenderPalette? renderPalette,ReportPaper? paper=null)
     {
+            var chosen=paper??ReportPaper.Default;var visuals=VisualsFor(chosen);
             renderPalette?.Apply(inv);
             var placements=Charts.Layout(inv);inv.Blockers.AddRange(Charts.Validate(inv,placements));inv.Blockers=inv.Blockers.Distinct().ToList();
             string json=JsonSerializer.Serialize(inv,JsonOptions);byte[] jsonBytes=new UTF8Encoding(false).GetBytes(json);string hash=Hash(jsonBytes);
@@ -135,7 +137,7 @@ public static class GeneratorEntry
             SupplementaryData.WriteExports(output, supplementary);
             string summary=Summary(inv)+SupplementaryData.Summary(supplementary);
             File.WriteAllText(Path.Combine(output,"technician-summary.txt"),summary);
-            if(inv.Blockers.Count>0){WriteReport(output,inv,hash,false);Console.Error.WriteLine("RENDER_BLOCKED=TRUE\n"+string.Join('\n',inv.Blockers));return 3;}
+            if(inv.Blockers.Count>0){WriteReport(output,inv,hash,false,paper:chosen);Console.Error.WriteLine("RENDER_BLOCKED=TRUE\n"+string.Join('\n',inv.Blockers));return 3;}
             string staging=Path.Combine(output,".rendering");Directory.CreateDirectory(staging);
             try
             {
@@ -146,22 +148,22 @@ public static class GeneratorEntry
                 var sceneErrors=booklet.SelectMany(Charts.ValidateScene).Distinct().ToList();
                 if(sceneErrors.Count>0)
                 {
-                    inv.Blockers.AddRange(sceneErrors);WriteReport(output,inv,hash,false);
+                    inv.Blockers.AddRange(sceneErrors);WriteReport(output,inv,hash,false,paper:chosen);
                     Console.Error.WriteLine("RENDER_BLOCKED=TRUE\n"+string.Join('\n',sceneErrors));return 3;
                 }
-                // Both raster diagrams use the same A4 landscape canvas at 300 DPI.
-                Png.Save(scene,Path.Combine(staging,Visuals[0]),3508,2480,true);
-                Png.Save(scene,Path.Combine(staging,Visuals[1]),3508,2480,true);
-                Pdf.Save(new(){scene},Path.Combine(staging,Visuals[2]));
-                Pdf.Save(booklet,Path.Combine(staging,Visuals[3]));
-                foreach(string file in Visuals){if(new FileInfo(Path.Combine(staging,file)).Length<100)throw new InvalidOperationException("Generated chart is empty.");}
-                foreach(string file in Visuals)File.Move(Path.Combine(staging,file),Path.Combine(output,file));
-                WriteReport(output,inv,hash,true,scene);
+                // Raster exports retain 300 DPI at the selected sheet dimensions.
+                Png.Save(scene,Path.Combine(staging,visuals[0]),chosen.PixelWidth,chosen.PixelHeight,true);
+                Png.Save(scene,Path.Combine(staging,visuals[1]),chosen.PixelWidth,chosen.PixelHeight,true);
+                Pdf.Save(new(){scene},Path.Combine(staging,visuals[2]),chosen);
+                Pdf.Save(booklet,Path.Combine(staging,visuals[3]),chosen);
+                foreach(string file in visuals){if(new FileInfo(Path.Combine(staging,file)).Length<100)throw new InvalidOperationException("Generated chart is empty.");}
+                foreach(string file in visuals)File.Move(Path.Combine(staging,file),Path.Combine(output,file));
+                WriteReport(output,inv,hash,true,scene,chosen);
                 Console.WriteLine("Created 8 deliverables. "+(InventoryBasis.HasConfiguredInterfaces(inv)?InventoryBasis.CountLabel(inv):"Physical interfaces: "+inv.Ports.Count)+". Inventory SHA256: "+hash);return 0;
             }
             catch
             {
-                foreach(string file in Visuals)File.Delete(Path.Combine(output,file));throw;
+                foreach(string file in visuals)File.Delete(Path.Combine(output,file));throw;
             }
             finally {if(Directory.Exists(staging))Directory.Delete(staging,true);}
     }
@@ -191,8 +193,9 @@ public static class GeneratorEntry
         return s.ToString();
     }
     static string Quote(string value)=>"\""+Parser.Safe(value).Replace("\"","\"\"")+"\"";
-    static void WriteReport(string output,Inventory inv,string hash,bool success,Scene? scene=null)
+    static void WriteReport(string output,Inventory inv,string hash,bool success,Scene? scene=null,ReportPaper? paper=null)
     {
+        var chosen=paper??ReportPaper.Default;
         var report=new StringBuilder();report.AppendLine("VALIDATION REPORT");report.AppendLine(new string('=',72));report.AppendLine("RENDER_BLOCKED="+(success?"FALSE":"TRUE"));
         report.AppendLine("Inventory SHA256: "+hash);
         if(InventoryBasis.HasConfiguredInterfaces(inv))
@@ -229,8 +232,8 @@ public static class GeneratorEntry
             foreach(var item in entries)report.AppendLine($"VLAN {item.Key}: {item.Value}");
             foreach(var item in AggregatePalette.Assign(inv,p=>VlanPalette.NativeFill(p,palette),palette.Values))report.AppendLine($"Outline {item.Key}: {item.Value}");
         }
-        report.AppendLine("All raster diagrams: A4 landscape, 3508 x 2480 pixels at 300 DPI. All PDF pages: A4 landscape.");
-        report.AppendLine("One complete working diagram fits A4 without needing supplemental pages for the port key. One normalized inventory feeds CSV, summary, JSON, both PNGs, and both PDFs. Inventory fingerprint is retained in this validation report.");
+        report.AppendLine("All raster diagrams: "+chosen.Label+", "+chosen.PixelWidth+" x "+chosen.PixelHeight+" pixels at 300 DPI. All PDF pages: "+chosen.Label+".");
+        report.AppendLine("The complete native A4 working diagram is uniformly fitted to the chosen paper without cropping; small paper can reduce printed text size. One normalized inventory feeds CSV, summary, JSON, both PNGs, and both PDFs. Inventory fingerprint is retained in this validation report.");
         report.AppendLine(ReportText.CableMoveDisclaimer);
         report.AppendLine("Assumptions/limitations:");foreach(var a in inv.Assumptions)report.AppendLine("- "+a);
         foreach(var b in inv.Blockers)report.AppendLine("BLOCKER: "+b);

@@ -1,5 +1,6 @@
 import {buildReportPackage,reportRequest} from './reports/index.mjs';
 import {supplementaryCsv} from './reports/supplementary.mjs';
+import {reportFileStem,reportPageLabel} from './reports/paper.mjs';
 
 const safe=value=>String(value||'Report').replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').replace(/[. ]+$/,'').trim().slice(0,100)||'Report';
 const json=value=>JSON.stringify(value,null,2);
@@ -10,7 +11,7 @@ const sha256=async value=>{
 // Build each file independently so a capacity or encoding failure cannot discard
 // another device's complete package. The manifest records the actual outcomes.
 export async function browserReportPackage(project,{png,pdf,progress=()=>{}}){
- const request=reportRequest(project),report=buildReportPackage(project),parts={},used=new Set(),items=[];
+ const request=reportRequest(project),report=buildReportPackage(project),parts={},used=new Set(),items=[],stem=reportFileStem(request.paper);
  for(const [index,item] of report.items.entries()){
   const stem=safe(item.folder||item.name);let directory=stem;for(let suffix=2;used.has(directory.toLowerCase());suffix++)directory=stem+'-'+suffix;used.add(directory.toLowerCase());
   const base=directory+'/',errors=[],written=[];
@@ -20,8 +21,8 @@ export async function browserReportPackage(project,{png,pdf,progress=()=>{}}){
   const attempt=async(name,render)=>{try{put(name,await render());}catch(error){errors.push(name+': '+error.message);}};
   progress('Exporting '+(index+1)+' of '+report.items.length+': '+item.name);
   if(item.pages.wall.length)await attempt('wall-chart.png',()=>png(item.pages.wall[0]));
-  if(item.pages.onePage.length){await attempt('a4-one-page.png',()=>png(item.pages.onePage[0]));await attempt('a4-one-page.pdf',()=>pdf(item.pages.onePage,{title:item.name}));}
-  if(item.pages.booklet.length)await attempt('a4-booklet.pdf',()=>pdf(item.pages.booklet,{title:item.name}));
+  if(item.pages.onePage.length){await attempt(stem+'-one-page.png',()=>png(item.pages.onePage[0]));await attempt(stem+'-one-page.pdf',()=>pdf(item.pages.onePage,{title:item.name}));}
+  if(item.pages.booklet.length)await attempt(stem+'-booklet.pdf',()=>pdf(item.pages.booklet,{title:item.name}));
   if(item.capacityError)errors.push(item.capacityError);
   errors.push(...item.validation.errors);
   const complete=item.filenames.filter(name=>name!=='validation-report.txt').every(name=>written.includes(name));
@@ -33,16 +34,16 @@ export async function browserReportPackage(project,{png,pdf,progress=()=>{}}){
  const shared=report.combined,combinedErrors=[];
  const combinedAttempt=async(name,render)=>{try{parts[name]=await render();}catch(error){combinedErrors.push(name+': '+error.message);}};
  if(shared.pages.length){
-  await combinedAttempt('workspace-a4-diagrams.pdf',()=>pdf(shared.pages,{title:request.title||project.name}));
+  await combinedAttempt('workspace-'+stem+'-diagrams.pdf',()=>pdf(shared.pages,{title:request.title||project.name}));
   for(const [index,page] of shared.pages.entries())await combinedAttempt('workspace-sheet-'+String(index+1).padStart(3,'0')+'.png',()=>png(page));
-  if(shared.booklet.length)await combinedAttempt('workspace-a4-booklets.pdf',()=>pdf(shared.booklet,{title:request.title||project.name}));
+  if(shared.booklet.length)await combinedAttempt('workspace-'+stem+'-booklets.pdf',()=>pdf(shared.booklet,{title:request.title||project.name}));
   parts['workspace-layout.json']=json(shared.pages.map(page=>({name:page.name,width:page.width,height:page.height,deviceIds:page.sourceDeviceIds,role:page.role})));
   parts['workspace-palette.json']=json(request.palette);
  }
  if(request.combined)parts['workspace-validation-report.txt']=shared.validationText+combinedErrors.map(error=>'EXPORT BLOCKER: '+error).join('\n')+'\n';
  const summary=report.summary+'\nEXPORT RESULTS\n'+items.map(item=>item.name+': '+(item.success?'complete':item.errors.join(' '))).join('\n')+'\n'+combinedErrors.join('\n');
  parts['workspace-summary.txt']=summary;
- const manifest={format:'NetworkDiagramStudio.SwitchportReports',sourceVersion:'1.18.5',outputLabel:request.outputLabel,items,combinedErrors};
+ const manifest={format:'NetworkDiagramStudio.SwitchportReports',sourceVersion:'1.18.5',outputLabel:request.outputLabel,paper:request.paper,paperDescription:reportPageLabel(request.paper),items,combinedErrors};
  parts['workspace-export.json']=json(manifest);
  return {parts,summary,items,combinedErrors,success:items.some(item=>item.success),complete:items.every(item=>item.success)&&!combinedErrors.length};
 }
