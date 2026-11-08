@@ -303,7 +303,7 @@ function wireless(project,db){
   for(const {sw,device,items} of views){
     const switchHeight=equipmentSize(project,device,width).h;
     const sorted=items.slice().sort((a,b)=>cmp(a.sp,b.sp)||cmp(a.apId,b.apId));
-    // Keep at most four per bank, including arbitrary imported socket layouts.
+    // Pack banks independently while retaining room for readable captions.
     const temp={items:[]},panel=addDevice(temp,project,device,[(W-width)/2,412,width,1],'inspect',{fitWidth:true,padding:equipmentPadding});
     const captionFor=e=>{const name=mediaInfo(e.media,true).name,s=project.layout?.linkStyles?.[name]||{};return [s.lineTitle&&s.lineTitle!==name?s.lineTitle:'',s.lineDescription].filter(Boolean).join(' | ');};
     const identityKey=(e,role)=>{let hash=14695981039346656037n;for(const c of JSON.stringify([e.apId,e.sw,e.sp,e.apPort]))hash=BigInt.asUintN(64,(hash^BigInt(c.codePointAt(0)))*1099511628211n);return (project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections|'+role+'|'+hash.toString(36);};
@@ -313,17 +313,22 @@ function wireless(project,db){
       const model=measured(e,'model',deviceModel(ap),width),mac=measured(e,'mac',macCaption(ap,e.apPort),width),titleHeight=Math.max(26,wrapPortText(nameOf(ap),width,18,true).length*22),registerHeight=Math.max(21,wrapPortText(register,width,13,true).length*16),detailHeight=Math.max(18,wrapPortText(detail,width,12).length*15),notes=captionFor(e)?wrapPortText(captionFor(e),width,12):[];
       return {register,detail,model,mac,titleHeight,registerHeight,detailHeight,notes,height:titleHeight+2+model.height+registerHeight+1+detailHeight+mac.height+2+notes.length*14};
     };
-    const captionLines=Math.max(0,...items.map(e=>captionFor(e)?wrapPortText(captionFor(e),245,12).length:0)),longLegend=items.some(e=>(project.layout?.linkStyles?.[mediaInfo(e.media,true).name]?.description||'').length>80),longName=items.some(e=>captions(e,245).height>150),capacity=short||longLegend||longName||switchHeight>150?1:Math.min(4,Math.max(1,Math.floor((W-190)/245)),Math.max(1,5-captionLines));
-    let bucket=[],counts={top:0,bottom:0},columns=new Set();const batches=[];
-    for(const e of sorted){
-      const k=getAnchor(panel,e.sp,'top',e.idx),side=k.side;
-      const col=side+' '+k.x.toFixed(1);
-      if(counts[side]===capacity||capacity===1&&bucket.length||columns.has(col)||bucket.some(b=>b.sp===e.sp)){batches.push(bucket);bucket=[];counts={top:0,bottom:0};columns=new Set();}
-      bucket.push(e);counts[side]++;columns.add(col);
+    const columnWidth=dynamic?132:245;
+    const captionLines=Math.max(0,...items.map(e=>captionFor(e)?wrapPortText(captionFor(e),245,12).length:0)),longLegend=items.some(e=>(project.layout?.linkStyles?.[mediaInfo(e.media,true).name]?.description||'').length>80),longName=items.some(e=>captions(e,245).height>150),capacity=short||longLegend||longName||switchHeight>150?1:Math.min(Math.max(1,Math.floor((W-220)/columnWidth)),Math.max(1,(dynamic?9:5)-captionLines));
+    const batches=[];
+    for(const edge of sorted){
+      const anchor=getAnchor(panel,edge.sp,'top',edge.idx),side=anchor.side;
+      const column=side+' '+anchor.x.toFixed(1);
+      let batch=batches.find(candidate=>candidate.counts[side]<capacity&&
+        (capacity!==1||!candidate.items.length)&&!candidate.columns.has(column)&&!candidate.ports.has(edge.sp));
+      if(!batch){
+        batch={items:[],counts:{top:0,bottom:0},columns:new Set(),ports:new Set()};
+        batches.push(batch);
+      }
+      batch.items.push(edge);batch.counts[side]++;batch.columns.add(column);batch.ports.add(edge.sp);
     }
-    if(bucket.length)batches.push(bucket);
-    for(const batch of batches){
-      const p=fresh('Wireless Connections','Wireless Connections',nameOf(device)+'  ·  access-point uplinks and physical switch ports',project),a=p.items;p.editScope=p.name+'|'+equipmentScope(device)+'|sheet:'+batches.indexOf(batch);
+    for(const [batchIndex,{items:batch}] of batches.entries()){
+      const p=fresh('Wireless Connections','Wireless Connections',nameOf(device)+'  ·  access-point uplinks and physical switch ports',project),a=p.items;p.editScope=p.name+'|'+equipmentScope(device)+'|sheet:'+batchIndex;
       const preview={width:W,height:H,items:batch.map(e=>({type:'path',color:mediaInfo(e.media,true).color,linkType:mediaInfo(e.media,true).name,sourceLink:e}))};applyLinkStyles(preview,project.layout?.linkStyles);linkLegend(preview);const headingOffset=Math.max(0,(preview.legendBottom||189)+10-bankStart);
       const bank=side=>batch.filter(e=>getAnchor(panel,e.sp,'top',e.idx).side===side),tops=bank('top'),bottoms=bank('bottom'),bankHeight=rows=>Math.max(70,...rows.map(e=>captions(e,Math.min(capacity===1?680:245,(W-220)/Math.max(1,rows.length))).height));
       const upper=bankStart+headingOffset+(tops.length?bankHeight(tops)+6+apSize+gutter+13*(tops.length-1):0),lower=bottoms.length?H-55-(apSize+10)-bankHeight(bottoms)-switchHeight-gutter-35-13*(bottoms.length-1):H-switchHeight-55;
@@ -363,7 +368,9 @@ function wireless(project,db){
           const track=order.indexOf(i),lane=top?switchY-21-13*track:switchY+switchHeight+gutter+13*track;
           const info=mediaInfo(e.media,true);
           const rail=center<start.x?swg.x-18-13*track:swg.x+swg.w+18+13*track,escape=start.escapeRange?start.escapeRange[0]+(start.escapeRange[1]-start.escapeRange[0])*(i+1)/(rs.length+1):null;
-          const points=escape==null?[[start.x,start.y],[start.x,lane],[end.x,lane],[end.x,end.y]]:[[start.x,start.y],[start.x,escape],[rail,escape],[rail,lane],[end.x,lane],[end.x,end.y]];
+          const lead=[[start.x,start.y],...(start.departure||[])],exitX=lead.at(-1)[0];
+          const points=escape==null?[...lead,[exitX,lane],[end.x,lane],[end.x,end.y]]:
+            [...lead,[exitX,escape],[rail,escape],[rail,lane],[end.x,lane],[end.x,end.y]];
           route(p,start,end,points,info.color,'AP link '+(e.idx+1),info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status});
         });
       }

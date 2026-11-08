@@ -134,6 +134,29 @@ export function addDevice(page,project,d,bounds,key,opts={}){
   page.items.push(g);
   return g;
 }
+// Move the lead into a free vertical channel before it reaches another jack.
+function socketDeparture(device, anchor, socket){
+  if(!socket)return undefined;
+  const direction=anchor.side==='top'?-1:1;
+  const boxes=device.children.filter(child=>child.socketPart===0&&child!==socket).map(child=>({
+    x:device.x+child.x*device.w,y:device.y+child.y*device.h,w:child.w*device.w,h:child.h*device.h
+  }));
+  const clearance=3;
+  const ahead=boxes.filter(box=>direction>0?box.y>anchor.y&&box.y<anchor.edge:
+    box.y+box.h<anchor.y&&box.y+box.h>anchor.edge);
+  const obstructing=ahead.filter(box=>anchor.x>box.x-clearance&&anchor.x<box.x+box.w+clearance);
+  if(!obstructing.length)return undefined;
+  const turnY=direction>0?Math.min(...obstructing.map(box=>box.y))-clearance:
+    Math.max(...obstructing.map(box=>box.y+box.h))+clearance;
+  const socketEdge=device.y+(socket.y+(direction>0?socket.h:0))*device.h;
+  if((turnY-socketEdge)*direction<0)return undefined;
+  const candidates=ahead.flatMap(box=>[box.x+box.w+clearance,box.x-clearance])
+    .sort((a,b)=>Math.abs(a-anchor.x)-Math.abs(b-anchor.x));
+  const exit=candidates.find(x=>!ahead.some(box=>x>box.x-clearance+.001&&x<box.x+box.w+clearance-.001)&&
+    !boxes.some(box=>turnY>box.y-clearance+.001&&turnY<box.y+box.h+clearance-.001&&
+      Math.max(x,anchor.x)>box.x-clearance&&Math.min(x,anchor.x)<box.x+box.w+clearance));
+  return exit===undefined?undefined:[[anchor.x,turnY],[exit,turnY]];
+}
 export function getAnchor(g,raw,sideHint,unique){
   const k=String(raw??''), keys=Object.keys(g.ports);
   let id=keys.find(a=>a.toLowerCase()===k.toLowerCase());
@@ -145,13 +168,21 @@ export function getAnchor(g,raw,sideHint,unique){
   }
   const [nx,ny]=g.ports[id];
   const regions=g.panelRegions||[],region=regions.find(r=>ny>=r.y-1e-8&&ny<=r.y+r.h+1e-8);
+  const top=region?ny<=region.y+region.h/2:ny<=.5;
+  const side=top?'top':'bottom',edge=region?(top?region.y:region.y+region.h):(top?0:1);
+  const anchor={device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+edge*g.h};
   if(region&&regions.length>1){
-    const top=ny<=region.y+region.h/2,side=top?'top':'bottom',edge=top?region.y:region.y+region.h;
     const adjacent=regions.filter(r=>r!==region&&(top?r.y+r.h<=region.y+1e-8:r.y>=edge-1e-8));
-    if(adjacent.length){const other=top?Math.max(...adjacent.map(r=>r.y+r.h)):Math.min(...adjacent.map(r=>r.y));return {device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+edge*g.h,escapeY:g.y+(edge+other)/2*g.h,escapeRange:[g.y+Math.min(edge,other)*g.h,g.y+Math.max(edge,other)*g.h]};}
-    return {device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+edge*g.h};
+    if(adjacent.length){
+      const other=top?Math.max(...adjacent.map(r=>r.y+r.h)):Math.min(...adjacent.map(r=>r.y));
+      anchor.escapeY=g.y+(edge+other)/2*g.h;
+      anchor.escapeRange=[g.y+Math.min(edge,other)*g.h,g.y+Math.max(edge,other)*g.h];
+    }
   }
-  return {device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side:ny<=.5?'top':'bottom',edge:g.y+(ny<=.5?0:g.h)};
+  const socket=g.children.find(c=>c.anchorOrigin&&Math.abs(c.x+c.w/2-nx)<1e-7&&Math.abs(c.y+c.h/2-ny)<1e-7);
+  const departure=socketDeparture(g,anchor,socket);
+  if(departure)anchor.departure=departure;
+  return anchor;
 }
 export function optic(page,project,device,body,anchor,info){
   if(!info.plug)return anchor;

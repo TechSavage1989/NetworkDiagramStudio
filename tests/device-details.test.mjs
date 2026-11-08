@@ -18,7 +18,7 @@ function wirelessSite(){
 function assertClear(page){
  const texts=page.items.filter(i=>i.type==='text'),bodies=page.items.filter(i=>i.type==='device'),paths=page.items.filter(i=>i.type==='path');
  for(const item of texts.filter(i=>i.deviceInfo)){
-  assert.ok(item.y>=150&&item.y+item.h<=920);assert.equal(textLayout(item).size,item.size);
+  assert.ok(item.y>=150&&item.y+item.h<=page.height-55);assert.equal(textLayout(item).size,item.size);
   assert.equal(textLayout(item).lines.join('').replace(/\s/g,''),item.value.replace(/\s/g,''));
   assert.ok(!texts.some(other=>other!==item&&intersects(item,other)),'caption overlaps text');
   assert.ok(!bodies.some(body=>intersects(item,body)),'caption overlaps hardware');
@@ -98,4 +98,17 @@ test('full address lists appear only in the selected address panel and keep manu
  assert.ok(!plain.svg.includes(addresses.at(-1)));project.layout={presentation:{defaults:{panel:{position:'right',sections:['addresses','models']}}},drawingEdits:{[detail.editKey]:{value:'Approved device caption'}}};
  const page=buildPages(project)[0],addressRow=page.items.find(i=>i.editKey?.includes('|info-panel|addresses|0')),modelRow=page.items.find(i=>i.editKey?.includes('|info-panel|models|0'));
  assert.ok(addressRow);for(const mac of addresses)assert.ok(addressRow.value.includes(mac));assert.ok(modelRow.value.includes('512 MAC addresses'));assert.ok(!modelRow.value.includes(addresses.at(-1)));assert.equal(page.items.find(i=>i.editKey===detail.editKey).value,'Approved device caption');assert.deepEqual(deviceMacs(project.devices[0]),addresses);
+});
+
+test('twelve ordinary AP uplinks fit on a single dynamic wireless sheet',()=>{
+ const site=wirelessSite();
+ for(let i=8;i<12;i++){
+  const id='ap-'+i;
+  site.devices.push({...site.devices[1],id,name:'LAB-AP-'+i});
+  site.links.push({...site.links[0],ap:'1/1/'+(i-7),b:id});
+ }
+ const pages=buildPages(site).filter(page=>page.title==='Wireless Connections');
+ assert.equal(pages.length,1);
+ assert.equal(pages[0].items.filter(item=>item.type==='path').length,12);
+ assertClear(pages[0]);
 });
