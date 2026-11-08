@@ -78,14 +78,20 @@ test('empty chassis bays open the way toward the peer but never turn a lead away
  assert.ok(getAnchor(g,'A3','top',3).moduleEscape,'An installed management module is never crossed');
 });
 
-test('a socket under an empty bay caption rises into the bay and turns beside the caption instead of crossing module rows',()=>{
+test('a socket under an empty bay caption leaves straight up and the caption slides clear of every rising cable',()=>{
  const d=modularChassis(),g=addDevice({items:[]},{},d,[0,0,700,1],'chassis',{fitWidth:true});
  const bay=g.panelRegions.find(r=>r.id==='management-bay');assert.ok(bay.empty);
- const under=getAnchor(g,'B23','top',0,{weight:4,peer:{x:-300,y:-300}}),open=getAnchor(g,'B11','top',1,{weight:4});
- assert.equal(under.side,'top');assert.equal(under.moduleEscape,undefined,'no turn between the module rows');assert.ok(under.departure,'a dogleg inside the empty bay');
- const [[x1,turn],[lane,turn2]]=under.departure;assert.equal(turn,turn2);assert.ok(turn>bay.y*g.h&&turn<(bay.y+bay.h)*g.h,'the turn stays inside the bay');
- const columns=g.children.filter(c=>c.anchorOrigin).map(c=>c.anchorOrigin[0]*g.w);assert.ok(columns.every(c=>Math.abs(c-lane)>=10-1e-6),'the lane keeps clear of every socket column');
- assert.equal(open.departure,undefined);assert.equal(open.moduleEscape,undefined);
- // A socket in the inner row is never routed up through the row above it.
- assert.ok(getAnchor(g,'B24','top',2,{weight:4}).moduleEscape);
+ const caption=()=>g.children.find(c=>c.type==='text'&&c.value==='Optional MM2 bay'),before={...caption()},master=g.masterKey;
+ const open=getAnchor(g,'B21','top',0,{weight:4}),under=getAnchor(g,'B23','top',1,{weight:4,peer:{x:-300,y:-300}});
+ for(const a of [open,under]){assert.equal(a.side,'top');assert.equal(a.moduleEscape,undefined,'no turn between the module rows');assert.equal(a.departure,undefined,'straight up');}
+ const moved=caption();assert.notEqual(moved.x,before.x,'the caption moved');assert.equal(moved.value,before.value);assert.notEqual(g.masterKey,master,'a moved caption has its own native master');
+ // The text box is a few units wider than the painted text it holds.
+ const left=moved.x*g.w,right=left+moved.w*g.w-6;for(const x of [open.x,under.x])assert.ok(x<left-4||x>right+4,'no rising cable crosses the caption');
+ assert.ok(moved.x>=bay.x&&moved.x+moved.w<=bay.x+bay.w+1e-9,'the caption stays inside its bay');
+ // With every spot taken, a socket still avoids the module rows: it turns inside the bay beside the caption.
+ const full=addDevice({items:[]},{},modularChassis(),[0,0,700,1],'chassis',{fitWidth:true});full.bayLeads=Array.from({length:400},(_,i)=>bay.x+i*bay.w/400);
+ const turned=getAnchor(full,'B23','top',2,{weight:4});assert.equal(turned.moduleEscape,undefined);assert.ok(turned.departure);
+ // A socket in the inner row never rises through the socket above it: it
+ // jogs between the outer row's sockets (as B12 does) or turns in its module.
+ const inner=getAnchor(g,'B24','top',3,{weight:4});assert.ok(inner.moduleEscape||inner.departure);
 });

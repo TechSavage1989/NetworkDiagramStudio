@@ -80,6 +80,15 @@ function cableLeader(box,owner,paths,obstacles){
  }
  return candidates.sort((a,b)=>a.distance-b.distance)[0]?.leader;
 }
+// Shortest gap between a text box and a cable's segments (0 when touching).
+function boxDistance(box,path){
+ let best=Infinity;
+ for(let i=1;i<(path?.points?.length||0);i++){
+  const [a,b]=[path.points[i-1],path.points[i]],x0=Math.min(a[0],b[0]),x1=Math.max(a[0],b[0]),y0=Math.min(a[1],b[1]),y1=Math.max(a[1],b[1]);
+  const dx=Math.max(0,box.x-x1,x0-(box.x+box.w)),dy=Math.max(0,box.y-y1,y0-(box.y+box.h));best=Math.min(best,Math.hypot(dx,dy));
+ }
+ return best;
+}
 export function placeCableLabels(page,requests,edits={}){
  const minY=page.dynamic?(page.originY||0)+36:158,maxY=(page.originY||0)+(page.height||975)-69,maxX=(page.originX||0)+(page.width||1200)-38;
  const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path');
@@ -88,12 +97,16 @@ export function placeCableLabels(page,requests,edits={}){
   const source=Array.isArray(req.value)?req.value:[req.value],patches=source.map((_,i)=>edits[req.editKey+'|'+i]||{}),size=Math.max(req.minSize??12,req.size||12,...patches.map(p=>p.size||0)),sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38,maxWidth=sidebar?(req.role==='media'&&page.dynamic?180:96):req.side==='right'?Math.max(96,1154-Math.max(req.outer+8,984)):Math.max(100,Math.min(req.outer-46,250));
   const lines=[];for(const [index,original] of source.entries()){const patch=patches[index];if(patch.hidden)continue;const value=patch.value??original;let line='',fragment=0;const push=()=>lines.push({value:line,patch,key:req.editKey+'|'+index+(fragment++?'|wrap'+fragment:'')});for(const char of String(value)){if(line&&textWidth(line+char,size,true)>maxWidth){push();line='';}line+=char;}if(line)push();}if(!lines.length)continue;
   const w=Math.max(...lines.map(s=>textWidth(s.value,size,s.patch.bold!==false))),h=lines.length*(size+4),candidates=[];
-  const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);
+  const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);let endpoint=null,nearSegments=1;
   if(owner){
    const points=req.endpoint&&req.endpoint!==(owner.startEndpoint||'a')?[...owner.points].reverse():owner.points;
    const segments=points.slice(1).map((b,i)=>[points[i],b]);
+   // "Near the port" starts where the cable leaves its equipment: a chassis
+   // module lead first runs inside the body, where no label can sit.
+   const inside=([x,y])=>bodies.some(n=>x>n.x&&x<n.x+n.w&&y>n.y&&y<n.y+n.h),firstOut=Math.max(0,segments.findIndex(([a,b])=>!inside([(a[0]+b[0])/2,(a[1]+b[1])/2])));
+   nearSegments=firstOut+1;endpoint=segments[firstOut]?.[0]||points[0];
    if(req.role==='media')segments.sort(([a,b],[c,d])=>Math.hypot(d[0]-c[0],d[1]-c[1])-Math.hypot(b[0]-a[0],b[1]-a[1]));
-   for(const [a,b] of segments){
+   for(const [segment,[a,b]] of segments.entries()){
     const vertical=a[0]===b[0],axis=vertical?1:0;
     const lo=Math.max(vertical?minY:page.dynamic?contentLeft:sidebar?contentLeft:306,Math.min(a[axis],b[axis])+4),hi=Math.min((vertical?maxY:maxX)-w,Math.max(a[axis],b[axis])-w-4);
     const preferred=req.role==='media'?(lo+hi)/2:a[axis]<b[axis]?lo:hi;
@@ -102,7 +115,7 @@ export function placeCableLabels(page,requests,edits={}){
      const x=vertical?a[0]+offset:along,y=vertical?along:a[1]+offset;
      const corridor=vertical?{x:Math.min(x,a[0]),y,w:h+5,h:w}:{x,y:Math.min(y,a[1]),w,h:h+5};
      if(paths.some(path=>path!==owner&&pathCrossesText(path,corridor,1)))continue;
-     candidates.push(vertical?{x:x+(h-w)/2,y:y+(w-h)/2,w,h,angle:Math.PI/2,attached:true}:{x,y,w,h,attached:true});
+     candidates.push(vertical?{x:x+(h-w)/2,y:y+(w-h)/2,w,h,angle:Math.PI/2,attached:true,segment}:{x,y,w,h,attached:true,segment});
     }
    }
   }
@@ -150,13 +163,23 @@ export function placeCableLabels(page,requests,edits={}){
   candidates.push(...late);
   const gutter=req.side==='right'?Math.max(req.outer+8,984):sidebar?req.outer-w-8:Math.min(req.outer-w-8,322-w),mainBodies=bodies.filter(b=>b.kind!=='handoff'),gutters=[gutter,...(sidebar?[Math.min(...(mainBodies.length?mainBodies:bodies).map(b=>b.x))-26-w]:[])];
   for(let n=0;n<740;n+=4)for(const sign of [1,-1])for(const x of gutters)candidates.push({x,y:req.y-h/2+n*sign,w,h});
+  // A label set beside its cable must read as that cable's: prefer spots
+  // where every other cable is clearly farther away, then any clear spot.
+  const clearlyOwn=b=>{const own=boxDistance(b,owner);return paths.every(p=>p===owner||boxDistance(b,p)>=own+8);};
   let box;
-  for(const candidate of candidates){
-   const b=textFootprint(candidate);
-   if(b.x<(contentLeft)||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>candidate.inline&&p===owner?(p.hops||[]).some(hop=>intersects(hop,b,2)):pathCrossesText(p,b,2)))continue;
-   const leader=owner&&!candidate.attached&&!candidate.inline?cableLeader(b,owner,paths,[...occupied,...bodies]):null;
-   if(owner&&req.role!=='reference'&&!candidate.attached&&!candidate.inline&&!leader)continue;
-   box={...candidate,leader};break;
+  for(const strict of owner?[true,false]:[false]){
+   for(const candidate of candidates){
+    const b=textFootprint(candidate);
+    if(b.x<(contentLeft)||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>candidate.inline&&p===owner?(p.hops||[]).some(hop=>intersects(hop,b,2)):pathCrossesText(p,b,2)))continue;
+    // A port name stays by its port: the strict pass only uses the lead and
+    // the first run from that endpoint, or a short leader line near it.
+    if(strict&&candidate.attached&&(req.role==='port'&&candidate.segment>nearSegments||!clearlyOwn(b)))continue;
+    if(strict&&req.role==='port'&&!candidate.attached&&!candidate.inline&&endpoint&&Math.hypot(b.x+b.w/2-endpoint[0],b.y+b.h/2-endpoint[1])>160)continue;
+    const leader=owner&&!candidate.attached&&!candidate.inline?cableLeader(b,owner,paths,[...occupied,...bodies]):null;
+    if(owner&&req.role!=='reference'&&!candidate.attached&&!candidate.inline&&!leader)continue;
+    box={...candidate,leader};break;
+   }
+   if(box)break;
   }
   if(!box)return {ok:false,failed:req,placed:result,clearance:h+12};
   occupied.push(box);if(box.leader)occupied.push(box.leader);

@@ -160,6 +160,33 @@ function socketDeparture(device, anchor, socket){
 }
 // A chassis lead may cross its own module horizontally, but its vertical run
 // must use the open center or an exterior side, never the next module/bay.
+// Empty bays the straight lead from (nx, ny) passes through on its side.
+function baysBetween(g,nx,ny,region,top){
+  const between=r=>r!==region&&nx>r.x&&nx<r.x+r.w&&(top?r.y+r.h<ny&&r.y+r.h>0:r.y>ny&&r.y<1);
+  return g.panelRegions.some(r=>between(r)&&!r.empty)?null:g.panelRegions.filter(r=>between(r)&&r.empty);
+}
+function recordBayLead(g,nx,ny,region,top){if(baysBetween(g,nx,ny,region,top)?.length)g.bayLeads=[...(g.bayLeads||[]),nx];}
+// The painted span of a bay caption, in normalized device coordinates.
+function bayCaptions(g,bay){
+  return g.children.filter(c=>c.type==='text'&&c.x<bay.x+bay.w&&c.x+c.w>bay.x&&c.y<bay.y+bay.h&&c.y+c.h>bay.y).map(c=>{
+    const {lines,size,lineHeight}=textLayout({...c,w:c.w*g.w,h:c.h*g.h}),w=Math.max(...lines.map(line=>Math.max(0,textWidth(line,size,c.bold)-6)))/g.w,h=lines.length*lineHeight/g.h;
+    const box=Math.max(...lines.map(line=>textWidth(line,size,c.bold)))/g.w+1/g.w;
+    return {child:c,x:c.x+(c.align==='right'?c.w-w:c.align==='center'?(c.w-w)/2:0),y:c.y+(c.h-h)/2,w,h,box};
+  });
+}
+// Slide an empty bay's caption along the bay to the nearest spot clear of
+// every cable rising through it (including this socket's). The moved caption
+// gets its own native master, since the same device elsewhere keeps the default.
+function moveBayCaption(g,nx,ny,region,top,weight){
+  const bays=baysBetween(g,nx,ny,region,top);if(bays?.length!==1)return false;
+  const bay=bays[0],pad=(weight/2+3)/g.w,caption=bayCaptions(g,bay).find(c=>nx>c.x-pad&&nx<c.x+c.w+pad);if(!caption)return false;
+  const columns=[...(g.bayLeads||[]),nx],edge=.012,clear=x=>columns.every(c=>c<x-pad||c>x+caption.w+pad);
+  let best=null;for(let x=bay.x+edge;x<=bay.x+bay.w-edge-caption.box+1e-9;x+=1/g.w)if(clear(x)&&(best===null||Math.abs(x-caption.x)<Math.abs(best-caption.x)))best=x;
+  if(best===null)return false;
+  // The text box keeps its measured width; the painted text starts at best.
+  Object.assign(caption.child,{x:best,w:Math.min(caption.box,bay.x+bay.w-best),align:'left'});
+  g.masterKey=g.masterKey.replace(/:bay-caption:[^:]*$/,'')+':bay-caption:'+Math.round(best*1e4);return true;
+}
 // Sockets under an empty bay's caption share the bay below (or above) the
 // caption. Each takes its own turn row and lane beside the caption edge it is
 // nearer to; nearer sockets turn closest to the row and use the outer lane, so
@@ -207,11 +234,14 @@ function modularAnchor(g,id,nx,ny,region,sideHint,socket,options={}){
   // Turning outside the chassis is preferable to crossing every inner row.
   if(blocked(top)&&!blocked(!top,false))top=!top;
   const side=top?'top':'bottom',weight=options.weight||cableWeight,anchor={device:g.key,port:id,x:g.x+nx*g.w,y:g.y+ny*g.h,side,edge:g.y+(top?0:g.h),weight};
-  if(!blocked(top)){const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
-  // Only an empty bay's caption is in the way: rise into the bay, turn under
-  // the caption and leave beside it, rather than crossing the module's rows.
+  if(!blocked(top)){recordBayLead(g,nx,ny,region,top);const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
+  // Only an empty bay's caption is in the way. Slide the caption clear of every
+  // cable rising through the bay so this socket also leaves straight; when no
+  // clear spot exists, rise into the bay, turn under the caption and leave
+  // beside it, rather than crossing the module's rows.
+  if(moveBayCaption(g,nx,ny,region,top,weight)){recordBayLead(g,nx,ny,region,top);const departure=socketDeparture(g,anchor,socket);if(departure)anchor.departure=departure;return anchor;}
   const bayTurn=captionDeparture(g,nx,ny,region,top,weight);
-  if(bayTurn){anchor.departure=bayTurn;return anchor;}
+  if(bayTurn){g.bayLeads=[...(g.bayLeads||[]),(bayTurn[1][0]-g.x)/g.w];anchor.departure=bayTurn;return anchor;}
   const center=(g.moduleChannel.left+g.moduleChannel.right)/2,column=nx<center?'left':'right';
   const pad=(weight/2+.01)/g.h,xPad=(weight/2+.01)/g.w,lo=region.y+pad,hi=region.y+region.h-pad;
   const details=g.children.filter(c=>(c.socketPart===0||c.type==='text')&&c.x+c.w>region.x&&c.x<region.x+region.w&&c.y+c.h>region.y&&c.y<region.y+region.h).map(c=>{
