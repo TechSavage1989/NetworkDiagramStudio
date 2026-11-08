@@ -5,6 +5,8 @@ import {withFaceplateMaps} from './fixtures/faceplate-maps.mjs';
 const buildPages=withFaceplateMaps(buildAllPages);
 import {unzip} from '../src/web/zip.mjs';
 import {intersects} from '../src/web/diagram/labels.mjs';
+import {cleanLayout} from '../src/web/layout.mjs';
+import {luminance} from '../src/web/reports/palette.mjs';
 
 // Fictional light-faceplate switch and dark-faceplate stack with tagged,
 // voice and LAG ports.
@@ -97,28 +99,45 @@ test('a trunk with many tagged VLANs keeps readable dots: wider hardware, or a +
  if(more){const texts=fixed.items.filter(i=>i.type==='text').map(i=>i.value);assert.ok(texts.includes('Tagged VLANs (+ on the jack)'));assert.ok(texts.some(t=>/^A?1-8: 100-124$/.test(t)),texts.filter(t=>/100/.test(t)).join(' | '));}
 });
 
-test('the switchport builder sheet style draws each switch port map on US Letter, readable and complete',async()=>{
+test('port maps default to the switchport builder sheet on US Letter, readable, complete and in device colors',async()=>{
  const {parseConfig}=await import('../src/web/imports/config.mjs');
  // Fictional AOS-Switch chassis with two SFP+ and two copper modules.
  const text=['; J9851A Configuration Editor; Created on release #KB.16.10.0009','hostname "LAB-SHEET"','module A type j9993a','module B type j9993a','module C type j9986a','module D type j9986a','trunk A1,B2 trk1 lacp',
   'vlan 1','   name "DEFAULT_VLAN"','   untagged C1-C12,Trk1','   no untagged A2-A8,B1,B3-B8,C13-C24,D1-D24','   exit',
   'vlan 20','   name "LAB_USERS"','   untagged C13-C24,D1-D24','   tagged A2-A8,B1,B3-B8,Trk1','   exit','vlan 30','   name "LAB_VOICE"','   tagged A2-A8,B1,B3-B8,C1-C24,Trk1','   voice','   exit'].join('\n');
- const device=parseConfig(text,'lab-sheet.cfg').devices[0],site={name:'Sheet lab',devices:[device],links:[],layout:{portMap:{mapStyle:'switchport'}}};
+ const device=parseConfig(text,'lab-sheet.cfg').devices[0],site={name:'Sheet lab',devices:[device],links:[],layout:{}};
  const pages=buildAllPages(site),sheet=pages.find(page=>page.portMap?.switchportSheet);assert.ok(sheet,'the builder sheet is the port map');
  assert.equal(Math.round(sheet.width),1056);assert.equal(Math.round(sheet.height),816);assert.equal(sheet.family,'ports');assert.equal(sheet.portMap.device,device.id);
  const numbers=sheet.items.filter(item=>item.reportPortRole==='number'),dots=sheet.items.filter(item=>item.reportPortRole==='tagged'||item.reportPortRole==='voice');
  assert.equal(new Set(numbers.map(item=>item.reportPort)).size,64,'every physical port is drawn');assert.ok(numbers.every(item=>item.size>=10),'numbers stay at least the builder size');
  assert.ok(dots.length&&dots.filter(dot=>dot.type==='ellipse').every(dot=>dot.w>=4.2-1e-9),'VLAN markers stay at least the builder size');
  assert.ok(pages.some(page=>page.portMap?.bookletRole==='inventory'),'the port inventory tables remain');
- // Device faceplate artwork is the default.
- const faceplate=buildAllPages({...site,layout:{}});assert.ok(!faceplate.some(page=>page.portMap?.switchportSheet));assert.ok(faceplate.some(page=>page.portMap?.overview&&page.items.some(item=>item.portNumberRole==='socket')));
+ // The sheet takes the chassis colors of the core-diagram artwork: the frame
+ // shows around and between the slots, which use the module-bay color.
+ const frame=sheet.items.find(item=>item.reportFrame),bodies=sheet.items.filter(item=>item.reportPanel);
+ assert.equal(frame?.fill,'#D8DDDE','the chassis frame color');assert.ok(bodies.length&&bodies.every(item=>item.fill==='#C2CCCF'),'slot panels use the module-bay color');
+ for(const body of bodies)assert.ok(body.x>=frame.x&&body.y>=frame.y&&body.x+body.w<=frame.x+frame.w&&body.y+body.h<=frame.y+frame.h,'slots sit inside the frame');
+ // The realistic faceplate stays available as an explicit choice.
+ const faceplate=buildAllPages({...site,layout:{portMap:{mapStyle:'faceplate'}}});assert.ok(!faceplate.some(page=>page.portMap?.switchportSheet));assert.ok(faceplate.some(page=>page.portMap?.overview&&page.items.some(item=>item.portNumberRole==='socket')));
+ assert.equal(cleanLayout({portMap:{mapStyle:'faceplate'}}).portMap.mapStyle,'faceplate');assert.equal(cleanLayout({portMap:{mapStyle:'switchport'}}).portMap.mapStyle,undefined,'the builder sheet is the default and is not stored');
 });
 
-test('port maps keep the realistic faceplate on a US Letter sheet by default, with builder-shaped jacks for readable dots',()=>{
+test('a dark access switch keeps its plate color on the builder sheet, with white port numbers',async()=>{
+ const {deviceFaceplate}=await import('../src/web/diagram/faceplate.mjs');
+ const vlans=[{id:10,name:'Lab users'},{id:20,name:'Lab voice'}];
+ const stack={id:'idf',name:'LAB-IDF',kind:'switch',vendor:'HPE Aruba',model:'JL558A',vlans,ports:Array.from({length:52},(_,i)=>({name:String(i+1),state:'up',native:10,tagged:i>=48?[20]:[]}))};
+ const sheet=buildAllPages({name:'Dark lab',devices:[stack],links:[],layout:{}}).find(page=>page.portMap?.switchportSheet);assert.ok(sheet,'the builder sheet is drawn');
+ const bodies=sheet.items.filter(item=>item.reportPanel),numbers=sheet.items.filter(item=>item.reportPortRole==='number');
+ const plate=deviceFaceplate(stack).children.filter(c=>c.type==='rect').reduce((a,b)=>b.w*b.h>a.w*a.h?b:a);assert.ok(luminance(plate.fill)<.4,'the fictional switch has a dark plate');
+ assert.ok(bodies.length&&bodies.every(item=>item.fill===plate.fill),'panels use the plate color of the core artwork');
+ assert.ok(numbers.length&&numbers.every(item=>item.color==='#ffffff'),'numbers stay readable on the dark plate');assert.ok(!sheet.items.some(item=>item.reportFrame),'a fixed switch has no chassis frame');
+});
+
+test('the realistic faceplate port map stays on a US Letter sheet, with builder-shaped jacks for readable dots',()=>{
  const vlans=Array.from({length:26},(_,i)=>({id:100+i,name:'Lab '+(100+i)}));
  const core={id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,ports:[{name:'A1',state:'up',native:100,tagged:vlans.slice(1,13).map(v=>v.id)},{name:'C1',state:'up',native:100,voice:125,tagged:vlans.slice(1,13).map(v=>v.id)}]};
- const page=buildAllPages({name:'Letter lab',devices:[core],links:[]}).find(p=>p.portMap?.overview);
- assert.equal(Math.round(page.width),1056);assert.equal(Math.round(page.height),816);assert.ok(!page.portMap.switchportSheet,'the faceplate artwork is the default');
+ const page=buildAllPages({name:'Letter lab',devices:[core],links:[],layout:{portMap:{mapStyle:'faceplate'}}}).find(p=>p.portMap?.overview);
+ assert.equal(Math.round(page.width),1056);assert.equal(Math.round(page.height),816);assert.ok(!page.portMap.switchportSheet,'the faceplate artwork is drawn');
  // Jack faces grow together and never overlap.
  const faces=page.items.filter(i=>i.portNumberRole==='face'),plate=page.items.find(i=>i.type==='device'&&i.sourceId==='core');assert.ok(faces.length,'jack faces are enlarged');
  // Faces take the switchport builder's shapes and cover their jack artwork.
@@ -134,7 +153,7 @@ test('port maps keep the realistic faceplate on a US Letter sheet by default, wi
 test('faceplate captions grow to a readable size without pushing a dense chassis map off US Letter',()=>{
  const vlans=Array.from({length:26},(_,i)=>({id:100+i,name:'Lab '+(100+i)}));
  const core={id:'core',name:'LAB-CHASSIS',kind:'switch',vendor:'Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:null,nativeState:'None',tagged:vlans.slice(0,25).map(v=>v.id)})),...Array.from({length:24},(_,i)=>({name:'C'+(i+1),state:'up',native:100+(i%6),voice:i%3?125:undefined,tagged:vlans.slice(1,2+(i%8)*2).map(v=>v.id)}))]};
- const page=buildAllPages({name:'Caption lab',devices:[core],links:[]}).find(p=>p.portMap?.overview);
+ const page=buildAllPages({name:'Caption lab',devices:[core],links:[],layout:{portMap:{mapStyle:'faceplate'}}}).find(p=>p.portMap?.overview);
  assert.equal(Math.round(page.width),1056);assert.equal(Math.round(page.height),816);
  const plate=page.items.find(i=>i.type==='device'&&i.sourceId==='core'),caption=value=>plate.children.find(c=>c.type==='text'&&c.value===value);
  for(const value of ['Management module','Optional MM2 bay'])assert.ok(caption(value)?.size>=9,value+' is readable');
