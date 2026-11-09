@@ -3,7 +3,7 @@ import {columnLayouts} from '../compact-layout.mjs';
 import {equipmentGapPlan,equipmentPadding} from './equipment-layout.mjs';
 import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
-import {pageGeometry} from '../page-options.mjs';
+import {pageGeometry,targetPageAspect} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
 import {coreLinkKey as linkKey,coreArrangement,lineSpacing,cableCaptions,hopStyle} from '../layout.mjs';
 import {coreSidebar} from './sidebar.mjs';
@@ -135,7 +135,7 @@ function measurement(project,d,edges,positions,handoffs=[],width=WIDTH,padding=1
 // including cable rails, covers the least area. Very long strips and long
 // cables cost slightly more. Rails between columns are reserved from the
 // links that cross each gap.
-function arrangeCore(boxes,links,{mode='compact',weight=4,extraTracks=0,reserve=()=>0}={}){
+function arrangeCore(boxes,links,{mode='compact',weight=4,extraTracks=0,reserve=()=>0,targetAspect=null}={}){
  if(!boxes.length)return [];
  const pitch=Math.max(ROUTE_STYLE.pitch,weight+ROUTE_STYLE.gap),clear=2*ROUTE_STYLE.clearance+weight,ids=new Set(boxes.map(b=>b.id)),local=links.filter(l=>l.a!==l.b&&ids.has(l.a)&&ids.has(l.b));
  const tracks=(left,right)=>{const a=new Set(left),b=new Set(right);return local.filter(l=>a.has(l.a)&&b.has(l.b)||a.has(l.b)&&b.has(l.a)).length;};
@@ -155,7 +155,7 @@ function arrangeCore(boxes,links,{mode='compact',weight=4,extraTracks=0,reserve=
   let distance=0;for(const link of local){const a=layout.positions.get(link.a),b=layout.positions.get(link.b);distance+=Math.abs(a.x+a.w/2-b.x-b.w/2)+Math.abs(a.y+a.h/2-b.y-b.h/2);}
   // Least area first; strips wider than 3:1 and long cables cost more.
   const area=w*h,aspect=Math.max(w,h)/Math.max(1,Math.min(w,h));
-  return area*(1+.3*Math.max(0,aspect-3))*(1+.1*(local.length?distance/local.length:0)/Math.sqrt(area));
+  return area*(1+.3*Math.max(0,aspect-3))*(1+.1*(local.length?distance/local.length:0)/Math.sqrt(area))*(targetAspect?1+.9*Math.abs(Math.log((w/h)/targetAspect)):1);
  };
  return layouts.map(layout=>({layout,score:score(layout)})).sort((a,b)=>a.score-b.score||a.layout.columns-b.layout.columns).map(choice=>choice.layout);
 }
@@ -276,7 +276,7 @@ export function corePages(project,inventory){
   // Any cable of a first-column device may take the left exterior: chassis
   // modules turn out to their nearest side and continuation links leave left.
   const reserveFor=layout=>{if(layout.columns<2)return stableReserve;const first=new Set(layout.ids[0]),touching=measuredEdges.filter(e=>first.has(e.a)||first.has(e.b)||first.has(db.devices.get(e.a)?.owner)||first.has(db.devices.get(e.b)?.owner)).length;return Math.max(ROUTE_STYLE.pitch,railPitch)*Math.max(0,Math.ceil(touching/2)+away-4)+expansion/2;};
-  const choices=dynamic&&!hasPositions?arrangeCore(owners.map(id=>({id,w:measured.get(id).width,h:measured.get(id).height+expansion})),measuredEdges,{mode:arrangement,weight:cableWeight,extraTracks:sheet.columnTracks||0,reserve:reserveFor}):[];
+  const choices=dynamic&&!hasPositions?arrangeCore(owners.map(id=>({id,w:measured.get(id).width,h:measured.get(id).height+expansion})),measuredEdges,{mode:arrangement,weight:cableWeight,extraTracks:sheet.columnTracks||0,reserve:reserveFor,targetAspect:arrangement==='compact'?targetPageAspect(aliasProject,{name:sheet.name,family:'core'}):null}):[];
   const packing=choices[Math.min(sheet.rank||0,choices.length-1)]||null;sheet.choices=choices.length;
   sheet.packedColumns=packing?.columns||1;
   const measuredHeight=dynamic?(packing?.h??[...measured.values()].reduce((sum,m)=>sum+m.height+expansion,0)):0;
