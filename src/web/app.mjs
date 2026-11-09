@@ -22,6 +22,7 @@ import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawi
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
+import {globalTextCategories,cleanGlobalTextStyles} from './global-text-styles.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
@@ -576,6 +577,46 @@ function linkStyleOptions(selected){
  button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1,weight:4});close();});button(bar,'Cancel',close);
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
+
+function globalTextStyleOptions(){
+ const body=modal('Global text styles');
+ body.append(el('p','Set font size, color, weight and alignment for each category across this project. These are defaults for existing and future items. Individually edited text keeps its own settings; exported diagrams use the same styles.','hint'));
+ const presets=cleanGlobalTextStyles(project.layout?.textStyles),controls=[];
+ const rows=el('div','','global-text-styles');body.append(rows);
+ for(const [id,title] of globalTextCategories){
+  const settings=presets[id]||{},section=el('details','','text-style-section'),heading=el('summary',title);rows.append(section);section.append(heading);
+  const grid=el('div','','form-grid');section.append(grid);
+  const size=field(grid,'Font size (%)',Math.round((settings.scale||1)*100));size.type='number';size.min=40;size.max=250;size.step=5;
+  const color=field(grid,'Text color (hex, blank for default)',settings.color||'');color.placeholder='Default';color.maxLength=7;
+  const weight=field(grid,'Weight',settings.bold==null?'default':String(settings.bold),[['default','Use built-in weight'],['true','Bold'],['false','Regular']]);
+  const align=field(grid,'Alignment',settings.align||'default',[['default','Use built-in alignment'],['left','Left'],['center','Center'],['right','Right']]);
+  const reset=button(section,'Reset '+title,()=>{size.value=100;color.value='';weight.value='default';align.value='default';});
+  reset.classList.add('secondary');
+  controls.push({id,size,color,weight,align});
+ }
+ const bar=actions(body);
+ button(bar,'Apply all text styles',()=>{
+  const next={};
+  for(const c of controls){
+   const percent=Number(c.size.value),color=c.color.value.trim();
+   if(!Number.isFinite(percent)||percent<40||percent>250)throw Error('Choose font sizes between 40% and 250% in '+globalTextCategories.find(([id])=>id===c.id)[1]+'.');
+   if(color&&!/^#[0-9a-fA-F]{6}$/.test(color))throw Error('Enter a six-digit hex color (for example #16364A), or leave the color blank.');
+   const style={scale:percent/100};
+   if(color)style.color=color;
+   if(c.weight.value!=='default')style.bold=c.weight.value==='true';
+   if(c.align.value!=='default')style.align=c.align.value;
+   next[c.id]=style;
+  }
+  const previous=project.layout||{},cleaned=cleanGlobalTextStyles(next);
+  project.layout={...previous,textStyles:cleaned};
+  let prepared;try{prepared=validateDrawing();}catch(error){project.layout=previous;throw error;}
+  perform('text-styles',prepared);close();say('Global text styles saved for all drawing pages. Undo restores the previous styles.');
+ },'primary');
+ button(bar,'Reset all styles',()=>{for(const c of controls){c.size.value=100;c.color.value='';c.weight.value='default';c.align.value='default';}});
+ button(bar,'Cancel',close);
+}
+$('global-text-styles').onclick=()=>task(globalTextStyleOptions);
+
 function layoutOptions(selected=pages[active]?.name){
  pageLayoutEditor({project,pages:buildPages(scoped(),{includeHidden:true}),selected,modal,field,button,close,apply(layout,include=[]){
   const previous=project;project={...project,devices:project.devices.map(d=>include.includes(d.id)?{...d,hidden:false,scopeOverride:true}:d),layout:cleanLayout(layout,project.devices.map(d=>d.id))};
