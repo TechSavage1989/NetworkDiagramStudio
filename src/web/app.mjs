@@ -181,6 +181,65 @@ function rotateConnectionLabel(key,angle){
  const patch={...project.layout?.drawingEdits?.[key],angle:angle*Math.PI/180,rotationMode:'fixed'};
  setDrawingEdits({...project.layout?.drawingEdits,[key]:patch});say('Label rotation saved.');
 }
+function dismissEditorContextMenu(){contextMenu?.remove();contextMenu=null;}
+function showEditorContextMenu(event,options){
+ dismissEditorContextMenu();
+ const menu=el('div','','editor-context-menu');menu.setAttribute('role','menu');menu.setAttribute('aria-label','Drawing editing options');
+ for(const [caption,action] of options){
+  if(action==null){menu.append(el('div',caption,'editor-context-heading'));continue;}
+  const b=el('button',caption);b.type='button';b.setAttribute('role','menuitem');
+  b.onclick=e=>{e.stopPropagation();dismissEditorContextMenu();task(action);};menu.append(b);
+ }
+ document.body.append(menu);contextMenu=menu;
+ menu.style.left=Math.max(8,Math.min(event.clientX,window.innerWidth-menu.offsetWidth-12))+'px';
+ menu.style.top=Math.max(8,Math.min(event.clientY,window.innerHeight-menu.offsetHeight-12))+'px';
+ menu.querySelector('button')?.focus({preventScroll:true});
+ event.preventDefault();
+}
+document.addEventListener('pointerdown',event=>{if(contextMenu&&!contextMenu.contains(event.target))dismissEditorContextMenu();},true);
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contextMenu){dismissEditorContextMenu();event.preventDefault();}},true);
+function handleEditorContextMenu(event){
+ const target=event.target;if(target.closest('input,textarea,select,[data-inline-editor]'))return;
+ const tab=target.closest('#tabs button[role="tab"]');
+ if(tab){
+  const visible=pages.filter(page=>familyOf(page)===familyOf(pages[active])),index=[...$('tabs').querySelectorAll('button[role="tab"]')].indexOf(tab),page=visible[index];
+  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Page options',pageOptions],['Pages & layout',()=>layoutOptions(page.name)]]);
+  return;
+ }
+ if(!target.closest('#canvas')||!pages[active])return;
+ const key=target.closest('[data-drawing-key]')?.getAttribute('data-drawing-key');
+ const socket=target.closest('[data-port-name]'),owner=socket?.closest('[data-device-id]');
+ const page=pages[active],item=drawingObjects(page).find(item=>item.editKey===key),actions=[];
+ if(!editDrawing)actions.push(['Enable Edit drawing',()=>$('edit-drawing').click()]);
+ if(item&&editDrawing){
+  actions.push([item.type==='path'?'Connection':item.labelRole?'Connection label':item.type==='device'?'Device':'Drawing object',null]);
+  actions.push(['Edit properties',()=>{selectDrawingItem(item.editKey);editDrawingObject(item.editKey);}],['Select object',()=>selectDrawingItem(item.editKey)]);
+  if(item.labelRole&&item.relatedCableKey){
+   actions.push(['Snap label to associated line',()=>{selectDrawingItem(item.editKey);snapSelectedLabelDialog();}]);
+   for(const [degrees,title] of [[0,'Horizontal'],[90,'Vertical'],[180,'Reverse horizontal'],[-90,'Reverse vertical']])actions.push(['Rotate: '+title,()=>rotateConnectionLabel(item.editKey,degrees)]);
+   actions.push(['Reset automatic label placement',()=>{const edits={...project.layout?.drawingEdits};delete edits[item.editKey];setDrawingEdits(edits);say('Automatic label placement restored.');}]);
+  }
+  if(item.type==='path'){
+   actions.push(['Edit cable bends',()=>editCablePoints(item)]);
+   if(item.sourceLink)actions.push(['Connect endpoints',()=>connectSelectedCable(item)]);
+   actions.push(['Organize connections',()=>$('drawing-organize').click()]);
+  }
+  if(item.type==='device'){
+   const d=project.devices.find(d=>d.id===item.sourceId);
+   if(d)actions.push(['Edit device details',()=>editDevice(d)],['Find hardware stencil',()=>deviceStencil(d)]);
+  }
+ }else if(socket&&owner&&editDrawing){
+  const sourceId=owner.getAttribute('data-device-id'),portName=socket.getAttribute('data-port-name');
+  const related=relatedConnectionItems(page,{sourceId,portName});
+  actions.push(['Port '+portName,null]);
+  if(related.paths.length)actions.push(['Highlight connected cable',()=>selectDrawingItem(related.paths[0].editKey)]);
+  const d=project.devices.find(d=>d.id===sourceId);
+  if(d)actions.push(['Edit device and port details',()=>editDevice(d)]);
+ }
+ if(!item&&!socket)actions.push(['Page',null]);
+ actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Page options',pageOptions],['Pages & layout',()=>layoutOptions(page.name)]);
+ showEditorContextMenu(event,actions);
+}
 function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...unpresentPatch(item,{points})}});}
 function cableControlClick(key,event,target=event.target){
  const add=target.closest('[data-cable-segment]'),point=target.closest('[data-cable-point]');if(!add&&!point)return false;
