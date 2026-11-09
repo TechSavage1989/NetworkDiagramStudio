@@ -229,7 +229,8 @@ export function reportDiagram(item,palette,request,{wall=false}={}){
 // two balanced columns, with one shared key. Port/socket sizing is unchanged;
 // only the measured member bands are grouped into a compact grid.
 export function responsiveStackPlan(plan,targetAspect){
- if(!(targetAspect>1.12)||plan.bands.length<3||plan.bands.length>8||plan.bands.some(band=>band.panels.length!==1)||plan.item.inventory.chassisSlots)return plan;
+ const memberCount=plan.item.inventory.groups.filter(group=>!group.slot).length;
+ if(!(targetAspect>1.12)||memberCount<3||memberCount>8||plan.bands.length<3||plan.bands.some(band=>band.panels.length!==1)||plan.item.inventory.chassisSlots)return plan;
  const columns=2,cellWidth=Math.max(...plan.bands.map(band=>band.width)),gap=20,bands=[];
  for(let index=0;index<plan.bands.length;index+=columns){
   const pair=plan.bands.slice(index,index+columns);
