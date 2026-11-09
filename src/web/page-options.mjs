@@ -54,18 +54,50 @@ export function paperDimensions(paper){
  const short=Math.min(...pair),long=Math.max(...pair),[widthMm,heightMm]=item.orientation==='portrait'?[short,long]:[long,short];
  return {widthMm,heightMm,ratio:widthMm/heightMm};
 }
+// Fit the completed, measured scene into a page of the selected aspect ratio.
+// This is a presentation transform, not a re-layout of saved edit coordinates.
+// Core and wireless planners may separately choose arrangements for this ratio.
 export function fitVisiblePage(page,project){
  const paper=visiblePagePaper(project,page),dimensions=paperDimensions(paper);
  if(!dimensions)return page;
- const W=page.width,H=page.height,ratio=dimensions.ratio;
- // Expand only the otherwise empty margin. No object or port coordinates are
- // transformed, so drag edits, socket glue, and page numbering retain identity.
- const width=Math.max(W,H*ratio),height=Math.max(H,W/ratio);
- page.originX=(page.originX||0)-(width-W)/2;
- page.originY=(page.originY||0)-(height-H)/2;
- page.width=width;page.height=height;
- page.widthMm=width*25.4/96;page.heightMm=height*25.4/96;
- page.visiblePaper=paper;
+ const sourceW=page.width,sourceH=page.height,originX=page.originX||0,originY=page.originY||0,ratio=dimensions.ratio;
+ const preserve=visibleFitMode(project)==='preserve',width=Math.max(sourceW,sourceH*ratio),height=Math.max(sourceH,sourceW/ratio);
+ let factor=1,dx=(width-sourceW)/2,dy=(height-sourceH)/2;
+ if(!preserve){
+  // Calculate a size-independent page frame. Scaling to fill it gives an
+  // effective fit on either portrait or landscape paper; device proportions,
+  // socket glue and exact manual relative positions remain unchanged.
+  const area=Math.max(1,sourceW*sourceH);
+  const targetW=Math.sqrt(area*ratio),targetH=targetW/ratio;
+  const margin=24,fit=Math.min((targetW-2*margin)/sourceW,(targetH-2*margin)/sourceH);
+  factor=Math.max(.05,Math.min(4,fit));
+  dx=originX+margin+(targetW-2*margin-sourceW*factor)/2-originX*factor;
+  dy=originY+margin+(targetH-2*margin-sourceH*factor)/2-originY*factor;
+  for(const item of page.items){
+   const prev=item.presentation||{scale:1,x:0,y:0,fontScale:1};
+   item.presentation={...prev,scale:(prev.scale||1)*factor,x:(prev.x||0)*factor+dx,y:(prev.y||0)*factor+dy,fontScale:(prev.fontScale||1)*factor};
+   for(const key of ['x','y','w','h','weight','sampleWeight']){
+    if(!Number.isFinite(item[key]))continue;
+    item[key]=item[key]*factor+(key==='x'?dx:key==='y'?dy:0);
+   }
+   if(item.points)item.points=item.points.map(([x,y])=>[x*factor+dx,y*factor+dy]);
+   if(item.commands)item.commands=item.commands.map(([op,...values])=>[op,...values.map((v,i)=>v*factor+(i%2?dy:dx))]);
+   if(item.hops)item.hops=item.hops.map(h=>({...h,x:h.x*factor+dx,y:h.y*factor+dy,w:h.w*factor,h:h.h*factor}));
+   for(const key of ['from','to'])if(item[key])item[key]={...item[key],x:item[key].x*factor+dx,y:item[key].y*factor+dy};
+   if(item.type==='text')item.size*=factor;
+   if(item.type==='device'){
+    for(const child of item.children||[])if(child.type==='text')child.size*=factor;
+    if(factor!==1)item.masterKey+=':visible-fit:'+factor.toFixed(6);
+   }
+  }
+  page.originX=originX;page.originY=originY;
+  page.width=targetW;page.height=targetH;
+ }else{
+  page.originX=originX-(width-sourceW)/2;page.originY=originY-(height-sourceH)/2;
+  page.width=width;page.height=height;
+ }
+ page.widthMm=page.width*25.4/96;page.heightMm=page.height*25.4/96;
+ page.visiblePaper=paper;page.visibleFitMode=preserve?'preserve':'optimize';
  page.printPaper=cleanPageSetup(project?.layout?.pageSetup).printPaper||paper;
  return page;
 }
