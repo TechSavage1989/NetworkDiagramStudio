@@ -33,7 +33,7 @@ test('global text settings survive project normalization and reject malformed va
 });
 
 test('existing page labels receive global defaults while individual edits retain priority',()=>{
- const device=label('site|device',{titleOwner:'switch',titleSlot:'title',align:'center'}),cable=label('site|cable',{labelRole:'media'});
+ const device=label('site|device',{titleOwner:'switch',titleSlot:'title',align:'center',color:'#008800'}),cable=label('site|cable',{labelRole:'media'});
  const page={items:[device,cable]};
  applyGlobalTextStyles(page,{deviceNames:{scale:1.5,color:'#AA0011',bold:true},linkLabels:{scale:.8,color:'#0022BB',align:'right'}},{'site|device':{color:'#008800'}});
  assert.equal(device.size,18); // explicit color remains authoritative
