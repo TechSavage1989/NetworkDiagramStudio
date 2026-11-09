@@ -597,7 +597,7 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
  repair('row');repair('rail');
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}
 }
-export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0,referenceLabel=0}){
+export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0,referenceLabel=0,directionNeutralLevels=false}){
  const bodies=[...nodes.values()];
  if(bodies.some(n=>n.x<minX))minX=Math.min(minX,...bodies.map(n=>n.x))-Math.max(24,endData.size*railPitch);
  if(bodies.some(n=>n.x+n.w>maxX))maxX=Math.max(maxX,...bodies.map(n=>n.x+n.w))+Math.max(24,endData.size*railPitch);
@@ -607,6 +607,10 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   const ends=new Map();
   for(const bank of banks.values()){
    const sorted=bank.slice().sort((a,b)=>{
+    // Wireless leads from the same switch edge use one consistent physical
+    // port order. Their levels no longer jump when the destination rail flips
+    // from left to right. Other sheet families keep their existing ordering.
+    if(directionNeutralLevels)return a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx;
     const as=sides.get(a.e.idx)||'left',bs=sides.get(b.e.idx)||'left';
     return as.localeCompare(bs)||(as==='left'?a.anchor.x-b.anchor.x:b.anchor.x-a.anchor.x)||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx;
    }),escapeChoices=new Map(),reserved=[];
