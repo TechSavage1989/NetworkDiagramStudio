@@ -9,7 +9,7 @@ import {sampleSite} from '../src/web/sample.mjs';
 import {unzip} from '../src/web/zip.mjs';
 
 const decode=new TextDecoder(),compact=value=>String(value).replace(/\s/g,'');
-const moduleFixture=()=>{const site=sampleSite();for(const d of site.devices.filter(d=>d.kind!=='ap'))d.name='LAB-CAMPUS-EXAMPLE-NETWORK-ROOM-'+d.id+'-LONG-DEVICE-NAME';return site;};
+const moduleFixture=()=>{const site=sampleSite();for(const d of site.devices.filter(d=>d.kind!=='ap'))d.name='LAB-CAMPUS-EXAMPLE-NETWORK-ROOM-'+d.id+'-LONG-DEVICE-NAME';site.layout={presentation:{defaults:{panel:{modulesMode:'full'}}}};return site;};
 
 test('SVG and native Visio render the same full measured caption without ellipsis',async()=>{
  const value='A complete interface description that wraps onto several readable lines',item={type:'text',x:40,y:180,w:170,h:100,value,size:12,bold:false,color:'#16364A',align:'left',editKey:'caption'},page={name:'Caption',title:'Caption',width:1200,height:975,items:[item]},layout=textLayout(item);
