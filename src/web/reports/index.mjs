@@ -65,13 +65,13 @@ export function buildReportPackage(project,selectedIds){
 export function portMapSheets(project,devices,paper,artwork=new Map()){
  const ids=devices.map(device=>device.id),sheets=new Map();if(!ids.length)return sheets;
  let prepared;try{prepared=prepare({...project,layout:{...project.layout,switchport:{...(project.layout?.switchport||{}),enabled:true,deviceIds:ids}}},ids);}catch{return sheets;}
- const {items,palette}=prepared,request={...prepared.request,paper,fill:!!paper?.fill};
+ const {items,palette}=prepared,request={...prepared.request,paper,fill:!!paper?.fill,dynamicCanvas:true};
  for(const item of items){
   if(!item.validation.ok)continue;
   // Port maps paint the builder sheet in the device's core-diagram colors.
   if(artwork.get(item.id))item.artwork=artwork.get(item.id);
   let pages=null;try{pages=assertScenes([reportDiagram(item,palette,request)]);}catch{try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
-  if(pages?.length)sheets.set(item.id,pages);
+  if(pages?.length){for(const page of pages)page.printPaper=project.layout?.pageSetup?.printPaper||null;sheets.set(item.id,pages);}
  }
  return sheets;
 }
