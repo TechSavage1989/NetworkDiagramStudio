@@ -2,13 +2,13 @@ import {presentation} from '../presentation.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {automaticPanelContent,panelRows} from './panel-content.mjs';
 import {panelFields} from '../presentation.mjs';
-import {label,linkLegend,C,value} from './scene.mjs';
+import {label,linkLegend,C} from './scene.mjs';
 
 export function informationPanel(page,project){
  const config=presentation(project,page),options=config.panel,scope=page.name;
  const isPanel=i=>/\|(?:legend|module-legend)\||\|device\|module-legend-/.test(i.editKey||'');
  if(!page.coreDeviceIds&&page.items.some(isPanel)){
-  page.items=page.items.filter(i=>!isPanel(i));page.legendLayout='sidebar';page.sidebar={scale:1,width:options.width,textScale:options.textScale*config.textScale};linkLegend(page);
+  page.items=page.items.filter(i=>!isPanel(i));page.legendLayout='sidebar';page.sidebar={scale:1,width:options.width,textScale:options.textScale*config.textScale,connectionHeading:options.sectionTitles.connections||'Connection types'};linkLegend(page);
   for(const item of page.items.filter(isPanel)){const patch=project.layout?.drawingEdits?.[item.editKey];if(patch)Object.assign(item,patch);}
  }
  page.items=page.items.filter(i=>!isPanel(i)||options.visible&&(i.editKey.includes('module-legend')?options.sections.includes('modules'):options.sections.includes('connections')));
