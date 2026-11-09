@@ -652,6 +652,34 @@ document.addEventListener('keydown',event=>{
  if(!opened)return;
  const focus=opened.querySelector('summary');closePageGroupMenus();focus?.focus();event.preventDefault();
 },true);
+let pageTabClickTimer=null;
+function renamePageTab(page,button){
+ if(!commitInlineEdit())return;
+ clearTimeout(pageTabClickTimer);
+ const previous=page.displayName||page.name,input=el('input');
+ input.className='page-tab-rename';input.value=previous;input.maxLength=80;input.setAttribute('aria-label','Rename page '+previous);
+ button.replaceChildren(input);button.title='Enter saves. Escape cancels.';
+ let finished=false;
+ const cancel=()=>{if(finished)return;finished=true;button.replaceChildren(previous);};
+ const commit=()=>{
+  if(finished)return;
+  const name=input.value.trim();
+  if(!name||name.length>80){input.setCustomValidity('Enter a page name up to 80 characters.');input.reportValidity();return;}
+  if(pages.some(other=>other.name!==page.name&&(other.displayName||other.name).toLowerCase()===name.toLowerCase())){input.setCustomValidity('Another page already has that name.');input.reportValidity();return;}
+  if(name===previous){cancel();return;}
+  const before=project.layout,layout=structuredClone(before||{});
+  layout.presentation||={defaults:{},pages:{}};layout.presentation.pages||={};
+  layout.presentation.pages[page.name]={...layout.presentation.pages[page.name],name};
+  project.layout=cleanLayout(layout,project.devices.map(device=>device.id));
+  try{const prepared=buildDrawing();finished=true;perform('page-rename',prepared);say('Page renamed to '+name+'. Tab, page selector and drawing heading updated.');}
+  catch(error){project.layout=before;cancel();say('Page rename failed: '+error.message);}
+ };
+ input.addEventListener('click',event=>event.stopPropagation());
+ input.addEventListener('dblclick',event=>event.stopPropagation());
+ input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commit();}else if(event.key==='Escape'){event.preventDefault();cancel();}});
+ input.addEventListener('blur',commit);
+ input.focus({preventScroll:true});input.select();
+}
 function pageNavigation(){
  const navigation=$('page-navigation'),families=$('page-families'),picker=$('page-select');
  navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
@@ -695,7 +723,14 @@ function draw(prepared){
  $('warnings').hidden=!project.warnings.length;$('warnings').textContent='Review '+project.warnings.length+' import '+(project.warnings.length===1?'note':'notes');
  active=Math.max(0,Math.min(active,pages.length-1));
  pageNavigation();
- pages.forEach((page,i)=>{if(familyOf(page)!==familyOf(pages[active]))return;const b=el('button',page.displayName||page.name);b.title='Double-click to rename or customize this page';b.ondblclick=()=>task(()=>layoutOptions(page.name));b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{if(!commitInlineEdit())return;active=i;draw(pages);};tabs.append(b);});
+ pages.forEach((page,i)=>{if(familyOf(page)!==familyOf(pages[active]))return;
+ const b=el('button',page.displayName||page.name);
+ b.title='Double-click to rename this page. Use Pages & layout for additional settings.';
+ b.ondblclick=event=>{event.preventDefault();clearTimeout(pageTabClickTimer);renamePageTab(page,b);};
+ b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);
+ b.onclick=event=>{if(event.target.matches('.page-tab-rename')||event.detail>1)return;if(!commitInlineEdit())return;clearTimeout(pageTabClickTimer);if(i===active)return;pageTabClickTimer=setTimeout(()=>{active=i;draw(pages);},230);};
+ tabs.append(b);
+});
  tabs.scrollLeft=previousTabScroll;
  const selectedTab=tabs.querySelector('button.active');
  if(selectedTab){const left=selectedTab.offsetLeft-tabs.offsetLeft,right=left+selectedTab.offsetWidth;if(left<tabs.scrollLeft)tabs.scrollLeft=left;else if(right>tabs.scrollLeft+tabs.clientWidth)tabs.scrollLeft=right-tabs.clientWidth;}
