@@ -227,7 +227,8 @@ export function reportDiagram(item,palette,request,{wall=false}={}){
 
 export function workspaceDiagrams(items,palette,request){
  const plans=items.filter(item=>item.validation?.ok!==false).map(item=>devicePlan(item)),pages=[];let current=null,currentPlans=[],at=0;
- const make=()=>{const p=page(request,'workspace|'+pages.length,request.title||request.outputLabel||'Switchport reports','Shared port maps and VLAN key','workspace',[]);pages.push(p);current=p;currentPlans=[];at=p.contentTop;return p;};
+ const sheet=paperOf(request),dynamicHeight=request?.dynamicCanvas?Math.max(sheet.height,Math.ceil(page(request,'workspace|measure',request.title||'Switchport reports','Shared port maps and VLAN key','workspace',[]).contentTop+plans.reduce((sum,plan)=>sum+blockHeight(plan)+12,0)+legendHeight(mergeInventories(plans.map(plan=>plan.item)),palette,sheet.width-margin*2,false,!!request?.fill)+80)):null;
+ const make=()=>{const p=page(request,'workspace|'+pages.length,request.title||request.outputLabel||'Switchport reports','Shared port maps and VLAN key','workspace',[],sheet.width,dynamicHeight??sheet.height);if(dynamicHeight)p.paper={preset:'custom',orientation:p.width>=p.height?'landscape':'portrait',widthMm:p.widthMm,heightMm:p.heightMm};pages.push(p);current=p;currentPlans=[];at=p.contentTop;return p;};
  const close=()=>{if(!current)return;const inv=mergeInventories(currentPlans.map(plan=>plan.item));legend(current,at+10,inv,palette);current.sourceDeviceIds=unique(currentPlans.map(plan=>plan.item.id));current=null;};
  const standalone=plan=>{
   let single;try{single=reportDiagram(plan.item,palette,request);}catch{return false;}
