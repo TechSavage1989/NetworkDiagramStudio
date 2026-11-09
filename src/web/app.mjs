@@ -617,7 +617,7 @@ function draw(prepared){
  const selectedTab=tabs.querySelector('button.active');
  if(selectedTab){const left=selectedTab.offsetLeft-tabs.offsetLeft,right=left+selectedTab.offsetWidth;if(left<tabs.scrollLeft)tabs.scrollLeft=left;else if(right>tabs.scrollLeft+tabs.clientWidth)tabs.scrollLeft=right-tabs.clientWidth;}
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
-  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true));}
+  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),pages[active]);}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
  for(const id of ['export','export-menu','print','svg'])$(id).disabled=!pages.length||working;
  $('port-map-options').hidden=!pages[active]?.portMap;syncDrawingSelection();
