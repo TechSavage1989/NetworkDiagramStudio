@@ -170,3 +170,12 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 #canvas svg circle.linked-port-marker{fill:#19a1b6;fill-opacity:.2;stroke:#087a94;stroke-width:2;pointer-events:none;vector-effect:non-scaling-stroke}
 #canvas svg [data-port-name]{cursor:crosshair}
 #drawing-snap-label:not(:disabled){border-color:#5a9cad;color:#0b5967}
+
+/* Configurable sidebar details are editable, reorderable sections. */
+.panel-section-editor{display:grid;gap:9px;margin:10px 0}
+.panel-section-row{padding:10px;border:1px solid #b8c9ce;border-radius:6px;background:#f6fafb;display:grid;gap:7px;min-width:0}
+.panel-section-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.panel-section-header .actions{display:flex;gap:4px;margin:0}
+.panel-section-header .actions button{font-size:11px;padding:4px 7px;min-width:0}
+.panel-section-row textarea{min-height:48px;max-height:130px;resize:vertical}
+.panel-section-row .hint{font-size:11px;margin:0;color:#526975}
