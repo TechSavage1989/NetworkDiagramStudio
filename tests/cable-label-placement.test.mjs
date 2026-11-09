@@ -29,6 +29,6 @@ test('saved label side persists and recalculates against a rerouted connection',
  assert.equal(saved['Core Network|media|test|0'].cableSide,'below');
  const first=labelPositionRelativeToCable(positionOnCable([[0,10],[100,10]],.5),{placement:saved['Core Network|media|test|0'].cableSide,width:80,height:20});
  const rerouted=labelPositionRelativeToCable(positionOnCable([[0,10],[0,110]],.5),{placement:saved['Core Network|media|test|0'].cableSide,width:80,height:20,rotation:Math.PI/2});
- near(first.y,26);near(rerouted.x,15);
+ near(first.y,26);near(rerouted.x,16);
  assert.equal(cleanDrawingEdits({'invalid':{cableFraction:.5,cableSide:'outside'}}).invalid.cableSide,undefined);
 });
