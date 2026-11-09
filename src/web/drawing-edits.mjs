@@ -12,6 +12,7 @@ export function cleanDrawingEdits(raw){
   if(!keyOk(key)||!input||typeof input!=='object'||Array.isArray(input))continue;const out={};
   for(const k of numbers)if(Number.isFinite(input[k])&&Math.abs(input[k])<=(['x','y'].includes(k)?1e7:12000)&&(!['w','h','size','weight'].includes(k)||input[k]>0))out[k]=input[k];
   if(Number.isFinite(input.opacity)&&input.opacity>=0&&input.opacity<=1)out.opacity=input.opacity;
+  if(Number.isFinite(input.cableFraction)&&input.cableFraction>=0&&input.cableFraction<=1)out.cableFraction=input.cableFraction;
   for(const k of ['fill','stroke','color'])if(colors.test(input[k]||''))out[k]=input[k];
   if(typeof input.value==='string')out.value=input.value.slice(0,10000);
   if(typeof input.name==='string')out.name=input.name.slice(0,300);
@@ -114,10 +115,11 @@ export function moveDrawingItems(page,edits,offsets){
   else if(item.type==='vector')patch.commands=item.commands.map(c=>c.length===3?[c[0],c[1]+localX,c[2]+localY]:[...c]);
   else {
    Object.assign(patch,{x:item.x+localX,y:item.y+localY});
-   if(item.labelRole&&item.angle)patch.angle=item.angle;
+   if(item.labelRole){delete patch.cableFraction;if(item.angle)patch.angle=item.angle;}
   }
   const changed=item.type==='path'?{points:patch.points}:item.type==='vector'?{commands:patch.commands}:{x:patch.x,y:patch.y,...(item.labelRole&&item.angle?{angle:item.angle}:{})};
   result[key]={...(result[key]||{}),...unpresentPatch(item,changed)};
+  if(item.labelRole)delete result[key].cableFraction;
  }
  return cleanDrawingEdits(result);
 }
