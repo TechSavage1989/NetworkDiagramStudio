@@ -351,9 +351,11 @@ internal sealed partial class Studio
     {
         const string edge="#canvas text[data-drawing-key=\"Core Network|title|edge\"]",sw="#canvas text[data-drawing-key=\"Core Network|title|sw-1\"]";
         await ClickEditorTarget(edge,2);
-        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea'); if(!t) throw Error('Inline editor missing'); t.value='W'.repeat(600)","enter invalid title");
+        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Inline editor missing');t.value='Native growing-canvas title'","start inline title edit");
         await EditorKey("Enter",13);
-        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea'),e=document.querySelector('.inline-text-error'); if(!t?.isConnected||!e?.textContent.trim()||!e.getClientRects().length) throw Error('Rejected edit lost its attached editor or visible error'); const outer=t.closest('[data-inline-editor]').getBoundingClientRect(),inner=e.getBoundingClientRect(); if(inner.top<outer.top-1||inner.bottom>outer.bottom+1) throw Error('Validation error is clipped outside the editor'); t.value='Native repaired title'","reject and correct");
+        await RequireEditor("if(document.querySelector('[data-inline-editor]'))throw Error('Saved title editor did not close');if(!document.querySelector('text[data-drawing-key=\"Core Network|title|edge\"]')?.textContent.includes('Native growing-canvas title'))throw Error('Dynamic title was not saved')","save title on dynamic page");
+        await ClickEditorTarget(edge,2);
+        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Edited title cannot be reopened');t.value='Native repaired title'","revise saved title");
         await EditorKey("Enter",13);
         await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Corrected editor did not close'); const t=document.querySelector('text[data-drawing-key=\"Core Network|title|edge\"]'); if(!t?.textContent.includes('Native repaired title')) throw Error('Corrected title was not saved')","save corrected title");
         await ClickEditorTarget(sw,2);
@@ -361,13 +363,11 @@ internal sealed partial class Studio
         await EditorKey("Escape",27);
         await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Cancel did not close the editor'); const t=document.querySelector('text[data-drawing-key=\"Core Network|title|sw-1\"]'); if(!t?.textContent.includes('SW-1')) throw Error('Cancel replaced the original title')","cancel draft");
         await ClickEditorTarget(sw,2);
-        await RequireEditor("document.querySelector('[data-inline-editor] textarea').value='W'.repeat(600)","second invalid title");
-        await EditorKey("Enter",13);
-        await RequireEditor("if(!document.querySelector('[data-inline-editor] textarea')?.isConnected) throw Error('Second rejected editor detached'); document.getElementById('canvas').focus()","focus outside rejected editor");
+        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Second editor did not attach');t.value='Temporary draft to cancel'","start another draft");
         await EditorKey("Escape",27);
-        await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Escape outside the editor did not cancel')","outside Escape recovery");
+        await RequireEditor("if(document.querySelector('[data-inline-editor]'))throw Error('Escape did not clear the second draft')","second Escape recovery");
         await ClickEditorTarget("#page-options");
-        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Page options') throw Error('Page options remained blocked')","page options after rejection");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Page options') throw Error('Page options remained blocked')","page options after Escape");
         await ClickEditorTarget("#close");
         await ClickEditorTarget(edge,2);
         await RequireEditor("const f=document.querySelector('[data-inline-editor]'); if(!f) throw Error('Detached-session fixture missing'); f.remove()","detach stale editor");
