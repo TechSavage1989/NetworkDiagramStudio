@@ -51,7 +51,7 @@ export function linkLegend(page){
  if(!values.length)return;
  if(page.legendLayout==='sidebar'){
   const side=page.sidebar||coreSidebar(),s=side.scale,tf=side.textScale||1,textX=38+64*s,textSpan=side.width-64*s-4,size=Math.max(12,14*s)*tf,detailSize=Math.max(11,12*s)*tf,lineHeight=Math.max(size*1.25,18*s),detailHeight=Math.max(detailSize*1.25,15*s);
-  label(page.items,38,147,side.width,26*s*tf,'CONNECTION TYPES',16*s*tf,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=147+51*s*tf;
+  label(page.items,38,147,side.width,26*s*tf,(page.sidebar?.connectionHeading||'CONNECTION TYPES').toUpperCase(),16*s*tf,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=147+51*s*tf;
   const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
   for(const {name,color,opacity,weight,style,speeds} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendEntryId(name,color,opacity,!!style,weight),title=titleOf({name,style,speeds,opacity}),lines=wrapPortText(title,textSpan,size),description=style?.description?wrapPortText(style.description,textSpan,detailSize):[];
    rect(page.items,38,y+11*s,52*s,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
