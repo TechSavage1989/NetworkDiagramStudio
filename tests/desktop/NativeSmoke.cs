@@ -165,7 +165,9 @@ internal sealed partial class Studio
         await RequireEditor("if(document.getElementById('drawing-selection').textContent!=='2 selected'||document.getElementById('dialog').open)throw Error('Shift selection failed')","Shift multi-selection");
         await ClickEditorTarget("#drawing-clear");
         await ClickEditorTarget(sw);
-        var raw=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const b=document.querySelector(\""+sw+"\").getBoundingClientRect();window.__gestureBefore={x:b.x,y:b.y,w:b.width,h:b.height};const x=b.x+Math.min(5,b.width/2),y=b.y+Math.min(5,b.height/2),hit=document.elementFromPoint(x,y)?.closest('[data-device-id]');return {x,y,device:hit?.getAttribute('data-device-id')};})()");
+        // Corner handles intentionally own their 10px hit area. A move gesture
+        // must start on verified device artwork, not a resize handle or text.
+        var raw=await browser.CoreWebView2.ExecuteScriptAsync("(()=>{const group=document.querySelector(\""+sw+"\"),b=group.getBoundingClientRect();window.__gestureBefore={x:b.x,y:b.y,w:b.width,h:b.height};for(const fx of [.12,.2,.35,.65,.8,.9])for(const fy of [.15,.35,.5,.7,.85]){const x=b.x+b.width*fx,y=b.y+b.height*fy,target=document.elementFromPoint(x,y);if(target&&group.contains(target)&&!target.closest('text,[data-port-name],.transform-controls,.cable-controls')&&target.closest('[data-device-id]')===group)return {x,y,device:group.getAttribute('data-device-id')};}return {error:'No unobstructed device body point',bounds:window.__gestureBefore};})()");
         using(var point=JsonDocument.Parse(raw)){
             if(!point.RootElement.TryGetProperty("device",out var hit)||hit.GetString()!="sw-1")throw new Exception("Shift drag must start inside SW-1: "+raw);
             var x=point.RootElement.GetProperty("x").GetDouble();var y=point.RootElement.GetProperty("y").GetDouble();

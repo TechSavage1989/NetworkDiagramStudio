@@ -1,3 +1,7 @@
+# Native device-drag smoke target
+
+The native smoke gesture previously started 5 screen pixels inside a device corner, which is now the resize handle hit area. It now selects a verified interior artwork point and rejects text, ports and editor overlays; the SW-1 identity, Shift axis lock, scaling, undo and selection assertions remain mandatory. Hosted browser coverage also moves a two-device Shift selection and checks unchanged widths and locked vertical positions. This is a test-target correction, not a production interaction change.
+
 # Direct transform follow-up
 
 Hosted Edge exposed a real accessibility issue: full-width alignment controls expanded the text toolbar, clipping the selected title and its handles above the canvas. The toolbar now uses bounded field widths, and selection/font changes reveal the selected text after layout at the existing zoom. Active gestures are never rebased. The browser regression checks the actual pointer hit target, compact toolbar height, committed resize status and persisted dimensions rather than dragging clipped coordinates.
