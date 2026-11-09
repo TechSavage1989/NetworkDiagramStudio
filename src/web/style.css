@@ -162,3 +162,11 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 #canvas .page-ruler-unit{position:absolute;z-index:6;top:0;left:0;width:24px;height:24px;padding:0;border:1px solid #a2b5bd;border-radius:0;background:#dbe9ed;color:#264755;font:10px Segoe UI,Arial,sans-serif;text-align:center;cursor:pointer}
 #canvas .page-ruler-unit:hover{background:#c4dde5}
 @media print{#canvas .page-ruler-top,#canvas .page-ruler-side,#canvas .page-ruler-unit{display:none}}
+
+/* Linked connection highlighting is applied only to the live editor SVG. */
+#canvas svg .linked-association{filter:drop-shadow(0 0 3px #168fa8);paint-order:stroke}
+#canvas svg path.diagram-cable.linked-association{filter:drop-shadow(0 0 4px #0bb7c6)}
+#canvas svg text.linked-association{stroke:#b5f3f4;stroke-width:2px;stroke-linejoin:round;paint-order:stroke fill}
+#canvas svg circle.linked-port-marker{fill:#19a1b6;fill-opacity:.2;stroke:#087a94;stroke-width:2;pointer-events:none;vector-effect:non-scaling-stroke}
+#canvas svg [data-port-name]{cursor:crosshair}
+#drawing-snap-label:not(:disabled){border-color:#5a9cad;color:#0b5967}
