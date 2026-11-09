@@ -22,6 +22,9 @@ try{
  assert.equal(await rulerTop.count(),1);assert.equal(await rulerSide.count(),1);
  const firstUnit=await unit.textContent();await unit.click();assert.notEqual(await unit.textContent(),firstUnit);
  await page.locator('#zoom-in').click();assert.ok(Number(await rulerTop.getAttribute('width'))>0);
+ // Clicking the ruler or toolbar dismisses an open menu; reopen before choosing.
+ assert.equal(await portGroup.evaluate(el=>el.open),false);
+ await portGroup.locator('summary').click();
  const list=portGroup.locator('.page-group-menu');
  assert.ok(await list.locator('button').count()>0,'menu lists pages');
  await page.screenshot({path:resolve(output,'page-groups.png')});
