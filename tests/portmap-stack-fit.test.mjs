@@ -52,3 +52,16 @@ test('every one-through-eight-member VSF map keeps the full stack and one key on
   assert.ok(page.items.filter(item=>item.reportPortRole==='number').length>=members*48);
  }
 });
+
+test('landscape pages arrange eight stack members in balanced columns without splitting or repeating the key',()=>{
+ const settings={visible:{fitMode:'optimize',groups:{ports:{preset:'a3',orientation:'landscape'}}}};
+ const pages=map(project(settings,8));
+ assert.equal(pages.length,1);
+ const page=pages[0],bodies=page.items.filter(item=>item.reportPanel&&item.reportGroup);
+ assert.equal(bodies.length,8);
+ assert.ok(new Set(bodies.map(body=>Math.round(body.x))).size>=2,'member blocks should fill landscape page in columns');
+ assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
+ assert.ok(page.items.some(item=>item.reportPort?.startsWith('8/')));
+ const same=map(project(settings,8))[0];
+ assert.equal(same.svg,page.svg,'responsive stack layout is deterministic');
+});
