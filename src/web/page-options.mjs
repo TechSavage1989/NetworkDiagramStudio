@@ -1,5 +1,8 @@
-export function cleanPageNumbers(raw){const p=raw&&typeof raw==='object'?raw:{};return {show:p.show!==false,start:Number.isInteger(p.start)&&p.start>=0&&p.start<=9999?p.start:1,pad:Number.isInteger(p.pad)&&p.pad>=1&&p.pad<=5?p.pad:2,format:typeof p.format==='string'&&p.format.length<=100?p.format:'{page} / {last}'};}
+export function cleanPageNumbers(raw){const p=raw&&typeof raw==='object'?raw:{};return {show:p.show===true,footer:p.footer===true,start:Number.isInteger(p.start)&&p.start>=0&&p.start<=9999?p.start:1,pad:Number.isInteger(p.pad)&&p.pad>=1&&p.pad<=5?p.pad:2,format:typeof p.format==='string'&&p.format.length<=100?p.format:'{page} / {last}'};}
 export function pageNumber(raw,index,count){const p=cleanPageNumbers(raw);if(!p.show)return null;const values={page:p.start+index,last:p.start+count-1,total:count};return p.format.replace(/\{(page|last|total)\}/g,(_,key)=>String(values[key]).padStart(p.pad,'0'));}
+
+// Reuse the footer band when neither optional decoration is enabled.
+export function footerAllowance(project){const p=cleanPageNumbers(project?.layout?.pageNumbers);return p.show||p.footer?0:42;}
 
 // Scene units are 96 per inch in SVG, printing and native Visio.
 export const paperSizes=[['original','Original drawing',317.5,257.96875],['letter','Letter',215.9,279.4],['legal','Legal',215.9,355.6],['tabloid','Tabloid / Ledger',279.4,431.8],['a5','A5',148,210],['a4','A4',210,297],['a3','A3',297,420],['a2','A2',420,594],['a1','A1',594,841],['custom','Custom',297,420]];

@@ -1,5 +1,5 @@
 import {deviceScale,presentation} from '../presentation.mjs';
-import {pageGeometry,targetPageAspect} from '../page-options.mjs';
+import {pageGeometry,targetPageAspect,visibleFitMode,visiblePagePaper,cleanPageSetup,paperDimensions} from '../page-options.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
 import {applyLinkStyles,linkWeight} from '../link-styles.mjs';
 import {deviceModel,macCaption} from '../device-details.mjs';
@@ -135,6 +135,31 @@ function pageBatches(project,db,device,edges,width,geometry){
 }
 
 export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
+ // Auto-fit paper is a readability constraint, not just an aspect ratio.
+ // Otherwise a large dynamic stack can be shrunk to a Letter sheet with
+ // 3-point AP details. Reuse measured member continuation and AP batching
+ // at the paper's physical size. Replay edits on that same plan after every
+ // rebuild; Preserve layout remains the explicit unchanged-geometry mode.
+ const visible=cleanPageSetup(project.layout?.pageSetup).visible,base=visiblePagePaper(project,{name:'Wireless Connections',family:'wireless'}),numbered=Object.entries(visible.pages).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,paper])=>paper);
+ // Numbered overrides retain their final paper, but the shared continuation
+ // plan must fit the smallest applicable width AND height. This avoids tiny
+ // text on one overridden sheet and keeps the plan stable after editing.
+ const dimensions=[base,...numbered].map(paperDimensions).filter(Boolean),widthMm=Math.min(...dimensions.map(d=>d.widthMm)),heightMm=Math.min(...dimensions.map(d=>d.heightMm));
+ const paper=dimensions.length?{preset:'custom',widthMm,heightMm,orientation:widthMm<heightMm?'portrait':'landscape'}:base;
+ if(paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
+  const planned={...project,layout:{...project.layout,pageSetup:{...project.layout?.pageSetup,overrides:{...project.layout?.pageSetup?.overrides,wireless:paper}}}};
+  try{return wirelessPages(planned,db,{portNumbers,tablePages,empty});}
+  catch(error){
+   if(error.code!=='WIRELESS_LAYOUT_CAPACITY')throw error;
+   // A narrow sheet can fit a multi-member box but not its outside cable
+   // departures. Retry smaller measured member groups before failing.
+   try{return wirelessPages({...planned,_wirelessMaxMembers:2},db,{portNumbers,tablePages,empty});}
+   catch(retry){if(retry.code!=='WIRELESS_LAYOUT_CAPACITY')throw retry;return wirelessPages({...planned,_wirelessMaxMembers:1},db,{portNumbers,tablePages,empty});}
+  }
+ }
+ return wirelessPages(project,db,{portNumbers,tablePages,empty});
+}
+function wirelessPages(project,db,{portNumbers,tablePages,empty}){
  let geometry=pageGeometry(project,'wireless'),width=geometry.width-202;
  const apIds=new Set([...db.devices.keys()].filter(id=>db.devices.get(id).kind==='ap')),linked=new Set(),groups=new Map();
  for(const e of db.links){const left=apIds.has(e.a),right=apIds.has(e.b);if(left===right)continue;const sw=left?e.b:e.a,edge={...e,sw,sp:left?e.bp:e.ap,apId:left?e.a:e.b,apPort:left?e.ap:e.bp};if(!groups.has(sw))groups.set(sw,[]);groups.get(sw).push(edge);linked.add(edge.apId);}
@@ -154,7 +179,8 @@ export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
   if(!geometry.dynamic&&organizing(project,pageScope(project,source,0))&&!whole.length)throw capacityError('This arrangement needs more room for wireless captions.');
   let parts=[source],assigned=[sorted],prepared;
   if(!geometry.dynamic&&!whole.length){
-   const variants=[[source],...[480,600,700].map(reserve=>equipmentViews(project,source,width,Math.max(80,geometry.height-reserve))),equipmentViews(project,source,width,Math.max(80,width/7))],seen=new Set(),plans=[];
+   const memberLimit=project._wirelessMaxMembers,limitedHeight=memberLimit>1&&source.stackMembers?.length?equipmentSize(project,{...source,stackMembers:source.stackMembers.slice(0,memberLimit),stackContinuation:true},width).h+.01:1;
+   const variants=memberLimit?[equipmentViews(project,source,width,limitedHeight)]:[[source],...[480,600,700].map(reserve=>equipmentViews(project,source,width,Math.max(80,geometry.height-reserve))),equipmentViews(project,source,width,Math.max(80,width/7))],seen=new Set(),plans=[];
    for(const variant of variants){const signature=variant.map(equipmentScope).join(';');if(seen.has(signature))continue;seen.add(signature);const owned=assignedEdges(project,variant,sorted,width),batches=variant.map((part,i)=>pageBatches(project,db,part,owned[i],width,geometry));if(batches.some(value=>!value))continue;plans.push({parts:variant,assigned:owned,prepared:batches,count:batches.reduce((n,b)=>n+b.length,0)});}
    const fit=plans.sort((a,b)=>a.count-b.count||a.parts.length-b.parts.length)[0];if(!fit)throw capacityError('This wireless caption needs more space. Choose a larger or dynamic page.');({parts,assigned,prepared}=fit);
   }

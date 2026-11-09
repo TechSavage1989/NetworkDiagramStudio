@@ -130,3 +130,16 @@ Verification on 2026-11-08 uses fictional input only. Customer captures and tran
 Desktop configuration imports use the complete retained upstream parser inventory. Browser-only imports use NDS parsers and the exact shared geometry catalog, and preserve a retained upstream inventory when one is present. Tested browser semantics and reports are equivalent for the covered fixtures; this is not a claim of identical handling for every upstream vendor command or management/mirror annotation. Unknown or unsupported hardware remains explicitly unconfirmed or blocked rather than receiving inferred ports.
 
 The intentional host differences are W06 and W07. NetworkDiagramStudio keeps its own update schedule, explicit installation, save-before-update and rollback behavior. No Switchport update feed, separate host settings panel, or protected unsaved update-restoration promise is introduced.
+
+## Unreleased parity refresh: upstream 1.18.6
+
+Compared current upstream commit 349236a8cd04cb9def8053fb2cbce9610fc3dc07 with the pinned 1.18.5 engine. This is a targeted reconciliation, not a claim that the browser implements every native vendor command.
+
+- Legacy workspace imports retain validated paper size/orientation and the independent title toggle through native and browser paths. Missing paper keeps A4 landscape.
+- Native external numbers follow every physical row pair and remain centered; dense stack candidates preserve complete markers and the NDS six-point reference-scene text floor. Shared sheets preserve and report socket scale and separate differently scaled blocks. PNG output uses the same centered physical quarter-inch margin as PDF.
+- Browser configuration imports now retain management/default-gateway and mirror annotations, correct IOS allowed-VLAN add/remove/except operations, and pass configured speeds, SVI addresses and tagged-native state into report inventories.
+- Native regression additions cover workspace migration, mixed copper/optical and multirow label positions/centering, socket-scale metadata, all fourteen paper size/orientation combinations, PNG centering and numeric 300-DPI metadata. These tests require the hosted Windows build; they were not executed in the local environment because no .NET SDK is installed.
+
+Remaining browser-only gaps include complete Comware hybrid/IRF semantics, RouterOS bridge admission and bonding details, IOS DTP/global native tagging and mode-aware aggregate inheritance, IPv6/secondary SVI parsing, and exhaustive unsupported-command blockers. Desktop imports retain the complete upstream native parser. Existing NDS-only topology, source selection, native Visio, editing and safe normalized persistence remain in place. Host update behavior intentionally remains W06/W07 above.
+
+The native renderer uniformly fits its established A4 scene on selected paper. Small or portrait paper can reduce actual printed font sizes below the reference-scene floor; this refresh does not claim native paper reflow. Retained native secondary/IPv6 SVI addresses remain alongside browser edits, with conflicting addresses requiring review rather than assumed replacement.

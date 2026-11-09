@@ -143,17 +143,22 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 .pagebar{position:relative;z-index:2;min-width:0}
 .pagebar .tabs{flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:#87a5ad transparent;overscroll-behavior-x:contain}
 .pagebar .tabs button{flex:0 0 auto}
-#page-families .page-group{position:relative;flex:0 0 auto}
-#page-families .page-group summary{display:block;list-style:none;cursor:pointer;user-select:none;white-space:nowrap;font-size:12px;font-weight:600;color:#183544;padding:3px 22px 3px 8px;background:#f5f8f9;border:1px solid transparent;border-radius:4px;position:relative}
-#page-families .page-group summary::-webkit-details-marker{display:none}
-#page-families .page-group summary:after{content:"";position:absolute;right:9px;top:44%;border:4px solid transparent;border-top-color:currentColor}
+/* Persistent sidebar page groups: never overlay the drawing or inventory. */
+aside .page-navigation{display:block;padding:12px 0;flex:none}
+aside .page-navigation[hidden]{display:none}
+.page-navigation h2{margin-bottom:8px}
+#page-families{display:block;max-height:clamp(130px,28vh,300px);overflow:auto;overscroll-behavior:contain;padding:3px}
+#page-families .page-group{margin:3px 0}
+#page-families .page-group summary{cursor:pointer;user-select:none;font-size:12px;font-weight:600;padding:7px 6px;background:#f5f8f9;border:1px solid transparent;border-radius:4px;overflow-wrap:anywhere}
 #page-families .page-group summary.active{background:#e0eff1;border-color:#9abcc4;color:#095d6c}
-#page-families .page-group summary:hover,#page-families .page-group[open] summary{background:#e8f2f4;border-color:#9abcc4}
-#page-families .page-group summary:focus-visible{outline:3px solid #35a5b6;outline-offset:2px}
-#page-families .page-group-menu{position:absolute;top:calc(100% + 4px);left:0;min-width:250px;max-width:min(440px,75vw);width:max-content;max-height:min(55vh,430px);overflow-y:auto;overscroll-behavior:contain;background:#fff;border:1px solid #aebfc6;border-radius:6px;box-shadow:0 12px 35px #102b3e38;padding:5px;z-index:12}
-#page-families .page-group-menu button{display:block;width:100%;padding:7px 10px;margin:0;border:0;border-radius:3px;text-align:left;white-space:normal;overflow-wrap:anywhere;background:#fff;color:#183544;font-size:12px;font-weight:500}
+#page-families .page-group summary:hover{background:#e8f2f4}
+#page-families .page-group summary:focus-visible{outline:3px solid #35a5b6;outline-offset:0}
+#page-families .page-group-menu{padding:4px 0 4px 12px}
+#page-families .page-group-menu button{display:block;width:100%;padding:7px 8px;margin:2px 0;border:0;border-left:3px solid transparent;border-radius:3px;text-align:left;white-space:normal;overflow-wrap:anywhere;background:#fff;color:#183544;font-size:12px;font-weight:500}
 #page-families .page-group-menu button:hover,#page-families .page-group-menu button:focus-visible{background:#edf4f6}
-#page-families .page-group-menu button.active{background:#e0eff1;color:#095d6c;font-weight:700}
+#page-families .page-group-menu button.active{background:#e0eff1;color:#095d6c;font-weight:700;border-left-color:#197485}
+.pagebar{flex-wrap:wrap}.pagebar .page-picker{margin-left:auto}
+
 
 /* Word-style editor rulers float outside the saved SVG and never print. */
 #canvas .page-ruler-top,#canvas .page-ruler-side{position:absolute;z-index:5;pointer-events:none;background:#f7fafb;box-shadow:0 1px 2px #17364a30}
@@ -185,7 +190,7 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 .editor-context-menu .editor-context-heading{font-weight:700;font-size:11px;color:#55717c;padding:6px 8px 4px;overflow-wrap:anywhere}
 .editor-context-menu button{appearance:none;text-align:left;width:100%;border:0;border-radius:4px;background:transparent;color:#173746;padding:7px 9px;font-size:12px;line-height:1.3;cursor:pointer}
 .editor-context-menu button:hover,.editor-context-menu button:focus-visible{background:#dfedf1;outline:none}
-#tabs .page-tab-rename{min-width:120px;max-width:260px;font:inherit;font-size:12px;padding:3px 5px;background:#fff;border:1px solid #117d96;border-radius:3px;box-shadow:0 0 0 2px #a8d6df;color:#173746}
+#page-families .page-tab-rename{min-width:0;max-width:100%;font:inherit;font-size:12px;padding:3px 5px;background:#fff;border:1px solid #117d96;border-radius:3px;box-shadow:0 0 0 2px #a8d6df;color:#173746}
 @media print{.editor-context-menu{display:none}}
 
 /* Editor-only association highlighting, never written to exported SVG or Visio. */
@@ -200,3 +205,5 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 .text-style-section summary:hover{background:#e3eff2}
 .text-style-section .form-grid{padding:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px}
 .text-style-section button{margin:0 10px 10px}
+
+@media(max-width:620px){.appbar .toolbar,.stagebar .toolbar{flex-wrap:wrap}.pagebar .page-picker{max-width:100%;flex-wrap:wrap}.page-picker select{max-width:65vw}.appbar .brand{max-width:100%}}

@@ -6,16 +6,18 @@
 
 ## Features
 
+Switchport workspace imports retain report paper and title settings. Native reports keep port numbers outside each physical row pair and use matching centered PNG/PDF paper placement. Browser configuration reports also preserve management/mirror notes, configured speeds and VLAN interface addresses. See [integration coverage](docs/SWITCHPORT_INTEGRATION.md) for the remaining browser-only parser limits.
+
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
 
 - Build Switchport Diagram Builder reports inside the same project: wall charts, paper-sized sheets and complete inventory booklets, with native/tagged/voice VLAN symbols, LAG outlines, stack markers and readable numbers outside the ports.
 - Export each device's eight-file report package, shared multi-device sheets, vector PDF, 300 dpi PNG, SVG and editable Visio. Keep one shared VLAN/LAG palette, report title, optional logo, serial numbers, asset tags and notes.
 - Open existing Switchport Diagram Builder workspaces and supported unencrypted RouterOS backups. Keep supplementary observations independently selectable and separate from configuration intent.
-- Navigate large drawing sets using scrollable page tabs and group dropdowns that dismiss on outside clicks or Escape. Moving equipment keeps the sidebar clear and reroutes affected cables with measured clearance.
+- Navigate large drawing sets using expandable page groups in the sidebar. Scroll the page list, select any sheet, or use the Page selector above the canvas. Moving equipment keeps the sidebar clear and reroutes affected cables with measured clearance.
 - Use **Organize connections** in Edit drawing to compare compact layouts, or tick **Even line spacing** to give every parallel cable on the page one consistent spacing. Review connection length, bends, crossings and footprint, switch between Current and Proposed, then apply the result as one undoable action. Keep manual cable bends by default or allow them to be rerouted.
 - Keep up to eight switch-stack members on one Port Map sheet with one VLAN/LAG key. On A4, Letter and other selected paper sizes, compare ordered member layouts and side/below legends to maximize readable hardware instead of forcing two columns. **Page options** offers **Auto-fit and optimize content** or **Preserve existing layout** for the selected page proportions, with independent print paper.
 - Port Inventory tables use compact readable type, smaller row spacing, and more of each printable page to reduce continuation pages. Interface identities, descriptions, tagged/native/voice VLANs, LAGs, link status and connected-device details remain intact and editable.
-- In Edit drawing, use right-click menus and **Snap label to line** for labels above, centered on or below their own cable. Specify the endpoint device/port, choose automatic alignment or manual rotation, and retain that placement when routing changes. Double-click page tabs to rename them and their printed titles.
+- In Edit drawing, use right-click menus and **Snap label to line** for labels above, centered on or below their own cable. Specify the endpoint device/port, choose automatic alignment or manual rotation, and retain that placement when routing changes. Double-click sidebar pages to rename them and their printed titles.
 - Configure the diagram details sidebar: reorder and rename sections, show or hide VLANs, LAGs, AP/VSF/uplink information, summarize or expand port-module assignments, and add custom sections while preserving complete address/MAC information.
 - Use the **Text styles** button at any time to apply project-wide font size, color, weight and alignment by category (device name/details, port labels, cable labels, page headings, connection key, sidebar and tables). Individual object formatting takes precedence.
 - Hover or select a Connection types sample to highlight every matching cable on the current page, or select/hover a cable to highlight its corresponding Connection types sample. The highlight is editor-only.
@@ -42,7 +44,7 @@ Network engineers can use the Windows application or the offline browser edition
 - Save and reopen the complete project, including report selections, colors, metadata, imported evidence and drawing edits.
 - Keep complete diagram captions with measured wrapping in both SVG and Visio. Port modules use editable gray optic faces with dark sockets and dark DAC ends with a horizontal insert, matching the Configuration Inspector style. Framed module keys expand or continue onto a module sheet; duplicate wording such as Port port1 is avoided.
 - Use the Visio-reference presentation with Calibri, a left connection/module key, nearby device labels and compact WAN/circuit cards. Circuit cards fit the actual stack width, use extra rows on narrow devices and retain complete provider/gateway text. Routes use available space inside the stack width when port orientation and clearances permit. Configure page-number visibility, starting values, padding and format.
-- Rename tabs, choose devices for named network/report pages, scale drawings/devices/text globally or independently, and customize the information panel with VLANs, addresses, routes and notes in **Pages & layout**. Built-in connectors use shared proportions across chassis and stacks. See the [layout guide](docs/FLEXIBLE_LAYOUT.md).
+- Rename pages, choose devices for named network/report pages, scale drawings/devices/text globally or independently, and customize the information panel with VLANs, addresses, routes and notes in **Pages & layout**. Built-in connectors use shared proportions across chassis and stacks. See the [layout guide](docs/FLEXIBLE_LAYOUT.md).
 
 ## Screenshots
 
@@ -55,9 +57,13 @@ Network engineers can use the Windows application or the offline browser edition
 **Review connection improvements before applying one undoable layout change.**
 <p align="center"><img src="docs/images/organize-connections.png" width="1000" alt="Organization preview with current and proposed cable length, bends, crossings and drawing footprint"></p>
 
-**Follow wireless connections with readable access-point captions and separate cable lanes.**
-<p align="center"><img src="docs/images/compact-wireless.png" width="900" alt="Fictional wireless connections with readable access-point captions and separate cable lanes"></p>
+**Keep wireless details readable on physical paper with automatic continuation sheets.**
+<p align="center"><img src="docs/images/wireless-paper.png" width="900" alt="Actual generated Letter wireless continuation sheet with fictional switch members, AP details and physical port links"></p>
 
+
+Cable labels and port numbers use centered text by default; explicit text-style edits remain available.
+
+Auto-fit plans wireless pages for the selected paper before drawing, so dense stacks continue across sheets instead of shrinking AP details to tiny text. Dynamic pages and Preserve existing layout remain available.
 
 ## Download
 
@@ -147,13 +153,13 @@ In **Edit drawing**, select a cable. Drag a square handle to move a bend, click 
 
 **Pages & layout**, under **Drawing defaults**, includes **Document detail**. Concise mode keeps complete physical inventory, consolidates only identical network records with their explicit device scope, and avoids automatic membership matrices that repeat the inventory. Full reference includes separate matrices. Custom reports and saved reference-page edits are preserved.
 
-**Pages & layout** provides page names, selected-device network/report pages, visible tabs, drawing and text scales, shared device scale, and a configurable information panel. Double-click a tab to open it. Clear **Use drawing defaults** to override that page. Choose **Add a page**, its type and devices to create a custom report; hide unwanted automatic pages with **Show this page**. Open device details for individual device scale, or **Edit drawing > Edit selected** for object and font sizes. The [layout guide](docs/FLEXIBLE_LAYOUT.md) describes inheritance and stencil behavior.
+**Pages & layout** provides page names, selected-device network/report pages, visible pages, drawing and text scales, shared device scale, and a configurable information panel. Double-click a sidebar page to rename it. Clear **Use drawing defaults** to override that page. Choose **Add a page**, its type and devices to create a custom report; hide unwanted automatic pages with **Show this page**. Open device details for individual device scale, or **Edit drawing > Edit selected** for object and font sizes. The [layout guide](docs/FLEXIBLE_LAYOUT.md) describes inheritance and stencil behavior.
 
 **Page options** separates **Canvas size** from **Print paper**. Dynamic / Fit all is the default for new drawings; existing explicit paper choices are retained. Choose **Match drawing (full-size PDF)** for the full canvas, or Letter, Legal, Tabloid, A5 through A1, or custom print dimensions (148 to 1500 mm) to fit each drawing page onto a printed sheet. Other documentation views retain their logical sections and connection banks.
 
 The device list shows each name, model/type and management IP, with a **Delete** button beside each device. Drag a row onto another device to place it before that device, or use **Up / Down** to change its position. The order is saved with the project and can be undone. The checkbox includes or excludes a device from the drawing. **Clear all** confirms the total inventory, including filtered or excluded devices; **Undo** restores devices and their connections.
 
-**Page options** also shows or hides page numbers, chooses their starting number and padding, and sets a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. The default is a two-digit number such as 01 / 07. These settings persist in the project.
+**Page options** keeps footers and page numbers off by default to leave more room for content. Enable either independently, choose a starting number and padding, and set a format. Use {page} for the current number, {last} for the final number and {total} for the sheet count. When enabled, the default format is a two-digit number such as 01 / 07. These settings persist in the project. Port Map sheets appear together before Port Inventory pages, in the editor and exports.
 
 Use **Core page** in **Device details** or **Device order / Core pages** to assign equipment to an existing page, create a dedicated page, or return it to automatic placement. Selecting any current layout page saves that sheet's device group as a named page, including a continued sheet. Existing group connection preferences are retained. Named pages can show all, some, or none of their off-page connection references.
 

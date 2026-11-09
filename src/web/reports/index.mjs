@@ -2,7 +2,7 @@ import {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReport
 import {sharedReportPalette} from './palette.mjs';
 import {reportDiagram,workspaceDiagrams,inventoryPages,blockedReport,validateReportScene,ReportCapacityError,numberReportPages} from './scene.mjs';
 import {reportPageLabel,reportFileStem} from './paper.mjs';
-import {targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions} from '../page-options.mjs';
+import {cleanPageNumbers,targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions} from '../page-options.mjs';
 import {adaptivePortMap} from './adaptive-port-map.mjs';
 export {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReportInventory,validateInventory,inventoryCsv,technicianSummary,reportFolder,reportModelChoice} from './model.mjs';
 export {sharedReportPalette,aggregateKey,validateVlanColor,nativeFill,markerVlans,vlanIds,colorDifference} from './palette.mjs';
@@ -67,7 +67,7 @@ export function buildReportPackage(project,selectedIds){
 export function portMapSheets(project,devices,paper,artwork=new Map()){
  const ids=devices.map(device=>device.id),sheets=new Map();if(!ids.length)return sheets;
  let prepared;try{prepared=prepare({...project,layout:{...project.layout,switchport:{...(project.layout?.switchport||{}),enabled:true,deviceIds:ids}}},ids);}catch{return sheets;}
- const {items,palette}=prepared,request={...prepared.request,paper,fill:!!paper?.fill,dynamicCanvas:true,targetAspect:targetPageAspect(project,{name:'MDF Port Map',family:'ports'})};
+ const {items,palette}=prepared,request={...prepared.request,pageFooter:cleanPageNumbers(project.layout?.pageNumbers),paper,fill:!!paper?.fill,dynamicCanvas:true,targetAspect:targetPageAspect(project,{name:'MDF Port Map',family:'ports'})};
  for(const item of items){
   if(!item.validation.ok)continue;
   // Port maps paint the builder sheet in the device's core-diagram colors.

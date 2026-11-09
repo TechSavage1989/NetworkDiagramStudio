@@ -10,7 +10,7 @@ public sealed class OnePageCapacityException : Exception
 // The RJ45 uses one simple latch tab; the optical cage retains its wide profile.
 public static class QuickSheet
 {
-    public const double PortWidth=25.2,TabTop=17.8,PortHeight=TabTop+5.4,TabFraction=.42,OpticalHeight=16.2,PortFont=6,DotRadius=2.1,AggregateStroke=2.4,AggregateOutset=.3,NumberInset=1.1,NativeInset=.9,MarkerTopInset=1.05,CopperMarkerTopInset=1.05,MarkerGap=.25,MarkerHalo=.08,MarkerStroke=.16,PortGap=1,FaceStroke=.8;
+    public const double PortWidth=25.2,TabTop=17.8,PortHeight=TabTop+5.4,TabFraction=.42,OpticalHeight=16.2,PortFont=6,DotRadius=2.1,AggregateStroke=2.4,AggregateOutset=.3,NumberInset=1.1,NativeInset=.9,MarkerTopInset=1.05,CopperMarkerTopInset=1.05,MarkerGap=.25,MarkerHalo=.08,MarkerStroke=.16,PortGap=1,FaceStroke=.8,NumberBand=7.5;
     public const double ActivePanelHeight=SocketTop+RowPitch+PortHeight+PanelBottom;
     public const double MarkerPitch=4.5;
     public const double MarkerClearance=.14,MinimumDotRadius=1.1,MaximumDotRadius=4.2,MinimumPortFont=6,MinimumBodyFont=7;
@@ -21,9 +21,9 @@ public static class QuickSheet
     public static double PanelHeight(Inventory inv)
     {
         int rows=Math.Max(2,inv.Groups.SelectMany(g=>g.SocketLayout).Select(s=>s.Row+1).DefaultIfEmpty(2).Max());
-        return SocketTop+(rows-1)*(RowPitch+(rows>2?9:0))+PortHeight+PanelBottom;
+        return SocketTop+(rows-1)*RowPitch+((rows-1)/2)*2*NumberBand+PortHeight+PanelBottom;
     }
-    const double PageWidth=805.89,PageHeight=559.28,Pitch=PortWidth+PortGap,RowPitch=PortHeight+PortGap,Header=8,SocketTop=Header+10,PanelBottom=9.8,PanelGap=.5,BodyFont=7.5;
+    const double PageWidth=805.89,PageHeight=559.28,Pitch=PortWidth+PortGap,RowPitch=PortHeight+PortGap,Header=8,SocketTop=Header+NumberBand+1,PanelBottom=.8+NumberBand,PanelGap=.5,BodyFont=7.5;
     public const double DiagramTop=37,IconKeyTop=PageHeight-24,DiagramBottom=IconKeyTop-3;
     public record Socket(string Port,string Suffix,Box Tile,string Display,bool Optical,Box NumberBounds)
     {
@@ -44,21 +44,27 @@ public static class QuickSheet
         public Dictionary<int,string> VlanColors {get;}=new();
         public Dictionary<string,string> AggregateColors {get;}=new(StringComparer.OrdinalIgnoreCase);
     }
-    sealed record LayoutPlan(double Scale,int Compact,bool PreferWholeWords=true,bool KeyBelow=false,double? MaximumBodyWidth=null,double? MaximumBottom=null)
+    sealed record LayoutPlan(double Scale,int Compact,bool PreferWholeWords=true,bool KeyBelow=false,double? MaximumBodyWidth=null,double? MaximumBottom=null,double FaceScale=1)
     {
         public double Width=>(PageWidth-.8)/Scale;
         public double Bottom=>Math.Min(DiagramTop+(DiagramBottom-DiagramTop)/Scale,MaximumBottom is {} limit?DiagramTop+(limit-DiagramTop)/Scale:double.MaxValue);
         public double Gap=>Compact==0?PortGap:.65;
-        public double Pitch=>PortWidth+Gap;
-        public int Rows {get;set;}=2;
-        public double NumberBand=>Height(NumberFont,Scale)+2/Scale;
-        public double RowPitch=>PortHeight+Gap+(Rows>2?NumberBand:0);
+        public double FaceWidth=>PortWidth*FaceScale;
+        public double FaceHeight=>PortHeight*FaceScale;
+        public double OpticalFaceHeight=>OpticalHeight*FaceScale;
+        public double Pitch=>FaceWidth+Gap;
+        public double RowPitch=>FaceHeight+Gap;
+        public double RowOffset(int row)=>row*RowPitch+(row/2)*NumberBand*2;
         public double TitleInkHeight {get;set;}
         public double KeyTextWidth {get;set;}=78;
         public double PreferredRadius=>Math.Min(MaximumDotRadius,DotRadius*Scale);
-        public double Header=>Math.Max(Height(Font(7),Scale),TitleInkHeight)+1.0/Scale;
+        public double Header=>(FaceScale<1?TitleInkHeight:Math.Max(Height(Font(7),Scale),TitleInkHeight))+1.0/Scale;
         public double HeaderInset=>.15/Scale;
         public double TitleTop=>.55/Scale;
+        public double NumberInkHeight {get;set;}
+        public double NumberBand=>FaceScale<1
+            ?Math.Max(4.5,NumberInkHeight+NumberInset+.25/Scale)
+            :Math.Max(6.5,Height(NumberFont,Scale)+2/Scale);
         public double SocketTop=>Header+NumberBand+(Compact==0?1:Math.Max(.65/Scale,AggregateOutset+.4/Scale));
         public double PanelBottom=>NumberBand+(Compact==0?.8:Math.Max(.7/Scale,AggregateOutset+.4/Scale));
         public double PanelGap=>Compact==0?.5:.3/Scale;
@@ -74,7 +80,11 @@ public static class QuickSheet
         public double KeyTextInset=>6+(2*PreferredRadius+3)/Scale;
         public double HeadingHeight=>12/Scale;
         public double AfterHeading=>13/Scale;
-        public double PanelHeight(Inventory inv)=>SocketTop+(Rows-1)*RowPitch+PortHeight+PanelBottom;
+        public double PanelHeight(Inventory inv)
+        {
+            int rows=Math.Max(2,inv.Groups.SelectMany(g=>g.SocketLayout).Select(s=>s.Row+1).DefaultIfEmpty(2).Max());
+            return SocketTop+RowOffset(rows-1)+FaceHeight+PanelBottom;
+        }
     }
     record Panel(string Group,string Title,double X,double Y,double W,double H);
     record PositionedSocket(Group Group,Placement Placement,double Column,int Row);
@@ -227,28 +237,30 @@ public static class QuickSheet
     static void DrawSocket(Result output,Inventory inv,Group g,Port port,Placement original,double x,double y,int row,Dictionary<string,string> colors,LayoutPlan plan)
     {
         var scene=output.Scene;bool optical=original.Socket=="M"||original.Socket!="T"&&port.Media!="RJ-45";
-        double h=optical?OpticalHeight:PortHeight;
-        var points=port.Media=="Unspecified"?new[]{(x,y),(x+PortWidth,y),(x+PortWidth,y+h),(x,y+h)}:Outline(x,y,optical);
+        double h=optical?plan.OpticalFaceHeight:plan.FaceHeight;
+        var points=port.Media=="Unspecified"?new[]{(x,y),(x+plan.FaceWidth,y),(x+plan.FaceWidth,y+h),(x,y+h)}:Outline(x,y,optical,plan.FaceScale);
         string fill=Fill(port,output.VlanColors);
         SocketShape(scene,points,fill,port.Aggregate.Length>0?colors[port.Aggregate]:null,port.Id,optical);
         string display=Display(g,port,original.Socket)+(port.Disabled==true?"!":"");
-        double numberWidth=PortWidth-1;
+        // The number is OUTSIDE the faceplate: upper socket rows above their
+        // RJ45 or SFP jack, lower rows below, centered to the same socket.
+        // Use the common copper reference height for bottom rows so optical
+        // and RJ45 numbers share the same horizontal band.
         var number=new Label(0,0,display,plan.NumberFont,"#101820",true,0,port.Id,true);
-        // Ink bounds are measured at final printed size, then normalized, so
-        // fractional geometry scales do not uncenter or clip small numerals.
         var measured=ReportRenderer.Measure(number with{Size=number.Size*plan.Scale});
         double numberWidthActual=measured.Width/plan.Scale,numberHeight=measured.Height/plan.Scale;
-        if(numberWidthActual>numberWidth)throw new OnePageCapacityException("interface number exceeds its reserved external label area");
-        // Top-row numbers sit above the sockets; other rows sit below. Extra
-        // bands on hardware with three or more rows prevent adjacent overlap.
-        double numberY=row==0?y-1/plan.Scale-numberHeight:y+PortHeight+1/plan.Scale;
-        var labelBox=new Box(x+(PortWidth-numberWidthActual)/2,numberY,numberWidthActual,numberHeight,"");
+        double numberWidth=plan.FaceWidth-2*NativeInset;
+        if(numberWidthActual>numberWidth)throw new OnePageCapacityException("interface number exceeds the width of its exterior label band");
+        double numberY=row%2==0?y-plan.NumberInset-numberHeight:y+plan.FaceHeight+plan.NumberInset;
+        var labelBox=new Box(x+(plan.FaceWidth-numberWidthActual)/2,numberY,numberWidthActual,numberHeight,"");
+        if(row%2==0?labelBox.Y+labelBox.H>y-.25:labelBox.Y<y+h+.25)
+            throw new OnePageCapacityException("interface number could not clear its physical socket");
         scene.Labels.Add(number with {X=labelBox.X,Y=labelBox.Y});
         double markerInset=plan.Compact>0&&port.Aggregate.Length==0?FaceStroke/2+.1:NativeInset+.05;
-        output.Sockets.Add(new(port.Id,original.Socket,new Box(x,y,PortWidth,h,fill),display,optical,labelBox)
+        output.Sockets.Add(new(port.Id,original.Socket,new Box(x,y,plan.FaceWidth,h,fill),display,optical,labelBox)
         {
             FacePoints=points,MarkerTop=y+(plan.Compact==0?MarkerTopInset:markerInset+.025),
-            MarkerBottom=y+h-.65,
+            MarkerBottom=(optical?y+h:y+TabTop*plan.FaceScale)-markerInset-.15,
             MarkerInset=markerInset,MarkerCount=MarkerVlans(inv,port).Count
         });
     }
@@ -326,28 +338,29 @@ public static class QuickSheet
         {
             Result? Attempt(double scale)
             {
+                // Only unusually tall stacks may compact all socket faces
+                // together, preserving the exact RJ45/SFP aspect ratios and
+                // the full-size exterior number text.
+                foreach(double face in inv.Groups.Count>=6?new[]{1.0,.95,.9,.85,.8,.75,.7,.65}:new[]{1.0})
                 foreach(bool wholeWords in new[]{true,false})foreach(bool narrow in new[]{true,false})
                 {
                     try
                     {
-                        var candidate=BuildCore(inv,original,hash,narrow,new(scale,compact,wholeWords,keyBelow,MaximumBottom:maximumHeight),palette,aggregate);
-                        ApplyGeometry(candidate,scale,compact);
+                        var candidate=BuildCore(inv,original,hash,narrow,new(scale,compact,wholeWords,keyBelow,MaximumBottom:maximumHeight,FaceScale:face),palette,aggregate);
+                        ApplyGeometry(candidate,scale,compact,face);
                         DrawVisualGuide(candidate.Scene,inv,palette,aggregate);
                         var errors=Charts.ValidateScene(candidate.Scene);
                         if(errors.Count>0)throw new OnePageCapacityException(string.Join("; ",errors));
+                        if(!MarkersFit(candidate,MinimumDotRadius))
+                            throw new OnePageCapacityException("complete VLAN markers cannot fit at the readable minimum size");
                         return candidate;
                     }
                     catch(OnePageCapacityException ex){last=ex;}
                 }
                 return null;
             }
-            var best=Attempt(1);double startingScale=1;
-            // External label bands keep a six-point text floor. A dense stack
-            // may reduce every socket proportionally before it needs another
-            // sheet; neither labels nor VLAN markers bypass their size guards.
-            if(best==null){startingScale=.6;best=Attempt(startingScale);}
-            if(best==null)continue;
-            double low=startingScale,high=4;
+            var best=Attempt(1);if(best==null)continue;
+            double low=1,high=4;
             for(int iteration=0;iteration<12;iteration++)
             {
                 double middle=(low+high)/2;var trial=Attempt(middle);
@@ -383,12 +396,13 @@ public static class QuickSheet
         var aggregate=AggregatePalette.Assign(inv,p=>Fill(p,palette),palette.Values);
         var candidates=new List<Result>();OnePageCapacityException? last=null;
         foreach(bool keyBelow in includeVlanKey?new[]{false,true}:new[]{false})for(int compact=0;compact<=2;compact++)
+        foreach(double face in inv.Groups.Count>=6?new[]{1.0,.95,.9,.85,.8,.75,.7,.65}:new[]{1.0})
         foreach(bool wholeWords in new[]{true,false})foreach(bool narrow in new[]{true,false})
         {
             try
             {
-                var candidate=BuildCore(inv,original,hash,narrow,new(1,compact,wholeWords,keyBelow,maximumBodyWidth,maximumHeight),palette,aggregate,includeVlanKey,includeDetails);
-                ApplyGeometry(candidate,1,compact);
+                var candidate=BuildCore(inv,original,hash,narrow,new(1,compact,wholeWords,keyBelow,maximumBodyWidth,maximumHeight,face),palette,aggregate,includeVlanKey,includeDetails);
+                ApplyGeometry(candidate,1,compact,face);
                 double radius=markerRadius??DotRadius;
                 if(!MarkersFit(candidate,radius))
                 {
@@ -412,7 +426,9 @@ public static class QuickSheet
         // A shared side key uses the width left by the switch. Reclaim unused
         // panel width before optimizing height, so a few shorter description
         // lines do not force complete VLAN names onto needless key pages.
-        var ordered=candidates.OrderByDescending(candidate=>Math.Round(candidate.MarkerRadius,5));
+        // At equal marker readability, preserve the largest physical sockets.
+        var ordered=candidates.OrderByDescending(candidate=>Math.Round(candidate.MarkerRadius,5))
+            .ThenByDescending(candidate=>candidate.GeometryScale);
         var best=(!includeVlanKey&&maximumBodyWidth.HasValue
             ?ordered.ThenBy(candidate=>candidate.Scene.DiagramBodyWidth).ThenBy(candidate=>candidate.Scene.Height)
             :ordered.ThenBy(candidate=>candidate.Scene.Height))
@@ -543,8 +559,9 @@ public static class QuickSheet
     static Result BuildCore(Inventory inv,List<Placement> original,string hash,bool compact,LayoutPlan plan,Dictionary<int,string> palette,Dictionary<string,string> colors,bool includeVlanKey=true,bool includeDetails=true)
     {
         var output=new Result();var scene=output.Scene;var groups=inv.Groups.ToDictionary(g=>g.Id);
-        plan.Rows=Math.Max(2,inv.Groups.SelectMany(g=>g.SocketLayout).Select(socket=>socket.Row+1).DefaultIfEmpty(2).Max());
         plan.TitleInkHeight=inv.Groups.Select(g=>ReportRenderer.Measure(new Label(0,0,PanelTitle(inv,g),plan.Font(7)*plan.Scale,"#ffffff",true,0,"",true)).Height/plan.Scale).DefaultIfEmpty(0).Max();
+        plan.NumberInkHeight=inv.Ports.Select(p=>Display(groups[p.Group],p,"")+(p.Disabled==true?"!":"")).Distinct()
+            .Select(text=>ReportRenderer.Measure(new Label(0,0,text,plan.NumberFont*plan.Scale,Bold:true,InkBox:true)).Height/plan.Scale).DefaultIfEmpty(0).Max();
         // Reserve readable legend content before maximizing the physical bank.
         // Long names may wrap, but a large diagram cannot squeeze the key into
         // character-wide columns or split the numeric VLAN identity.
@@ -710,19 +727,18 @@ public static class QuickSheet
             }
             else scene.Text(panel.X+3,panel.Y+plan.TitleTop,panel.Title,plan.Font(7),"#ffffff",true,panel.W-6,inkBox:true);
             var pp=positions[g.Id];
-            double width=pp.Max(p=>p.Column)*plan.Pitch+PortWidth;
+            double width=pp.Max(p=>p.Column)*plan.Pitch+plan.FaceWidth;
             if(width>panel.W-3)throw new OnePageCapacityException("module socket inventory exceeds fixed-scale panel width");
             double x0=panel.X+(panel.W-width)/2;
             double leading=pp.Min(p=>p.Column)*plan.Pitch;
             if(leading>plan.Pitch)scene.Rect(x0,panel.Y+plan.SocketTop,leading-plan.Gap,panel.H-plan.SocketTop-plan.PanelBottom,"#e3e8ed","#c6d2dc",role:"BlankFascia");
             int rows=pp.Max(p=>p.Row)+1;
-            double rowPitch=plan.RowPitch;
-            double bankHeight=(rows-1)*rowPitch+PortHeight;
+            double bankHeight=plan.RowOffset(rows-1)+plan.FaceHeight;
             double bankTop=panel.Y+plan.SocketTop+(panel.H-plan.SocketTop-plan.PanelBottom-bankHeight)/2;
             foreach(var item in pp)
             {
                 var port=inv.Ports.Single(p=>p.Id==item.Placement.Port);
-                DrawSocket(output,inv,item.Group,port,item.Placement,x0+item.Column*plan.Pitch,bankTop+item.Row*rowPitch,item.Row,colors,plan);
+                DrawSocket(output,inv,item.Group,port,item.Placement,x0+item.Column*plan.Pitch,bankTop+plan.RowOffset(item.Row),item.Row,colors,plan);
             }
         }
         var vlans=output.VlanColors.Keys.Order().ToList();
@@ -765,13 +781,13 @@ public static class QuickSheet
         scene.DiagramBodyWidth=includeVlanKey?keyX+keyWidth:diagramWidth;
         return output;
     }
-    static void ApplyGeometry(Result result,double scale,int compact)
+    static void ApplyGeometry(Result result,double scale,int compact,double faceScale=1)
     {
         var scene=result.Scene;double dx=Math.Max(0,(PageWidth-scene.DiagramBodyWidth*scale)/2);
-        bool Body(double y)=>y>=DiagramTop-.01;
+        bool Body(double y)=>y>=DiagramTop-.01&&y<IconKeyTop;
         double X(double x)=>dx+x*scale;double Y(double y)=>DiagramTop+(y-DiagramTop)*scale;
         for(int i=0;i<scene.Boxes.Count;i++){var b=scene.Boxes[i];if(Body(b.Y))scene.Boxes[i]=b with{X=X(b.X),Y=Y(b.Y),W=b.W*scale,H=b.H*scale,Radius=b.Radius*scale};}
-        for(int i=0;i<scene.Labels.Count;i++){var l=scene.Labels[i];if(Body(l.Y)&&!(l.Y==PageHeight-10&&l.Text==ReportText.CableMoveDisclaimer))scene.Labels[i]=l with{X=X(l.X),Y=Y(l.Y),Size=l.Size*scale,Width=l.Width*scale};}
+        for(int i=0;i<scene.Labels.Count;i++){var l=scene.Labels[i];if(Body(l.Y))scene.Labels[i]=l with{X=X(l.X),Y=Y(l.Y),Size=l.Size*scale,Width=l.Width*scale};}
         for(int i=0;i<scene.Shapes.Count;i++){var p=scene.Shapes[i];if(Body(p.Points.Min(v=>v.Y)))scene.Shapes[i]=p with{Points=p.Points.Select(v=>(X(v.X),Y(v.Y))).ToArray(),StrokeWidth=p.StrokeWidth*scale};}
         for(int i=0;i<scene.Dots.Count;i++){var d=scene.Dots[i];if(Body(d.Y))scene.Dots[i]=d with{X=X(d.X),Y=Y(d.Y),Radius=DotRadius,Halo=MarkerHalo,Outline=MarkerStroke,VoiceExtra=0};}
         Box Box(Box b)=>b with{X=X(b.X),Y=Y(b.Y),W=b.W*scale,H=b.H*scale};
@@ -779,7 +795,8 @@ public static class QuickSheet
         {
             var p=result.Sockets[i];result.Sockets[i]=p with{Tile=Box(p.Tile),NumberBounds=Box(p.NumberBounds),FacePoints=p.FacePoints.Select(v=>(X(v.X),Y(v.Y))).ToArray(),MarkerTop=Y(p.MarkerTop),MarkerBottom=Y(p.MarkerBottom),MarkerInset=p.MarkerInset*scale};
         }
-        scene.DiagramScale=scale;scene.MarkerRadius=DotRadius;scene.CompactionLevel=compact;scene.IsAdaptiveLayout=true;
+        // Report the actual socket scale, including uniform dense-stack compaction.
+        scene.DiagramScale=scale*faceScale;scene.MarkerRadius=DotRadius;scene.CompactionLevel=compact;scene.IsAdaptiveLayout=true;
     }
     public static void FitToPage(Scene scene)
     {

@@ -185,3 +185,25 @@ Do not persist an unchanged generated color-key object name when its cable type 
 ## Adaptive port-map paper fitting
 
 For an explicit visible paper in Auto-fit mode, evaluate measured side/below legends and ordered complete banks before scaling. Landscape alone must not force two stack columns. Keep socket aspect ratios, all marker memberships, readable number bands and one complete key; prefer the largest shared socket size with readable text at near ties. Chassis slots retain their physical pairs. Use actual final workspace page names for individual overrides. Exact paper-planned scenes bypass a second whole-page fit margin. Regenerate the same adaptive base after an edit, then apply stable-key overrides; never reset untouched members on the first move. Preserve mode, dynamic canvases, independent print paper and standalone native report behavior stay separate. Require the built-editor adaptive-port-map browser gate and synthetic physical-size/order/data checks.
+
+## Wireless paper readability and page decorations
+
+Align opposite wireless runs using final geometry, including stack-gap escape
+rows, not only initial side ranks. Reuse a row only when the full cable keeps
+its endpoints, physical gap bounds, painted clearance and crossing checks.
+Auto-fit physical paper is a readability constraint before wireless placement;
+keep Dynamic and Preserve existing layout semantics, explicit saved positions,
+and complete link/member inventories through continuations. Footer and page
+numbers default off independently; reclaim their band only when both are off.
+Main drawing-set port maps precede inventories in the common editor/export
+page list. Standalone Switchport Reports keep their independent settings.
+
+Page groups are persistent expandable lists in the project sidebar, not popup menus.
+Keep page navigation separately scrollable and inside the sidebar; never scroll
+the transform-based canvas to reveal a page entry. The active family's page list
+retains #tabs for native checks, while page buttons use data-page stable names and
+aria-current. Preserve keyboard activation, double-click rename and page context
+menus when changing navigation. Capture the synthetic responsive sidebar at
+1366, 1024 and 620 pixels through tests/browser-page-navigation.mjs on hosted Edge.
+
+Switchport 1.18.6 compatibility: migrate legacy workspace Paper (Preset/Orientation) and ShowWorkspaceTitle independently of output naming. Native exterior numbers follow each even/odd physical row pair, not only row zero. Preserve NDS six-point reference-scene number fonts when incorporating upstream compaction. Shared sheet placement/page scales reflect actual socket widths; package GeometryScale is null when pages use different scales. PNG and PDF use centered proportional fits with a physical quarter-inch margin. Keep native tests in the Windows build gate and describe browser parser coverage precisely in docs/SWITCHPORT_INTEGRATION.md.

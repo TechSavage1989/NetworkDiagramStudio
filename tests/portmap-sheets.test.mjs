@@ -166,7 +166,7 @@ test('builder port maps grow tagged dots to fill the most filled jack, centered,
  const vlans=Array.from({length:30},(_,i)=>({id:10+i,name:'Lab VLAN '+(10+i)})),ids=vlans.map(v=>v.id);
  const chassis=(id,max)=>({id,name:'LAB-'+id,kind:'switch',vendor:'HPE Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,
   ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:ids[0],tagged:ids.slice(6,6+(i%max)+1)})),...Array.from({length:24},(_,i)=>({name:'C'+(i+1),state:'up',native:ids[i%6],tagged:ids.slice(6,6+(i%max)+1)}))]});
- const pages=buildAllPages({name:'Fill lab',devices:[chassis('sparse',3),chassis('dense',14)],links:[],layout:{}}).filter(page=>page.portMap?.switchportSheet),sheet=id=>pages.find(page=>page.portMap.device===id);
+ const pages=buildAllPages({name:'Fill lab',devices:[chassis('sparse',3),chassis('dense',14)],links:[],layout:{pageNumbers:{footer:true}}}).filter(page=>page.portMap?.switchportSheet),sheet=id=>pages.find(page=>page.portMap.device===id);
  const dots=page=>page.items.filter(i=>(i.reportPortRole==='tagged'&&i.type==='ellipse')),sizes=page=>new Set(dots(page).map(i=>i.w.toFixed(3)));
  for(const page of pages){assert.equal(sizes(page).size,1,'one dot size per map');assert.ok(Math.abs([...sizes(page)][0]/2-page.reportMarkerFit)<1e-3,'the map draws its fill size');}
  assert.ok(sheet('sparse').reportMarkerFit>sheet('dense').reportMarkerFit,'a sparser map takes larger dots');assert.ok(sheet('dense').reportMarkerFit>2.1,'the dense map grows past the builder radius');

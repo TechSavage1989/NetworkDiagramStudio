@@ -1,3 +1,4 @@
+import {reportPaperChoices} from './reports/paper.mjs';
 import {parseConfig,mergeModels,findDeviceIdentity} from './imports/index.mjs';
 import {importReportSupplementary,supplementaryPromptHostname} from './reports/supplementary.mjs';
 import {normalizeSupplementarySources} from './reports/supplementary.mjs';
@@ -15,6 +16,13 @@ function nativeDevice(item,{independent=true}={}){
  const d={...input,id,name:cleanText(input.name||item.name,180),kind:input.kind||'switch',fromConfig:true,ports:(input.ports||[]).map(port=>({...port,...(port.disabled!=null?{admin:port.disabled?'down':'up'}:{})})),vlans:input.vlans||[],routes:input.routes||[],stackMembers:input.stackMembers||composition.stackMembers||[],modules:input.modules||composition.modules||[],reportDetails:lowerRows(item.details||input.reportDetails),switchportInventory:item.inventory||input.switchportInventory,reportSupplementary:normalizeSupplementarySources(item.supplementary||[])};
  delete d.hardwareComposition;return d;
 }
+function workspacePaper(raw){
+ if(raw==null)return {preset:'a4',orientation:'landscape'};
+ if(typeof raw!=='object'||Array.isArray(raw))throw Error('Invalid saved report paper.');
+ const preset=String(value(raw,'preset')??'a4').trim().toLowerCase(),orientation=String(value(raw,'orientation')??'landscape').trim().toLowerCase();
+ if(!reportPaperChoices.some(([id])=>id===preset)||!['portrait','landscape'].includes(orientation))throw Error('Invalid saved report paper size or orientation.');
+ return {preset,orientation};
+}
 function palette(raw={}){
  const vlans={},aggregates={};
  for(const [key,color] of Object.entries(value(raw,'vlans')||{})){
@@ -27,7 +35,7 @@ function palette(raw={}){
 export async function importSwitchportWorkspace(file){
  if(file.size>100_000_000)throw Error('Choose a Switchport workspace under 100 MB.');
  const native=await nativeImport(file);
- if(native){const devices=native.items.map(item=>nativeDevice(item));return {model:{devices,links:[],warnings:native.warnings||[]},settings:{enabled:true,deviceIds:devices.map(d=>d.id),combined:true,outputLabel:native.outputLabel||file.name.replace(/\.spworkspace\.json$/i,''),title:native.showWorkspaceTitle?native.title||native.outputLabel:'',palette:palette(native.palette)},selectedId:native.selectedId?'switchport:'+native.selectedId:devices[0]?.id||null};}
+ if(native){const devices=native.items.map(item=>nativeDevice(item));return {model:{devices,links:[],warnings:native.warnings||[]},settings:{enabled:true,deviceIds:devices.map(d=>d.id),combined:true,outputLabel:native.outputLabel||file.name.replace(/\.spworkspace\.json$/i,''),title:native.showWorkspaceTitle?native.title||native.outputLabel:'',showWorkspaceTitle:native.showWorkspaceTitle===true,paper:workspacePaper(native.paper),palette:palette(native.palette)},selectedId:native.selectedId?'switchport:'+native.selectedId:devices[0]?.id||null};}
  const doc=JSON.parse(await file.text());if(value(doc,'format')!=='SwitchportDiagramBuilder.Workspace'||value(doc,'version')!==1)throw Error('Choose a Switchport Diagram Builder workspace (version 1).');
  const items=value(doc,'items');if(!Array.isArray(items)||items.length>100)throw Error('A Switchport workspace supports up to 100 configurations.');
  const ids=new Set(),models=[];
@@ -48,7 +56,7 @@ export async function importSwitchportWorkspace(file){
  }
  const selectedId=value(doc,'selectedId');if(selectedId!=null&&!ids.has(selectedId))throw Error('The saved selected configuration is not in this workspace.');
  const model=mergeModels(...models),outputLabel=cleanText(value(doc,'outputLabel')||file.name.replace(/\.spworkspace\.json$/i,''),100);
- return {model,settings:{enabled:true,deviceIds:model.devices.map(d=>d.id),combined:true,outputLabel,title:value(doc,'showWorkspaceTitle')?cleanText(file.name.replace(/\.spworkspace\.json$/i,''),180):'',showWorkspaceTitle:value(doc,'showWorkspaceTitle')===true,palette:palette(value(doc,'paletteOverrides'))},selectedId:selectedId?'switchport:'+selectedId:model.devices[0]?.id||null};
+ return {model,settings:{enabled:true,deviceIds:model.devices.map(d=>d.id),combined:true,outputLabel,title:value(doc,'showWorkspaceTitle')?cleanText(file.name.replace(/\.spworkspace\.json$/i,''),180):'',showWorkspaceTitle:value(doc,'showWorkspaceTitle')===true,paper:workspacePaper(value(doc,'paper')),palette:palette(value(doc,'paletteOverrides'))},selectedId:selectedId?'switchport:'+selectedId:model.devices[0]?.id||null};
 }
 export async function enrichSwitchportSources(files,sources,existingDevices=[]){
  if(globalThis.NDSDesktop?.report)for(let i=0;i<files.length;i++){

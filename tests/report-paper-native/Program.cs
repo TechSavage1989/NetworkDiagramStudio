@@ -26,11 +26,45 @@ static class ReportPaperChecks
         }
         finally { File.Delete(path); }
     }
+    static void CheckRasterFit()
+    {
+        foreach (string orientation in new[] { "portrait", "landscape" })
+        {
+            var paper=ReportPaper.Parse("letter",orientation);
+            string path=Path.Combine(Path.GetTempPath(),"nds-fit-"+Guid.NewGuid().ToString("N")+".png");
+            try
+            {
+                var scene=new Scene { Width=100,Height=50 };
+                scene.Rect(0,0,100,50,"#000000","#000000",0);
+                Png.Save(scene,path,paper.PixelWidth,paper.PixelHeight,true);
+                using var bitmap=SkiaSharp.SKBitmap.Decode(path);
+                Require(bitmap.Width==paper.PixelWidth&&bitmap.Height==paper.PixelHeight,"Raster has selected paper dimensions.");
+                int left=bitmap.Width,right=-1,top=bitmap.Height,bottom=-1;
+                for(int x=0;x<bitmap.Width;x++)if(bitmap.GetPixel(x,bitmap.Height/2).Red<128){left=Math.Min(left,x);right=x;}
+                for(int y=0;y<bitmap.Height;y++)if(bitmap.GetPixel(bitmap.Width/2,y).Red<128){top=Math.Min(top,y);bottom=y;}
+                Require(Math.Abs(left-(bitmap.Width-1-right))<=1&&Math.Abs(top-(bitmap.Height-1-bottom))<=1,"PNG content is centered in both axes, like PDF.");
+                Require(Math.Abs(Math.Min(left,top)-75)<=1,"PNG uses a physical quarter-inch minimum margin at 300 DPI.");
+                byte[] png=File.ReadAllBytes(path);
+                int physical=-1;
+                for(int offset=8;offset+12<=png.Length;)
+                {
+                    int length=System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(offset,4));
+                    Require(length>=0&&length<=png.Length-offset-12,"PNG chunk length is valid.");
+                    if(png.AsSpan(offset+4,4).SequenceEqual("pHYs"u8)){physical=offset+8;break;}
+                    offset+=length+12;
+                }
+                Require(physical>=0&&System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(physical,4))==11811&&System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(physical+4,4))==11811&&png[physical+8]==1,"PNG retains numeric 300 DPI metadata.");
+            }
+            finally { File.Delete(path); }
+        }
+    }
     static void Main()
     {
         Require(ReportPaper.Parse(null,null).Preset=="a4","Old workspaces default to A4.");
         Require(ReportPaper.Parse(null,null).Stem=="a4","Default filenames remain unchanged.");
-        CheckPdf("a4","landscape",297,210);
+        CheckRasterFit();
+        foreach(var (name,width,height) in new[]{("letter",215.9,279.4),("legal",215.9,355.6),("tabloid",279.4,431.8),("a5",148.0,210.0),("a4",210.0,297.0),("a3",297.0,420.0),("a2",420.0,594.0)})
+        { CheckPdf(name,"portrait",width,height); CheckPdf(name,"landscape",height,width); }
         CheckPdf("letter","landscape",279.4,215.9);
         CheckPdf("letter","portrait",215.9,279.4);
         CheckPdf("legal","landscape",355.6,215.9);

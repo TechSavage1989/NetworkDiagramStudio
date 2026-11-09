@@ -70,7 +70,7 @@ export function adaptivePortMap(item,palette,request,identity){
   p.name=identity.name;return p;
  };
  const sample=make(),top=sample.contentTop,contentWidth=sheet.width-2*MARGIN;
- const guideHeight=P.symbolKeyHeight(inv,contentWidth),bottom=sheet.height-65-guideHeight,available=bottom-top;
+ const footerSpace=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?24:65,guideHeight=P.symbolKeyHeight(inv,contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
  const keys=[{side:false,key:keyPlan(inv,palette,contentWidth)},...[160,190,220,260].filter(width=>width<contentWidth*.4).map(width=>({side:true,key:keyPlan(inv,palette,width)}))];
  const candidates=[];
  for(const style of styles){
@@ -102,7 +102,7 @@ export function adaptivePortMap(item,palette,request,identity){
   try{
    const bankBottom=P.drawBlock(p,plan,x,top,palette,{heading:false});
    drawKey(p,key,side?x+plan.width+GAP:MARGIN,side?top:bankBottom+GAP);
-   P.symbolKey(p,sheet.height-65-guideHeight,palette,inv);
+   P.symbolKey(p,sheet.height-footerSpace-guideHeight,palette,inv);
    P.finish(p,request,palette,inv);preserveLegacyKeys(p,identity);
    const errors=validateReportScene(p);if(errors.length)continue;
    p.adaptivePortMap={columns,keyPosition:side?'side':'below',socketWidth:plan.portWidth,numberFont:plan.style.numberFont};

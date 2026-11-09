@@ -61,9 +61,14 @@ static class Program
         var workspace = new ConfigurationWorkspace();
         var workspaceItem = workspace.AddText(Aruba, "fictional.cfg");
         workspace.SetDevices(workspaceItem.Id, new[] { new DeviceIdentity { Id = "1", Name = "LAB-REPORT", SerialNumber = "LAB-SERIAL", AssetTag = "LAB-ASSET", Notes = "Fictional inventory record" } });
-        workspace.OutputLabel = "Fictional reports"; workspace.ShowWorkspaceTitle = true;
+        workspace.OutputLabel = "Fictional reports"; workspace.ShowWorkspaceTitle = true; workspace.Paper = ReportPaper.Parse("letter", "portrait");
         workspace.AddSupplementary(workspaceItem.Id, SupplementaryData.FromText("LAB-ACCESS# show interfaces\n1 is down, line protocol is down\n", "Fictional observation", "LAB-ACCESS"));
+        var restoredWorkspace = ConfigurationWorkspace.Deserialize(workspace.Serialize());
+        Check(restoredWorkspace.Paper.Preset == "letter" && restoredWorkspace.Paper.Orientation == "portrait", "Workspace paper survives native save/reopen.");
+        restoredWorkspace.Clear(); restoredWorkspace.UndoRemoval();
+        Check(restoredWorkspace.Paper.Preset == "letter" && restoredWorkspace.Paper.Orientation == "portrait", "Workspace paper survives clear/undo.");
         var migrated = Object(SwitchportReportService.ImportJson("Fictional workspace.spworkspace.json", Encoding.UTF8.GetBytes(workspace.Serialize())));
+        Check(migrated["paper"]!["preset"]!.GetValue<string>() == "letter" && migrated["paper"]!["orientation"]!.GetValue<string>() == "portrait", "Native migration returns independent report paper.");
         Check(migrated["items"]![0]!["details"]![0]!["assetTag"]!.GetValue<string>() == "LAB-ASSET", "Saved workspace device details are migrated.");
         Check(migrated["showWorkspaceTitle"]!.GetValue<bool>() && migrated["title"]!.GetValue<string>() == "Fictional workspace", "Workspace title and independent output naming are migrated.");
         Check(migrated["items"]![0]!["inventory"]!["ports"]![0]!["liveState"]!.GetValue<string>() == "Unknown/Confirm before use", "Migrated primary inventory does not permanently absorb supplementary state.");
@@ -144,6 +149,18 @@ static class Program
         var largeStack = new JsonObject { ["name"] = "LAB-EIGHT-MEMBERS", ["model"] = "JL256A", ["stackMembers"] = new JsonArray(Enumerable.Range(1, 8).Select(member => (JsonNode)new JsonObject { ["id"] = member.ToString(), ["model"] = "JL256A" }).ToArray()), ["ports"] = new JsonArray() };
         var largeResult = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "large", ["device"] = largeStack }), ["combined"] = false }.ToJsonString()));
         Check(largeResult["items"]![0]!["success"]!.GetValue<bool>(), "An eight-member complete stack retains readable external labels: " + largeResult["items"]![0]!["error"]);
+        var stackInventory = JsonSerializer.Deserialize<Inventory>(largeResult["items"]![0]!["inventory"]!.ToJsonString(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var smallInventory = Parser.Parse(Aruba);
+        var sharedScales = WorkspaceSheet.Build(new[] { new WorkspaceSheetItem("small", "LAB-SMALL", smallInventory), new WorkspaceSheetItem("stack", "LAB-STACK", stackInventory) });
+        foreach(var placement in sharedScales.Placements)
+        {
+            var scene = sharedScales.Pages[placement.PageNumber - 1];
+            var faces = scene.Shapes.Where(shape => shape.Owner.StartsWith(placement.Id + ":", StringComparison.Ordinal) && shape.Fill.Length > 0).ToArray();
+            Check(faces.Length > 0 && faces.All(face => Math.Abs((face.Points.Max(point => point.X) - face.Points.Min(point => point.X)) / QuickSheet.PortWidth - placement.GeometryScale) < .001), "Shared placement scale matches measured physical faces.");
+            Check(Math.Abs(scene.DiagramScale-placement.GeometryScale)<.001,"Shared page scale agrees with its components.");
+        }
+        Check(sharedScales.Placements.Count == 2, "Shared sheets retain both complete configuration blocks.");
+        Check(sharedScales.Placements.GroupBy(p => p.PageNumber).All(page => page.Select(p => Math.Round(p.GeometryScale, 5)).Distinct().Count() == 1), "Shared sheets never silently mix compact and full-scale physical sockets.");
         foreach (string model in new[] { "JL256A", "JL479A" })
         {
             var geometry = catalog["models"]!.AsArray().Single(row => row!["sku"]!.GetValue<string>() == model)!["inventory"]!;
@@ -154,6 +171,15 @@ static class Program
             var chart = QuickSheet.Build(inventory, Charts.Layout(inventory), "fictional");
             Check(chart.Sockets.All(socket => socket.NumberBounds.Y + socket.NumberBounds.H < socket.Tile.Y || socket.NumberBounds.Y > socket.Tile.Y + socket.Tile.H), "All dense " + model + " port numbers are outside socket interiors.");
             Check(chart.Scene.Labels.Where(label => label.Owner.Length > 0 && label.InkBox).All(label => label.Size >= 6 - 1e-6), "All dense " + model + " numbers retain the six-point printed text floor.");
+            foreach (var socket in chart.Sockets)
+            {
+                var port = inventory.Ports.Single(p => p.Id == socket.Port);
+                var group = inventory.Groups.Single(g => g.Id == port.Group);
+                var position = group.SocketLayout.FirstOrDefault(p => p.Number == port.Number && p.Suffix == socket.Suffix);
+                if (position != null) Check(position.Row % 2 == 0 ? socket.NumberBounds.Y + socket.NumberBounds.H < socket.Tile.Y : socket.NumberBounds.Y > socket.Tile.Y + socket.Tile.H, "Every physical row pair has exterior top/bottom labels.");
+                Check(Math.Abs(socket.NumberBounds.X + socket.NumberBounds.W / 2 - socket.Tile.X - socket.Tile.W / 2) < .001, "Port number ink is centered on its socket.");
+                Check(Math.Abs(socket.Tile.W / QuickSheet.PortWidth - chart.GeometryScale) < .001, "Recorded geometry includes actual socket compaction.");
+            }
             Check(Charts.ValidateScene(chart.Scene).Count == 0, "Dense " + model + " copper/optical labels and markers do not collide.");
             Check(chart.Scene.Dots.Count >= inventory.Ports.Count * 19, "Dense " + model + " diagrams retain every VLAN marker.");
             Png.Save(chart.Scene, Path.Combine(output, model + "-external-numbers.png"), 3508, 2480, true);

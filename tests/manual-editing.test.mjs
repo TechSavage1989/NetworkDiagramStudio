@@ -52,7 +52,7 @@ test('compact port maps reduce pages without omitting records and keep the facep
  const maps=()=>buildPages(site).filter(p=>p.portMap),compact=maps();site.layout={pageSetup:{overrides:{ports:{preset:'dynamic'}}},portMap:{density:'expanded'}};const expanded=maps();assert.ok(compact.length<expanded.length);assert.ok(compact.filter(p=>p.portMap.bookletRole==='inventory').length<=4);
  assert.deepEqual(compact.flatMap(p=>p.portMap.rowNames),ports.map(p=>p.name));assert.equal(compact[0].portMap.overview,true);assert.ok(compact.slice(1).every(p=>!p.portMap.overview&&!p.items.some(i=>i.type==='device')));
  site.layout=cleanLayout({portMap:{density:'compact',repeatFaceplate:true}},['s']);assert.equal(site.layout.portMap.repeatFaceplate,true);assert.ok(maps().every(p=>p.portMap.overview&&p.items.some(i=>i.type==='device')));
- for(const page of [...compact,...expanded])for(const t of page.items.filter(i=>i.portTableRole)){assert.ok(textWidth(t.value,t.size,t.bold)<=t.w,t.value+' is wider than its column');assert.ok(t.y+t.h<=851);}
+ for(const page of [...compact,...expanded])for(const t of page.items.filter(i=>i.portTableRole)){assert.ok(textWidth(t.value,t.size,t.bold)<=t.w,t.value+' is wider than its column');assert.ok(t.y+t.h<=893);}
 });
 test('long port records retain every word across pages and oversized repeated faceplates still allow detail pages',()=>{
  const description=Array.from({length:160},(_,i)=>'Description'+i).join(' '),site={devices:[{id:'s',name:'LAB',kind:'switch',ports:[{name:'1/1/1',description}]}],links:[],layout:{portMap:{repeatFaceplate:true}}};

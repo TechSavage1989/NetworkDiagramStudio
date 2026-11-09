@@ -35,3 +35,15 @@ test('Switchport workspace migration preserves order, choices, details and indep
 test('Switchport workspace rejects damaged identity, palette and supplementary data rather than truncating it',async()=>{
  for(const mutate of [doc=>doc.Version=2,doc=>doc.Items[1].Id=first,doc=>doc.SelectedId='c'.repeat(32),doc=>doc.PaletteOverrides.Vlans['vlan:10:Data']='#ff0000',doc=>doc.Items[0].SupplementarySources=[{Id:'invalid',Name:'Bad',Kind:'Command output',Device:'LAB-ACCESS',Observations:[]}],doc=>doc.Items[0].SupplementarySources=[{Id:'c'.repeat(32),Name:'Too many',Kind:'Command output',Device:'LAB-ACCESS',Observations:Array.from({length:5001},()=>({Category:'Reference',Interface:'1',Field:'Status',Value:'Up'}))}]]){const doc=workspace();mutate(doc);await assert.rejects(importSwitchportWorkspace(file(doc)));}
 });
+test('Switchport workspace migrates validated paper and independent title in browser and native paths',async()=>{
+ const doc=workspace();doc.Paper={Preset:'letter',Orientation:'portrait'};
+ let result=await importSwitchportWorkspace(file(doc));assert.deepEqual(result.settings.paper,{preset:'letter',orientation:'portrait'});assert.equal(result.settings.showWorkspaceTitle,true);
+ assert.deepEqual((await importSwitchportWorkspace(file(workspace()))).settings.paper,{preset:'a4',orientation:'landscape'});
+ for(const paper of [{Preset:'unknown'}, {Orientation:'diagonal'},[],'letter']){doc.Paper=paper;await assert.rejects(importSwitchportWorkspace(file(doc)),/report paper/);}
+ const priorReader=globalThis.FileReader,priorDesktop=globalThis.NDSDesktop;
+ try{
+  globalThis.FileReader=class{async readAsDataURL(input){this.result='data:application/json;base64,'+Buffer.from(await input.arrayBuffer()).toString('base64');this.onload();}};
+  globalThis.NDSDesktop={report:async()=>({items:[{id:first,device:{name:'LAB-NATIVE',ports:[]}}],paper:{preset:'a3',orientation:'portrait'},showWorkspaceTitle:true,title:'Native workspace',outputLabel:'Independent output',palette:{}})};
+  result=await importSwitchportWorkspace(file(workspace()));assert.deepEqual(result.settings.paper,{preset:'a3',orientation:'portrait'});assert.equal(result.settings.showWorkspaceTitle,true);assert.equal(result.settings.title,'Native workspace');assert.equal(result.settings.outputLabel,'Independent output');
+ }finally{if(priorReader===undefined)delete globalThis.FileReader;else globalThis.FileReader=priorReader;if(priorDesktop===undefined)delete globalThis.NDSDesktop;else globalThis.NDSDesktop=priorDesktop;}
+});

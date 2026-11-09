@@ -15,7 +15,7 @@ import {documentationMode,documentationSections,includeTrunkReference,interfaceA
 import {corePages} from './core.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
 import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
-import {pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage} from '../page-options.mjs';
+import {cleanPageNumbers,footerAllowance,pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage} from '../page-options.mjs';
 import {applyLinkStyles} from '../link-styles.mjs';
 import {orderedDevices,hopStyle} from '../layout.mjs';
 import {comparePorts,hasPortDetails,consecutivePorts,wrapPortText,portColumnPrefix,portRanges,portNumberBox} from '../port-table.mjs';
@@ -61,7 +61,7 @@ function wrappedRows(cols,rows){
   });
 }
 function tablePages(project,name,subtitle,cols,rows,none){
-  const {width,height}=pageGeometry(project,pageFamily(name));cols=fitColumns(cols,width-72);const buckets=split(wrappedRows(cols,rows),Math.max(1,Math.floor((height-280)/28)));
+  const {width,height}=pageGeometry(project,pageFamily(name));cols=fitColumns(cols,width-72);const buckets=split(wrappedRows(cols,rows),Math.max(1,Math.floor((height-280+footerAllowance(project))/28)));
   if(!buckets.length)buckets.push([]);
   return buckets.map(b=>{const p=fresh(name,name,subtitle,project);if(b.length)table(p,cols,b);else empty(p,none);p.sourceDeviceIds=[...new Set(b.map(r=>r.sourceDeviceId).filter(Boolean))];return p;});
 }
@@ -485,7 +485,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   // heading and first row fit there; the rest continues on inventory pages.
   // On a combined sheet the faceplate bar already names the device, so its
   // table opens with a slim section bar instead of a second dark bar.
-  const filterLine=sheet===0&&shown<ports.length?20:0,slim=26,slimFits=wrapPortText(nameOf(device)+'  /  Port inventory  |  Ports '+ports.length+'-'+ports.length+' of '+ports.length,W-88,11,true).length===1,host=sheet===0&&start&&slimFits&&start.top+slim+filterLine+header+(rows[0]?.height||type.row)<=H-82?start.page:null,bar=host?slim-8:barHeight;
+  const filterLine=sheet===0&&shown<ports.length?20:0,slim=26,slimFits=wrapPortText(nameOf(device)+'  /  Port inventory  |  Ports '+ports.length+'-'+ports.length+' of '+ports.length,W-88,11,true).length===1,host=sheet===0&&start&&slimFits&&start.top+slim+filterLine+header+(rows[0]?.height||type.row)<=H-82+footerAllowance(project)?start.page:null,bar=host?slim-8:barHeight;
   const p=host||fresh('MDF Port Map','MDF port map','Port assignments, descriptions, VLANs and link state',project),a=p.items,scope=scopeBase+'|sheet:'+sheet;if(!host)p.editScope=scope;
   let y=host?start.top:150;const barTop=y,tableTop=barTop+bar+8+filterLine;y=tableTop;
   if(sheet===0&&shown<ports.length){label(a,38,barTop+bar+6,W-80,18,shown+' of '+ports.length+' port records in details | '+(ports.length-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
@@ -493,7 +493,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   rect(a,36,y,W-72,header,'#E3ECF5','#C4D3E3',.75);a.at(-1).editKey=scope+'|inventory-header';let x=36;
   columns.forEach(([,w],column)=>{headings[column].forEach((text,line)=>{label(a,x+6,y+3+line*type.headerLine,w-10,type.headerLine,text,type.header,true,'#1B3A4B');Object.assign(a.at(-1),{editKey:scope+'|column|'+column+'|'+line,full:true});});x+=w;});y+=header;
   const members=[];let count=0;
-  while(at<rows.length&&y+rows[at].height<=H-124){
+  while(at<rows.length&&y+rows[at].height<=H-124+footerAllowance(project)){
    const row=rows[at++],rowKey=scopeBase+'|row|'+row.key+'|part:'+row.part;members.push(...(row.part?[]:row.names));
    rect(a,36,y,W-72,row.height,count%2?'#F3F7FA':C.white);a.at(-1).editKey=rowKey+'|background';rect(a,36,y+row.height-1,W-72,1,'#DCE5E9');a.at(-1).editKey=rowKey+'|rule';
    let cx=36;
@@ -517,7 +517,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
    detail.slice(0,barDetailLines).forEach((text,line)=>{label(a,50,barTop+5+barTitle.length*17+line*12,W-100,12,text,10,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|bar-detail'+(line?'|'+line:''),full:true});});
   }
   const note=wrapPortText('Confirm live link, LLDP/CDP and MAC address tables before moving production cables.'+(grouped?' Ports with the same settings share a row (port count in brackets).':''),W-76,11);
-  const noted=(!host||start.last&&start.note!==false)&&y+12+note.length*15<=H-75;if(noted)note.forEach((text,line)=>{label(a,38,y+12+line*15,W-76,15,text,11,false,C.muted);a.at(-1).editKey=scope+'|note'+(line?'|'+line:'');});
+  const noted=(!host||start.last&&start.note!==false)&&y+12+note.length*15<=H-75+footerAllowance(project);if(noted)note.forEach((text,line)=>{label(a,38,y+12+line*15,W-76,15,text,11,false,C.muted);a.at(-1).editKey=scope+'|note'+(line?'|'+line:'');});
   out.end={page:p,y:y+(noted?12+note.length*15:0),hosted:!!host};
   if(host)out.hosted={records,shown};
   else{p.portMap={device:device.id,devices:[device.id],shown,total:ports.length,rowNames:records.map(r=>r.name),portRecords:records,density:'compact',overview:false,bookletRole:'inventory',inventoryTable:true};namePortInventory(p);out.push(p);}
@@ -598,16 +598,16 @@ function referencePortMaps(project,db,switches,options,plan){
     });
     {
      const probe={...p,items:[]},end=referencePortLegend(probe,bottom+15,used)+10;
-    if(end<=H-75){a.push(...probe.items);start=end;legendPending=false;}else{start=H;legendPending=true;repeatFits=false;}
+    if(end<=H-75+footerAllowance(project)){a.push(...probe.items);start=end;legendPending=false;}else{start=H;legendPending=true;repeatFits=false;}
     }
    }else if(legendPending){start=referencePortLegend(p,151,used)+10;legendPending=false;}
-   if(shown<total&&start<H-75){label(a,38,start-20,(W-80),17,shown+' of '+total+' port records in details | '+(total-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
-   const captions=columns.map(([title,w],column)=>{const info=data[column-1],caption=info?title+(info.prefix?' ('+info.prefix+')':''):title;return wrapPortText(caption,w-24,13,true);}),header=Math.max(39,9+15*Math.max(...captions.map(lines=>lines.length))),canTable=start+header+(rows[at]?.height||20)<=(H-124);if(!canTable)repeatFits=false;
-   if(header+184+(rows[at]?.height||20)>(H-124))throw Error('This port-map column heading needs more space. Use a shorter device name or a wider port-map view.');
+   if(shown<total&&start<H-75+footerAllowance(project)){label(a,38,start-20,(W-80),17,shown+' of '+total+' port records in details | '+(total-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
+   const captions=columns.map(([title,w],column)=>{const info=data[column-1],caption=info?title+(info.prefix?' ('+info.prefix+')':''):title;return wrapPortText(caption,w-24,13,true);}),header=Math.max(39,9+15*Math.max(...captions.map(lines=>lines.length))),canTable=start+header+(rows[at]?.height||20)<=(H-124+footerAllowance(project));if(!canTable)repeatFits=false;
+   if(header+184+(rows[at]?.height||20)>(H-124+footerAllowance(project)))throw Error('This port-map column heading needs more space. Use a shorter device name or a wider port-map view.');
    const tableStart=a.length;p.tableTop=start;
    if(canTable){rect(a,36,start,(W-72),header,C.ink);a.at(-1).editKey=scope+'|assignment-header';let x=36;columns.forEach(([title,w],column)=>{captions[column].forEach((text,line)=>{label(a,x+12,start+4+line*15,w-24,18,text,13,true,C.white);a.at(-1).editKey=scope+'|column|'+column+'|'+line;});x+=w;});}
    let y=start+header,count=0;const members=[];
-   while(canTable&&at<rows.length&&y+rows[at].height<=(H-124)){const row=rows[at++];let hash=2166136261;for(const char of JSON.stringify([row.title,row.vlan,row.ports]))hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;const rowKey=scope+'|assignment|'+hash.toString(36)+'|part:'+row.part;members.push(...row.members);rect(a,36,y+2,(W-72),row.height-3,count%2?C.pale:C.white);a.at(-1).editKey=rowKey+'|background';rect(a,36,y+2,5,row.height-3,referencePortFills[row.role]);a.at(-1).editKey=rowKey+'|role';let x=36;
+   while(canTable&&at<rows.length&&y+rows[at].height<=(H-124+footerAllowance(project))){const row=rows[at++];let hash=2166136261;for(const char of JSON.stringify([row.title,row.vlan,row.ports]))hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;const rowKey=scope+'|assignment|'+hash.toString(36)+'|part:'+row.part;members.push(...row.members);rect(a,36,y+2,(W-72),row.height-3,count%2?C.pale:C.white);a.at(-1).editKey=rowKey+'|background';rect(a,36,y+2,5,row.height-3,referencePortFills[row.role]);a.at(-1).editKey=rowKey+'|role';let x=36;
     row.lines.forEach((lines,column)=>{lines.forEach((text,line)=>{label(a,x+12,y+6+line*14,columns[column][1]-24,14,text,12,column===0,C.ink);Object.assign(a.at(-1),{editKey:rowKey+'|cell:'+column+'|line:'+line,portTableRole:column>0&&column<=devices.length?'interface':'detail',portAssignmentRole:column===0?'assignment':column<=devices.length?'ports':'details',full:true});});x+=columns[column][1];});y+=row.height;count++;
    }
    if(!rows.length&&canTable)label(a,49,start+47,(W-100),25,total?'No ports match the selected table filter. All physical ports remain on the faceplate.':'No physical switch port records were supplied.',14,false,C.muted);
@@ -703,7 +703,8 @@ function portMaps(project,db){
   }
   best=out;
  }
- return [...best,...extra];
+ const ordered=[...best,...extra],isInventory=page=>page.portMap?.bookletRole==='inventory'||/^Port Inventory/.test(page.name);
+ return [...ordered.filter(page=>!isInventory(page)),...ordered.filter(isInventory)];
 }
 function portMapsAtScale(project,db,plan){
  const {width:W,height:H}=pageGeometry(project,'ports');
@@ -741,16 +742,16 @@ function portMapsAtScale(project,db,plan){
     const g=addDevice(p,project,d,[(W-plan.width)/2,159,plan.width,1],'panel',{fitWidth:true,padding:equipmentPadding});portNumbers(a,g,ports,{fill:port=>portFills[assignment(port)[1]],stateKey:true});
     {
      const legendTop=g.y+g.h+10,probe={...p,items:[]},end=referencePortLegend(probe,legendTop,new Set(ports.map(port=>assignment(port)[1])));
-    if(end+40<=H-75){a.push(...probe.items);summary=end;start=summary+40;legendPending=false;}else{summary=H;start=H;legendPending=true;repeatFits=false;}
+    if(end+40<=H-75+footerAllowance(project)){a.push(...probe.items);summary=end;start=summary+40;legendPending=false;}else{summary=H;start=H;legendPending=true;repeatFits=false;}
     }
    }else if(legendPending){summary=referencePortLegend(p,151,new Set(ports.map(port=>assignment(port)[1])));start=summary+40;legendPending=false;}
-   if(summary<H-75)label(a,38,summary,(W-80),20,shown+' of '+ports.length+' port records in details'+(shown<ports.length?'  |  '+(ports.length-shown)+' hidden by table filter':'')+'  |  '+(group?'Consecutive matching ports grouped':'One row per interface')+(compact?'  |  N: native, T: tagged':''),11,false,C.muted);
-   const header=compact?27:31,canTable=start+header+(rows[at]?.height||20)<=(H-124);
+   if(summary<H-75+footerAllowance(project))label(a,38,summary,(W-80),20,shown+' of '+ports.length+' port records in details'+(shown<ports.length?'  |  '+(ports.length-shown)+' hidden by table filter':'')+'  |  '+(group?'Consecutive matching ports grouped':'One row per interface')+(compact?'  |  N: native, T: tagged':''),11,false,C.muted);
+   const header=compact?27:31,canTable=start+header+(rows[at]?.height||20)<=(H-124+footerAllowance(project));
    if(!canTable)repeatFits=false;
    const tableStart=a.length;p.tableTop=start;
    if(canTable){rect(a,36,start,(W-72),header,'#E8F1F3');rect(a,36,start,3,header,C.teal);let x=36;for(const [title,w] of columns){label(a,x+10,start,w-20,header,title,11,true,C.teal);x+=w;}}
    let y=start+header,count=0;const rowNames=[];
-   while(canTable&&at<rows.length&&y+rows[at].height<=(H-124)){const row=rows[at++];rowNames.push(...row.names);rect(a,36,y,(W-72),row.height,count%2?'#F5F8FA':C.white);rect(a,36,y+row.height-1,(W-72),1,'#DCE5E9');rect(a,36,y+4,3,row.height-8,row.color);let x=36;
+   while(canTable&&at<rows.length&&y+rows[at].height<=(H-124+footerAllowance(project))){const row=rows[at++];rowNames.push(...row.names);rect(a,36,y,(W-72),row.height,count%2?'#F5F8FA':C.white);rect(a,36,y+row.height-1,(W-72),1,'#DCE5E9');rect(a,36,y+4,3,row.height-8,row.color);let x=36;
     row.lines.forEach((lines,j)=>{lines.forEach((text,k)=>{label(a,x+10,y+(compact?3:6)+k*lineHeight,columns[j][1]-20,lineHeight,text,12,j===0,j===0?C.teal:j===2&&k===0?stateMarks[row.linkState]:C.ink);Object.assign(a.at(-1),{portTableRole:j===0?'interface':'detail',full:true});});x+=columns[j][1];});y+=row.height;count++;
    }
    if(!rows.length&&canTable)label(a,49,start+46,(W-100),25,ports.length?'No ports match the selected table filter. All physical ports remain on the faceplate.':'No physical switch port records were supplied.',14,false,C.muted);
@@ -791,9 +792,9 @@ function membershipMatrix(project,db) {
   for(let at=groups.length-1;at>=0;at--){
     for(let count=1;count<=Math.min(limit,groups.length-at);count++){
       const batch=groups.slice(at,at+count),colW=width/count,headings=batch.map(g=>({g,nameHeight:Math.max(22,wrapPortText(g.device,colW-8,14,true).length*17),portsHeight:Math.max(18,wrapPortText(interfaceList(g.ports),colW-8,12).length*15),taggedHeight:Math.max(17,wrapPortText(vlanSet(g.tagged),colW-8,11).length*14)})),headerHeight=Math.max(69,...headings.map(h=>h.nameHeight+h.portsHeight+h.taggedHeight+12)),top=188+headerHeight;
-      if(rowSizes.some(row=>top+row.height>(H-124))||!plans[at+count])continue;
+      if(rowSizes.some(row=>top+row.height>(H-124+footerAllowance(project)))||!plans[at+count])continue;
       const buckets=[];let bucket=[],height=0;
-      for(const row of rowSizes){if(bucket.length&&top+height+row.height>(H-124)){buckets.push(bucket);bucket=[];height=0;}bucket.push(row);height+=row.height;}if(bucket.length)buckets.push(bucket);
+      for(const row of rowSizes){if(bucket.length&&top+height+row.height>(H-124+footerAllowance(project))){buckets.push(bucket);bucket=[];height=0;}bucket.push(row);height+=row.height;}if(bucket.length)buckets.push(bucket);
       const tail=plans[at+count],candidate={batch,colW,headings,headerHeight,top,buckets,next:at+count,pages:buckets.length+tail.pages,splits:buckets.length-1+tail.splits,headerArea:headerHeight*buckets.length+tail.headerArea},best=plans[at];
       if(!best||candidate.pages<best.pages||candidate.pages===best.pages&&(candidate.splits<best.splits||candidate.splits===best.splits&&candidate.headerArea<best.headerArea))plans[at]=candidate;
     }
@@ -859,10 +860,10 @@ export function buildPages(project={},options={}){
     // Switchport sheets already reserve measured headers, keys and footers.
     // Keep their readable number/marker layout intact while allowing ordinary
     // object edits and uniform drawing scale like the other page families.
-    if(p.switchportReport){scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});return;}
+    if(p.switchportReport){if(p.family==='ports')for(const item of p.items.filter(i=>i.reportFooterRole==='page')){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(!project.layout?.drawingEdits?.[item.editKey]){item.x=p.width-264;item.w=240;item.h=24;}}scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});return;}
     if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p,{style:hopStyle(project)});fitDynamicPage(p,project);
     const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
-    rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
+    if(cleanPageNumbers(project.layout?.pageNumbers).footer){rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';}const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
     applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);applyGlobalTextStyles(p,project.layout?.textStyles,project.layout?.drawingEdits);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});
   });
   return options.includeHidden?pages:visible;

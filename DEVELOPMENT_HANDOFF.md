@@ -1,3 +1,61 @@
+# Unreleased: Switchport 1.18.6 parity reconciliation
+
+Native report layout and workspace migration incorporate upstream 1.18.6 fixes while retaining NDS six-point reference-scene number text and normalized-data persistence. Browser parsing/report projection now covers management/mirror notes, configured speed/SVI data, IOS all/except edits and tagged-native state. See docs/SWITCHPORT_INTEGRATION.md for exact remaining browser-only gaps; do not call this exhaustive browser parser parity.
+
+Native workspace, geometry, mixed-scale, raster-fit and paper regression tests are added to the existing build gates. Local .NET is unavailable, so native execution and hosted Windows/browser validation remain pending. No version bump, release intent, merge or publication is included.
+
+# Unreleased: readable paper layouts and wireless row alignment
+
+Working from preview.41 main `43d9752b697aa044e8083ae35af959e4a0be2034` on
+`fix/wireless-alignment-footer`. No new release, version bump or publication
+intent is authorized by this change. The existing preview.41 remains published.
+
+- Page groups are persistent expandable lists in the project sidebar, with
+  current-page highlighting, keyboard navigation, double-click/context rename,
+  internal scrolling and the existing page picker/controls retained. Top page
+  tabs are removed. The active family retains the native-test `#tabs` contract.
+- Cable labels and port numbers default to centered text in their measured
+  boxes, including banked/inline/multiline labels and physical map numbers.
+  Explicit saved alignment still wins. SVG/PDF/Visio alignment and ordinary/
+  stacked map regressions pass; actual synthetic output was rendered/reviewed.
+- Footer and page numbers are independent, opt-in Page options. Explicit saved
+  settings and formats survive; unspecified old/new projects start with both off.
+  Dynamic content and fixed-paper tables reuse the unused footer band. Main
+  drawing-set builder maps obey these settings; standalone Switchport Reports
+  retain their separate native behavior.
+- All port map sheets precede the port inventory sheets, retaining relative
+  device/page order and edit identities. The editor and exports share that order.
+- Wireless alignment now operates on final, actual route directions, including
+  bounded stack-gap rows that the initial rank pass cannot align. Disjoint
+  opposite runs can share a row only if full route scoring and painted-lead
+  clearance checks accept it. Same-side/overlapping routes remain separated;
+  manual bend restoration is unchanged. The synthetic 8-member/32-AP regression
+  reduces crossings from 106 to 34 with zero obstruction/merged-segment costs.
+- Explicit physical paper in Auto-fit mode constrains wireless planning before
+  whole-page fitting, avoiding unreadably shrunken large dynamic canvases.
+  Dynamic pages and Preserve existing layout retain their existing geometry.
+  Auto-fit regenerates the same paper-aware base before applying manual edits,
+  so the first edit cannot collapse its continued sheets. Continuation retains every AP/link and
+  complete physical members; no source observations are removed. Saved numbered
+  paper overrides conservatively constrain the shared plan to the smallest
+  applicable physical width/height, while each final sheet retains its own paper.
+  The fictional 8-member/32-AP Letter fixture improves minimum AP detail from
+  3.54pt to 8.47pt; A4, A3, A5 and Letter portrait also exceed 8pt. Larger paper
+  needs fewer sheets. First-edit/reopen and explicit font overrides are tested.
+
+Validation is synthetic only. Current local Chromium cannot launch because its
+required IPC socket is blocked, including an escalated launch. Do not call this
+an interactive browser pass. Inspect actual renderer output locally and require
+both hosted browser and native Windows checks on the final source before merge.
+Normal checks: `node scripts/check-repo.mjs`, `node --test`,
+`node scripts/build-web.mjs`, `node scripts/export-test-fixtures.mjs`,
+`python3 scripts/check-visio-package.py .artifacts/visio`, and
+`python3 -m unittest discover -s tests -p 'test_*.py'`. Export fixtures must be
+generated before the Python package tests. Local aggregate validation: 446 JavaScript tests pass with zero skips; the
+offline build, repository/whitespace guards, nine independent Visio packages
+and seven Python package checks pass. Draft PR validation is authorized;
+merging and release publication remain pending explicit approval.
+
 # Preview.41: measured paper-aware port-map reflow
 
 Requested correction: use the measured layout approach of Switchport Diagram Builder rather than shrinking a forced horizontal member arrangement. src/web/reports/adaptive-port-map.mjs compares complete ordered banks, bounded number/heading styles and side/below key positions on the selected physical paper. It maximizes shared socket width, favors readable type near a size tie and retains all VLAN memberships, ports and member order. Chassis module pairs are never rewrapped as independent members. Standalone native and browser Switchport Reports retain their existing behavior.

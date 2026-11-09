@@ -54,7 +54,7 @@ test('drawing, device and text scales survive save/reopen with glued endpoints a
 });
 
 test('page aliases preserve edit keys, appear in native Visio and hidden tabs use continuous numbering',async()=>{
- const site=sampleSite(),before=buildPages(site),first=before[0],body=first.items.find(i=>i.kind==='switch');site.layout={presentation:{pages:{[first.name]:{name:'Campus network'},[before[1].name]:{hidden:true}}},drawingEdits:{[body.editKey]:{x:body.x+90}}};
+ const site=sampleSite(),before=buildPages(site),first=before[0],body=first.items.find(i=>i.kind==='switch');site.layout={pageNumbers:{show:true},presentation:{pages:{[first.name]:{name:'Campus network'},[before[1].name]:{hidden:true}}},drawingEdits:{[body.editKey]:{x:body.x+90}}};
  const pages=buildPages(site);assert.equal(pages.length,before.length-1);assert.equal(pages[0].name,first.name);assert.equal(pages[0].displayName,'Campus network');near(pages[0].items.find(i=>i.editKey===body.editKey).x,body.x+90);
  pages.forEach((p,i)=>assert.equal(p.items.find(t=>t.pageFrame==='footer-number').value,String(i+1).padStart(2,'0')+' / '+String(pages.length).padStart(2,'0')));
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer());assert.match(new TextDecoder().decode(parts.get('visio/pages/pages.xml')),/Name="Campus network"/);

@@ -155,8 +155,8 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
   if(!best)continue;
   for(const {lead,box,footprint} of best.placed){
    const {req,m}=lead;occupied.push(footprint);banked.add(req);
-   // Names end nearest the device so the row reads evenly.
-   result.push({...req,...box,lines:m.lines,size:m.size,textAlign:axis===1?(dir<0?'left':'right'):(dir<0?'right':'left')});
+   // Placement reserves the full measured box; text stays centered within it.
+   result.push({...req,...box,lines:m.lines,size:m.size});
   }
  }
  // One request at one text size: the chosen box, or null when nothing fits.
@@ -325,17 +325,17 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
     const th=b.h/b.lines.length;
     for(let i=0;i<b.lines.length;i++){
      const shift=(i-(b.lines.length-1)/2)*th,center=b.angle?{x:b.x+b.w/2+shift,y:b.y+b.h/2}:{x:b.x+b.w/2,y:b.y+b.h/2+shift};
-     page.items.push({type:'text',x:center.x-b.w/2,y:center.y-th/2,w:b.w,h:th,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});
+     page.items.push({type:'text',x:center.x-b.w/2,y:center.y-th/2,w:b.w,h:th,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});
     }
     continue;
    }
    let offset=0;
    for(let i=0;i<b.lines.length;i++){
     const w=b.parts[i],center=b.angle?{x:b.x+b.w/2,y:b.y+b.h/2+b.w/2-offset-w/2}:{x:b.x+offset+w/2,y:b.y+b.h/2};offset+=w;
-    page.items.push({type:'text',x:center.x-w/2,y:center.y-b.h/2,w,h:b.h,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});
+    page.items.push({type:'text',x:center.x-w/2,y:center.y-b.h/2,w,h:b.h,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});
    }
    continue;
   }
-  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||b.textAlign||(b.side==='left'?'right':'left'),background:b.manual?'#FFFFFF':undefined,full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});}
+  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||'center',background:b.manual?'#FFFFFF':undefined,full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});}
  return {ok:true,placed:result};
 }
