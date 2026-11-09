@@ -69,16 +69,16 @@ export function closestCable(candidates,point,matrix,{radius=cablePickRadius}={}
 
 // enabled: cables can be selected and focused (Edit drawing). highlight: the
 // nearest cable glows under the pointer, which also helps while only viewing.
-export function cableProximity(canvas,{enabled=()=>false,highlight=enabled}={}){
+export function cableProximity(canvas,{enabled=()=>false,highlight=enabled,onHover=()=>{}}={}){
  let svg=null,candidates=[],hover=null,halo=null,frame=null,pending=null,active=false;
  const windowFor=()=>canvas.ownerDocument?.defaultView;
  function clear(){
   if(frame!=null)windowFor()?.cancelAnimationFrame(frame);frame=null;pending=null;
-  hover?.classList.remove('cable-hover');hover=null;halo?.remove();halo=null;canvas.classList.remove('near-cable');
+  hover?.classList.remove('cable-hover');hover=null;onHover(null);halo?.remove();halo=null;canvas.classList.remove('near-cable');
  }
  function setHover(path){
   if(path===hover)return;clear();if(!path||!svg||!highlight())return;
-  hover=path;path.classList.add('cable-hover');canvas.classList.add('near-cable');
+  hover=path;onHover(path);path.classList.add('cable-hover');canvas.classList.add('near-cable');
   halo=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','g');halo.setAttribute('class','cable-proximity-halo');halo.setAttribute('data-editor-only','cable-hover');halo.setAttribute('aria-hidden','true');halo.setAttribute('pointer-events','none');
   const matrix=svg.getScreenCTM(),scale=Math.hypot(matrix.a,matrix.b),candidate=candidates.find(item=>item.element===path),paintedWidth=candidate?.weight??(Number(path.getAttribute('stroke-width'))||0);
   // CSS transforms on the root SVG also scale non-scaling-stroke in Chromium.
