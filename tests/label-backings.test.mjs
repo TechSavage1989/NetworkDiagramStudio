@@ -80,11 +80,12 @@ function ppm(bytes){
 const available=name=>!spawnSync(name,['--version'],{encoding:'utf8'}).error;
 for(const kind of ['PDF','SVG'])test('actual '+kind+' render keeps unrelated cables visible and own cable backed in either paint order',{skip:!available('pdftoppm')||(kind==='SVG'&&!available('inkscape'))?'Required external renderer unavailable':false},async()=>{
  const folder=mkdtempSync(join(tmpdir(),'nds-backing-'));
- try{for(const mode of ['horizontal','vertical','oblique','hop','negative'])for(const late of [false,true]){
+ try{for(const mode of ['horizontal','vertical','oblique','hop','negative','tight','roomy','transparent'])for(const late of [false,true]){
   const rotated=mode==='vertical';let page=fixture(rotated,late);const label=page.items.find(i=>i.type==='text'),other=page.items.find(i=>i.editKey==='other');
   if(mode==='oblique')label.angle=.3;
   if(mode==='hop')other.commands=[['M',100,20],['L',100,90],['A',112,102,100,114],['L',100,200]];
   if(mode==='negative')page=shift(page);
+  if(['tight','roomy','transparent'].includes(mode)){label.labelRole='port';page.labelBacking={padding:mode==='tight'?.5:20,mode:mode==='transparent'?'transparent':'white'};}
   const source=join(folder,'page.pdf');
   if(kind==='SVG'){
    const svg=join(folder,'page.svg');writeFileSync(svg,svgPage(page));
@@ -96,7 +97,8 @@ for(const kind of ['PDF','SVG'])test('actual '+kind+' render keeps unrelated cab
   const near=(point,rgb)=>assert.ok(pixel(...point).every((v,n)=>Math.abs(v-rgb[n])<=2),kind+' '+point+': '+pixel(...point));
   near(rotated?[146,60]:mode==='hop'?[112,102]:mode==='oblique'?[100,120]:[100,96],[176,48,64]);
   if(mode==='hop')near([102,102],[170,187,205]);
-  near(rotated?[160,85]:[130,110],[255,255,255]);
+  if(['tight','roomy','transparent'].includes(mode))near([140,110],mode==='roomy'?[255,255,255]:[22,72,120]);
+  else near(rotated?[160,85]:[130,110],[255,255,255]);
   near([10,10],[170,187,205]);
   near(rotated?[160,25]:[25,110],[22,72,120]);
  }}finally{rmSync(folder,{recursive:true,force:true});}

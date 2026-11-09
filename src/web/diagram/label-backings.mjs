@@ -1,3 +1,6 @@
+import {textLayout} from './scene.mjs';
+import {captionFontMetrics} from './caption-font-metrics.mjs';
+import {cleanLabelBacking} from '../label-backing-settings.mjs';
 import {defaultLinkWeight} from '../link-styles.mjs';
 // Backings may conceal their own cable, never another connection. Keep the
 // scene's paint order and cable/jump geometry intact: punch conservative stroke
@@ -35,21 +38,46 @@ function envelopes(path){
  }
  return parts;
 }
-export function labelBackingItems(items,{nativeText=false}={}){
+// Measure actual ink, not the roomy selection/wrapping box. Keep the baseline,
+// alignment and rotation center unchanged, including old manually widened boxes.
+export function captionBackingBoxes(text,padding=.5){
+ const {lines,size,lineHeight}=textLayout(text),metrics=captionFontMetrics[text.bold?'bold':'normal'],scale=size/2048;
+ const baseline=text.y+(text.h-lines.length*lineHeight)/2+lineHeight/2+size*.34;
+ return lines.flatMap((line,n)=>{
+  let advance=0,left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+  for(const char of line){
+   const m=metrics[char.codePointAt(0)]||[2048,0,-430,2048,1640];
+   if(m[3]>m[1]&&m[4]>m[2]){left=Math.min(left,advance+m[1]);right=Math.max(right,advance+m[3]);top=Math.min(top,-m[4]);bottom=Math.max(bottom,-m[2]);}
+   advance+=m[0];
+  }
+  if(!Number.isFinite(left))return [];
+  const anchor=text.align==='right'?text.x+text.w-advance*scale:text.align==='center'?text.x+(text.w-advance*scale)/2:text.x;
+  return [{x:anchor+left*scale-padding,y:baseline+n*lineHeight+top*scale-padding,w:(right-left)*scale+2*padding,h:(bottom-top)*scale+2*padding}];
+ });
+}
+export function labelBackingItems(items,{nativeText=false,...options}={}){
+ const settings=cleanLabelBacking(options);
  const cables=items.filter(i=>i.type==='path'&&(i.opacity??1)>0).map(item=>({item,parts:envelopes(item)}));
  return items.flatMap(text=>{
   if(text.type!=='text'||!text.background)return [text];
+  const caption=['port','media'].includes(text.labelRole);
+  if(caption&&settings.mode==='transparent')return [{...text,background:undefined}];
   const angle=text.angle||0,c=Math.cos(angle),s=Math.sin(angle),cx=text.x+text.w/2,cy=text.y+text.h/2;
   const local=([x,y])=>[cx+(x-cx)*c-(y-cy)*s,cy+(x-cx)*s+(y-cy)*c];
   const world=([x,y])=>[cx+(x-cx)*c+(y-cy)*s,cy-(x-cx)*s+(y-cy)*c];
-  let pieces=[{x:text.x,y:text.y,w:text.w,h:text.h}];
+  const boxes=caption?captionBackingBoxes(text,settings.padding*(text.presentation?.fontScale||1)):[{x:text.x,y:text.y,w:text.w,h:text.h}];
+  // Expanded multiline backings can overlap. Partition their union before
+  // export so native compound fill rules cannot reopen the overlap as a hole.
+  let pieces=[];
+  for(const box of boxes){let additions=[box];for(const prior of pieces)additions=additions.flatMap(piece=>subtract(piece,prior));pieces.push(...additions);}
+  const extent=pieces.length?{x:Math.min(...pieces.map(p=>p.x)),y:Math.min(...pieces.map(p=>p.y)),w:Math.max(...pieces.map(p=>p.x+p.w))-Math.min(...pieces.map(p=>p.x)),h:Math.max(...pieces.map(p=>p.y+p.h))-Math.min(...pieces.map(p=>p.y))}:text;
   for(const {item,parts} of cables){
    const own=text.relatedCableKey?item.editKey===text.relatedCableKey:text.linkId!=null&&item.linkId===text.linkId;
    if(own)continue;
    // Round joins and antialiasing must remain clear, including thick strokes.
    const pad=(item.weight||defaultLinkWeight)/2+.1;
    for(const points of parts){
-    const transformed=points.map(local),localPoints=points.length===2?clipSegment(transformed,text,pad):transformed;
+    const transformed=points.map(local),localPoints=points.length===2?clipSegment(transformed,extent,pad):transformed;
     if(!localPoints.length)continue;
     const xs=localPoints.map(p=>p[0]),ys=localPoints.map(p=>p[1]),x=Math.min(...xs)-pad,y=Math.min(...ys)-pad;
     pieces=pieces.flatMap(piece=>subtract(piece,{x,y,w:Math.max(...xs)+pad-x,h:Math.max(...ys)+pad-y}));

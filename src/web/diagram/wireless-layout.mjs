@@ -1,3 +1,4 @@
+import {deviceBounds} from './device-geometry.mjs';
 import {deviceScale,presentation} from '../presentation.mjs';
 import {pageGeometry,targetPageAspect,visibleFitMode,visiblePagePaper,cleanPageSetup,paperDimensions} from '../page-options.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
@@ -8,7 +9,7 @@ import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,equipmentGa
 import {coreRoutes} from './routing.mjs';
 import {lineSpacing} from '../layout.mjs';
 import {wirelessNumberLeads} from './wireless-number-leads.mjs';
-import {crossesText} from './labels.mjs';
+import {crossesText,intersects} from './labels.mjs';
 import {C,addDevice,cableWeight,fresh,getAnchor,label,linkLegend,mediaInfo,physicalPorts,rate,route} from './scene.mjs';
 
 const cmp=(a,b)=>String(a).localeCompare(String(b),'en',{numeric:true,sensitivity:'base'});
@@ -102,7 +103,8 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
   for(const {e,caption,apGeometry} of row.items){const i=index++,y=top?rowY+row.height+6+row.apHeight-apGeometry.h:rowY+row.lanes,textY=top?rowY:y+apGeometry.h+10;
    const cell=Math.max(apGeometry.w,caption.width)+16,center=cursor+cell/2;cursor+=cell;
    const ap=db.devices.get(e.apId),edgeKey=top?'uplink.bottom':'uplink.top',dest=addDevice(page,project,ap,[center-apGeometry.w/2-apGeometry.x,y-apGeometry.y,layout.apSize,layout.apSize],'ap'+side+i,{apEdge:edgeKey,instanceKey:e.sw+'/'+e.sp+'/'+e.apPort});nodes.set('ap/'+e.idx,dest);
-   captionItems(page,project,db,e,dest.x+dest.w/2,textY+dest.y-y+(top?0:dest.h-apGeometry.h),layout.col,caption);
+   const visible=deviceBounds(dest),captionY=dest.angle?(top?visible.y-caption.height-6:visible.y+visible.h+10):textY+dest.y-y+(top?0:dest.h-apGeometry.h);
+   captionItems(page,project,db,e,dest.x+dest.w/2,captionY,layout.col,caption);
    const weight=pathWeight(project,e),mappedPort=Object.keys(dest.ports).find(port=>port.toLowerCase()===String(e.apPort).toLowerCase())||edgeKey,end=getAnchor(dest,mappedPort,top?'bottom':'top',i,{weight}),start=getAnchor(sw,e.sp,side,e.idx,{weight,peer:{x:end.x,y:end.y}}),edge={...e,a:e.sw,ap:e.sp,b:'ap/'+e.idx,bp:mappedPort};routed.push(edge);
    const gap=start.escapeRange?'gap/'+start.escapeRange.map(v=>v.toFixed(3)).join('/'):'edge/'+start.side;
    addEnd(edge,'a',sw,start,'switch/'+gap);addEnd(edge,'b',dest,end,'ap/'+side+'/'+rowIndex);
@@ -112,6 +114,7 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
  }
  portNumbers(page.items,sw,physicalPorts(device),{selected:new Set(edges.map(e=>e.sp.toLowerCase())),fontScale:presentation(project,'Wireless Connections').textScale});
  applyDrawingEdits(page,project);
+ if([...nodes.values()].some(n=>n.angle)){const bodies=[...nodes.values()].map(deviceBounds);if(page.items.some(i=>i.wirelessCaption&&bodies.some(b=>intersects(i,b,2))))throw Object.assign(Error('This rotated wireless equipment needs more space around its captions. Move the devices apart or adjust the rotation.'),{code:'CORE_LAYOUT_CAPACITY'});}
  const numberBoxes=wirelessNumberLeads(page,sw,endData,project),obstacles=[...numberBoxes.obstacles,...page.items.filter(i=>i.type==='text'&&!i.portNumberRole&&(i.wirelessCaption||!i.deviceTextOwner))],planned=coreRoutes(routed,[],endData,banks,nodes,{left:sw.x,right:sw.x+sw.w,minX:36,maxX:layout.W-36,pitch:layout.pitch,railPitch:layout.pitch,topClearance:12,bottomClearance:12,obstacles,uniform:lineSpacing(project,page.name),directionNeutralLevels:true});
  // Validate every complete lead once, including internal number bands.
  planned.cost[0]+=planned.routes.filter(r=>numberBoxes.numbers.some(box=>crossesText(r.points,box,r.weight/2))).length;

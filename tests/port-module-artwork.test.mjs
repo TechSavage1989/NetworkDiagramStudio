@@ -31,3 +31,10 @@ test('existing module detail edits and selected artwork take precedence',()=>{
  project.stencils={custom:{id:'custom',name:'Chosen module',width:72,height:45,dataUrl:image,anchors:{cable:[.3,.6]}}};project.optics={sr:'custom',fg_sr:'custom'};
  const selected=modules(buildPages(project)[0]).filter(i=>i.asset?.id==='custom');assert.ok(selected.length>=3);for(const module of selected){assert.equal(module.asset.dataUrl,image);assert.deepEqual(module.ports.cable,[.3,.6]);assert.equal(module.children.length,0);}
 });
+test('placement-only optic edits do not duplicate physical module categories',()=>{
+ const project=sampleSite();project.links[0].media='LR';const before=buildPages(project)[0],plugs=modules(before).filter(i=>i.host);
+ project.layout={drawingEdits:Object.fromEntries(plugs.map((p,n)=>[p.editKey,{x:p.x+n,y:p.y,w:p.w*.9,h:p.h*.9}]))};
+ const next=buildPages(JSON.parse(JSON.stringify(project)))[0];assert.equal(keyModules(next).length,keyModules(before).length);
+ assert.deepEqual(keyModules(next).map(i=>i.sourceId).sort(),keyModules(before).map(i=>i.sourceId).sort());
+ assert.ok(keyModules(next).some(i=>i.sourceId.includes('SFP:lr')));assert.ok(keyModules(next).some(i=>i.sourceId.includes('DAC')));
+});

@@ -1,3 +1,4 @@
+import {deviceBounds,rotatedDeviceAnchor} from './device-geometry.mjs';
 import {endpointLead} from './routing.mjs';
 import {crossesText,textFootprint,intersects,embeddedTextBoxes} from './labels.mjs';
 
@@ -8,6 +9,11 @@ const failure=()=>Object.assign(Error('This wireless port needs more room around
 // the nearest free interval beside a band instead of crossing its text.
 export function wirelessNumberLeads(page,node,endData,project={}){
  const attached=[...endData.values()].filter(v=>v.node===node),edits=project.layout?.drawingEdits||{};
+ if(node.angle){
+  const numbers=page.items.filter(i=>i.sourceId===node.sourceId&&i.portNumberRole==='text').map(textFootprint),body=deviceBounds(node);
+  for(const {anchor} of attached){const point=node.ports[anchor.port];if(point)Object.assign(anchor,rotatedDeviceAnchor(node,anchor.port,...point,anchor.side,anchor.weight,numbers));}
+  return {numbers,obstacles:numbers.filter(b=>b.x<body.x||b.y<body.y||b.x+b.w>body.x+body.w||b.y+b.h>body.y+body.h)};
+ }
  // Mapped bitmaps have anchors but no measured socket outline. Keep their
  // centered number band beyond the painted endpoint, not two pixels from its
  // center as a socket-free report label would otherwise be placed.

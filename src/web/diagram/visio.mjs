@@ -26,7 +26,8 @@ function ellipseOutline(w,h){
   return '<Section N="Geometry" IX="0"><Row IX="1" T="Ellipse">'+cell('X',inch(w/2),'Width*0.5')+cell('Y',inch(h/2),'Height*0.5')+cell('A',inch(w),'Width')+cell('B',inch(h/2),'Height*0.5')+cell('C',inch(w/2),'Width*0.5')+cell('D',inch(h),'Height')+'</Row></Section>';
 }
 function rectShape(i,id,H,masterChild,relative){
-  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+ (relative||box(i.x,i.y,i.w,i.h,H))+
+  const transform=relative||box(i.x,i.y,i.w,i.h,H).replace(cell('Angle',0),cell('Angle',i.angle||0));
+  return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+
     cell('LinePattern',i.stroke==='none'?0:1)+cell('LineColor',i.stroke==='none'?'#FFFFFF':i.stroke)+lineWeight(i.weight||1)+
     cell('FillPattern',i.fill==='none'?0:1)+cell('FillForegnd',i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+(i.type==='ellipse'?ellipseOutline(i.w,i.h):outline(i.w,i.h))+'</Shape>';
 }
@@ -66,7 +67,8 @@ function childXform(child,w,h,owner){
     cell('LocPinX',inch(w*child.w/2),'Width*0.5')+cell('LocPinY',inch(h*child.h/2),'Height*0.5');
 }
 function group(i,id,H,m,allocate,rid,asMaster=false,mount=''){
-  const xform=mount||box(asMaster?0:i.x,asMaster?0:i.y,i.w,i.h,asMaster?i.h:H);
+  // Masters stay in local unrotated coordinates; only page instances rotate.
+  const xform=(mount||box(asMaster?0:i.x,asMaster?0:i.y,i.w,i.h,asMaster?i.h:H)).replace(cell('Angle',0),cell('Angle',asMaster?0:i.angle||0));
   let children='';
   if(i.asset?.native){
     const art=cleanNativeArt(i.asset.native);let nativeIndex=6;
@@ -201,7 +203,7 @@ function writePackage(pages,stencil){
   let pagesXml='';
   const drawingPages=stencil?[]:pages;
   drawingPages.forEach((source,index)=>{
-    const normalized=normalizedPage(source),p={...normalized,items:labelBackingItems(normalized.items,{nativeText:true})};
+    const normalized=normalizedPage(source),p={...normalized,items:labelBackingItems(normalized.items,{...normalized.labelBacking,nativeText:true})};
     const n=index+1,name=p.displayName||p.name;
     pagesXml+='<Page ID="'+index+'" Name="'+xml(name)+'" NameU="'+xml(name)+'" IsCustomName="1" IsCustomNameU="1" ViewScale="0.75" ViewCenterX="'+round(inch(p.width/2))+'" ViewCenterY="'+round(inch(p.height/2))+'">'+sheet(p.width,p.height,true,p.printPaper||p.paper,!!p.printPaper)+relation(n)+'</Page>';
     const rel=[],relKeys=new Map(),byKey=new Map(),connect=[];
@@ -224,7 +226,8 @@ function writePackage(pages,stencil){
       let mount='';
       if(i.host){
         const host=byKey.get(i.host.device),ix=host.m.keys.indexOf(i.host.port)+1;
-        const s='Sheet.'+host.id+'!',pf=a=>s+'Pin'+a+'-'+s+'LocPin'+a+'+'+s+'Connections.'+a+ix;
+        const s='Sheet.'+host.id+'!',dx='('+s+'Connections.X'+ix+'-'+s+'LocPinX)',dy='('+s+'Connections.Y'+ix+'-'+s+'LocPinY)',angle=s+'Angle';
+        const pf=a=>s+'Pin'+a+'+'+(a==='X'?dx+'*COS('+angle+')-'+dy+'*SIN('+angle+')':dx+'*SIN('+angle+')+'+dy+'*COS('+angle+')');
         mount=cell('PinX',inch(i.x+i.w/2),pf('X'))+cell('PinY',inch(p.height-i.y-i.h/2),pf('Y'))+size(i.w,i.h);
       }
       return group(i,j+1,p.height,m,()=>++seq,rid,false,mount);

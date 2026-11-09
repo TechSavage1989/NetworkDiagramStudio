@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
 import {placeCableLabels,textWidth} from '../src/web/diagram/labels.mjs';
 
 test('on-page cable labels retain their original side preference and collision clearance',()=>{
@@ -34,4 +36,14 @@ test('far-off edited anchors and title bounds cannot allocate an unbounded label
  const result=spawnSync(process.execPath,['--max-old-space-size=96','--input-type=module','-e',script],{encoding:'utf8',timeout:5000,maxBuffer:65536,windowsHide:true});
  assert.equal(result.error,undefined,'Layout subprocess exceeded its time or output limit.');
  assert.equal(result.status,0,result.stderr.slice(-1500));assert.match(result.stdout,/bounded-layout-completed/);
+});
+
+// Execute the integration entry point: reveal follows accepted scene rebuilds,
+// while rejected validation must retain the old scene/editor without panning.
+for(const legend of [false,true])test('accepted '+(legend?'legend':'title')+' text reveals current bounds after rebuilding',()=>{
+ const app=readFileSync(new URL('../src/web/app.mjs',import.meta.url),'utf8'),fn=app.slice(app.indexOf('function saveTextEdit('),app.indexOf('function editOnDoubleClick(')),calls=[];
+ const context={project:{layout:{drawingEdits:{}}},editableText:item=>item.value,setDrawingEdits(){calls.push('rebuilt');},setLinkStyle(){calls.push('rebuilt');},revealSelectedText(){calls.push('reveal');},item:{editKey:'title',value:'Old',legendEntry:legend,linkType:legend?'Copper':null}};
+ vm.runInNewContext(fn+"saveTextEdit(item,'A longer accepted title','#17364A');",context);assert.deepEqual(calls,['rebuilt','reveal']);
+ context.setDrawingEdits=context.setLinkStyle=()=>{throw Error('Validation rejected');};calls.length=0;
+ assert.throws(()=>vm.runInNewContext(fn+"saveTextEdit(item,'Rejected','#17364A');",context),/Validation rejected/);assert.deepEqual(calls,[]);
 });

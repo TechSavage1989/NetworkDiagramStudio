@@ -143,6 +143,12 @@ public static class QuickSheet
     }
     static string Ports(IEnumerable<Port> ports)
     {
+        // User-renamed interfaces are valid identifiers, not necessarily a
+        // numeric port sequence. Keep their full labels instead of attempting
+        // to range-compress an empty or overflowing numeric suffix.
+        var namedPorts=ports.ToList();
+        if(namedPorts.Any(p=>!int.TryParse(Regex.Match(p.Id,@"(\d+)$").Value,out _)))return string.Join(", ",namedPorts.Select(p=>p.Id));
+        ports=namedPorts;
         if(ports.Any(p=>p.DisplayNumber.Length>0)&&!ports.All(p=>Regex.IsMatch(p.Id,@"^(?:GigabitEthernet|TenGigabitEthernet|TwentyFiveGigE|HundredGigE)\d+/")))return string.Join(", ",ports.Select(p=>p.Id));
         var result=new List<string>();
         foreach(var g in ports.GroupBy(p=>Regex.Match(p.Id,@"^(.*?)(\d+)$").Groups[1].Value))

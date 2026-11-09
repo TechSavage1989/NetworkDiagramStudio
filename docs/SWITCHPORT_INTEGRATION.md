@@ -131,7 +131,7 @@ Desktop configuration imports use the complete retained upstream parser inventor
 
 The intentional host differences are W06 and W07. NetworkDiagramStudio keeps its own update schedule, explicit installation, save-before-update and rollback behavior. No Switchport update feed, separate host settings panel, or protected unsaved update-restoration promise is introduced.
 
-## Unreleased parity refresh: upstream 1.18.6
+## Preview.42 parity refresh: upstream 1.18.6
 
 Compared current upstream commit 349236a8cd04cb9def8053fb2cbce9610fc3dc07 with the pinned 1.18.5 engine. This is a targeted reconciliation, not a claim that the browser implements every native vendor command.
 
@@ -153,3 +153,14 @@ Empty browser route lists recover native normalized routes. Existing structured 
 ### Category selection boundary
 
 Selected source copies now mask retained native port semantics when Ports is disabled, keeping only physical identity, aliases/media and exact group/socket geometry. VLAN/SVI and routes follow their separate categories. Management requires both Ports and Routes because retained statements mix addresses and gateways; mirror data follows Ports. Supplementary observations follow their category or recognized command, while unclassified mixed reference text requires every category enabled. Source records remain unchanged, re-enabling categories restores manual edits, and JSON save/reopen preserves the mask. Tests cover camel-case and native-case records and selected observations without Identity. Native sparse-port render/validation remains part of the hosted gate.
+
+
+## Browser parser and standardized-port follow-up (unreleased)
+
+The browser now uses explicit saved-configuration semantics for Comware access/trunk/hybrid/PVID, aggregate inheritance and IRF; RouterOS bridge VLAN filtering/admission/PVID, bonding, renamed physical interfaces and disabled/dynamic records; and Cisco IOS DTP qualification, global native tagging, allowed-VLAN set operations and mode-aware port-channel inheritance. Hardware identity still requires catalog-backed evidence or explicit selection. Unsupported switching syntax is a report blocker rather than a fabricated assignment. Parser provenance is the retained upstream engine at the pinned source revision above.
+
+IPv4, IPv6 and secondary SVI addresses are retained as address arrays. An explicit edited array replaces that interface's old report addresses; older projects containing only a single IP continue to supplement retained native addresses. Route reconciliation compares normalized destination, gateway, interface and selection qualifiers. Exactly equivalent native records are deduplicated; differing preference/VRF/tag/options remain distinct, and unparsed records remain qualified references with a review warning. This is conservative equivalence for recognized syntax, not proof that all vendor routing commands are understood. Report adapters retain all normalized route fields.
+
+Port-map fixed devices, chassis modules and adaptive stacks share the stacked-switch socket width and copper/optical aspect ratios. Dense markers enlarge every device uniformly within the selected report; chassis column allocation changes panel size rather than stretching socket faces. Browser geometry/export regression includes a 96-port chassis, 260-port stack and 52-port fixed switch.
+
+Remaining limits: exhaustive vendor-command equivalence is not claimed, particularly unrecognized Cisco/Comware switching syntax and RouterOS switch-chip/filter commands. These are blocked or explicitly qualified. Aruba-family existing parsers have not undergone a complete command-by-command equivalence audit in this follow-up. Native imports continue to use upstream parsers. Native proportional paper fitting and the host update differences above remain intentional. Native Windows integration and real-browser export validation are release gates, not replaced by JavaScript unit tests.

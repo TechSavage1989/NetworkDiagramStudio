@@ -105,6 +105,7 @@ function groupTitle(inv,group){
  const detail=inv.devices.find(detail=>detail.id===(group.slot?group.device+'/'+group.slot:group.device)),members=unique(inv.groups.map(row=>row.device)),identity=group.slot?(members.length>1?'Member '+group.device+' / ':'')+(group.rear?'Rear module ':'Slot ')+group.slot:members.length>1?'Member '+group.device:group.rear?'Rear panel':group.id;
  return [identity,group.product,detail?.name,detail?.serialNumber?'S/N '+detail.serialNumber:'',detail?.assetTag?'Asset '+detail.assetTag:''].filter(Boolean).join(' | ');
 }
+export function standardPortMapWidth(inv){return markerSize(inv,normalStyle);}
 function markerSize(inv,style=normalStyle){
  const specs=inv.groups.flatMap(group=>group.socketLayout.map(socket=>({socket,port:inv.ports.find(port=>port.group===group.id&&port.number===socket.number)}))).filter(row=>row.port);
  // Faces keep the same copper/optical aspect ratios. Large membership sets
@@ -120,9 +121,9 @@ function markerSize(inv,style=normalStyle){
 // port still holds all of its markers, with a gap of DOT_GAP x r between
 // neighbours and at most a readable maximum for sparse maps.
 const DOT_GAP=.28;
-// Optical cages on a port map are a little taller than the builder's, still
-// clearly rectangular and centered in the copper-height row.
-const OPTICAL_HEIGHT={builder:16.2/25.2,map:19.6/25.2};
+// Port maps and stack/workspace sheets share the same reference socket
+// proportions. Fitting paper must never make module optics artificially tall.
+const OPTICAL_HEIGHT={builder:16.2/25.2,map:16.2/25.2};
 const dotArea=(x,y,w,h,bottom)=>({x:x+1.6,y:y+1.6,w:Math.max(0,w-3.2),h:Math.max(0,h-1.6-bottom)});
 const dotReserve=(port,optical,numberFont)=>port.disabled||port.taggedVlanPolicy?numberFont*1.2+1:optical?2.4:3;
 function largestDot(n,box){let best=0;for(let cols=1;cols<=n;cols++){const rows=Math.ceil(n/cols),r=Math.min(box.w/(2*cols+DOT_GAP*(cols-1)),box.h/(2*rows+DOT_GAP*(rows-1)));if(r>best)best=r;}return best;}
@@ -144,7 +145,7 @@ function groupPlan(inv,group,portWidth,style=normalStyle){
  return {group,ports,width,height,header,minimum,pitch,faceHeight,rowPitch,portWidth,rowsCount,numberFont,style};
 }
 function devicePlan(item,style=normalStyle,width=null,fill=false){
- const inv=item.inventory,portWidth=width??markerSize(inv,style),opticalRatio=fill?OPTICAL_HEIGHT.map:OPTICAL_HEIGHT.builder,plans=inv.groups.map(group=>({...groupPlan(inv,group,portWidth,style),opticalRatio})),bands=[];
+ const inv=item.inventory,portWidth=width??item.standardPortWidth??markerSize(inv,style),opticalRatio=fill?OPTICAL_HEIGHT.map:OPTICAL_HEIGHT.builder,plans=inv.groups.map(group=>({...groupPlan(inv,group,portWidth,style),opticalRatio})),bands=[];
  if(inv.chassisSlots&&inv.groups.every(group=>/^[A-L]$/.test(group.slot))){
   const slotWidth=Math.max(280,...plans.map(plan=>plan.width)),slotHeight=Math.max(80,...plans.map(plan=>plan.height));
   for(let slot=0;slot<inv.chassisSlots;slot+=2){const panels=[0,1].map(column=>({plan:plans.find(plan=>plan.group.slot===String.fromCharCode(65+slot+column)),empty:String.fromCharCode(65+slot+column),x:column*(slotWidth+16)})),height=panels.some(panel=>panel.plan)?slotHeight:24*Math.max(1,Math.min(1.2,style.scale));for(const panel of panels){panel.w=slotWidth;panel.h=height;}bands.push({panels,width:slotWidth*2+16,height});}
@@ -203,7 +204,7 @@ function mapCandidates(item,palette,request,styles){
  for(const style of styles){
   let base;try{base=devicePlan(item,style,null,true);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;continue;}
   if(!fits(base,style))continue;
-  const at=k=>devicePlan(item,style,base.portWidth*k,true),most=Math.max(1,56/base.portWidth);let lo=1,hi=most;
+  const at=k=>devicePlan(item,style,base.portWidth*k,true),most=item.standardPortWidth?1:Math.max(1,56/base.portWidth);let lo=1,hi=most;
   if(fits(at(hi),style))lo=hi;else for(let i=0;i<18;i++){const mid=(lo+hi)/2;if(fits(at(mid),style))lo=mid;else hi=mid;}
   const plan=at(lo),fit=fillRadius(item.inventory,plan);out.push({style,plan,fit,score:fit??style.markerRadius});
  }
@@ -213,7 +214,7 @@ function mapCandidates(item,palette,request,styles){
 export function reportDiagram(item,palette,request,{wall=false}={}){
  if(item.validation&&!item.validation.ok)throw new ReportCapacityError(item.validation.errors.join(' '),{deviceId:item.id});
  let failure;
- const styles=wall?[normalStyle]:[...(request?.fill?largeStyles:[]),normalStyle,...compactStyles];
+ const styles=wall?[normalStyle]:[...(request?.fill&&!item.standardPortWidth?largeStyles:[]),normalStyle,...compactStyles];
  for(const {style,plan,fit} of request?.fill&&!wall?mapCandidates(item,palette,request,styles):styles.map(style=>({style,plan:devicePlan(item,style),fit:null}))){
   const sheet=paperOf(request),width=wall?Math.max(sheet.width,plan.width+margin*2):sheet.width,radius=fit;
   // A port map (request.fill) draws one dot size, as large as its most

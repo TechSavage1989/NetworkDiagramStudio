@@ -45,16 +45,71 @@ export function decodeRouterosBackup(bytes){
  for(const name of wanted)if(name.startsWith('net/')&&name!=='net/devices'&&table(name).length)snapshot.Unsupported.push('Switch-chip VLAN tables require a RouterOS .rsc export for validation.');
  return snapshot;
 }
+// Retained snapshots are an allowlist, including inventory JSON supplied by a
+// caller. Unknown keys (scripts, credentials, raw source) must never persist.
+function normalizedSnapshot(input){
+ const result={},fields={Interfaces:['Key','Name','DefaultName','Comment','Disabled'],Bridges:['Key','Name','Filtering'],BridgePorts:['Interface','Bridge','Pvid','Frames','Disabled','Dynamic','TagStacking'],Vlans:['Bridge','Ids','Tagged','Untagged','Comment','Disabled','Dynamic'],Bonds:['Name','Slaves','Mode','Disabled'],LogicalInterfaces:['Name','Parent','Vlan','Disabled'],Addresses:['Address','Interface','Disabled','Dynamic'],Routes:['Destination','Gateway','Interface','Disabled','Dynamic','Distance','Table']};
+ const value=v=>typeof v==='string'?safe(v):typeof v==='number'&&Number.isFinite(v)||typeof v==='boolean'||v===null?v:undefined;
+ for(const key of ['Binary','Hostname','Firmware','Model'])if(Object.hasOwn(input,key))result[key]=value(input[key]);
+ result.Unsupported=Array.isArray(input.Unsupported)?input.Unsupported.filter(v=>typeof v==='string').map(safe):[];
+ for(const [table,keys] of Object.entries(fields)){const rows=input[table]||[];if(!Array.isArray(rows)||rows.length>10000)throw Error('Invalid RouterOS inventory table.');result[table]=rows.map(row=>{if(!row||typeof row!=='object')throw Error('Invalid RouterOS inventory row.');return Object.fromEntries(keys.filter(key=>Object.hasOwn(row,key)).map(key=>[key,Array.isArray(row[key])?row[key].map(value).filter(v=>v!==undefined):value(row[key])]));});}
+ return result;
+}
+// Text and allowlisted binary snapshots share effective switching semantics.
 export function routerosSnapshotModel(snapshot,filename='RouterOS backup'){
- const out=empty(),d=device(safe(snapshot.Hostname||snapshot.hostname||filename),{vendor:'MikroTik',kind:'switch',os:'RouterOS',fromConfig:true}),interfaces=snapshot.Interfaces||[],bridges=new Map((snapshot.Bridges||[]).map(v=>[String(v.Key),v])),byKey=new Map();
- const unsupported=[...(snapshot.Unsupported||[])];
+ snapshot=normalizedSnapshot(snapshot);
+ const out=empty(),d=device(safe(snapshot.Hostname||snapshot.hostname||filename),{vendor:'MikroTik',kind:'switch',os:'RouterOS',fromConfig:true}),interfaces=snapshot.Interfaces||[],bridges=new Map(),byKey=new Map(),bonds=new Map();
+ const unsupported=[...(snapshot.Unsupported||[])],assumptions=[];
  if(snapshot.Model)Object.assign(d,identify(snapshot.Model));
- const names=new Set();for(const row of interfaces){if(!row.Name||names.has(row.Name.toLowerCase())||byKey.has(String(row.Key)))throw Error('Duplicate or missing MikroTik interface identity.');names.add(row.Name.toLowerCase());const p=ensurePort(d,safe(row.Name));Object.assign(p,{description:safe(row.Comment),admin:row.Disabled?'down':'up',state:'unknown',media:row.DefaultName?.startsWith('ether')?'RJ-45':row.DefaultName?.startsWith('qsfp')?'QSFP+':'SFP+',nativeState:'unknown',notes:[]});byKey.set(String(row.Key),p);}
- for(const row of snapshot.BridgePorts||[]){const p=byKey.get(String(row.Interface)),bridge=bridges.get(String(row.Bridge));if(!p||!bridge){unsupported.push('Unresolved RouterOS bridge-port reference.');continue;}if(row.Pvid<1||row.Pvid>4094){unsupported.push('Invalid RouterOS PVID.');continue;}p.ingressPvid=row.Pvid;p.bridge=bridge.Name;p.bridgeMembershipDisabled=!!row.Disabled;p.notes.push('Configured ingress PVID: '+row.Pvid,'Bridge: '+safe(bridge.Name));if(row.TagStacking)unsupported.push('RouterOS tag-stacking cannot be represented by one native VLAN fill.');}
- for(const row of snapshot.Vlans||[]){if(row.Disabled)continue;const bridge=bridges.get(String(row.Bridge));if(!bridge){unsupported.push('Unresolved RouterOS VLAN bridge.');continue;}for(const id of row.Ids||[])ensureVlan(d,id).name=safe(row.Comment);if(bridge.Filtering===false)continue;
-  for(const [kind,ids] of [['tagged',row.Tagged||[]],['native',row.Untagged||[]]])for(const key of ids){if(bridges.has(String(key)))continue;const p=byKey.get(String(key));if(!p){unsupported.push('Unresolved RouterOS interface reference: '+safe(key));continue;}if(!(snapshot.BridgePorts||[]).some(v=>String(v.Interface)===String(key)&&String(v.Bridge)===String(row.Bridge)))unsupported.push('RouterOS VLAN member is not assigned to its bridge: '+p.name);for(const vlan of row.Ids||[]){if(kind==='tagged')p.tagged=[...new Set([...(p.tagged||[]),vlan])];else{if(p.native!=null&&p.native!==vlan)unsupported.push('Multiple untagged RouterOS VLANs on '+p.name);p.native=vlan;p.nativeState='known';}}}
+ if(snapshot.Firmware&&snapshot.Firmware!=='Unknown')d.firmware=safe(snapshot.Firmware);
+ const names=new Set(),defaults=new Set();
+ for(const row of interfaces){
+  if(!row.Name||names.has(row.Name.toLowerCase())||byKey.has(String(row.Key))||(row.DefaultName&&defaults.has(row.DefaultName.toLowerCase())))throw Error('Duplicate or missing MikroTik interface identity.');
+  names.add(row.Name.toLowerCase());if(row.DefaultName)defaults.add(row.DefaultName.toLowerCase());
+  const p=ensurePort(d,safe(row.Name)),physical=row.DefaultName||'';
+  Object.assign(p,{description:safe(row.Comment),admin:row.Disabled?'down':'up',state:'unknown',media:physical.startsWith('ether')?'RJ-45':physical.startsWith('qsfp')?'QSFP+':physical.startsWith('sfp')?'SFP+':'Unknown',nativeState:'unknown',notes:[],relatedInterfaces:physical&&physical!==row.Name?[safe(physical)]:[]});byKey.set(String(row.Key),p);
  }
- for(const p of d.ports){if(p.native!=null&&p.tagged?.includes(p.native))unsupported.push('RouterOS VLAN is both tagged and untagged on '+p.name);p.role=p.tagged?.length?'trunk':p.native!=null?'access':'unknown';if(p.native!=null&&p.ingressPvid!=null&&p.native!==p.ingressPvid)unsupported.push('RouterOS ingress PVID and untagged egress VLAN differ on '+p.name);}
- const note='Binary import retains static VLAN-table assignments and configured ingress PVID separately. Dynamic membership, bridge-filtering state, firmware and exact model are not inferred.';
- d.routerosSnapshot=snapshot;d.reportBlockers=[...new Set(unsupported)];d.reportAssumptions=[note];out.devices.push(d);out.warnings.push(...d.reportBlockers.map(v=>filename+': '+v),filename+': '+note);return out;
+ for(const row of snapshot.Bridges||[]){if(!row.Key||bridges.has(String(row.Key)))unsupported.push('Duplicate or missing RouterOS bridge identity.');else bridges.set(String(row.Key),row);}
+ for(const row of snapshot.Bonds||[]){if(!row.Name||bonds.has(row.Name)||byKey.has(row.Name))unsupported.push('Duplicate or missing RouterOS bond identity.');else bonds.set(row.Name,row);}
+ const resolve=key=>{key=String(key);if(byKey.has(key))return [byKey.get(key)];if(bonds.has(key))return (bonds.get(key).Slaves||[]).map(name=>byKey.get(String(name))).filter(Boolean);if(bridges.has(key))return [];unsupported.push('Unresolved RouterOS interface reference: '+safe(key));return [];};
+ for(const bond of bonds.values()){
+  if((bond.Slaves||[]).length<2||bond.Slaves.some(name=>!byKey.has(String(name))))unsupported.push('Invalid RouterOS bond members.');
+  for(const p of resolve(bond.Name)){if(p.lag)unsupported.push('RouterOS interface belongs to multiple bonds.');p.lag=safe(bond.Name);p.notes.push('Aggregation mode: '+safe(bond.Mode||'balance-rr'));if(bond.Disabled)p.notes.push('Bond disabled');}
+ }
+ const native=(p,id)=>{if(p.native!=null&&p.native!==id)unsupported.push('Multiple untagged RouterOS VLANs on '+p.name);p.native=id;p.nativeState='known';};
+ for(const row of snapshot.Vlans||[]){if(row.Disabled||row.Dynamic)continue;const bridge=bridges.get(String(row.Bridge));if(!bridge){unsupported.push('Unresolved RouterOS bridge reference.');continue;}
+  const ids=(row.Ids||[]).filter(id=>Number.isInteger(id)&&id>=1&&id<=4094);if(ids.length!==(row.Ids||[]).length)unsupported.push('Invalid RouterOS VLAN range.');
+  for(const id of ids){const vlan=ensureVlan(d,id);if(!vlan.name)vlan.name=safe(row.Comment);}
+  if(bridge.Filtering===false){assumptions.push('Bridge VLAN filtering is disabled on '+safe(bridge.Name)+'; stored VLAN-table assignments are inactive and are not drawn.');continue;}
+  for(const [kind,keys] of [['tagged',row.Tagged||[]],['native',row.Untagged||[]]])for(const key of keys){
+   if(!bridges.has(String(key))&&!(snapshot.BridgePorts||[]).some(v=>String(v.Interface)===String(key)&&String(v.Bridge)===String(row.Bridge)))unsupported.push('RouterOS VLAN member is not assigned to the specified bridge: '+safe(key));
+   for(const p of resolve(key))for(const id of ids){if(kind==='tagged')p.tagged=[...new Set([...(p.tagged||[]),id])];else native(p,id);}
+  }
+ }
+ const membership=new Map();
+ for(const row of snapshot.BridgePorts||[]){if(row.Dynamic)continue;const bridge=bridges.get(String(row.Bridge));if(!bridge){unsupported.push('Unresolved RouterOS bridge reference.');continue;}
+  if(!Number.isInteger(row.Pvid)||row.Pvid<1||row.Pvid>4094){unsupported.push('Invalid RouterOS PVID.');continue;}
+  if(row.TagStacking)unsupported.push('RouterOS tag-stacking cannot be represented by one native VLAN fill.');
+  if(!['admit-all','admit-only-vlan-tagged','admit-only-untagged-and-priority-tagged'].includes(row.Frames||'admit-all'))unsupported.push('Unknown RouterOS frame admission mode.');
+  for(const p of resolve(row.Interface)){
+   if(membership.has(p)&&membership.get(p)!==String(row.Bridge))unsupported.push('RouterOS interface belongs to multiple bridges: '+p.name);membership.set(p,String(row.Bridge));
+   Object.assign(p,{ingressPvid:row.Pvid,bridge:safe(bridge.Name),bridgeMembershipDisabled:!!row.Disabled});p.notes.push('Configured ingress PVID: '+row.Pvid,'Bridge: '+safe(bridge.Name));
+   if(row.Disabled){p.notes.push('Bridge membership disabled');continue;}
+   const taggedOnly=row.Frames==='admit-only-vlan-tagged';
+   if(p.native!=null&&!taggedOnly&&p.native!==row.Pvid)unsupported.push('RouterOS ingress PVID and untagged egress VLAN differ on '+p.name);
+   if(bridge.Filtering===true&&!taggedOnly){ensureVlan(d,row.Pvid);native(p,row.Pvid);}
+   if(bridge.Filtering===true&&taggedOnly&&p.native==null)p.nativeState='none';
+  }
+ }
+ for(const p of d.ports){if(p.native!=null&&p.tagged?.includes(p.native))unsupported.push('RouterOS VLAN is both tagged and untagged on '+p.name);if(p.tagged)p.tagged.sort((a,b)=>a-b);p.role=p.tagged?.length?'trunk':p.native!=null?'access':'unknown';}
+ const lanes=new Map();for(const row of interfaces){const match=/^qsfpplus(\d+)-[1-4]$/.exec(row.DefaultName||'');if(match){const list=lanes.get(match[1])||[];list.push(byKey.get(String(row.Key)));lanes.set(match[1],list);}}
+ for(const [cage,ports] of lanes)if(new Set(ports.map(p=>JSON.stringify([p.nativeState,p.native,p.tagged||[],p.lag,p.admin]))).size>1)unsupported.push('QSFP+ '+cage+' has different lane assignments. A lane-level physical diagram is not yet supported.');
+ d.bridges=[...bridges.values()].map(b=>({name:safe(b.Name),type:'bridge',members:(snapshot.BridgePorts||[]).filter(p=>String(p.Bridge)===String(b.Key)&&!p.Disabled&&!p.Dynamic).map(p=>safe(p.Interface))}));
+ for(const row of snapshot.LogicalInterfaces||[]){const p=ensurePort(d,safe(row.Name));Object.assign(p,{parent:safe(row.Parent),vlan:row.Vlan,admin:row.Disabled?'down':'up',logical:true});if(row.Vlan)ensureVlan(d,row.Vlan).name=safe(row.Name);}
+ for(const row of snapshot.Addresses||[]){if(row.Disabled||row.Dynamic)continue;const p=ensurePort(d,safe(row.Interface));p.addresses=[...new Set([...(p.addresses||[]),safe(row.Address)])];p.ip||=safe(row.Address);(p.notes||=[]).push('Address: '+safe(row.Address));if(p.vlan){const vlan=ensureVlan(d,p.vlan);vlan.ip||=p.ip;vlan.addresses=[...p.addresses];}}
+ d.routes=(snapshot.Routes||[]).filter(row=>!row.Dynamic).map(row=>({destination:safe(row.Destination),nextHop:safe(row.Gateway),interface:safe(row.Interface),type:'static',...(row.Disabled?{status:'disabled'}:{}),...(row.Distance?{metric:row.Distance}:{}),...(row.Table?{context:safe(row.Table)}:{})}));
+ if(snapshot.Binary)assumptions.push('Binary import retains static VLAN-table assignments and configured ingress PVID separately. Dynamic membership, bridge-filtering state, firmware and exact model are not inferred.');
+ for(const p of d.ports)p.configurationResolved=true;
+ // Snapshot contains only normalized allowlisted inventory, never configuration source.
+ d.routerosSnapshot=snapshot;d.reportBlockers=[...new Set(unsupported)];d.reportAssumptions=[...new Set(assumptions)];out.devices.push(d);out.warnings.push(...[...d.reportBlockers,...d.reportAssumptions].map(v=>filename+': '+v));return out;
 }

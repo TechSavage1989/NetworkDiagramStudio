@@ -1,3 +1,211 @@
+# Accepted inline titles stay visible after re-layout
+
+Run 201 passed all 17 browser suites and the native build, report, paper and
+packaging checks. Native lifecycle diagnostics then established why the second
+title edit failed: every painted glyph of the successfully saved title was
+obstructed by an HTML span after the new scene moved that title under editor
+controls. The accepted-save path now reveals the currently selected rebuilt
+text after toolbar layout, preserving the current zoom. Rejected edits still
+keep their existing scene and editor without panning.
+
+The browser recovery sequence now also checks a 1024 × 720 viewport, unchanged
+zoom and title visibility after each save. Native failures include obstruction
+ancestry and viewport/canvas bounds. Twelve focused Node checks, syntax, build
+and repository checks pass locally. The next hosted run must confirm native
+recovery and all remaining timer, install and rollback stages.
+
+# Native repeated-title recovery targeting
+
+Hosted run 200 passed all 17 browser suites but the native lifecycle check
+stopped when reopening a title after its first successful save. The old native
+click helper trusted the overall SVG text center and reused it across both
+clicks. That does not establish that either click reaches the text after
+selection or viewport callbacks. The helper now measures each real CDP click,
+requires an actual text glyph hit, and reports its chosen glyph or obstructing
+target. Every title revision, Escape and detached-session assertion remains.
+
+The hosted direct-transform suite repeats the native title recovery flow using
+the exact same target expression. Four Node checks execute that expression
+against synthetic hit-test contexts, including blank-center and obstruction
+cases. Local JavaScript syntax, focused checks, build and repository guard pass;
+.NET/WebView2 and local Chromium remain unavailable. Native recovery is not yet
+claimed fixed at runtime: the next hosted browser/native run must confirm it.
+
+# Interactive HTML viewer gesture and label polish
+
+Run 200 passed all browser gates but visual review found native text selection
+after panning, and duplicated inspection text from title + painted tspans. The
+viewer now disables native selection only on its pan surface and cancels the
+pointer default before starting pan. Search reads the full SVG title when
+present, so wrapped/painted text is not concatenated with that title. The hosted
+gate asserts one full label per result, the exact inspection label, and no native
+selection after dragging from actual SVG text or fitting the page. Run 201
+passed the viewer gate. Its genuine capture in artifact 13713080937 was visually
+reviewed and confirmed clean: no selected text after panning and no duplicated
+inspection label. It has not been uploaded into the repository. The final
+source head still requires both validation jobs.
+# Hosted browser validation: all 17 suites passed
+
+[Run 200](https://github.com/TechSavage1989/NetworkDiagramStudio/actions/runs/42701077407)
+passed all 17 browser suites on head `284eb7e` (local `68e9866`, tree `7a93ef7f`).
+Edge 156.0.4314.58 and Playwright 1.62.1 exercised the actual offline build.
+The artifact `editor-browser-checks` (13711472971) confirms model-size/spacing,
+group membership and transforms, locked A4 overflow/retry, socket glue,
+port/VLAN drafts, save/reopen and Undo/redo. Sidebar reset/reload and white/
+transparent backing controls also pass. No browser errors were reported.
+
+Four inspected, unchanged captures now document device rotation, grouped
+models, locked-page rejection and backing options. The viewer issues found
+in run 200 were corrected, and the run 201 viewer capture was visually checked
+clean in artifact 13713080937 without a repository image upload. Native Windows
+verification is tracked separately, and any later source head still needs
+both required jobs.
+
+# Reviewed hosted editor captures
+
+The current hero, port map, connection/style dialogs, organization preview,
+wireless page and direct text tools were refreshed from actual hosted Edge
+captures in [run 199](https://github.com/TechSavage1989/NetworkDiagramStudio/actions/runs/42698535059),
+artifact `editor-browser-checks` (13710691710), source head `75714ff`.
+New README links show separate page navigation at 1366, 1024 and 620 px, the
+existing-device stack dialog, port/VLAN controls and configured panel output.
+The PNGs were inspected and copied unchanged; all use fictional data and are
+under 400 KiB. The port capture intentionally shows the scrolled Edit ports
+section rather than the top of the device dialog.
+
+Documentation, panel-content and device-stacks passed run 199. Navigation and
+port editing reached these captures before later failures; run 200 subsequently
+passed all 17 suites, as recorded above.
+
+# Hosted sample reload checks
+
+Run 199 reached the real editor and found two test setup errors: page-navigation
+looked for the initial-only `#sample` ID after New project, and page-layout-defaults
+looked for that welcome-only button while a drawing was still open. Both now use
+the visible Open sample site action; the latter first opens New project. Reset,
+sidebar restoration, backing controls, history and persistence assertions remain
+mandatory. Page-layout-defaults now captures any failure. Syntax and repository
+checks pass locally. Both suites subsequently passed hosted run 200.
+# Interactive HTML hosted selector follow-up
+
+Hosted run 199 stopped before downloading the viewer because the unscoped
+Drawing pages label matched both a sidebar landmark and the export selector.
+The browser gate now scopes its named combobox and download button to the
+Export documentation dialog. It also lets initial/mobile ResizeObserver layout
+settle before viewport assertions and counts only nonlocal resource requests
+(data images are embedded resources, not network calls). The viewer behavior
+and security assertions remain unchanged; hosted run 200 subsequently passed.
+# Filled native artwork hit-testing
+
+Hosted Edge run 199 exposed a real editor interaction bug: the generic
+stroke-only path rule also applied to filled native device artwork, so clicking
+inside a visible body selected the background. Device artwork now restores
+visible-painted hit-testing while cables retain their existing stroke behavior.
+Both hosted rotation and port/sizing suites retain real interior pointer clicks;
+rotation now checks the exact hit target and both tests capture useful failure
+evidence. Save/reopen checks wait for the actual scene replacement, not stale
+feedback or matching device keys. Geometry, socket glue, history and persistence
+assertions remain strict.
+Local syntax, focused tests, offline build and repository guard pass. Local
+Chromium remains blocked by socket/IPC restrictions. Both corrected suites
+subsequently passed hosted Edge run 200.
+
+# Hosted port, sizing, group and page-lock regression
+
+`tests/browser-port-sizing-controls.mjs` is registered in the hosted Edge job.
+It uses fictional linked models to exercise keyboard/pointer port suggestions,
+manual and selected VLANs, visible rejected-save feedback, cancellation,
+project downloads/reopen, model-size versus layout-spacing geometry, socket
+glue, grouped movement/scaling and ungrouping, physical A4 locking, overflow
+rejection/retry, and Undo/redo. Its screenshots and results stay in the CI QA
+artifact. Existing native smoke field labels are unchanged.
+
+Local verification: JavaScript syntax, 14 focused Node tests, offline build,
+repository guard and whitespace check pass. The browser launch was attempted
+but Chromium aborted on prohibited socket/IPC operations before any UI test
+ran. Hosted run 200 subsequently passed the complete suite and produced
+reviewed UI captures; no local browser pass is claimed. The integration fix gives generic dialog errors their own
+visible `.dialog-task-error`, rather than reusing a hidden VLAN picker error.
+# Grouped optics and module categories
+
+Group transforms treat optics attached to a selected chassis as implicit children, including a group containing only one chassis and its optics. They follow the chassis once instead of receiving independent pinned geometry. Module legend categories now ignore placement-only optic edits while retaining original reach/media categories and separately edited native artwork. Focused group, locked-page and module-artwork regressions cover a saved A3 top-panel group shrink without legend expansion or lost endpoint glue.
+
+# Tight, configurable port/link label backings
+
+Pages & layout → Drawing defaults exposes Port/link label backing (White or
+Transparent) and per-side padding from 0–20 drawing pixels (default 0.5).
+`layout.labelBacking` survives clean/save/reopen and ordinary history. Transparent
+emits no backing geometry or label cutout; cable jumps keep their existing masks.
+White backing follows each rendered line's ink bounds, not the roomy selection
+box, so manually widened captions no longer hide long cable runs. Text values,
+positions, alignment, rotation and saved dimensions remain untouched.
+
+SVG/editor, vector PDF, PNG and native Visio use the same settings and selective
+unrelated-cable clearance. Native fragments stay in their editable text shape.
+Drawing/paper scaling scales the padding. A compact Latin glyph metric table is
+derived from the already bundled DejaVu report fonts; regenerate it with
+`python3 scripts/generate-caption-font-metrics.py` (maintenance-only fontTools
+dependency). Unsupported glyphs use conservative bounds rather than clipping.
+The default font families and existing text layout have not changed.
+
+Local checks: 539 Node tests pass without skips, seven Python package tests and
+nine independent Visio package checks pass; offline build, root guard and
+whitespace checks pass. Actual SVG/PDF pixels cover tight, roomy and transparent
+backings, while synthetic sample white/transparent renders were inspected.
+`tests/browser-page-layout-defaults.mjs` now covers the settings, cancel,
+Undo/redo and save/reopen; local Chromium aborts on sandbox IPC/ptrace restrictions
+before launch. Hosted run 200 passed the full backing UI sequence and its
+capture was inspected. Installed desktop Visio
+interaction is still untested. No version bump or remote publication included.
+# Interactive HTML drawing export
+
+Export documentation now offers Interactive HTML for the existing current-page,
+page-group and all-pages scopes. The standalone offline viewer includes only
+page names and rendered SVG snapshots, with navigation, full-set label search,
+object-label inspection, zoom/pan, keyboard controls and a responsive sidebar.
+It is explicitly read-only. Passive SVG filtering and a no-network CSP reject
+script/event/external-resource markup while retaining embedded raster images,
+rotated geometry, physical ports and cable masks. No project/evidence records
+are serialized. Preserve the scene font stack when stripping SVG inline styles.
+
+`node --test tests/interactive-html.test.mjs`, offline build and repository guard
+pass locally. Local Chromium aborts because socket() is prohibited, so actual
+browser verification uses the hosted
+`tests/browser-interactive-html.mjs` gate, which passed run 200. That gate exercises the real Export
+menu/download, viewer navigation/search/zoom/pan, mobile width, hostile markup,
+embedded image retention and zero network requests. It captures
+`interactive-html.png`; the visual-review follow-up above must finish before
+adding the run 201 visually verified capture to docs if separately approved.
+No publication or release-version changes are included in this work.
+# Configurable model sizing and panel docking
+
+Size changes now offers Model size (default, preserves existing core positions) and Layout spacing (moves selected objects without changing dimensions). The setting is saved in layout.sizeMode and participates in history. scaleDrawingItems pins visible core bodies before dimension edits; direct corner handles always resize models. Layout spacing requires at least two top-level objects and anchors their upper-left selection bounds. Ports remain glued after scene rebuilds.
+
+Information panels receive a final docking pass after text styling and labels, using rotated bounds and cable extents to stay on the selected left/right/top side without collisions. Free positioning remains manual. Docking precedes uniform page scaling, so SVG/PDF/Visio share the same final scene.
+
+Focused checks: node --test tests/size-panel.test.mjs tests/editor-placement.test.mjs tests/transform-controls.test.mjs tests/presentation.test.mjs. Hosted run 200 passed the sizing and panel suites; focused control captures were reviewed. Native Windows verification remains separate.
+# Persistent visual groups and locked physical paper
+
+`drawing-groups.mjs` stores stable edit-key membership under layout.drawingGroups. Group/Ungroup and expanded selection retain individual objects, artwork and history. Shared-pivot transforms pin existing core geometry and clear saved attached bends for socket-based rerouting. Native-detail rotation is rejected atomically; internal alignment/spacing requires ungrouping.
+
+Explicit new physical paper choices default to locked; existing settings remain compatible. The initial fit records visible.lockFrames per page. Later manual edits freeze that presentation and reject overflow, rather than resizing the sheet or silently refitting every object. Page-option changes clear/recompute frames. Focused regression coverage is in drawing-groups.test.mjs and page-lock.test.mjs. Hosted run 200 passed the grouping/page-lock suite, and its reviewed captures are included. Native Windows verification remains separate.
+# Explicit existing-device stack associations
+
+Device details and the device context menu now offer Configure device stack. Named associations assign existing device IDs to explicit member numbers. Member removal, dissolve, Cancel and project Undo/Redo retain individual devices, ports, links, source evidence and positions. This is separate from imported single-record hardware stackMembers and freeform drawing groups. Stack/member captions are measured with device details in core and port-map scenes and therefore travel with SVG/PDF/Visio scene exports. Associations survive project cleaning/save/reopen and accepted identity aliases. No physical stack cables, hardware compatibility or chassis merging is inferred.
+
+Run node --test tests/device-stacks.test.mjs and the full node --test suite, then node scripts/build-web.mjs. tests/browser-device-stacks.mjs is added to hosted Edge validation for real UI, cancellation, history, duplicate-member validation and save/reopen; hosted run 200 passed, and its synthetic stack screenshot has been inspected and added to docs. Native Windows checks remain separate.
+
+# Device rotation candidate (after preview.42)
+
+Devices now expose manual angle entry/reset and direct rotation handles, with 15-degree Shift snapping. The unrotated physical dimensions and normalized artwork are retained, while world sockets, selection bounds and cable departures use the saved center rotation. Native text/detail drags invert the parent rotation. Rotating pins existing core positions as one undoable edit; insufficient room or overlapping hardware rejects the change. SVG, PNG/print, vector PDF and native Visio carry the same artwork/socket rotation, including port decorations and glued endpoints. Reopening retains angles and recomputes routes.
+
+Local tests cover arbitrary and quarter-turn socket glue, conservative routing, modular departure constraints, inverse native-text dragging, history, saved-project rebuilds, vector/raster PDF pixels and native Visio ports/master inheritance. Hosted tests/browser-device-rotation.mjs covers UI controls, physical glue, cancellation and save/reopen; the suite passed hosted run 200, and its rotation screenshot has been inspected and added to docs. Hosted Windows lifecycle verification remains separate. No installed Microsoft Visio application is available for interactive verification.
+# Separate drawing-pages sidebar
+
+Drawing set navigation now has its own sibling `aside#page-navigation` immediately right of `.project-sidebar`. The project sidebar retains site/import/inventory controls. Page groups scroll independently over the available height; existing IDs, keyboard navigation, page rename and scope menus are unchanged. At widths below 1000 px the bounded project/pages panels sit above the full-width canvas; phone widths stack them. A new project hides the empty pages rail and reclaims its space.
+
+`tests/browser-page-navigation.mjs` covers separate landmarks, six viewport widths (390–1366 px), canvas space, no horizontal document overflow, keyboard/scroll/rename/context menu behavior, and new-project/reload restoration. Local browser execution remains unavailable in this sandbox. Hosted run 200 passed the navigation suite; current 1366, 1024 and 620 px captures are included.
+
 # Native device-drag smoke target
 
 The native smoke gesture previously started 5 screen pixels inside a device corner, which is now the resize handle hit area. It now selects a verified interior artwork point and rejects text, ports and editor overlays; the SW-1 identity, Shift axis lock, scaling, undo and selection assertions remain mandatory. Hosted browser coverage also moves a two-device Shift selection and checks unchanged widths and locked vertical positions. This is a test-target correction, not a production interaction change.
@@ -63,7 +271,7 @@ Category selection now masks retained native report data and supplementary obser
 Native workspace, geometry, mixed-scale, raster-fit and paper regression tests are added to the existing build gates. Local .NET is unavailable, so native execution and hosted Windows/browser validation remain pending. No version bump, release intent, merge or publication is included.
 # Direct editing controls (pending hosted verification)
 
-Single selected objects now expose proportional corner resize handles; text also exposes a rotation handle (Shift snaps to 15 degrees). Text can be selected directly, including native device text, with a compact content/style/angle toolbar. Changes use the existing validated project history and saved edit pipeline. Hardware rotation remains unsupported because physical glue/routing has no rotated-device model. Transform overlays are editor-only. Escape cancels a gesture. The size buttons remain the keyboard-accessible resize alternative.
+Single selected objects now expose proportional corner resize handles; text also exposes a rotation handle (Shift snaps to 15 degrees). Text can be selected directly, including native device text, with a compact content/style/angle toolbar. Changes use the existing validated project history and saved edit pipeline. This earlier text-only limitation is superseded by the device rotation candidate above. Transform overlays are editor-only. Escape cancels a gesture. The size buttons remain the keyboard-accessible resize alternative.
 
 Verification: transform geometry, presentation coordinates, saved/rebuilt text angles and SVG/Visio export tests are in tests/transform-controls.test.mjs. Local Chromium cannot start because socket() is prohibited even with escalation; hosted browser interactions and a current screenshot remain required before release.
 
@@ -779,3 +987,27 @@ Validation runs on pull requests and on a release request. An intentional change
 Approved for the initial task only were publication of the new source, tests, build assets and documentation in TechSavage1989/NetworkDiagramStudio, a ready PR, merge after required checks/reviews, and publication of the tagged preview and its assets. These recorded permissions do not carry forward. A later contributor should verify the repository visibility, target commit, required hosted checks, release tag and asset checksums before describing a release as published.
 
 See the contributor guide for the tracked-root exceptions and source map. Supported import syntax and physical layout limits are documented separately. [Contributor guide](AGENTS.md) · [Hardware support](docs/HARDWARE_SUPPORT.md) · [Diagram engine](src/web/diagram/README.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
+
+
+## Pending browser parser and port-map follow-up
+
+Based on preview.42 main 813e454. Browser Comware, RouterOS and IOS saved-switching semantics, conservative route equivalence, multi-address report projection and standardized stacked/chassis/fixed port-map socket geometry are under validation. See docs/SWITCHPORT_INTEGRATION.md for coverage and remaining limits. This entry does not claim a published build or completed native/real-browser gate. Keep renderer and parser regression results with the final integration/release record.
+
+# Information panel content and Apply feedback
+
+Information panels default to one row per VLAN ID in the page's device scope,
+retaining distinct recorded names and addresses. Device-grouped VLANs remain
+available. Address type and port-detail filters, text row limits with explicit
+remaining-item notices, and show/hide missing-data explanations are persisted
+in cleanPanel. All enabled empty sections (including generated legends and
+custom notes) explain missing records by default rather than silently vanishing.
+No inventory/configuration data is invented or changed by these filters.
+
+Apply layout catches failures beside its footer, keeps the dialog and current
+edits open, and focuses the explanation. Inherited/disabled position inputs do
+not prevent saving unrelated settings. tests/panel-content.test.mjs covers
+scope, deduplication, filters, empty data, bounds, reopen, undo/redo, edited rows,
+SVG and native Visio. tests/browser-panel-content.mjs covers actual dialog
+failure/retry, history and save/reopen; run it in hosted browser validation.
+Local Chromium launch is blocked by socket/IPC permissions, so no interactive
+browser pass or browser screenshot is claimed here.

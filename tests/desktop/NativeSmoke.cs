@@ -335,16 +335,40 @@ internal sealed partial class Studio
     async Task ClickEditorTarget(string selector,int clicks=1,int modifiers=0)
     {
         var query=JsonSerializer.Serialize(selector);
-        // Measure the visible target after scroll and resize callbacks settle.
-        var raw=await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new{
-            expression=$"(async () => {{ const n=document.querySelector({query}); if(!n) return null; n.scrollIntoView({{block:'center',inline:'center'}}); await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))); const r=n.getBoundingClientRect(); return {{x:r.x+r.width/2,y:r.y+r.height/2}}; }})()",
-            awaitPromise=true,returnByValue=true}));
-        using var doc=JsonDocument.Parse(raw);
-        var result=doc.RootElement.GetProperty("result");
-        if(!result.TryGetProperty("value",out var point)||point.ValueKind!=JsonValueKind.Object)throw new Exception("Native edit target is unavailable: "+selector+" "+raw);
-        var x=point.GetProperty("x").GetDouble();var y=point.GetProperty("y").GetDouble();
-        for(int click=1;click<=clicks;click++)foreach(var type in new[]{"mousePressed","mouseReleased"})
-            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=click,modifiers}));
+        // Re-measure each click after selection/reveal and resize callbacks.
+        // SVG text bounds can contain blank space; require a painted glyph hit.
+        for(int click=1;click<=clicks;click++)
+        {
+            var raw=await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new{
+                expression=$$"""
+                (async () => {
+                    const n=document.querySelector({{query}});if(!n)return {error:'Target missing'};
+                    n.scrollIntoView({block:'center',inline:'center'});
+                    await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
+                    const r=n.getBoundingClientRect(),center={x:r.x+r.width/2,y:r.y+r.height/2};
+                    if(!n.matches('svg text'))return center;
+                    const describe=node=>{const chain=[];for(let at=node;at&&chain.length<5;at=at.parentElement)chain.push({tag:at.localName,id:at.id,class:at.getAttribute?.('class')});return chain;};
+                    const count=n.getNumberOfChars(),matrix=n.getScreenCTM(),hits=[];
+                    for(let step=0;step<count;step++){
+                        const index=(Math.floor(count/2)+step)%count,b=n.getExtentOfChar(index);
+                        if(!b.width||!b.height)continue;
+                        const point=new DOMPoint(b.x+b.width/2,b.y+b.height/2).matrixTransform(matrix),hit=document.elementFromPoint(point.x,point.y);
+                        if(hit?.closest('text')===n)return {x:point.x,y:point.y,glyph:index,key:n.dataset.drawingKey};
+                        if(hits.length<8)hits.push({glyph:index,x:point.x,y:point.y,hit:hit?.localName,key:hit?.closest('[data-drawing-key]')?.dataset.drawingKey,ancestors:describe(hit)});
+                    }
+                    const hit=document.elementFromPoint(center.x,center.y);
+                    return {error:'No visible text glyph hit',bounds:{x:r.x,y:r.y,w:r.width,h:r.height},count,centerHit:hit?.localName,centerAncestors:describe(hit),viewport:{width:innerWidth,height:innerHeight},canvas:document.querySelector('#canvas')?.getBoundingClientRect().toJSON(),centerKey:hit?.closest('[data-drawing-key]')?.dataset.drawingKey,hits,feedback:document.getElementById('feedback')?.textContent};
+                })()
+                """,
+                awaitPromise=true,returnByValue=true}));
+            using var doc=JsonDocument.Parse(raw);
+            var result=doc.RootElement.GetProperty("result");
+            if(!result.TryGetProperty("value",out var point)||point.ValueKind!=JsonValueKind.Object||point.TryGetProperty("error",out _))throw new Exception("Native edit target is unavailable: "+selector+" "+raw);
+            var x=point.GetProperty("x").GetDouble();var y=point.GetProperty("y").GetDouble();
+            if(point.TryGetProperty("glyph",out _))RecordEditorStartup("Native text click "+click+"/"+clicks+": "+point.GetRawText());
+            foreach(var type in new[]{"mousePressed","mouseReleased"})
+                await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=click,modifiers}));
+        }
     }
     async Task EditorKey(string key,int code)
     {
@@ -363,7 +387,7 @@ internal sealed partial class Studio
         await EditorKey("Enter",13);
         await RequireEditor("if(document.querySelector('[data-inline-editor]'))throw Error('Saved title editor did not close');if(!document.querySelector('text[data-drawing-key=\"Core Network|title|edge\"]')?.textContent.includes('Native growing-canvas title'))throw Error('Dynamic title was not saved')","save title on dynamic page");
         await ClickEditorTarget(edge,2);
-        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Edited title cannot be reopened');t.value='Native repaired title'","revise saved title");
+        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Edited title cannot be reopened: '+JSON.stringify({selection:document.getElementById('drawing-selection')?.textContent,feedback:document.getElementById('feedback')?.textContent,dialog:document.getElementById('dialog')?.open,active:document.activeElement?.id,viewport:document.querySelector('#canvas svg')?.style.transform}));t.value='Native repaired title'","revise saved title");
         await EditorKey("Enter",13);
         await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Corrected editor did not close'); const t=document.querySelector('text[data-drawing-key=\"Core Network|title|edge\"]'); if(!t?.textContent.includes('Native repaired title')) throw Error('Corrected title was not saved')","save corrected title");
         await ClickEditorTarget(sw,2);

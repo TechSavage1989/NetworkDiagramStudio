@@ -73,6 +73,7 @@ function mergeRoutes(routes, incoming) {
   for(const r of incoming) {
     const ix=routes.findIndex(old=>old.destination===r.destination && old.nextHop===r.nextHop &&
       (old.vdom||'')===(r.vdom||'') && (old.context||'')===(r.context||'') &&
+      ['distance','preference','vrf','tag','name','track','description','options'].every(field=>JSON.stringify(old[field]??'')===JSON.stringify(r[field]??'')) &&
       (old.source||'')===(r.source||'') && (old.service||'')===(r.service||'') &&
       (old.type==='policy')===(r.type==='policy') &&
       (old.status||'')===(r.status||'') && (old.interface===r.interface ||

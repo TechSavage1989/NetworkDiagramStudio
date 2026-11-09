@@ -1,3 +1,4 @@
+import {deviceBounds,deviceLocalDelta,deviceRegionBounds} from './diagram/device-geometry.mjs';
 import {textFootprint} from './diagram/labels.mjs';
 import {applyLinkStyles} from './link-styles.mjs';
 import {placeBeside} from './arrange.mjs';
@@ -29,7 +30,7 @@ export function cleanDrawingEdits(raw){
 export const deviceEditKey=(page,g)=>(page.editScope||page.name)+'|device|'+g.sourceId+'|'+(g.kind==='plug'?'plug:'+g.host?.port:g.instanceKey||'body');
 export function editDeviceShape(page,project,g){
  const key=deviceEditKey(page,g),legacy=deviceEditKey({name:page.name},g),edits=project.layout?.drawingEdits||{},patch=s=>edits[key+s]??edits[legacy+s],change=patch('');g.editKey=key;g.legacyEditKey=legacy;
- if(change)for(const k of ['x','y','w','h'])if(Number.isFinite(change[k]))g[k]=change[k];
+ if(change)for(const k of ['x','y','w','h','angle'])if(Number.isFinite(change[k]))g[k]=change[k];
  if(typeof change?.name==='string')g.name=change.name;
  g.children.forEach((c,i)=>{const slot=c.editSlot??i;c.editKey=key+'|child|'+slot;c.legacyEditKey=legacy+'|child|'+slot;const change=patch('|child|'+slot);if(change){Object.assign(c,change);if(c.anchorName){const [x,y]=c.anchorOrigin;for(const [port,point] of Object.entries(g.ports))if(Math.abs(point[0]-x)<1e-8&&Math.abs(point[1]-y)<1e-8)g.ports[port]=[c.x+c.w/2,c.y+c.h/2];}}});
  if(g.asset?.native){
@@ -49,15 +50,21 @@ export function applyDrawingEdits(page,project){
  applyLinkStyles(page,project.layout?.linkStyles,edits);
 }
 export function drawingObjects(page){const out=[];for(const item of page.items){out.push(item);if(item.type!=='device')continue;if(!item.asset)for(const child of item.children)out.push({...child,parent:item,normalized:true});else if(item.asset.native){item.asset.native.paths.forEach((p,i)=>out.push({...p,type:'vector',name:p.name||'Vector path '+(i+1),editKey:item.editKey+'|vector|'+i,parent:item,normalized:true}));item.asset.native.texts.forEach((t,i)=>out.push({...t,type:'arttext',value:t.text,editKey:item.editKey+'|arttext|'+i,parent:item,normalized:true}));}}return out;}
+export const inverseDeviceDelta=deviceLocalDelta;
+function parentBounds(item,bounds){
+ if(!item.normalized||!item.parent.angle)return bounds;
+ const p=item.parent;return deviceRegionBounds(p,{x:(bounds.x-p.x)/p.w,y:(bounds.y-p.y)/p.h,w:bounds.w/p.w,h:bounds.h/p.h});
+}
 export function drawingBounds(item){
- if(item.type==='arttext'&&item.normalized)return {key:item.editKey,...textFootprint({x:item.parent.x+(item.x-item.w/2)*item.parent.w,y:item.parent.y+item.y*item.parent.h-item.size*item.parent.w*.7,w:item.w*item.parent.w,h:item.size*item.parent.w*1.4,angle:item.angle})};
+ if(item.type==='device')return {key:item.editKey,...deviceBounds(item)};
+ if(item.type==='arttext'&&item.normalized)return {key:item.editKey,...parentBounds(item,textFootprint({x:item.parent.x+(item.x-item.w/2)*item.parent.w,y:item.parent.y+item.y*item.parent.h-item.size*item.parent.w*.7,w:item.w*item.parent.w,h:item.size*item.parent.w*1.4,angle:item.angle}))};
  let x=item.x,y=item.y,w=item.w,h=item.h;
  if(item.type==='path'||item.type==='vector'){
   const pts=item.type==='path'?item.points:item.commands.filter(c=>c.length===3).map(c=>c.slice(1));if(!pts.length)return null;
   x=Math.min(...pts.map(p=>p[0]));y=Math.min(...pts.map(p=>p[1]));w=Math.max(...pts.map(p=>p[0]))-x;h=Math.max(...pts.map(p=>p[1]))-y;
  }else if(item.type==='arttext'){x=item.x-item.w/2;y=item.y-item.size*.7;h=item.size*1.4;}
  if(item.normalized){x=item.parent.x+x*item.parent.w;y=item.parent.y+y*item.parent.h;w*=item.parent.w;h*=item.parent.h;}
- const bounds=item.type==='text'?textFootprint({x,y,w,h,angle:item.angle}):{x,y,w,h};
+ const bounds=parentBounds(item,['text','rect','ellipse'].includes(item.type)?textFootprint({x,y,w,h,angle:item.angle}):{x,y,w,h});
  return {key:item.editKey,x:bounds.x,y:bounds.y,w:bounds.w,h:bounds.h};
 }
 function moveCable(item,dx,dy){
@@ -90,12 +97,14 @@ export function movementOffsets(page,edits,offsets,{exclude=[]}={}){
 // The scene may expand to the right, but the reserved content area is solid.
 export function safeCoreMoveOffsets(page,offsets){
  if(page?.legendLayout!=='sidebar'||!Number.isFinite(page.sidebar?.divider))return new Map(offsets);
- const boundary=page.sidebar.divider+20,out=new Map(offsets);
+ const boundary=page.sidebar.divider+20,out=new Map(offsets),shared=new Map();
+ // A shared translation is one rigid move. Clamp the entire selection by
+ // its leftmost constrained body, never individual members independently.
  for(const [key,[dx,dy]] of out){
-  const item=page.items.find(i=>i.editKey===key);
-  if(item?.type==='device'&&item.kind!=='plug'&&item.kind!=='handoff'&&!item.moduleLegend&&item.sourceId!=='module-legend')
-   out.set(key,[Math.max(dx,boundary-item.x),dy]);
+  const item=page.items.find(i=>i.editKey===key),token=dx+','+dy;
+  if(item?.type==='device'&&item.kind!=='plug'&&item.kind!=='handoff'&&!item.moduleLegend&&item.sourceId!=='module-legend')shared.set(token,Math.max(shared.get(token)??dx,boundary-drawingBounds(item).x));
  }
+ for(const [key,[dx,dy]] of out)out.set(key,[shared.get(dx+','+dy)??dx,dy]);
  return out;
 }
 export function moveDrawingItems(page,edits,offsets,{preventSidebarOverlap=false}={}){
@@ -111,7 +120,7 @@ export function moveDrawingItems(page,edits,offsets,{preventSidebarOverlap=false
  }
  for(const [key,[dx,dy]] of offsets){
   const item=objects.find(o=>o.editKey===key);if(!item||item.parent&&offsets.has(item.parent.editKey))continue;
-  const localX=item.normalized?dx/item.parent.w:dx,localY=item.normalized?dy/item.parent.h:dy,patch={...(result[key]||{})};
+  const [ux,uy]=item.normalized?inverseDeviceDelta(item.parent,dx,dy):[dx,dy],localX=item.normalized?ux/item.parent.w:ux,localY=item.normalized?uy/item.parent.h:uy,patch={...(result[key]||{})};
   // A cable whose two ends move by the same offset is translated whole.
   if(item.type==='path')patch.points=item.from&&item.to&&sameOffset(offsets.get(endOwner(shapes,item.from)),[dx,dy])&&sameOffset(offsets.get(endOwner(shapes,item.to)),[dx,dy])?item.points.map(([x,y])=>[x+dx,y+dy]):moveCable(item,dx,dy);
   else if(item.type==='vector')patch.commands=item.commands.map(c=>c.length===3?[c[0],c[1]+localX,c[2]+localY]:[...c]);
@@ -145,9 +154,18 @@ export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='a
  for(const item of others)offsets.set(item.editKey,[0,0]);
  return moveDrawingItems(page,edits,offsets);
 }
-export function scaleDrawingItems(page,edits,keys,factor){
+export function scaleDrawingItems(page,edits,keys,factor,{mode='models'}={}){
  if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Choose a size from 10 to 400 percent.');
- const selected=new Set(keys),result=cleanDrawingEdits(edits);
+ const selected=new Set(keys),objects=drawingObjects(page),chosen=objects.filter(item=>selected.has(item.editKey)&&!selected.has(item.parent?.editKey)&&item.type!=='path');
+ if(mode==='spacing'){
+  const top=chosen.filter(item=>!item.parent);
+  if(top.length<2)throw Error('Select at least two objects to change layout spacing.');
+  const bounds=top.map(drawingBounds),x=Math.min(...bounds.map(b=>b.x)),y=Math.min(...bounds.map(b=>b.y));
+  return moveDrawingItems(page,edits,new Map(top.map((item,i)=>[item.editKey,[(bounds[i].x-x)*(factor-1),(bounds[i].y-y)*(factor-1)]])));
+ }
+ // Dimension edits must not trigger automatic repacking. Pin the visible
+ // scene before changing sizes, just as a direct drag does.
+ const result=moveDrawingItems(page,edits,new Map(chosen.map(item=>[item.editKey,[0,0]])));
  for(const item of drawingObjects(page)){
   if(!selected.has(item.editKey)||selected.has(item.parent?.editKey)||item.type==='path')continue;
   const change={};

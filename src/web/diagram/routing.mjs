@@ -1,3 +1,4 @@
+import {routingDevice} from './device-geometry.mjs';
 // Physical obstructions and merged cables are hard constraints. After those,
 // prefer a short clear path; a small crossing with a hop is cheaper than a long
 // trip around the page. Candidate scoring only compares the changing cable.
@@ -241,6 +242,7 @@ export function planModuleEscapes(anchors,{weight=4,pitch=6,minX=-Infinity,maxX=
 }
 export function endpointLead({anchor,ay,exitX,moduleEscape}){
  const start=[anchor.x,anchor.y];
+ if(anchor.rotatedDeparture){const points=[start,...anchor.departure],x=points.at(-1)[0];return [...points,[x,ay],[exitX,ay]];}
  if(moduleEscape)return [start,[start[0],moduleEscape.y],[moduleEscape.x,moduleEscape.y],[moduleEscape.x,ay],[exitX,ay]];
  if(!anchor.departure&&anchor.escapeY==null&&exitX!==anchor.x){
   const turn=anchor.y+(anchor.side==='top'?-1:1)*Math.max(2,(anchor.weight||4)/2+1);
@@ -630,6 +632,15 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}
 }
 export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0,referenceLabel=0,directionNeutralLevels=false}){
+ const originalBodies=[...nodes.values()],hasRotation=originalBodies.some(n=>n.angle);
+ if(hasRotation)for(let i=0;i<originalBodies.length;i++)for(let j=i+1;j<originalBodies.length;j++){
+  const a=originalBodies[i],b=originalBodies[j];if(!a.angle&&!b.angle)continue;
+  const aa=routingDevice(a),bb=routingDevice(b);
+  if(Math.min(aa.x+aa.w,bb.x+bb.w)-Math.max(aa.x,bb.x)>.01&&Math.min(aa.y+aa.h,bb.y+bb.h)-Math.max(aa.y,bb.y)>.01)throw Object.assign(Error('Rotated equipment overlaps another device. Move the devices apart or reduce the rotation.'),{code:'CORE_LAYOUT_CAPACITY',owner:a.sourceId});
+ }
+ const converted=new Map([...nodes].map(([id,node])=>[id,routingDevice(node)]));
+ const byOriginal=new Map([...nodes].map(([id,node])=>[node,converted.get(id)])),convert=v=>({...v,node:byOriginal.get(v.node)||v.node});
+ nodes=converted;endData=new Map([...endData].map(([id,v])=>[id,convert(v)]));banks=new Map([...banks].map(([id,bank])=>[id,bank.map(convert)]));
  const bodies=[...nodes.values()];
  if(bodies.some(n=>n.x<minX))minX=Math.min(minX,...bodies.map(n=>n.x))-Math.max(24,endData.size*railPitch);
  if(bodies.some(n=>n.x+n.w>maxX))maxX=Math.max(maxX,...bodies.map(n=>n.x+n.w))+Math.max(24,endData.size*railPitch);
@@ -758,5 +769,6 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
   return {routes,references,ends};
  }
  const best=build(),cost=score(best.routes,nodes,obstacles,minX,maxX,railPitch);
+ if(hasRotation&&cost[0])throw Object.assign(Error('This rotated equipment needs more room for clear cable routes. Move the equipment or adjust its rotation.'),{code:'CORE_LAYOUT_CAPACITY'});
  return {...best,cost,stats};
 }

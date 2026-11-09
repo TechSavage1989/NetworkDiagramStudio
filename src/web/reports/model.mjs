@@ -1,3 +1,4 @@
+import {configuredAddress,configuredRouteText} from '../imports/routing-records.mjs';
 import {switchportCatalog} from './catalog-data.mjs';
 import {deviceFaceplate,faceplateProfile} from '../diagram/faceplate.mjs';
 import {physicalPorts} from '../diagram/scene.mjs';
@@ -10,7 +11,7 @@ const own=(object,key)=>Object.prototype.hasOwnProperty.call(object||{},key);
 const get=(object,key,fallback)=>object?.[key]??Object.entries(object||{}).find(([name])=>name.toLowerCase()===key.toLowerCase())?.[1]??fallback;
 const number=value=>Number.isInteger(Number(value))?Number(value):null;
 const vlan=value=>{const n=number(value);return n>=1&&n<=4094?n:null;};
-const key=value=>String(value??'').toLowerCase().replace(/[\s-]/g,'').replace(/^(gigabitethernet|gigeth|gig)(?=\d)/,'gi').replace(/^(tengigabitethernet|tengigeth|tengige)(?=\d)/,'te').replace(/^(twentyfivegigabitethernet|twentyfivegige|twe)(?=\d)/,'twentyfiveg').replace(/^(fortygigabitethernet|fortygige|fo)(?=\d)/,'fortyg').replace(/^(hundredgigabitethernet|hundredgige|hu)(?=\d)/,'hundredg').replace(/^fastethernet(?=\d)/,'fa').replace(/^ethernet(?=\d)/,'eth');
+const key=value=>String(value??'').toLowerCase().replace(/[\s-]/g,'').replace(/^(gigabitethernet|gigeth|gig)(?=\d)/,'gi').replace(/^(tengigabitethernet|tengigeth|tengige)(?=\d)/,'te').replace(/^(twentyfivegigabitethernet|twentyfivegige|twe)(?=\d)/,'twentyfiveg').replace(/^(fortygigabitethernet|fortygige|fo)(?=\d)/,'fortyg').replace(/^(hundredgigabitethernet|hundredgige|hu)(?=\d)/,'hundredg').replace(/^fastethernet(?=\d)/,'fa').replace(/^ethernet(?=\d)/,'eth').replace(/^vlaninterface(?=\d)/,'vlan');
 const sku=value=>String(value??'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 const clone=value=>JSON.parse(JSON.stringify(value));
 const unique=values=>[...new Set(values)];
@@ -126,10 +127,12 @@ export function inventoryForDevice(device){
  inv.assumptions=inv.assumptions.filter(note=>!/^Supplementary observations from /i.test(note)&&!/^SVI .*: the browser address differs from retained native addresses\. Both are retained; review primary, secondary and IPv6 addresses before use\.$/.test(note));
  inv.hostname=reportText(device.name||inv.hostname,400);for(const name of ['vendor','os','firmware','reportModel'])if(device[name])inv[name]=reportText(device[name],400);
  if(own(device,'vlans')){const retained=inv.vlans;inv.vlans=rows(device.vlans).map(row=>({id:vlan(row.id),name:reportText(row.name),voice:own(row,'voice')?row.voice===true:retained.find(previous=>previous.id===vlan(row.id))?.voice===true})).filter(row=>row.id);}
+ for(const field of ['blockers','assumptions'])inv[field]=unique([...inv[field],...rows(device[field==='blockers'?'reportBlockers':'reportAssumptions']).map(value=>reportText(value))]);
  for(const field of ['management','mirrors'])if(own(device,field))inv[field]=rows(device[field]).map(value=>reportText(value));
  // Browser records retain one address per VLAN. Supplement the native list
  // without discarding its IPv6 or secondary addresses.
- const configuredSvis=rows(device.vlans).filter(row=>row.ip).map(row=>({interface:'vlan '+row.id,address:reportText(row.ip)}));
+ for(const row of rows(device.vlans).filter(row=>Array.isArray(row.addresses))){const id=key('vlan '+row.id);inv.svis=inv.svis.filter(svi=>key(svi.interface)!==id);for(const address of row.addresses)inv.svis.push({interface:'vlan '+row.id,address:configuredAddress(address)||reportText(address)});}
+ const configuredSvis=rows(device.vlans).filter(row=>row.ip&&!Array.isArray(row.addresses)).map(row=>({interface:'vlan '+row.id,address:configuredAddress(row.ip)||reportText(row.ip)}));
  for(const svi of configuredSvis){
   const retained=inv.svis.filter(row=>key(row.interface)===key(svi.interface));
   if(retained.some(row=>row.address===svi.address))continue;
@@ -137,9 +140,11 @@ export function inventoryForDevice(device){
   inv.svis.push(svi);
  }
  for(const input of rows(device.ports)){
-  const name=String(input.name||input.id||''),targets=[...inv.ports,...inv.logicalInterfaces].filter(port=>key(port.id)===key(name)||port.relatedInterfaces.some(alias=>key(alias)===key(name)));
+  const name=String(input.name||input.id||''),aliases=new Set([name,...rows(input.relatedInterfaces)].map(key)),targets=[...inv.ports,...inv.logicalInterfaces].filter(port=>[port.id,...port.relatedInterfaces].some(alias=>aliases.has(key(alias))));
   if(!targets.length){const record=normalizePort({id:name,group:'Logical interfaces'});inv.logicalInterfaces.push(record);targets.push(record);}
   for(const port of targets){
+   if(port.id!==name&&rows(input.relatedInterfaces).some(alias=>key(alias)===key(port.id))){port.relatedInterfaces=unique([...port.relatedInterfaces,port.id]);port.id=name;}
+   if(input.configurationResolved){port.configurationResolved=true;port.untaggedVlan=null;port.untaggedState='Unknown';port.taggedVlans=[];port.taggedVlanPolicy=null;port.voiceVlan=null;}
    for(const [field,target] of [['description','description'],['role','mode'],['speed','speed'],['connectedDevice','connectedDevice'],['usage','usage'],['lag','aggregate']])if(own(input,field)&&!(['speed','connectedDevice'].includes(field)&&/^Observed:/i.test(input[field])))port[target]=reportText(input[field]||(['description','aggregate'].includes(target)?'':'Unknown'));
    if(own(input,'native')){port.untaggedVlan=vlan(input.native);port.untaggedState=port.untaggedVlan!=null?'Known':/^none$/i.test(input.nativeState||'')||input.nativeTagged?'None':'Unknown';}
    if(own(input,'nativeState')&&!port.untaggedVlan)port.untaggedState=/^none$/i.test(input.nativeState)?'None':'Unknown';
@@ -152,11 +157,11 @@ export function inventoryForDevice(device){
    if(own(input,'voice'))port.voiceVlan=vlan(input.voice);if(own(input,'disabled'))port.disabled=typeof input.disabled==='boolean'?input.disabled:null;else if(input.adminState||input.admin){const admin=reportText(input.adminState||input.admin,50);port.disabled=/^(down|disable|disabled|shutdown)$/i.test(admin)?true:/^(up|enable|enabled)$/i.test(admin)?false:null;}
    if(own(input,'state')&&!/^Observed:/i.test(input.state))port.liveState=reportText(input.state||'Unknown/Confirm before use');if(own(input,'stackLink'))port.stackLink=input.stackLink===true;
    if(own(input,'notes'))port.notes=unique([...port.notes,...rows(input.notes).map(note=>reportText(note)).filter(note=>!/^Supplementary \(/i.test(note))]);if(own(input,'relatedInterfaces'))port.relatedInterfaces=unique([...port.relatedInterfaces,...rows(input.relatedInterfaces).map(String)]);
-   for(const address of [input.ip,input.address].filter(Boolean)){const note='Address: '+reportText(address);if(!port.notes.includes(note))port.notes.push(note);}
+   for(const address of [input.ip,input.address,...rows(input.addresses)].filter(Boolean)){const note='Address: '+reportText(address);if(!port.notes.includes(note))port.notes.push(note);}
   }
  }
- const lagIdentity=value=>key(value).replace(/^(lag|trk|portchannel|po|bond|bridgeaggregation|ae)/,'');for(const port of inv.ports.filter(port=>port.aggregate)){const leader=inv.logicalInterfaces.find(candidate=>lagIdentity(candidate.id)===lagIdentity(port.aggregate));if(!leader)continue;if(!port.untaggedVlan&&port.untaggedState==='Unknown'){port.untaggedVlan=leader.untaggedVlan;port.untaggedState=leader.untaggedState;}if(!port.taggedVlans.length&&!port.taggedVlanPolicy){port.taggedVlans=[...leader.taggedVlans];port.taggedVlanPolicy=leader.taggedVlanPolicy;}port.voiceVlan??=leader.voiceVlan;}
- if(own(device,'routes'))inv.routes=rows(device.routes).map(route=>typeof route==='string'?reportText(route):['destination','nextHop','interface','metric','type','vdom','context'].filter(field=>route[field]!=null&&route[field]!=='').map(field=>field+': '+reportText(route[field])).join(' | '));
+ const lagIdentity=value=>key(value).replace(/^(lag|trk|portchannel|po|bond|bridgeaggregation|ae)/,'');for(const port of inv.ports.filter(port=>port.aggregate&&!port.configurationResolved)){const leader=inv.logicalInterfaces.find(candidate=>lagIdentity(candidate.id)===lagIdentity(port.aggregate));if(!leader)continue;if(!port.untaggedVlan&&port.untaggedState==='Unknown'){port.untaggedVlan=leader.untaggedVlan;port.untaggedState=leader.untaggedState;}if(!port.taggedVlans.length&&!port.taggedVlanPolicy){port.taggedVlans=[...leader.taggedVlans];port.taggedVlanPolicy=leader.taggedVlanPolicy;}port.voiceVlan??=leader.voiceVlan;}
+ if(own(device,'routes'))inv.routes=rows(device.routes).map(configuredRouteText);
  const described=describeDevices(inv);if(!described.length&&inv.chassisSlots)described.push(normalizeDetail({id:'1',label:'Chassis',kind:'Chassis',model:device.model||inv.chassisModel}));for(const detail of described)if(!inv.devices.some(row=>row.id===detail.id))inv.devices.push(detail);const details=rows(device.reportDetails).map(normalizeDetail);
  for(const detail of details){const found=inv.devices.find(row=>key(row.id)===key(detail.id));if(!found){inv.assumptions.push('Saved details for '+detail.id+' are unassigned to the current hardware and retained for review.');inv.devices.push({...detail,label:'Unassigned details / '+detail.id,kind:'Unassigned'});continue;}for(const field of ['name','serialNumber','assetTag','notes','modelSelection'])found[field]=detail[field];found.moduleSelections=detail.moduleSelections;}
  if(!details.length&&inv.devices.filter(row=>!row.parentId).length===1){const parent=inv.devices.find(row=>!row.parentId);for(const field of ['serialNumber','assetTag','notes'])if(device[field])parent[field]=reportText(device[field]);}

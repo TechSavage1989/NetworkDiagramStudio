@@ -11,13 +11,13 @@ const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[];
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
- await page.locator('#sample').click();await page.waitForSelector('#page-families .page-group summary');
+ await page.getByRole('button',{name:'Open sample site',exact:true}).click();await page.waitForSelector('#page-families .page-group summary');
  const groups=page.locator('#page-families .page-group'),portGroup=groups.filter({hasText:'Port maps'});
  assert.ok(await groups.count()>=3,'sample has multiple page groups');
  assert.equal(await portGroup.count(),1);
  await portGroup.locator('summary').click();
  assert.ok(await portGroup.evaluate(e=>e.open),'sidebar group expands its page list');
- assert.equal(await page.locator('aside #page-navigation').count(),1,'page groups live in the sidebar');
+ assert.equal(await page.locator('main > aside#page-navigation').count(),1,'page groups live in their own sidebar');
  assert.equal(await page.locator('.stagebar #page-navigation, .pagebar #tabs').count(),0,'no top page tabs remain');
  const rulerTop=page.locator('#canvas .page-ruler-top'),unit=page.locator('#canvas .page-ruler-unit');
  assert.equal(await rulerTop.count(),1);
@@ -42,12 +42,23 @@ try{
  await page.waitForFunction(()=>document.querySelector('#page-families').scrollTop>0);
  const scrolled=await nav.evaluate(e=>e.scrollTop);
  await nav.evaluate(e=>{e.style.maxHeight='';});
- for(const [width,height] of [[1366,768],[1024,768],[620,900]]){
+ for(const [width,height] of [[1366,768],[1024,768],[900,768],[768,768],[620,900],[390,844]]){
   await page.setViewportSize({width,height});await page.locator('#zoom-fit').click();
-  const geometry=await page.evaluate(()=>{const box=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right};};return {canvas:box('#canvas'),nav:box('#page-families'),aside:box('aside'),overflow:document.documentElement.scrollWidth>innerWidth+1};});
+  const geometry=await page.evaluate(()=>{const box=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {width:r.width,height:r.height,left:r.left,right:r.right,top:r.top,bottom:r.bottom};};return {canvas:box('#canvas'),nav:box('#page-families'),aside:box('.pages-sidebar'),project:box('.project-sidebar'),overflow:document.documentElement.scrollWidth>innerWidth+1};});
   assert.ok(geometry.canvas.width>300&&geometry.canvas.height>150,'responsive canvas stays usable');
   assert.ok(geometry.nav.left>=geometry.aside.left&&geometry.nav.right<=geometry.aside.right,'page lists stay within sidebar');
   assert.equal(geometry.overflow,false,'no horizontal document overflow');
+  if(width>=1000){
+   assert.ok(geometry.aside.left>=geometry.project.right-1,'pages rail is immediately right of project sidebar');
+   assert.ok(geometry.canvas.left>=geometry.aside.right-1,'drawing canvas follows the pages rail');
+   assert.ok(geometry.nav.height>height/2,'page list uses the available sidebar height');
+  }else if(width>620){
+   assert.ok(geometry.aside.left>=geometry.project.right-1,'narrow layout retains separate side-by-side panels');
+   assert.ok(geometry.canvas.top>=geometry.aside.bottom,'narrow canvas sits below the bounded panels');
+   assert.ok(geometry.canvas.width>=width-1,'narrow canvas retains full width');
+  }
+  assert.equal(await page.locator('.project-sidebar #page-families').count(),0);
+  assert.equal(await page.locator('.project-sidebar #site, .project-sidebar #drop, .project-sidebar #devices').count(),3,'project controls stay in main sidebar');
   await page.screenshot({path:resolve(output,'sidebar-'+width+'.png')});
  }
  await page.setViewportSize({width:1366,height:768});
@@ -120,6 +131,15 @@ try{
  });
  assert.equal(rejection.attached,true,'rejected editor remains attached');
  assert.equal(rejection.visible,true,'validation failure remains visible');
+ await page.locator('#new').click();
+ await page.waitForFunction(()=>document.querySelector('#page-navigation').hidden);
+ assert.equal(await page.locator('.pages-sidebar').isVisible(),false,'new project hides the empty pages rail');
+ const blank=await page.evaluate(()=>({left:document.querySelector('#canvas').getBoundingClientRect().left,right:document.querySelector('.project-sidebar').getBoundingClientRect().right}));
+ assert.ok(Math.abs(blank.left-blank.right)<1,'hidden pages rail returns its width to the canvas');
+ // Reset recreates the welcome button; its accessible name survives that lifecycle.
+ await page.getByRole('button',{name:'Open sample site',exact:true}).click();
+ await page.waitForSelector('#page-families .page-group summary');
+ assert.equal(await page.locator('.pages-sidebar').isVisible(),true,'loading another drawing restores its separate rail');
  assert.deepEqual(errors,[]);
  await writeFile(resolve(output,'results.json'),JSON.stringify({groups:await groups.count(),sidebarScrolledPixels:scrolled,printCanvasUnchanged:true,errors},null,2));
  console.log('PASS sidebar page lists, keyboard navigation, rename, responsive scrolling and independent paper selection.');

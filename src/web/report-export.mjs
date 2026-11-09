@@ -5,16 +5,31 @@ import {cableWeight,svgPage,textLayout} from './diagram/scene.mjs';
 // font as the printable report; PNGs carry explicit 300-dpi resolution metadata.
 const color=(value,fallback='#16364a')=>/^#[0-9a-f]{6}$/i.test(value||'')?value:fallback;
 const paint=value=>value&&value!=='none'&&value!=='transparent';
+// Rotate around the original chassis center, never its axis-aligned bounds.
+// Baking vector points and text centers keeps cable/backing calculations in
+// page coordinates; raster and ellipse paint retains a local PDF transform.
+function rotateItem(item,group){
+ const angle=group.angle||0;if(!angle)return item;
+ const cx=group.x+group.w/2,cy=group.y+group.h/2,c=Math.cos(angle),s=Math.sin(angle);
+ const point=([x,y])=>[cx+(x-cx)*c+(y-cy)*s,cy-(x-cx)*s+(y-cy)*c];
+ if(item.type==='vector'||item.type==='path')return {...item,
+  ...(item.points?{points:item.points.map(point)}:{}),
+  ...(item.commands?{commands:item.commands.map(([op,...xy])=>[op,...xy.flatMap((v,n)=>n%2?[]:point([v,xy[n+1]]))])}:{})};
+ const [x,y]=point([item.x+item.w/2,item.y+item.h/2]);
+ return {...item,x:x-item.w/2,y:y-item.h/2,angle:(item.angle||0)+angle};
+}
 function flatten(items,parent){
  const out=[];
  for(const item of items||[]){
   const i=parent?{...item,x:parent.x+item.x*parent.w,y:parent.y+item.y*parent.h,w:item.w*parent.w,h:item.h*parent.h}:item;
   if(i.type!=='device'){out.push(i);continue;}
+  let children=[];
   if(i.asset?.native){
-   for(const path of i.asset.native.paths.filter(p=>!p.hidden))out.push({type:'vector',commands:path.commands.map(([op,x,y])=>op==='Z'?['Z']:[op,i.x+x*i.w,i.y+y*i.h]),fill:path.fill,stroke:path.stroke,weight:path.weight*i.w});
-   for(const t of i.asset.native.texts.filter(t=>!t.hidden))out.push({type:'text',x:i.x+t.x*i.w-t.w*i.w/2,y:i.y+t.y*i.h-t.size*i.w*.7,w:t.w*i.w,h:t.size*i.w*1.4,size:t.size*i.w,value:t.text,color:t.color,bold:t.bold,align:t.align||'center',angle:t.angle,art:true});
-  }else if(i.asset?.dataUrl)out.push({type:'image',x:i.x,y:i.y,w:i.w,h:i.h,dataUrl:i.asset.dataUrl});
-  else out.push(...flatten(i.children,i));
+   for(const path of i.asset.native.paths.filter(p=>!p.hidden))children.push({type:'vector',commands:path.commands.map(([op,x,y])=>op==='Z'?['Z']:[op,i.x+x*i.w,i.y+y*i.h]),fill:path.fill,stroke:path.stroke,weight:path.weight*i.w});
+   for(const t of i.asset.native.texts.filter(t=>!t.hidden))children.push({type:'text',x:i.x+t.x*i.w-t.w*i.w/2,y:i.y+t.y*i.h-t.size*i.w*.7,w:t.w*i.w,h:t.size*i.w*1.4,size:t.size*i.w,value:t.text,color:t.color,bold:t.bold,align:t.align||'center',angle:t.angle,art:true});
+  }else if(i.asset?.dataUrl)children.push({type:'image',x:i.x,y:i.y,w:i.w,h:i.h,dataUrl:i.asset.dataUrl});
+  else children=flatten(i.children,i);
+  out.push(...children.map(child=>rotateItem(child,i)));
  }
  return out;
 }
@@ -106,9 +121,14 @@ export async function exportPdf(pages,{title='Network documentation'}={}){
   if(index)pdf.addPage(format(page),orientation(page));
   const ox=page.originX||0,oy=page.originY||0;
   const x=v=>(v-ox)*scale,y=v=>(v-oy)*scale;
-  const items=labelBackingItems(flatten(page.items)),clips=pdfCableClips(items);
+  const items=labelBackingItems(flatten(page.items),page.labelBacking),clips=pdfCableClips(items);
   for(const i of items){
    pdf.saveGraphicsState();
+   if(i.angle&&['rect','ellipse','image'].includes(i.type)){
+    // PDF's native Y axis points up, unlike the scene and jsPDF's drawing API.
+    const c=Math.cos(i.angle),s=Math.sin(i.angle),cx=x(i.x+i.w/2),cy=(page.height-i.y-i.h/2+oy)*scale;
+    pdf.setCurrentTransformationMatrix(new pdf.Matrix(c,s,-s,c,cx-c*cx+s*cy,cy-s*cx-c*cy));
+   }
    if(i.opacity!=null&&i.opacity<1)pdf.setGState(new pdf.GState({opacity:i.opacity,'stroke-opacity':i.opacity}));
    pdf.setLineWidth((i.weight||(i.type==='path'?cableWeight:1))*scale);pdf.setDrawColor(color(i.stroke||i.color));pdf.setFillColor(color(i.fill,'#ffffff'));
    if(i.type==='rect'){

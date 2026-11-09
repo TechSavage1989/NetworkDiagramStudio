@@ -27,7 +27,7 @@ internal static class NormalizedInventory
         value = Regex.Replace(value, @"^(?:twentyfivegigabitethernet|twentyfivegige|twe)(?=\d)", "twentyfiveg");
         value = Regex.Replace(value, @"^(?:fortygigabitethernet|fortygige|fo)(?=\d)", "fortyg");
         value = Regex.Replace(value, @"^(?:hundredgigabitethernet|hundredgige|hu)(?=\d)", "hundredg");
-        return value;
+        return Regex.Replace(value, @"^vlaninterface(?=\d)", "vlan");
     }
     static string CanonicalModel(string text)
     {
@@ -189,12 +189,26 @@ internal static class NormalizedInventory
             inventory.Vlans = Rows(Get(device, "vlans")).Select(vlan => new Vlan
             { Id = Int(Get(vlan, "id")) ?? 0, Name = Text(vlan, "name", 400), Voice = Boolean(Get(vlan, "voice")) ?? voice.Contains(Int(Get(vlan, "id")) ?? 0) }).Where(vlan => vlan.Id > 0).ToList();
         }
+        foreach (string field in new[] { "management", "mirrors" })
+            if (Has(device, field)) { var values = Rows(Get(device, field)).Select(value => Text(value)).ToList(); if (field == "management") inventory.Management = values; else inventory.Mirrors = values; }
+        foreach (var vlan in Rows(Get(device, "vlans")))
+        {
+            string sviId = "vlan " + Text(vlan, "id", 20);
+            if (Has(vlan, "addresses"))
+            {
+                inventory.SVIs.RemoveAll(svi => Key(svi.Interface) == Key(sviId));
+                foreach (var addressRow in Rows(Get(vlan, "addresses"))) if (Text(addressRow) is { Length: > 0 } value) inventory.SVIs.Add(new Svi { Interface = sviId, Address = value });
+            }
+            else if (Text(vlan, "ip", 200) is { Length: > 0 } address && !inventory.SVIs.Any(svi => Key(svi.Interface) == Key(sviId) && svi.Address == address)) inventory.SVIs.Add(new Svi { Interface = sviId, Address = address });
+        }
+        var resolvedPorts = new HashSet<Port>();
         var targets = inventory.Ports.Concat(inventory.LogicalInterfaces).Distinct().ToList();
         foreach (var input in Rows(Get(device, "ports")))
         {
             string id = Text(input, "name", 200); if (id.Length == 0) id = Text(input, "id", 200);
             if (id.Length == 0) continue;
-            var matching = targets.Where(port => Key(port.Id) == Key(id) || port.RelatedInterfaces.Any(alias => Key(alias) == Key(id))).ToList();
+            var aliases = Rows(Get(input, "relatedInterfaces")).Select(value => Key(Text(value))).Append(Key(id)).ToHashSet();
+            var matching = targets.Where(port => aliases.Contains(Key(port.Id)) || port.RelatedInterfaces.Any(alias => aliases.Contains(Key(alias)))).ToList();
             if (matching.Count == 0)
             {
                 var logical = new Port { Id = id, Group = "Logical interfaces" };
@@ -202,6 +216,13 @@ internal static class NormalizedInventory
             }
             foreach (var port in matching)
             {
+                if (port.Id != id && aliases.Contains(Key(port.Id))) { if (!port.RelatedInterfaces.Contains(port.Id)) port.RelatedInterfaces.Add(port.Id); port.Id = id; }
+                foreach (string alias in Rows(Get(input, "relatedInterfaces")).Select(value => Text(value, limit: 200))) if (!port.RelatedInterfaces.Contains(alias)) port.RelatedInterfaces.Add(alias);
+                if (Boolean(Get(input, "configurationResolved")) == true)
+                {
+                    resolvedPorts.Add(port); port.UntaggedVlan = null; port.UntaggedState = "Unknown";
+                    port.TaggedVlans.Clear(); port.TaggedVlanPolicy = null; port.VoiceVlan = null;
+                }
                 if (Has(input, "description")) port.Description = Text(input, "description", 4000);
                 if (Has(input, "role")) port.Mode = Text(input, "role", 100) is { Length: > 0 } mode ? mode : "Unknown";
                 if (Has(input, "native"))
@@ -252,7 +273,7 @@ internal static class NormalizedInventory
                     }
             }
         }
-        foreach (var port in inventory.Ports.Where(port => port.Aggregate.Length > 0))
+        foreach (var port in inventory.Ports.Where(port => port.Aggregate.Length > 0 && !resolvedPorts.Contains(port)))
         {
             string KeyLag(string value) => Regex.Replace(Key(value), @"^(lag|trk|portchannel|po|bond|bridgeaggregation|ae)", "");
             var leader = inventory.LogicalInterfaces.FirstOrDefault(candidate => KeyLag(candidate.Id) == KeyLag(port.Aggregate));
@@ -261,8 +282,7 @@ internal static class NormalizedInventory
             if (port.TaggedVlans.Count == 0 && port.TaggedVlanPolicy == null) { port.TaggedVlans = leader.TaggedVlans.ToList(); port.TaggedVlanPolicy = leader.TaggedVlanPolicy; }
             port.VoiceVlan ??= leader.VoiceVlan;
         }
-        if (Has(device, "routes")) inventory.Routes = Rows(Get(device, "routes")).Select(route =>
-            route.ValueKind == JsonValueKind.String ? Text(route) : string.Join(" | ", new[] { Text(route, "destination"), Text(route, "nextHop"), Text(route, "interface"), Text(route, "metric") }.Where(value => value.Length > 0))).ToList();
+        if (Has(device, "routes")) inventory.Routes = Rows(Get(device, "routes")).Select(RouteText).ToList();
         foreach (string blocker in Rows(Get(device, "reportBlockers")).Select(value => Text(value))) if (!inventory.Blockers.Contains(blocker)) inventory.Blockers.Add(blocker);
         foreach (string note in Rows(Get(device, "reportAssumptions")).Select(value => Text(value))) if (!inventory.Assumptions.Contains(note)) inventory.Assumptions.Add(note);
         if (Has(device, "reportDetails")) DeviceIdentities.Apply(inventory, Read<DeviceIdentity>(Get(device, "reportDetails")));
@@ -273,6 +293,24 @@ internal static class NormalizedInventory
             if (Has(device, "assetTag")) parent.AssetTag = Text(device, "assetTag", 80);
             if (Has(device, "notes")) parent.Notes = Text(device, "notes", 400);
         }
+    }
+    static string RouteText(JsonElement route)
+    {
+        if (route.ValueKind == JsonValueKind.String) return Text(route);
+        if (route.ValueKind != JsonValueKind.Object) return "";
+        string[] order = { "destination", "nextHop", "interface", "distance", "metric", "vrf", "vdom", "context", "type", "status", "protocol", "tag", "name", "track", "description", "options" };
+        var properties = route.EnumerateObject().ToList();
+        var names = order.Where(name => properties.Any(property => property.Name == name)).Concat(properties.Select(property => property.Name).Where(name => !order.Contains(name)).Order(StringComparer.Ordinal));
+        var fields = new List<string>();
+        foreach (string name in names)
+        {
+            JsonElement value = route.GetProperty(name);
+            if (value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined || value.ValueKind == JsonValueKind.String && value.GetString() == "") continue;
+            string text = value.ValueKind == JsonValueKind.String ? Text(value) : JsonSerializer.Serialize(value);
+            if (text.Length > 4096) throw new InvalidOperationException("Report route field exceeds its supported length.");
+            fields.Add(name + ": " + Parser.Safe(text));
+        }
+        return string.Join(" | ", fields);
     }
     static int? Int(JsonElement value)
     {
