@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pageRulerTicks} from '../src/web/rulers.mjs';
 import {relatedConnectionItems,nearestOnCable,positionOnCable} from '../src/web/connection-selection.mjs';
-import {safeCoreMoveOffsets} from '../src/web/drawing-edits.mjs';
+import {safeCoreMoveOffsets,cleanDrawingEdits,moveDrawingItems} from '../src/web/drawing-edits.mjs';
 import {placeCableLabels} from '../src/web/diagram/labels.mjs';
 
 const cable={
@@ -55,4 +55,18 @@ test('core device drag cannot cross into the sidebar',()=>{
  const offsets=safeCoreMoveOffsets(page,new Map([['switch',[-300,20]]]));
  assert.deepEqual(offsets.get('switch'),[-110,20]);
  assert.deepEqual(safeCoreMoveOffsets(page,new Map([['switch',[50,20]]])).get('switch'),[50,20]);
+});
+
+test('snap position follows a changed cable path but manual dragging detaches the label from it',()=>{
+ const key='Core Network|port|fraction',initial={name:'Core Network',dynamic:true,width:1200,height:975,items:[{...cable}]};
+ const saved=cleanDrawingEdits({[key+'|0']:{cableFraction:.4,x:205,y:278}});
+ const req={role:'port',editKey:key,endpoint:'a',value:'1/50',linkId:7,side:'right',outer:600,y:300};
+ assert.equal(placeCableLabels(initial,[req],saved).ok,true);
+ const label=initial.items.find(i=>i.editKey===key+'|0'),first=[label.x,label.y];
+ const rerouted={name:'Core Network',dynamic:true,width:1200,height:975,items:[{...cable,points:[[100,400],[600,400],[600,550]]}]};
+ assert.equal(placeCableLabels(rerouted,[req],saved).ok,true);
+ const moved=rerouted.items.find(i=>i.editKey===key+'|0');
+ assert.notDeepEqual([moved.x,moved.y],first,'snapped caption stays on its cable when the cable reroutes');
+ const edits=moveDrawingItems(rerouted,saved,new Map([[moved.editKey,[15,0]]]));
+ assert.equal(edits[moved.editKey].cableFraction,undefined,'explicit dragging takes over from automatic cable alignment');
 });
