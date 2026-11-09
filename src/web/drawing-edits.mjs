@@ -83,8 +83,20 @@ export function movementOffsets(page,edits,offsets,{exclude=[]}={}){
  }
  return result;
 }
+// Keep manually dragged core equipment clear of the information sidebar.
+// The scene may expand to the right, but the reserved content area is solid.
+export function safeCoreMoveOffsets(page,offsets){
+ if(page?.legendLayout!=='sidebar'||!Number.isFinite(page.sidebar?.divider))return new Map(offsets);
+ const boundary=page.sidebar.divider+20,out=new Map(offsets);
+ for(const [key,[dx,dy]] of out){
+  const item=page.items.find(i=>i.editKey===key);
+  if(item?.type==='device'&&item.kind!=='plug'&&item.kind!=='handoff'&&!item.moduleLegend&&item.sourceId!=='module-legend')
+   out.set(key,[Math.max(dx,boundary-item.x),dy]);
+ }
+ return out;
+}
 export function moveDrawingItems(page,edits,offsets){
- offsets=movementOffsets(page,edits,offsets);
+ offsets=movementOffsets(page,edits,safeCoreMoveOffsets(page,offsets));
  const objects=drawingObjects(page),result=cleanDrawingEdits(edits),shapes=new Map(page.items.filter(i=>i.type==='device').map(i=>[i.key,i]));
  if(page.coreDeviceIds&&objects.some(item=>offsets.has(item.editKey)&&(item.type==='device'||item.parent?.type==='device'))){
   // Any positioned device detail disables automatic core packing. Preserve
