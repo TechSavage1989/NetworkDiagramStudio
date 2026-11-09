@@ -62,12 +62,14 @@ export function buildReportPackage(project,selectedIds){
 // Port maps in the drawing set use the switchport builder's sheet for each
 // switch whose hardware it confirms, on the requested paper; a switch it
 // cannot draw keeps the faceplate port map.
-export function portMapSheets(project,devices,paper){
+export function portMapSheets(project,devices,paper,artwork=new Map()){
  const ids=devices.map(device=>device.id),sheets=new Map();if(!ids.length)return sheets;
  let prepared;try{prepared=prepare({...project,layout:{...project.layout,switchport:{...(project.layout?.switchport||{}),enabled:true,deviceIds:ids}}},ids);}catch{return sheets;}
  const {items,palette}=prepared,request={...prepared.request,paper,fill:!!paper?.fill};
  for(const item of items){
   if(!item.validation.ok)continue;
+  // Port maps paint the builder sheet in the device's core-diagram colors.
+  if(artwork.get(item.id))item.artwork=artwork.get(item.id);
   let pages=null;try{pages=assertScenes([reportDiagram(item,palette,request)]);}catch{try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
   if(pages?.length)sheets.set(item.id,pages);
  }

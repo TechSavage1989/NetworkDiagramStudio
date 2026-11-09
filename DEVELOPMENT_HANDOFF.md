@@ -1,3 +1,7 @@
+## Preview.35: port maps in device colors with larger, centered VLAN dots
+
+Version 0.1.0-preview.35 (PR #34) makes the Switchport builder sheet the default port map, painted in each device's core-diagram artwork colors, and grows jacks and tagged dots to fill the sheet (one centered dot size per map, set by its busiest port). The realistic faceplate remains a Port map style option. Publish only after the merged-main release workflow passes and the GitHub release, updater feed and asset checksums are verified.
+
 ## Preview.34: configurable report paper, outside port numbering and compact network sheets
 
 Version 0.1.0-preview.34 combines the fully validated paper-size implementation from PR #33 with the active port-map/network-layout changes in PR #32. The former PR was merged into the latter, then the version and release intent were updated on the combined branch. Merge only after the exact version commit passes all Windows/browser/native tests. The final merged-main release workflow must pass, publish an immutable preview.34 prerelease, and have its public GitHub release, updater feed and asset checksums verified before announcing publication.
@@ -108,13 +112,17 @@ Owner follow-up (Visio alignment, hops, labels, sidebar, port map dots):
   - Tagged dots keep a minimum radius of 1.5. Dynamic pages widen the whole port-map family until every dot fits. Fixed paper shows a "+" marker and lists the full VLAN set.
 
 Owner follow-up (printable port maps, port names and off-page tags):
-- Owner preference: keep the realistic faceplates.
-  - Port maps use the faceplate artwork on a US Letter sheet by default.
+- Owner decision (latest): port maps use the Switchport builder sheet by default, painted in each device's core-diagram artwork colors. This gives the most room and the builder's exact jack, number and key proportions.
+  - Slot panels take the device's plate color; a chassis shows its frame color around and between module-bay-colored slots. Numbers and slot captions turn white on dark plates.
+  - Tagged dots grow to fill the jacks: each map uses one dot size, the largest at which its most filled port still holds every dot, drawn as a centered grid that grows outward from the middle of the face. A shared size across all maps was tried and rejected by the owner because a dense device shrank every other map's dots.
+  - The jacks themselves grow until the map and key fill the sheet; the number style (8 px minimum) is the one that gives the largest dots, keeping larger numbers on near ties. SFP+ cages on port maps are a little taller (19.6/25.2 of their width) but stay rectangular.
+  - Port map options > Port map style > "Realistic device faceplate artwork" (layout.portMap.mapStyle 'faceplate') keeps the faceplate sheet described next. Its chassis slot line now moves to the next sheet instead of running into the footer key.
+- Realistic faceplate style (now optional):
+  - Uses the faceplate artwork on a US Letter sheet.
   - Jack faces on built-in plates take the Switchport builder's shapes: copper 25.2 x 23.2 and optical 25.2 x 16.2. Each media type shares one width, and faces grow away from their port numbers until rows meet edge to edge. Where a plate has no room for that shape (tight rows on a 48-port stack member), copper keeps its own proportions. The plate keeps its shape.
   - Module, bay and model captions on the plate grow to a readable size (up to 11 px) after the port numbers and faces are placed, so they never push a map off Letter.
   - The VLAN key moves under the hardware when that leaves fewer '+' markers.
-  - The builder sheet described below is now the Port map options > Port map style choice "Switchport builder sheet".
-- Builder sheet details (now optional):
+- Builder sheet details (the default):
   - Fitted to US Letter landscape (or a fixed port-map paper choice).
   - Jacks, dots and numbers grow to fill the sheet.
   - Undeclared slots are slim bands, and the VLAN key uses the builder's dense one-line, five-column layout.
