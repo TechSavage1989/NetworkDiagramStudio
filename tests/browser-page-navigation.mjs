@@ -1,0 +1,47 @@
+// Real browser interactions against the built offline app, using fictional data.
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
+const output=resolve(process.env.NDS_QA_OUTPUT||'.artifacts/page-navigation');await mkdir(output,{recursive:true});
+const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE_PATH||undefined,args:['--no-sandbox']});
+const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[];
+page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
+try{
+ await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
+ await page.locator('#sample').click();await page.waitForSelector('#page-families .page-group summary');
+ const groups=page.locator('#page-families .page-group'),portGroup=groups.filter({hasText:'Port maps'});
+ assert.ok(await groups.count()>=3,'sample has multiple page groups');
+ assert.equal(await portGroup.count(),1);
+ await portGroup.locator('summary').click();
+ assert.ok(await portGroup.evaluate(e=>e.open),'top-level group opens its page menu');
+ const list=portGroup.locator('.page-group-menu');
+ assert.ok(await list.locator('button').count()>0,'menu lists pages');
+ await page.screenshot({path:resolve(output,'page-groups.png')});
+ await list.locator('button').last().click();
+ assert.ok(await page.locator('#page-select').inputValue()!=='','clicking a group page directly navigates');
+ assert.equal(await portGroup.count(),1,'group navigation remains available');
+ const tabs=page.locator('#tabs');
+ await tabs.evaluate(e=>{e.style.width='220px';e.style.flex='0 0 220px';e.scrollLeft=0;});
+ const scrollable=await tabs.evaluate(e=>e.scrollWidth>e.clientWidth);
+ assert.ok(scrollable,'individual page tabs must overflow horizontally');
+ const bounds=await tabs.boundingBox();assert.ok(bounds);
+ await page.mouse.move(bounds.x+bounds.width/2,bounds.y+bounds.height/2);
+ await page.mouse.wheel(0,360);
+ await page.waitForFunction(()=>document.querySelector('#tabs').scrollLeft>0);
+ const scrolled=await tabs.evaluate(e=>e.scrollLeft);assert.ok(scrolled>0);
+ await tabs.evaluate(e=>{e.style.width='';e.style.flex='';});
+ const before=await page.locator('#canvas svg').getAttribute('viewBox');
+ await page.locator('#page-options').click();
+ await page.locator('#dialog').getByLabel('Print paper',{exact:true}).selectOption('a4');
+ await page.locator('#dialog').getByLabel('Print orientation',{exact:true}).selectOption('portrait');
+ await page.locator('#dialog').getByRole('button',{name:'Save page options'}).click();
+ await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ assert.equal(await page.locator('#canvas svg').getAttribute('viewBox'),before,'printing paper must not change drawing dimensions');
+ await page.screenshot({path:resolve(output,'print-paper-options.png')});
+ assert.deepEqual(errors,[]);
+ await writeFile(resolve(output,'results.json'),JSON.stringify({groups:await groups.count(),tabScrolledPixels:scrolled,printCanvasUnchanged:true,errors},null,2));
+ console.log('PASS page-group dropdowns, horizontal wheel scrolling and unchanged canvas on paper selection.');
+}catch(error){await page.screenshot({path:resolve(output,'failure.png')});console.error(errors);throw error;}finally{await browser.close();}
