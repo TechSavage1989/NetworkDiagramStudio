@@ -37,6 +37,24 @@ export function positionOnCable(points,fraction){
  return points?.length?{x:points.at(-1)[0],y:points.at(-1)[1],angle:0,ratio:fraction}:null;
 }
 
+
+/**
+ * Position the visual centre of a connection label relative to its cable.
+ * On-line labels may create a white break; offset labels leave the cable intact.
+ * Horizontal segments use above/below; vertical segments use left/right.
+ * The rotated text footprint determines the gap, not unrotated box dimensions.
+ */
+export function labelPositionRelativeToCable(point,{placement='on',width=0,height=0,rotation=point?.angle??0,gap=6}={}){
+ if(!point)return null;
+ const side=placement==='above'||placement==='below'?placement:'on';
+ if(side==='on')return {...point,angle:rotation};
+ const vertical=Math.abs(Math.sin(point.angle||0))>.5;
+ const a=Number.isFinite(rotation)?rotation:0,w=Math.max(0,width),h=Math.max(0,height);
+ const across=vertical?Math.abs(Math.cos(a))*w+Math.abs(Math.sin(a))*h:Math.abs(Math.sin(a))*w+Math.abs(Math.cos(a))*h;
+ const offset=across/2+Math.max(0,gap),sign=side==='above'?-1:1;
+ return {...point,x:point.x+(vertical?sign*offset:0),y:point.y+(vertical?0:sign*offset),angle:a};
+}
+
 export function describeCableEnds(cable,devices=[]){
  const byId=new Map(devices.map(device=>[device.id,device.name||device.id]));
  const link=cable?.sourceLink||{},a={device:link.a,port:link.ap},b={device:link.b,port:link.bp};
