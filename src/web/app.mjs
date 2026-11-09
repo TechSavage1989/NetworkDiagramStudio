@@ -145,6 +145,7 @@ function saveSnappedLabel(key,point){
  const label=pages[active]?.items.find(item=>item.editKey===key&&item.labelRole),cable=label&&pages[active].items.find(item=>item.editKey===label.relatedCableKey&&item.type==='path');
  if(!label||!cable||!point)throw Error('Select a label associated with a visible cable.');
  const patch=unpresentPatch(label,{x:point.x-label.w/2,y:point.y-label.h/2,angle:point.angle});
+ if(Number.isFinite(point.ratio))patch.cableFraction=point.ratio;
  setDrawingEdits({...project.layout?.drawingEdits,[key]:{...project.layout?.drawingEdits?.[key],...patch}});
  say('Connection label aligned to its cable. Its saved position will not move automatically.');
 }
