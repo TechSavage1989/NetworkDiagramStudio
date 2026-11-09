@@ -14,7 +14,7 @@ import {documentationMode,documentationSections,includeTrunkReference,interfaceA
 import {corePages} from './core.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
 import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
-import {pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles} from '../page-options.mjs';
+import {pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage} from '../page-options.mjs';
 import {applyLinkStyles} from '../link-styles.mjs';
 import {orderedDevices,hopStyle} from '../layout.mjs';
 import {comparePorts,hasPortDetails,consecutivePorts,wrapPortText,portColumnPrefix,portRanges,portNumberBox} from '../port-table.mjs';
@@ -855,11 +855,11 @@ export function buildPages(project={},options={}){
     // Switchport sheets already reserve measured headers, keys and footers.
     // Keep their readable number/marker layout intact while allowing ordinary
     // object edits and uniform drawing scale like the other page families.
-    if(p.switchportReport){scalePage(p,project);p.svg=svgPage({...p,title:p.displayName});return;}
+    if(p.switchportReport){scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});return;}
     if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p,{style:hopStyle(project)});fitDynamicPage(p,project);
     const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
     rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
-    applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);p.svg=svgPage({...p,title:p.displayName});
+    applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});
   });
   return options.includeHidden?pages:visible;
 }
