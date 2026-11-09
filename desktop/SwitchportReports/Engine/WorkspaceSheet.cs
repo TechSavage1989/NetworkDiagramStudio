@@ -11,7 +11,12 @@ public sealed class WorkspaceSheetResult
     public List<WorkspaceSheetPlacement> Placements {get;}=new();
     public List<WorkspaceSheetLegendEntry> LegendEntries {get;}=new();
     public List<string> Warnings {get;}=new();
-    public double GeometryScale=>1;
+    // A multi-page package can contain different physical scales. Each
+    // placement remains authoritative; null means there is no single scale.
+    public double? GeometryScale
+    {
+        get { var scales=Placements.Select(p=>p.GeometryScale).Distinct().ToArray();return scales.Length==1?scales[0]:null; }
+    }
     public double MarkerRadius {get;internal set;}=QuickSheet.DotRadius;
 }
 
@@ -79,7 +84,7 @@ public static class WorkspaceSheet
             var legends=PlanLegend(group.Select(component=>component.Item).DistinctBy(item=>item.Id).ToArray(),PageWidth-bodyWidth-LegendGap,ContentBottom-top);
             for(int part=0;part<legends.Count;part++)
             {
-                var page=new Scene{Width=PageWidth,Height=PageHeight,DiagramScale=1,MarkerRadius=radius,DiagramBodyWidth=bodyWidth,IsAdaptiveLayout=true};
+                var page=new Scene{Width=PageWidth,Height=PageHeight,DiagramScale=group[0].Scene.DiagramScale,MarkerRadius=radius,DiagramBodyWidth=bodyWidth,IsAdaptiveLayout=true};
                 result.Pages.Add(page);double y=top;
                 if(titleLines.Count>0)
                 {
@@ -92,7 +97,7 @@ public static class WorkspaceSheet
                     Append(page,component.Scene,y,bodyWidth,component.Item.Id,component.Item.Ordinal,component.Item.Name);
                     // Continuation sheets repeat the original switch context; the
                     // ordered placement index points to each switch's first page.
-                    if(part==0&&!component.Continuation)result.Placements.Add(new(component.Item.Id,component.Item.Name,result.Pages.Count,y,component.Scene.Height));
+                    if(part==0&&!component.Continuation)result.Placements.Add(new(component.Item.Id,component.Item.Name,result.Pages.Count,y,component.Scene.Height,component.Scene.DiagramScale));
                     y+=component.Scene.Height+BlockGap;
                 }
                 DrawLegend(page,legends[part],bodyWidth+LegendGap,radius,part+1,legends.Count,top);
@@ -160,6 +165,10 @@ public static class WorkspaceSheet
                 result.Warnings.Add("A new sheet starts with "+component.Item.Name+" so complete switch blocks and their side keys remain together and readable.");
             }
             if(candidateHeight>ContentBottom-top)throw new OnePageCapacityException(component.Item.Name+" cannot fit beside its side VLAN key at readable reference geometry; its individual export remains available");
+            // A compact tall stack must not silently change the physical scale
+            // of other configurations sharing its sheet.
+            if(group.Count>0&&Math.Abs(group[0].Scene.DiagramScale-component.Scene.DiagramScale)>.00001)
+            {Flush();candidateHeight=component.Scene.Height;}
             group.Add(component);bodyHeight=candidateHeight;
         }
         Flush();

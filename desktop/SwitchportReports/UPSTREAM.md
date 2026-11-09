@@ -4,6 +4,8 @@ The Engine directory, Data/hardware-catalog.json and Fonts files originate from 
 
 Source: https://github.com/TechSavage1989/SwitchPort_Diagram_Builder/tree/2327083bcd4301db1cc7c162a764540190c5d7ad/Source/SwitchportGenerator
 
+QuickSheet, WorkspaceSheet and workspace paper migration were subsequently reconciled with upstream 1.18.6 at commit 349236a8cd04cb9def8053fb2cbce9610fc3dc07. The native PNG fitting correction follows that revision. Unchanged parsers and catalog remain pinned to 1.18.5 above. Local differences retain the six-point reference-scene exterior number floor, normalized NDS export facade and independent paper type. Shared-page metadata reports actual socket scale; a multi-scale package has no single package scale (null), with per-placement scales retained.
+
 The reusable engine retains the source parsers, verified hardware catalog, compatible module selectors, palette solver, report geometry, inventory tables, supplementary evidence handling and eight standard outputs. It is built as a library inside the existing NetworkDiagramStudio desktop application. The separate Switchport application interface and updater are not included.
 
 NetworkDiagramStudio additions are kept outside Engine where possible. The generator entry point is split to expose rendering from a normalized Inventory. QuickSheet reserves external port-number bands, keeps numbers at least six printed points, and permits uniformly smaller socket geometry for dense stacks while preserving text and marker limits. Its body transform handles those layouts without moving the fixed report footer. Raw configurations are accepted transiently only by explicit import methods. Report exports operate on normalized typed inventories and never write a raw configuration to disk.

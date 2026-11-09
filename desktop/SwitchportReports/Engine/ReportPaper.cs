@@ -7,6 +7,8 @@ public readonly record struct ReportPaper(
     string Preset, string Orientation, double WidthPt, double HeightPt,
     int PixelWidth, int PixelHeight, string Label, string Stem)
 {
+    public static ReportPaper Normalize(ReportPaper? value) => Parse(value?.Preset, value?.Orientation);
+
     public static ReportPaper Default => Parse("a4", "landscape");
 
     public static ReportPaper Parse(string? preset, string? orientation)

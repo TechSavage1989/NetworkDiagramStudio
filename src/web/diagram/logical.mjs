@@ -1,4 +1,4 @@
-import {pageGeometry,fitColumns} from '../page-options.mjs';
+import {footerAllowance,pageGeometry,fitColumns} from '../page-options.mjs';
 import {C,fresh,label,rect} from './scene.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
@@ -24,7 +24,7 @@ function legacyChanges(project,sections){
  return result;
 }
 export function logicalPages(project,sections,options={}){
- const name=options.name||NAME,{width:W,height:H}=pageGeometry(project,options.family||'logical'),BOTTOM=H-69,columns=options.columns||[['Record',132],['Name / destination',330],['Address / next hop / type',302],['Egress / members / details',364]];
+ const name=options.name||NAME,{width:W,height:H}=pageGeometry(project,options.family||'logical'),BOTTOM=H-69+Math.min(33,footerAllowance(project)),columns=options.columns||[['Record',132],['Name / destination',330],['Address / next hop / type',302],['Egress / members / details',364]];
  const pages=[],edits=project.layout?.drawingEdits||{},legacy=name===NAME?legacyChanges(project,sections):new Map(),compact=options.compact===true,PAD=compact?8:12,FONT=compact?12:13;let page,y;
  const next=()=>{page=fresh(name,name,options.subtitle||'VLAN definitions, interfaces, bridges and routing entries',project);page.logicalSections=[];page.sourceDeviceIds=[];pages.push(page);y=TOP;};
  next();

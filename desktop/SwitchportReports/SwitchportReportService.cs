@@ -106,7 +106,7 @@ public static class SwitchportReportService
                 foreach (var item in workspace.Items) imported.Add(Imported(item.Id, item.Name, item.Inventory, item.SupplementarySources));
                 warnings.AddRange(workspace.Items.SelectMany(item => item.Inventory.Blockers.Select(blocker => item.Name + ": " + blocker)));
                 outputLabel = workspace.OutputLabel; selectedId = workspace.SelectedId ?? ""; showWorkspaceTitle = workspace.ShowWorkspaceTitle; palette = workspace.PaletteOverrides;
-                return JsonSerializer.Serialize(new { items = imported, outputLabel, showWorkspaceTitle, title = WorkspaceNaming.DocumentTitle(workspace), selectedId, palette, warnings }, Json);
+                return JsonSerializer.Serialize(new { items = imported, outputLabel, showWorkspaceTitle, title = WorkspaceNaming.DocumentTitle(workspace), selectedId, palette, paper = new { workspace.Paper.Preset, workspace.Paper.Orientation }, warnings }, Json);
             }
             if (document.RootElement.TryGetProperty("Schema", out _) || document.RootElement.TryGetProperty("schema", out _))
             {

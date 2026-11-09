@@ -50,7 +50,7 @@ export function applyDrawingEdits(page,project){
 }
 export function drawingObjects(page){const out=[];for(const item of page.items){out.push(item);if(item.type!=='device')continue;if(!item.asset)for(const child of item.children)out.push({...child,parent:item,normalized:true});else if(item.asset.native){item.asset.native.paths.forEach((p,i)=>out.push({...p,type:'vector',name:p.name||'Vector path '+(i+1),editKey:item.editKey+'|vector|'+i,parent:item,normalized:true}));item.asset.native.texts.forEach((t,i)=>out.push({...t,type:'arttext',value:t.text,editKey:item.editKey+'|arttext|'+i,parent:item,normalized:true}));}}return out;}
 export function drawingBounds(item){
- if(item.type==='arttext'&&item.normalized)return {key:item.editKey,x:item.parent.x+(item.x-item.w/2)*item.parent.w,y:item.parent.y+item.y*item.parent.h-item.size*item.parent.w*.7,w:item.w*item.parent.w,h:item.size*item.parent.w*1.4};
+ if(item.type==='arttext'&&item.normalized)return {key:item.editKey,...textFootprint({x:item.parent.x+(item.x-item.w/2)*item.parent.w,y:item.parent.y+item.y*item.parent.h-item.size*item.parent.w*.7,w:item.w*item.parent.w,h:item.size*item.parent.w*1.4,angle:item.angle})};
  let x=item.x,y=item.y,w=item.w,h=item.h;
  if(item.type==='path'||item.type==='vector'){
   const pts=item.type==='path'?item.points:item.commands.filter(c=>c.length===3).map(c=>c.slice(1));if(!pts.length)return null;

@@ -9,7 +9,7 @@ import {drawingObjects,drawingBounds,moveDrawingItems} from '../src/web/drawing-
 import {crossesText,intersects} from '../src/web/diagram/labels.mjs';
 import {unzip} from '../src/web/zip.mjs';
 const core=site=>buildPages(site).filter(p=>p.title.startsWith('Core Network'));
-function clearLabels(p){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole||i.titleOwner)){for(const b of texts)if(a!==b)assert.ok(!intersects(a,b,0),a.value+' overlaps '+b.value);for(const path of paths)assert.ok(!crossesText(path.points,a,0),a.value+' crosses '+path.name);}}
+function clearLabels(p){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole||i.titleOwner)){for(const b of texts)if(a!==b)assert.ok(!intersects(a,b,0),a.value+' overlaps '+b.value);for(const path of paths){const own=a.background&&a.linkId!=null&&a.linkId===path.linkId;assert.ok(own?!(path.hops||[]).some(hop=>intersects(hop,a,0)):!crossesText(path.points,a,0),a.value+' crosses '+path.name);}}}
 test('core routing uses straight or two-bend routes between facing jacks and four bends for same-side jacks',()=>{
  for(const [ap,bp,expected] of [['1/1/26','1/1/25',0],['1/1/26','1/1/27',2],['1/1/25','1/1/25',4]]){
   const site={devices:['a','b'].map(id=>({id,name:'LAB-'+id,kind:'switch',model:'JL724A',ports:[{name:ap},{name:bp}]})),links:[{a:'a',ap,b:'b',bp,media:'DAC',speed:'10 Gbps'}]},page=core(site)[0],path=page.items.find(i=>i.type==='path');

@@ -18,14 +18,14 @@ function fixture(t){
   return {preview(dx,dy,event){preview.splice(0,2,...delta(dx,dy,event));},commit(dx,dy,event){const [x,y]=delta(dx,dy,event);device.x+=x;device.y+=y;preview.splice(0,2,0,0);}};
  }});
  viewport.show('Drawing',svg);
- const visible=()=>{
+ const visible=(item=device)=>{
   const transform=/translate\(([-\d.e]+)px,([-\d.e]+)px\) scale\(([-\d.e]+)\)/.exec(svg.style.transform);assert.ok(transform);
   const [,x,y,scale]=transform.map(Number);
-  return {x:rect.left+x+(device.x+preview[0])*scale,y:rect.top+y+(device.y+preview[1])*scale,scale};
+  return {x:rect.left+x+(item.x+preview[0])*scale,y:rect.top+y+(item.y+preview[1])*scale,scale};
  };
  const target={closest(selector){return selector==='[data-inline-editor]'?null:this;},getAttribute(){return 'device';}};
  const dispatch=(type,x,y)=>handlers.get(type)({pointerId:1,button:0,clientX:x,clientY:y,target,shiftKey:true,preventDefault(){}});
- return {visible,dispatch,resize(){rect.top+=20;canvas.clientHeight-=20;},notifyResize:()=>notifyResize()};
+ return {visible,dispatch,reveal:bounds=>viewport.reveal(bounds),rect,canvas,resize(){rect.top+=20;canvas.clientHeight-=20;},notifyResize:()=>notifyResize()};
 }
 
 for(const timing of ['before the first movement','after the first movement'])test('an editable drag keeps its visible origin when a delayed resize runs '+timing,t=>{
@@ -40,4 +40,16 @@ for(const timing of ['before the first movement','after the first movement'])tes
  const moving=view.visible();assert.ok(Math.abs(moving.x-before.x-30)<1e-7);assert.ok(Math.abs(moving.y-before.y)<1e-7);assert.equal(moving.scale,before.scale);
  view.dispatch('pointermove',x+60,y+25);view.dispatch('pointerup',x+60,y+25);
  const after=view.visible();assert.ok(Math.abs(after.x-before.x-60)<1e-7);assert.ok(Math.abs(after.y-before.y)<1e-7);assert.equal(after.scale,before.scale);
+});
+
+
+test('revealing selected text after toolbar reflow keeps its handles reachable without zooming',t=>{
+ const view=fixture(t),text={x:400,y:-200,w:150,h:25};
+ view.resize();view.notifyResize();const scale=view.visible().scale;view.reveal(text);
+ const shown=view.visible(text);assert.equal(shown.scale,scale);assert.ok(shown.y>=view.rect.top+28-1e-7);assert.ok(shown.x>=view.rect.left+28-1e-7);
+ const before=view.visible();view.reveal(text);assert.deepEqual(view.visible(),before,'already-visible selection does not drift');
+});
+test('selection reveal cannot rebase an active drag',t=>{
+ const view=fixture(t),before=view.visible();view.dispatch('pointerdown',before.x,before.y);
+ view.reveal({x:-5000,y:-5000,w:100,h:20});assert.deepEqual(view.visible(),before);
 });

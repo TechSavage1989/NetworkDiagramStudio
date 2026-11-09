@@ -107,11 +107,13 @@ function switchCLI(text,filename) {
   }
   if(stackMembers.size)d.stackMembers=[...stackMembers.values()];if(modules.length)d.modules=modules;
   let ports=[],section='', vids=[];
+  const annotate=(field,value)=>{const values=d[field]||=[];if(!values.includes(value))values.push(value);};
   for(const raw of text.split(/\r?\n/)){
     const s=raw.trim();let m;
     if(!s)continue;
     if((m=/^interface\s+(range\s+)?(.+)$/i.exec(s))){section='port';ports=[];vids=[];
       const label=m[2];const svi=/^(?:vlan(?:-interface|if)?\s*)(\d+)$/i.exec(label);
+      if(/^(?:mgmt|management)(?:\s|$)/i.test(label)){section='management';continue;}
       if(svi){section='svi';vids=[Number(svi[1])];ensureVlan(d,svi[1]);}
       else for(const n of ranges(label)) ports.push(ensurePort(d,n));
       continue;
@@ -121,6 +123,9 @@ function switchCLI(text,filename) {
       Object.assign(ensurePort(d,m[2]),{role:'aggregate',type:'aggregate',members});continue;
     }
     if(!/^\s/.test(raw) && (m=/^vlan\s+([\d, -]+)$/i.exec(s))){section='vlan';ports=[];vids=vlans(m[1]);vids.forEach(id=>ensureVlan(d,id));continue;}
+    if((m=/^ip default-gateway\s+(\S+)$/i.exec(s))){annotate('management','Default gateway: '+m[1]);continue;}
+    if(/^(?:mirror|monitor\s+session)\b/i.test(s)){annotate('mirrors',s);continue;}
+    if(section==='management'&&(m=/^ip(?:v6)?\s+(?:address|static)\s+(.+)$/i.exec(s))){annotate('management',scalar(m[1]));continue;}
     if((m=/^ip route(?:-static)?\s+(\S+)\s+(.+)$/i.exec(s))){let tail=words(m[2]),dst=m[1];if(!dst.includes('/')&&/^\d+\.\d+\.\d+\.\d+$/.test(tail[0]) && tail.length>1)dst=cidr(dst,tail.shift());
       const hop=tail.find(x=>/^\d+\.\d+\.\d+\.\d+$/.test(x));const intf=tail[0]!==hop?tail[0]:'';pushRoute(d,dst,hop,intf,{type:'static'});continue;}
     if(/^(?:exit|quit|!|#)$/.test(s)){section='';ports=[];vids=[];continue;}
@@ -145,10 +150,12 @@ function switchCLI(text,filename) {
       else if((m=/^(?:vlan trunk native|switchport trunk native vlan|port trunk pvid vlan)\s+(\d+)/i.exec(s))){p.native=Number(m[1]);p.nativeTagged=/\btag\s*$/i.test(s);p.role='trunk';}
       else if((m=/^(?:vlan trunk allowed|switchport trunk allowed vlan|port trunk (?:allow-pass|permit) vlan)\s+(?:(add|remove|except)\s+)?(.+)/i.exec(s))){
         const values=vlans(m[2].replace(/\s+to\s+/ig,'-'));p.role='trunk';
-        if(m[1]==='except') {p.allowedExcept=values;p.allowed=['all'];}
-        else if(m[1]==='remove' && !p.allowed){p.allowedExcept=values;p.allowed=['all'];}
-        else if(m[1]==='remove')p.allowed=p.allowed.filter(n=>!values.includes(n));
-        else p.allowed=m[1]==='add'?[...new Set([...(p.allowed||[]),...values])]:values;
+        const operation=(m[1]||'').toLowerCase(),all=p.allowed?.includes('all')||(!p.allowed&&cisco);
+        if(operation==='except'){p.allowedExcept=values;p.allowed=['all'];}
+        else if(operation==='remove'||operation==='add'){
+          if(all){p.allowed=['all'];p.allowedExcept=operation==='remove'?[...new Set([...(p.allowedExcept||[]),...values])]:(p.allowedExcept||[]).filter(n=>!values.includes(n));}
+          else p.allowed=operation==='remove'?(p.allowed||[]).filter(n=>!values.includes(n)):[...new Set([...(p.allowed||[]),...values])];
+        }else {p.allowed=values;delete p.allowedExcept;}
       }else if((m=/^(?:switchport mode|port link-type)\s+(access|trunk|hybrid)/i.exec(s)))p.role=m[1].toLowerCase();
       else if((m=/^(?:lag|channel-group|eth-trunk|port link-aggregation group)\s+(\d+)/i.exec(s)))p.lag=m[1];
       else if((m=/^ip address\s+(\d[\d./]*)(?:\s+(\d[\d.]*))?/i.exec(s)))p.ip=cidr(m[1],m[2]);

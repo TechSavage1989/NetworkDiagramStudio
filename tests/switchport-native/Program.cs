@@ -61,9 +61,14 @@ static class Program
         var workspace = new ConfigurationWorkspace();
         var workspaceItem = workspace.AddText(Aruba, "fictional.cfg");
         workspace.SetDevices(workspaceItem.Id, new[] { new DeviceIdentity { Id = "1", Name = "LAB-REPORT", SerialNumber = "LAB-SERIAL", AssetTag = "LAB-ASSET", Notes = "Fictional inventory record" } });
-        workspace.OutputLabel = "Fictional reports"; workspace.ShowWorkspaceTitle = true;
+        workspace.OutputLabel = "Fictional reports"; workspace.ShowWorkspaceTitle = true; workspace.Paper = ReportPaper.Parse("letter", "portrait");
         workspace.AddSupplementary(workspaceItem.Id, SupplementaryData.FromText("LAB-ACCESS# show interfaces\n1 is down, line protocol is down\n", "Fictional observation", "LAB-ACCESS"));
+        var restoredWorkspace = ConfigurationWorkspace.Deserialize(workspace.Serialize());
+        Check(restoredWorkspace.Paper.Preset == "letter" && restoredWorkspace.Paper.Orientation == "portrait", "Workspace paper survives native save/reopen.");
+        restoredWorkspace.Clear(); restoredWorkspace.UndoRemoval();
+        Check(restoredWorkspace.Paper.Preset == "letter" && restoredWorkspace.Paper.Orientation == "portrait", "Workspace paper survives clear/undo.");
         var migrated = Object(SwitchportReportService.ImportJson("Fictional workspace.spworkspace.json", Encoding.UTF8.GetBytes(workspace.Serialize())));
+        Check(migrated["paper"]!["preset"]!.GetValue<string>() == "letter" && migrated["paper"]!["orientation"]!.GetValue<string>() == "portrait", "Native migration returns independent report paper.");
         Check(migrated["items"]![0]!["details"]![0]!["assetTag"]!.GetValue<string>() == "LAB-ASSET", "Saved workspace device details are migrated.");
         Check(migrated["showWorkspaceTitle"]!.GetValue<bool>() && migrated["title"]!.GetValue<string>() == "Fictional workspace", "Workspace title and independent output naming are migrated.");
         Check(migrated["items"]![0]!["inventory"]!["ports"]![0]!["liveState"]!.GetValue<string>() == "Unknown/Confirm before use", "Migrated primary inventory does not permanently absorb supplementary state.");
@@ -123,13 +128,29 @@ static class Program
         var snapshotDevice = new JsonObject { ["name"] = "LAB-SNAPSHOT", ["routerosSnapshot"] = JsonNode.Parse(snapshot), ["ports"] = new JsonArray() };
         var snapshotResult = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "snapshot", ["device"] = snapshotDevice }), ["combined"] = false }.ToJsonString()));
         Check(snapshotResult["items"]![0]!["success"]!.GetValue<bool>() && snapshotResult["items"]![0]!["inventory"]!["ports"]!.AsArray().Count == 9, "Browser-decoded RouterOS snapshots feed the exact native physical adapter.");
+        // The upstream parser adds a tagged native VLAN until an explicit
+        // allowed command replaces membership. The normalized tagged array is
+        // likewise the complete effective list, not an additive list.
+        foreach(var allowed in new string?[] { null, "10,20", "20" })
+        {
+            var nativeParsed = Parser.Parse("; JL256A Configuration Editor\nhostname LAB-NATIVE-TAGGING\ninterface 1\n vlan trunk native 10 tag\n" + (allowed == null ? "" : " vlan trunk allowed " + allowed + "\n") + " exit\n");
+            var nativePort = nativeParsed.Ports.Single(port => port.Id == "1");
+            var expectedMembership = allowed == null ? new[] {10} : allowed == "10,20" ? new[] {10,20} : new[] {20};
+            Check(nativePort.UntaggedVlan == null && nativePort.UntaggedState == "None" && nativePort.TaggedVlans.SequenceEqual(expectedMembership), "Upstream parser distinguishes implicit, included and excluded tagged-native membership.");
+            var normalizedPort = new JsonObject { ["name"] = "1", ["native"] = 10, ["nativeTagged"] = true };
+            if(allowed != null)normalizedPort["tagged"] = new JsonArray(expectedMembership.Select(id => (JsonNode)JsonValue.Create(id)!).ToArray());
+            var normalized = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "membership", ["device"] = new JsonObject { ["name"] = "LAB-NORMALIZED-TAGGING", ["model"] = "JL256A", ["ports"] = new JsonArray(normalizedPort) } }), ["combined"] = false }.ToJsonString()));
+            Check(normalized["items"]![0]!["success"]!.GetValue<bool>(), "Native membership comparison renders.");
+            var rendered = normalized["items"]![0]!["inventory"]!["ports"]!.AsArray().Single(port => port!["id"]!.GetValue<string>() == "1")!;
+            Check(rendered["untaggedVlan"] == null && rendered["untaggedState"]!.GetValue<string>() == "None" && rendered["taggedVlans"]!.AsArray().Select(id => id!.GetValue<int>()).SequenceEqual(nativePort.TaggedVlans), "Normalized tagged-native membership agrees with the source parser without inventing excluded VLANs.");
+        }
         var semantics = new JsonObject { ["name"] = "LAB-SEMANTICS", ["model"] = "JL256A", ["ports"] = new JsonArray(
-            new JsonObject { ["name"] = "1", ["native"] = 10, ["nativeTagged"] = true, ["tagged"] = new JsonArray(20), ["admin"] = "down", ["state"] = "up", ["ingressPvid"] = 10 },
+            new JsonObject { ["name"] = "1", ["native"] = 10, ["nativeTagged"] = true, ["tagged"] = new JsonArray(10,20), ["admin"] = "down", ["state"] = "up", ["ingressPvid"] = 10 },
             new JsonObject { ["name"] = "2", ["state"] = "down" }, new JsonObject { ["name"] = "3", ["admin"] = "disable" }, new JsonObject { ["name"] = "4", ["admin"] = "enable" }) };
         var semanticResult = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "semantics", ["device"] = semantics }), ["combined"] = false }.ToJsonString()));
         Check(semanticResult["items"]![0]!["success"]!.GetValue<bool>(), "Normalized configuration semantics render successfully.");
         var semanticPorts = semanticResult["items"]![0]!["inventory"]!["ports"]!.AsArray();
-        Check(semanticPorts[0]!["untaggedVlan"] == null && semanticPorts[0]!["untaggedState"]!.GetValue<string>() == "None" && semanticPorts[0]!["taggedVlans"]!.AsArray().Any(id => id!.GetValue<int>() == 10), "Tagged native VLAN is not painted as an untagged fill.");
+        Check(semanticPorts[0]!["untaggedVlan"] == null && semanticPorts[0]!["untaggedState"]!.GetValue<string>() == "None" && semanticPorts[0]!["taggedVlans"]!.AsArray().Select(id => id!.GetValue<int>()).SequenceEqual(new[] {10,20}), "Tagged native VLAN is not painted as an untagged fill.");
         Check(semanticPorts[0]!["disabled"]!.GetValue<bool>() && semanticPorts[1]!["disabled"] == null, "Configured admin state remains independent of observed link state.");
         Check(semanticPorts[2]!["disabled"]!.GetValue<bool>() && !semanticPorts[3]!["disabled"]!.GetValue<bool>(), "FortiOS enable/disable administrative spellings remain explicit configured states.");
         Check(semanticPorts[0]!["notes"]!.AsArray().Any(note => note!.GetValue<string>() == "Configured ingress PVID: 10"), "Configured ingress PVID is retained for complete CSV export.");
@@ -141,9 +162,37 @@ static class Program
         voiceItem["device"]!["vlans"]![1]!["voice"] = false;
         var clearedVoice = Object(SwitchportReportService.PreviewJson(voiceRequest.ToJsonString()));
         Check(!clearedVoice["items"]![0]!["inventory"]!["vlans"]![1]!["voice"]!.GetValue<bool>(), "An explicit voice change still overrides retained configuration evidence.");
+        var maskedInventory = migrated["items"]![0]!["inventory"]!.DeepClone().AsObject();
+        var physicalFields = new HashSet<string>(new[] { "id", "group", "number", "displayNumber", "relatedInterfaces", "media" }, StringComparer.OrdinalIgnoreCase);
+        foreach(string collection in new[] { "ports", "logicalInterfaces" })
+            foreach(var port in maskedInventory[collection]!.AsArray())
+                foreach(string field in port!.AsObject().Select(pair=>pair.Key).ToArray())if(!physicalFields.Contains(field))port.AsObject().Remove(field);
+        var maskedRequest = new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "masked", ["device"] = new JsonObject { ["name"] = "LAB-MASKED", ["switchportInventory"] = maskedInventory, ["ports"] = new JsonArray() } }), ["combined"] = false };
+        var maskedResult = Object(SwitchportReportService.PreviewJson(maskedRequest.ToJsonString()));
+        Check(maskedResult["items"]![0]!["success"]!.GetValue<bool>(), "Geometry-only retained ports satisfy native validation and render.");
+        var maskedPorts = maskedResult["items"]![0]!["inventory"]!["ports"]!.AsArray();
+        Check(maskedPorts.Count == maskedInventory["ports"]!.AsArray().Count && maskedPorts.All(port => port!["untaggedVlan"] == null && port["taggedVlans"]!.AsArray().Count == 0 && port["disabled"] == null), "Category-masked native reports retain socket count without stale configured state.");
+        var taggedRequest = new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "tagged", ["device"] = new JsonObject { ["name"] = "LAB-TAGGED", ["model"] = "JL256A", ["ports"] = new JsonArray(new JsonObject { ["name"] = "1", ["native"] = 27, ["nativeTagged"] = true, ["tagged"] = new JsonArray(57), ["configuredSpeed"] = "1000", ["speed"] = "Observed: 10 Gbps" }) } }), ["combined"] = false };
+        var taggedResult = Object(SwitchportReportService.PreviewJson(taggedRequest.ToJsonString()));
+        Check(taggedResult["items"]![0]!["success"]!.GetValue<bool>(), "Tagged-native normalized fixture renders.");
+        var taggedPort = taggedResult["items"]![0]!["inventory"]!["ports"]!.AsArray().Single(port => port!["id"]!.GetValue<string>() == "1")!;
+        Check(taggedPort["untaggedVlan"] == null && taggedPort["untaggedState"]!.GetValue<string>() == "None" && taggedPort["taggedVlans"]!.AsArray().Select(value => value!.GetValue<int>()).SequenceEqual(new[] {57}), "Explicit allowed membership does not invent an excluded tagged-native VLAN.");
+        Check(taggedPort["speed"]!.GetValue<string>() == "1000", "Native report configured speed wins over observed speed.");
         var largeStack = new JsonObject { ["name"] = "LAB-EIGHT-MEMBERS", ["model"] = "JL256A", ["stackMembers"] = new JsonArray(Enumerable.Range(1, 8).Select(member => (JsonNode)new JsonObject { ["id"] = member.ToString(), ["model"] = "JL256A" }).ToArray()), ["ports"] = new JsonArray() };
         var largeResult = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "large", ["device"] = largeStack }), ["combined"] = false }.ToJsonString()));
         Check(largeResult["items"]![0]!["success"]!.GetValue<bool>(), "An eight-member complete stack retains readable external labels: " + largeResult["items"]![0]!["error"]);
+        var stackInventory = JsonSerializer.Deserialize<Inventory>(largeResult["items"]![0]!["inventory"]!.ToJsonString(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var smallInventory = Parser.Parse(Aruba);
+        var sharedScales = WorkspaceSheet.Build(new[] { new WorkspaceSheetItem("small", "LAB-SMALL", smallInventory), new WorkspaceSheetItem("stack", "LAB-STACK", stackInventory) });
+        foreach(var placement in sharedScales.Placements)
+        {
+            var scene = sharedScales.Pages[placement.PageNumber - 1];
+            var faces = scene.Shapes.Where(shape => shape.Owner.StartsWith(placement.Id + ":", StringComparison.Ordinal) && shape.Fill.Length > 0).ToArray();
+            Check(faces.Length > 0 && faces.All(face => Math.Abs((face.Points.Max(point => point.X) - face.Points.Min(point => point.X)) / QuickSheet.PortWidth - placement.GeometryScale) < .001), "Shared placement scale matches measured physical faces.");
+            Check(Math.Abs(scene.DiagramScale-placement.GeometryScale)<.001,"Shared page scale agrees with its components.");
+        }
+        Check(sharedScales.Placements.Count == 2, "Shared sheets retain both complete configuration blocks.");
+        Check(sharedScales.Placements.GroupBy(p => p.PageNumber).All(page => page.Select(p => Math.Round(p.GeometryScale, 5)).Distinct().Count() == 1), "Shared sheets never silently mix compact and full-scale physical sockets.");
         foreach (string model in new[] { "JL256A", "JL479A" })
         {
             var geometry = catalog["models"]!.AsArray().Single(row => row!["sku"]!.GetValue<string>() == model)!["inventory"]!;
@@ -154,6 +203,15 @@ static class Program
             var chart = QuickSheet.Build(inventory, Charts.Layout(inventory), "fictional");
             Check(chart.Sockets.All(socket => socket.NumberBounds.Y + socket.NumberBounds.H < socket.Tile.Y || socket.NumberBounds.Y > socket.Tile.Y + socket.Tile.H), "All dense " + model + " port numbers are outside socket interiors.");
             Check(chart.Scene.Labels.Where(label => label.Owner.Length > 0 && label.InkBox).All(label => label.Size >= 6 - 1e-6), "All dense " + model + " numbers retain the six-point printed text floor.");
+            foreach (var socket in chart.Sockets)
+            {
+                var port = inventory.Ports.Single(p => p.Id == socket.Port);
+                var group = inventory.Groups.Single(g => g.Id == port.Group);
+                var position = group.SocketLayout.FirstOrDefault(p => p.Number == port.Number && p.Suffix == socket.Suffix);
+                if (position != null) Check(position.Row % 2 == 0 ? socket.NumberBounds.Y + socket.NumberBounds.H < socket.Tile.Y : socket.NumberBounds.Y > socket.Tile.Y + socket.Tile.H, "Every physical row pair has exterior top/bottom labels.");
+                Check(Math.Abs(socket.NumberBounds.X + socket.NumberBounds.W / 2 - socket.Tile.X - socket.Tile.W / 2) < .001, "Port number ink is centered on its socket.");
+                Check(Math.Abs(socket.Tile.W / QuickSheet.PortWidth - chart.GeometryScale) < .001, "Recorded geometry includes actual socket compaction.");
+            }
             Check(Charts.ValidateScene(chart.Scene).Count == 0, "Dense " + model + " copper/optical labels and markers do not collide.");
             Check(chart.Scene.Dots.Count >= inventory.Ports.Count * 19, "Dense " + model + " diagrams retain every VLAN marker.");
             Png.Save(chart.Scene, Path.Combine(output, model + "-external-numbers.png"), 3508, 2480, true);

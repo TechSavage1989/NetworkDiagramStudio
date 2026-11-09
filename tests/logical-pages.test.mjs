@@ -6,7 +6,7 @@ import {textLayout} from '../src/web/diagram/scene.mjs';
 import {cleanDrawingEdits} from '../src/web/drawing-edits.mjs';
 import {unzip} from '../src/web/zip.mjs';
 const section=(id,n)=>({id,name:'LAB-SWITCH-'+id,rows:Array.from({length:n},(_,i)=>['VLAN '+(i+1),'Network '+(i+1),'192.0.2.1/24','1/1/1'])});
-const clear=pages=>{for(const p of pages){const texts=p.items.filter(i=>i.logicalDeviceId);for(const t of texts){assert.ok(t.y+t.h<=906);assert.equal(textLayout(t).size,t.size);}for(let i=1;i<p.logicalSections.length;i++)assert.ok(p.logicalSections[i].y>=p.logicalSections[i-1].y+p.logicalSections[i-1].h+18);}};
+const clear=pages=>{for(const p of pages){const texts=p.items.filter(i=>i.logicalDeviceId);for(const t of texts){assert.ok(t.y+t.h<=p.height-36);assert.equal(textLayout(t).size,t.size);}for(let i=1;i<p.logicalSections.length;i++)assert.ok(p.logicalSections[i].y>=p.logicalSections[i-1].y+p.logicalSections[i-1].h+18);}};
 test('legacy table captions and text colors remain available in grouped device records',()=>{
  const s=section('A',1);s.rows[0][1]='Office';let hash=0;for(const c of JSON.stringify(['Office',null]))hash=Math.imul(hash,31)+c.charCodeAt(0)|0;
  const project={layout:{drawingEdits:{['VLANs and Routing|text|'+hash+'|0']:{value:'Office users',color:'#2255AA'}}}},pages=logicalPages(project,[s]),item=pages[0].items.find(i=>i.logicalColumn===1);

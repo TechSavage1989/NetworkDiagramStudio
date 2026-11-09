@@ -67,7 +67,9 @@ jobs:
             @{ name = 'documentation'; script = 'tests/browser-documentation.mjs' },
             @{ name = 'page-navigation'; script = 'tests/browser-page-navigation.mjs' },
             @{ name = 'connection-labels'; script = 'tests/browser-connection-labels.mjs' },
-            @{ name = 'adaptive-port-map'; script = 'tests/browser-adaptive-port-map.mjs' }
+            @{ name = 'adaptive-port-map'; script = 'tests/browser-adaptive-port-map.mjs' },
+            @{ name = 'page-layout-defaults'; script = 'tests/browser-page-layout-defaults.mjs' },
+            @{ name = 'direct-transforms'; script = 'tests/browser-direct-transforms.mjs' }
           )
           $results = @()
           foreach ($check in $checks) {

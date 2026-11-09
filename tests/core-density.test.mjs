@@ -22,11 +22,11 @@ test('full-scale continuation retains readable legends, full module assignments 
 function clear(page){
  const texts=page.items.filter(i=>i.type==='text'),bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path'),segments=[];
  for(const text of texts.filter(i=>i.labelRole||i.titleOwner)){
-  // Port names may shrink a little to stay beside their own cable.
+  // Port names may shrink a little to stay readable on or beside their own cable.
   assert.ok(text.size>=(text.labelRole==='port'?9:12),'readable text size');
   for(const other of texts)if(other!==text)assert.ok(!intersects(text,other),'overlapping text');
   for(const body of bodies)assert.ok(!intersects(text,body),'text overlaps equipment');
-  for(const path of paths)assert.ok(!pathCrossesText(path,text,1),'text overlaps a cable or hop');
+  for(const path of paths){const own=text.background&&text.linkId!=null&&text.linkId===path.linkId;assert.ok(own?!(path.hops||[]).some(hop=>intersects(hop,text,1)):!pathCrossesText(path,text,1),'text overlaps an unrelated cable or hop');}
  }
  for(const path of paths)for(let i=1;i<path.points.length;i++){
   const a=path.points[i-1],b=path.points[i],horizontal=a[1]===b[1],axis=a[horizontal?1:0],lo=Math.min(a[horizontal?0:1],b[horizontal?0:1]),hi=Math.max(a[horizontal?0:1],b[horizontal?0:1]);assert.ok(horizontal||a[0]===b[0]);

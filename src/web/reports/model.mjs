@@ -123,9 +123,19 @@ export function inventoryForDevice(device){
  // Retained inventories may contain the last report's snapshot annotations.
  // Remove those derived values before the currently enabled sources reapply.
  for(const port of [...inv.ports,...inv.logicalInterfaces]){if(/^Observed:/i.test(port.liveState))port.liveState='Unknown/Confirm before use';if(/^Observed:/i.test(port.connectedDevice))port.connectedDevice='Unknown/Confirm before use';if(/^Observed:/i.test(port.speed))port.speed='Not specified';port.notes=port.notes.filter(note=>!/^Supplementary \(/i.test(note));}
- inv.assumptions=inv.assumptions.filter(note=>!/^Supplementary observations from /i.test(note));
+ inv.assumptions=inv.assumptions.filter(note=>!/^Supplementary observations from /i.test(note)&&!/^SVI .*: the browser address differs from retained native addresses\. Both are retained; review primary, secondary and IPv6 addresses before use\.$/.test(note));
  inv.hostname=reportText(device.name||inv.hostname,400);for(const name of ['vendor','os','firmware','reportModel'])if(device[name])inv[name]=reportText(device[name],400);
  if(own(device,'vlans')){const retained=inv.vlans;inv.vlans=rows(device.vlans).map(row=>({id:vlan(row.id),name:reportText(row.name),voice:own(row,'voice')?row.voice===true:retained.find(previous=>previous.id===vlan(row.id))?.voice===true})).filter(row=>row.id);}
+ for(const field of ['management','mirrors'])if(own(device,field))inv[field]=rows(device[field]).map(value=>reportText(value));
+ // Browser records retain one address per VLAN. Supplement the native list
+ // without discarding its IPv6 or secondary addresses.
+ const configuredSvis=rows(device.vlans).filter(row=>row.ip).map(row=>({interface:'vlan '+row.id,address:reportText(row.ip)}));
+ for(const svi of configuredSvis){
+  const retained=inv.svis.filter(row=>key(row.interface)===key(svi.interface));
+  if(retained.some(row=>row.address===svi.address))continue;
+  if(retained.length)inv.assumptions.push('SVI '+reportText(svi.interface,200)+': the browser address differs from retained native addresses. Both are retained; review primary, secondary and IPv6 addresses before use.');
+  inv.svis.push(svi);
+ }
  for(const input of rows(device.ports)){
   const name=String(input.name||input.id||''),targets=[...inv.ports,...inv.logicalInterfaces].filter(port=>key(port.id)===key(name)||port.relatedInterfaces.some(alias=>key(alias)===key(name)));
   if(!targets.length){const record=normalizePort({id:name,group:'Logical interfaces'});inv.logicalInterfaces.push(record);targets.push(record);}
@@ -133,9 +143,12 @@ export function inventoryForDevice(device){
    for(const [field,target] of [['description','description'],['role','mode'],['speed','speed'],['connectedDevice','connectedDevice'],['usage','usage'],['lag','aggregate']])if(own(input,field)&&!(['speed','connectedDevice'].includes(field)&&/^Observed:/i.test(input[field])))port[target]=reportText(input[field]||(['description','aggregate'].includes(target)?'':'Unknown'));
    if(own(input,'native')){port.untaggedVlan=vlan(input.native);port.untaggedState=port.untaggedVlan!=null?'Known':/^none$/i.test(input.nativeState||'')||input.nativeTagged?'None':'Unknown';}
    if(own(input,'nativeState')&&!port.untaggedVlan)port.untaggedState=/^none$/i.test(input.nativeState)?'None':'Unknown';
+   if(input.nativeTagged&&vlan(input.native)){port.untaggedVlan=null;port.untaggedState='None';}
    if(own(input,'tagged')){port.taggedVlans=parseVlans(input.tagged);port.taggedVlanPolicy=rows(input.tagged).some(value=>/^all$/i.test(value))||/^all$/i.test(input.tagged)?'All':null;if(port.taggedVlanPolicy)port.taggedVlans=inv.vlans.map(vlan=>vlan.id);}
    if(own(input,'taggedVlanPolicy'))port.taggedVlanPolicy=input.taggedVlanPolicy?reportText(input.taggedVlanPolicy):null;
    if(rows(input.allowedExcept).length){const excluded=parseVlans(input.allowedExcept);port.taggedVlanPolicy='All except '+excluded.join(', ');port.taggedVlans=inv.vlans.map(vlan=>vlan.id).filter(id=>!excluded.includes(id));}
+   if(input.nativeTagged&&vlan(input.native)&&!own(input,'tagged')&&!own(input,'allowedExcept')&&!port.taggedVlans.includes(vlan(input.native)))port.taggedVlans.push(vlan(input.native));
+   if(input.configuredSpeed)port.speed=reportText(input.configuredSpeed,100);
    if(own(input,'voice'))port.voiceVlan=vlan(input.voice);if(own(input,'disabled'))port.disabled=typeof input.disabled==='boolean'?input.disabled:null;else if(input.adminState||input.admin){const admin=reportText(input.adminState||input.admin,50);port.disabled=/^(down|disable|disabled|shutdown)$/i.test(admin)?true:/^(up|enable|enabled)$/i.test(admin)?false:null;}
    if(own(input,'state')&&!/^Observed:/i.test(input.state))port.liveState=reportText(input.state||'Unknown/Confirm before use');if(own(input,'stackLink'))port.stackLink=input.stackLink===true;
    if(own(input,'notes'))port.notes=unique([...port.notes,...rows(input.notes).map(note=>reportText(note)).filter(note=>!/^Supplementary \(/i.test(note))]);if(own(input,'relatedInterfaces'))port.relatedInterfaces=unique([...port.relatedInterfaces,...rows(input.relatedInterfaces).map(String)]);

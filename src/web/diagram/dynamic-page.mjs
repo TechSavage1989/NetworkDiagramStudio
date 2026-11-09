@@ -1,3 +1,4 @@
+import {footerAllowance} from '../page-options.mjs';
 import {drawingObjects,drawingBounds} from '../drawing-edits.mjs';
 
 // Fit scene coordinates, including negative manual positions, without moving
@@ -7,7 +8,7 @@ export function fitDynamicPage(page,project,{footer=false}={}){
  const edits=project.layout?.drawingEdits||{};
  const boxes=drawingObjects(page).filter(i=>!i.pageFrame||edits[i.editKey]).map(drawingBounds).filter(b=>b&&[b.x,b.y,b.w,b.h].every(Number.isFinite));
  let left=0,top=0,right=1200,bottom=300;
- const footerSpace=Math.max(78,...page.items.filter(i=>/^footer-/.test(i.pageFrame||'')).map(i=>(i.h||0)+57));
+ const footerSpace=Math.max(78-footerAllowance(project),...page.items.filter(i=>/^footer-/.test(i.pageFrame||'')).map(i=>(i.h||0)+57));
  for(const b of boxes){left=Math.min(left,b.x-36);top=Math.min(top,b.y-36);right=Math.max(right,b.x+b.w+36);bottom=Math.max(bottom,b.y+b.h+footerSpace);}
  page.originX=left;page.originY=top;page.width=right-left;page.height=bottom-top;
  page.widthMm=page.width*25.4/96;page.heightMm=page.height*25.4/96;

@@ -40,9 +40,10 @@ function page(request,name,title,subtitle,role,ids,width=paperOf(request).width,
  return p;
 }
 function finish(p,request,palette,inventory,index=1,count=1){
- const a=p.items,y=p.height-47;rect(a,margin,y,p.width-margin*2,1,rule);
- text(a,margin,y+8,p.width-margin*2-100,'Configured settings and observed state remain separate.',9,false,muted);
- text(a,p.width-margin-95,y+8,95,index+' / '+count,9,false,muted,'right',{reportFooterRole:'page'});
+ const a=p.items,y=p.height-47;if(request.pageFooter?.footer!==false){rect(a,margin,y,p.width-margin*2,1,rule);
+ text(a,margin,y+8,p.width-margin*2-(request.pageFooter?.show?252:100),'Configured settings and observed state remain separate.',9,false,muted);
+ }
+ if(request.pageFooter?.show!==false)text(a,p.width-margin-95,y+8,95,index+' / '+count,9,false,muted,'right',{reportFooterRole:'page'});
  for(const [n,item] of a.entries())item.editKey??=p.name+'|item|'+n;
  p.reportPalette=palette;p.reportInventory=inventory?.hostname;p.reportSourceVersion='1.18.5';return p;
 }
@@ -194,9 +195,10 @@ function blockHeight(plan){const inv=plan.item.inventory;return Math.max(16.8,wr
 // A port map uses the whole sheet: for each number style it grows the jacks
 // until the map and key fill the page, then keeps the style whose dots come
 // out largest (numbers no smaller than 8 px). Near ties keep larger numbers.
+function footerGain(request){return request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?25:0;}
 function mapCandidates(item,palette,request,styles){
  const sheet=paperOf(request),tops=new Map(),contentTop=compact=>{if(!tops.has(compact))tops.set(compact,page(request,item.id+'|measure',displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),'onePage',[item.id],sheet.width,sheet.height,compact).contentTop);return tops.get(compact);};
- const fits=(plan,style)=>plan.width<=sheet.width-margin*2&&contentTop(style.compact)+plan.height+(style.compact?4:12)+legendHeight(item.inventory,palette,sheet.width-margin*2,style.compact,true)+(style.compact?49:59)<=sheet.height+.01;
+ const fits=(plan,style)=>plan.width<=sheet.width-margin*2&&contentTop(style.compact)+plan.height+(style.compact?4:12)+legendHeight(item.inventory,palette,sheet.width-margin*2,style.compact,true)+(style.compact?49:59)-footerGain(request)<=sheet.height+.01;
  const out=[];
  for(const style of styles){
   let base;try{base=devicePlan(item,style,null,true);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;continue;}
@@ -218,7 +220,7 @@ export function reportDiagram(item,palette,request,{wall=false}={}){
   // filled port allows.
   if(radius!=null)for(const band of plan.bands)for(const panel of band.panels)if(panel.plan)panel.plan.markerRadius=radius;
   if(plan.width>width-margin*2){failure=new ReportCapacityError('The complete physical banks of '+displayName(item.inventory)+' exceed readable '+reportPageLabel(request.paper)+' width. Use larger paper or the wall chart.',{deviceId:item.id,requiredWidth:plan.width+margin*2});continue;}
-  const p=page(request,item.id+'|'+(wall?'wall':'a4'),displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),wall?'wall':'onePage',[item.id],width,sheet.height,style.compact),keyHeight=legendHeight(item.inventory,palette,width-margin*2,style.compact,!!request?.fill),gap=style.compact?4:12,needed=p.contentTop+plan.height+gap+keyHeight+(style.compact?49:59);
+  const p=page(request,item.id+'|'+(wall?'wall':'a4'),displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),wall?'wall':'onePage',[item.id],width,sheet.height,style.compact),keyHeight=legendHeight(item.inventory,palette,width-margin*2,style.compact,!!request?.fill),gap=style.compact?4:12,needed=p.contentTop+plan.height+gap+keyHeight+(style.compact?49:59)-footerGain(request);
   if(wall){p.height=Math.max(p.height,needed);p.paper={preset:'custom',orientation:p.width>=p.height?'landscape':'portrait',widthMm:p.width*25.4/96,heightMm:p.height*25.4/96};}else if(needed>p.height+.01){failure=new ReportCapacityError('The complete port map and VLAN key need '+Math.ceil(needed)+' px of readable height; '+reportPageLabel(request.paper)+' provides '+Math.floor(p.height)+' px. The booklet keeps all content on continued sheets.',{deviceId:item.id,requiredHeight:needed});continue;}
   try{const bottom=drawBlock(p,plan,margin,p.contentTop,palette,{heading:false});legend(p,bottom+gap,item.inventory,palette);p.widthMm=p.width*25.4/96;p.heightMm=p.height*25.4/96;p.reportGeometryScale=style.scale;p.reportNumberFont=style.numberFont;if(fit!=null){p.reportMarkerFit=fit;p.reportMarkerRadius=radius;}return finish(p,request,palette,item.inventory);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;failure=error;}
  }
@@ -241,7 +243,7 @@ export function responsiveStackPlan(plan,targetAspect){
 }
 export function workspaceDiagrams(items,palette,request){
  const plans=items.filter(item=>item.validation?.ok!==false).map(item=>responsiveStackPlan(devicePlan(item),request?.targetAspect)),pages=[];let current=null,currentPlans=[],at=0;
- const originalSheet=paperOf(request),sheet={...originalSheet,width:request?.dynamicCanvas?Math.max(originalSheet.width,...plans.map(plan=>plan.width+margin*2)):originalSheet.width},dynamicHeight=request?.dynamicCanvas?Math.max(sheet.height,Math.ceil(page(request,'workspace|measure',request.title||'Switchport reports','Shared port maps and VLAN key','workspace',[]).contentTop+plans.reduce((sum,plan)=>sum+blockHeight(plan)+12,0)+legendHeight(mergeInventories(plans.map(plan=>plan.item)),palette,sheet.width-margin*2,false,false)+180)):null;
+ const originalSheet=paperOf(request),sheet={...originalSheet,width:request?.dynamicCanvas?Math.max(originalSheet.width,...plans.map(plan=>plan.width+margin*2)):originalSheet.width},dynamicHeight=request?.dynamicCanvas?Math.max(sheet.height,Math.ceil(page(request,'workspace|measure',request.title||'Switchport reports','Shared port maps and VLAN key','workspace',[]).contentTop+plans.reduce((sum,plan)=>sum+blockHeight(plan)+12,0)+legendHeight(mergeInventories(plans.map(plan=>plan.item)),palette,sheet.width-margin*2,false,false)+180-footerGain(request))):null;
  const make=()=>{const p=page(request,'workspace|'+pages.length,request.title||request.outputLabel||'Switchport reports','Shared port maps and VLAN key','workspace',[],sheet.width,dynamicHeight??sheet.height);if(dynamicHeight)p.paper={preset:'custom',orientation:p.width>=p.height?'landscape':'portrait',widthMm:p.widthMm,heightMm:p.heightMm};pages.push(p);current=p;currentPlans=[];at=p.contentTop;return p;};
  const close=()=>{if(!current)return;const inv=mergeInventories(currentPlans.map(plan=>plan.item));legend(current,at+10,inv,palette);current.sourceDeviceIds=unique(currentPlans.map(plan=>plan.item.id));current=null;};
  const standalone=plan=>{
@@ -252,23 +254,23 @@ export function workspaceDiagrams(items,palette,request){
  for(const plan of plans){
   if(plan.width>sheet.width-margin*2){if(standalone(plan))continue;throw new ReportCapacityError('The complete physical bank of '+displayName(plan.item.inventory)+' is too wide for shared '+reportPageLabel(request.paper)+' sheets.',{deviceId:plan.item.id});}
   if(!current)make();let required=blockHeight(plan),candidate=mergeInventories([...currentPlans.map(row=>row.item),plan.item]),keyHeight=legendHeight(candidate,palette,current.width-margin*2);
-  if(at+required+keyHeight+69>current.height&&currentPlans.length){close();make();candidate=plan.item.inventory;keyHeight=legendHeight(candidate,palette,current.width-margin*2);}
+  if(at+required+keyHeight+69-footerGain(request)>current.height&&currentPlans.length){close();make();candidate=plan.item.inventory;keyHeight=legendHeight(candidate,palette,current.width-margin*2);}
   // An editable dynamic sheet must grow before considering compact
   // standalone pagination. It is not bounded by fixed print paper height.
-  if(request?.dynamicCanvas&&at+required+keyHeight+69>current.height){
+  if(request?.dynamicCanvas&&at+required+keyHeight+69-footerGain(request)>current.height){
    current.height=Math.ceil(at+required+keyHeight+160);
    current.heightMm=current.height*25.4/96;
    current.paper={preset:'custom',orientation:current.width>=current.height?'landscape':'portrait',widthMm:current.widthMm,heightMm:current.heightMm};
   }
-  if(at+required+keyHeight+69<=current.height){at=drawBlock(current,plan,margin,at,palette)+12;currentPlans.push(plan);continue;}
+  if(at+required+keyHeight+69-footerGain(request)<=current.height){at=drawBlock(current,plan,margin,at,palette)+12;currentPlans.push(plan);continue;}
   if(standalone(plan))continue;
   // Whole configurations are preferred. Oversized stacks/chassis continue at
   // complete member/module-row boundaries, always with a complete local key.
   if(currentPlans.length){close();make();}let bands=[],continued=false;
   for(const band of plan.bands){
-   const partial={...plan,bands:[...bands,band],height:[...bands,band].reduce((sum,row)=>sum+row.height+8,0)},limit=current.contentTop+blockHeight(partial)+keyHeight+69;
+   const partial={...plan,bands:[...bands,band],height:[...bands,band].reduce((sum,row)=>sum+row.height+8,0)},limit=current.contentTop+blockHeight(partial)+keyHeight+69-footerGain(request);
    if(limit>current.height&&bands.length){at=drawBlock(current,plan,margin,current.contentTop,palette,{bands,continued})+12;currentPlans=[plan];close();make();bands=[];continued=true;}
-   if(current.contentTop+blockHeight({...plan,bands:[band],height:band.height+8})+keyHeight+69>current.height)throw new ReportCapacityError('One module/member and its complete VLAN key cannot fit '+reportPageLabel(request.paper)+' at readable size.',{deviceId:plan.item.id});
+   if(current.contentTop+blockHeight({...plan,bands:[band],height:band.height+8})+keyHeight+69-footerGain(request)>current.height)throw new ReportCapacityError('One module/member and its complete VLAN key cannot fit '+reportPageLabel(request.paper)+' at readable size.',{deviceId:plan.item.id});
    bands.push(band);
   }
   if(bands.length){at=drawBlock(current,plan,margin,current.contentTop,palette,{bands,continued})+12;currentPlans=[plan];close();}

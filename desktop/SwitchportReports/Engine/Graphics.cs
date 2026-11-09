@@ -621,9 +621,10 @@ public static class Png
         if((long)width*height>50_000_000)throw new InvalidOperationException("Raster size exceeds limit.");
         using var surface=SkiaSharp.SKSurface.Create(new SkiaSharp.SKImageInfo(width,height));
         var canvas=surface.Canvas;canvas.Clear(SkiaSharp.SKColors.White);
-        double marginX=width*18/841.89,marginY=height*18/595.28;
+        // A quarter-inch margin is 75 pixels at 300 DPI on every paper size.
+        double marginX=75,marginY=75;
         float scale=(float)Math.Min((width-2*marginX)/scene.Width,(height-2*marginY)/scene.Height);
-        canvas.Translate((float)(width-scene.Width*scale)/2,(float)marginY);canvas.Scale(scale);ReportRenderer.Draw(canvas,scene);
+        canvas.Translate((float)((width-scene.Width*scale)/2),(float)((height-scene.Height*scale)/2));canvas.Scale(scale);ReportRenderer.Draw(canvas,scene);
         using var image=surface.Snapshot();using var data=image.Encode(SkiaSharp.SKEncodedImageFormat.Png,100);
         byte[] png=data.ToArray();
         using var file=File.Create(path);file.Write(png,0,33);

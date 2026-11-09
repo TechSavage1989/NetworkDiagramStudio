@@ -19,6 +19,50 @@ export async function readSources(files){
  }
  return out;
 }
+const reportField=(row,name)=>Object.keys(row||{}).find(key=>key.toLowerCase()===name.toLowerCase())||name;
+const reportGet=(row,name)=>row?.[reportField(row,name)];
+const reportSet=(row,name,value)=>{row[reportField(row,name)]=value;};
+// Report metadata is carried with identity, but its evidence still belongs to
+// the same selectable categories as the editor. Operate on selected()'s clone.
+function selectReportEvidence(device,input,chosen){
+ const inv=device.switchportInventory;
+ if(inv){
+  if(!categories.every(category=>chosen.has(category)))reportSet(inv,'assumptions',[]);
+  if(!chosen.has('ports')){
+   for(const field of ['ports','logicalInterfaces'])reportSet(inv,field,(reportGet(inv,field)||[]).map(port=>{
+    const keep={};for(const name of ['id','group','number','displayNumber','relatedInterfaces','media'])if(reportGet(port,name)!==undefined)reportSet(keep,reportField(port,name),reportGet(port,name));
+    reportSet(keep,reportField(port,'notes'),[]);
+    return keep;
+   }));
+   reportSet(inv,'mirrors',[]);
+  }
+  if(!chosen.has('vlans')){reportSet(inv,'vlans',[]);reportSet(inv,'svis',[]);}
+  if(!chosen.has('routes'))reportSet(inv,'routes',[]);
+  // Management mixes interface addresses and gateway statements, so require
+  // both owners rather than misclassifying an opaque retained string.
+  if(!chosen.has('ports')||!chosen.has('routes'))reportSet(inv,'management',[]);
+ }
+ if(!chosen.has('ports'))delete device.mirrors;
+ if(!chosen.has('ports')||!chosen.has('routes'))delete device.management;
+ const allowed=observation=>{
+  const category=String(reportGet(observation,'category')||'').toLowerCase(),field=String(reportGet(observation,'field')||'').toLowerCase();
+  if(category==='route')return chosen.has('routes');
+  if(category==='neighbor')return chosen.has('links');
+  if(['interface','ip interface','dhcp','dhcp relay','arp','mac table'].includes(category))return chosen.has('ports');
+  if(category==='device')return chosen.has(field==='connected to'?'links':field==='ip addresses'?'ports':'identity');
+  if(category==='reference'){
+   if(/lldp|cdp|neighbor/.test(field))return chosen.has('links');
+   if(/route|routing/.test(field))return chosen.has('routes');
+   if(/interface|dhcp|relay|arp|mac.address|auvik configuration/.test(field))return chosen.has('ports');
+   if(/vlan/.test(field))return chosen.has('vlans');
+  }
+  // Unclassified records can mix categories. Keep only with all enabled.
+  return categories.every(category=>chosen.has(category));
+ };
+ for(const field of ['reportSupplementary','switchportSupplementary','supplementarySources'])if(input[field])device[field]=input[field].map(source=>{
+  reportSet(source,'observations',(reportGet(source,'observations')||[]).filter(allowed));return source;
+ }).filter(source=>reportGet(source,'observations').length);
+}
 function selected(source){
  if(!source.enabled)return {devices:[],links:[],warnings:[]};
  const c=new Set(source.categories||categories),m=copy(source.model),first=m.devices[0]?.id;
@@ -31,8 +75,9 @@ function selected(source){
   const v={id:d.id,name:d.name,kind:'unknown',ports:[],vlans:[],routes:[]};
   if(c.has('identity'))for(const [k,x] of Object.entries(d))if(!['ports','vlans','routes','bridges'].includes(k))v[k]=x;
   for(const k of ['ports','vlans','routes','bridges'])if(c.has(k))v[k]=d[k]||[];
+  selectReportEvidence(v,d,c);
   return v;
- }).filter(d=>used.has(d.id)||c.has('identity')||['ports','vlans','routes','bridges'].some(k=>d[k]?.length));
+ }).filter(d=>used.has(d.id)||c.has('identity')||['ports','vlans','routes','bridges','reportSupplementary','switchportSupplementary','supplementarySources'].some(k=>d[k]?.length));
  if(!c.has('links'))m.links=[];
  return m;
 }

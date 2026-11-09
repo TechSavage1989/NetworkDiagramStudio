@@ -1,3 +1,4 @@
+import {transformControls,transformGeometry,transformEdits,rotatable} from './transform-controls.mjs';
 import {physicalLink} from './physical-links.mjs';
 import {installFormControls} from './form-controls.mjs';
 import {connectionLayoutEditor} from './connection-layout-ui.mjs';
@@ -108,7 +109,7 @@ function field(parent,labelText,value='',opts=null){
 function perform(scope='project',prepared){captureEdits(project,evidenceSnapshot);if(project.evidence)evidenceSnapshot=snapshot();projectHistory.record(project,scope);dirty=projectHistory.dirty;draw(prepared);}
 function resetDrawingHistory(){inlineCancel?.();drawingSelection.clear();projectHistory.reset(project);cablePoint=-1;snapLabelPick=null;pageCache.clear();reports.reset();}
 function syncDrawingSelection(){
- const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls'))n.remove();
+ const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls,.transform-controls'))n.remove();
  const objects=pages[active]?drawingObjects(pages[active]):[],known=new Set(objects.map(o=>o.editKey));for(const key of drawingSelection)if(!known.has(key))drawingSelection.delete(key);
  if(svg){
   for(const element of svg.querySelectorAll('.linked-association'))element.classList.remove('linked-association');
@@ -130,6 +131,9 @@ function syncDrawingSelection(){
  }
 
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
+ const single=drawingSelection.size===1?objects.find(o=>drawingSelection.has(o.editKey)):null;
+ if(svg&&editDrawing&&single)transformControls(svg,single);
+ syncQuickText(single);
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
  $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
@@ -141,7 +145,25 @@ function syncDrawingSelection(){
  else $('cable-point-info').textContent='Move near a cable to highlight it, then click to select.';
  viewport.syncCableInteraction();
 }
-function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();}
+function syncQuickText(item){
+ const bar=$('quick-text-tools');bar.hidden=!editDrawing||!rotatable(item);if(bar.hidden)return;
+ $('quick-text-size').value=Math.round((item.normalized?item.size*item.parent.w:item.size)*100)/100;
+ $('quick-text-bold').checked=!!item.bold;$('quick-text-align').value=item.align||'left';
+ $('quick-text-color').value=/^#[0-9a-f]{6}$/i.test(item.color||'')?item.color:'#17364a';
+ $('quick-text-angle').value=Math.round((item.angle||0)*180/Math.PI*100)/100;
+}
+function quickTextChange(rotationChanged=false){
+ const item=drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));if(!rotatable(item))return;
+ const size=Number($('quick-text-size').value),degrees=Number($('quick-text-angle').value);
+ if(!Number.isFinite(size)||size<1||size>500||!$('quick-text-size').value)throw Error('Text size must be between 1 and 500.');
+ if(!Number.isFinite(degrees)||!$('quick-text-angle').value||Math.abs(degrees)>360)throw Error('Rotation must be between -360 and 360 degrees.');
+ const patch=unpresentPatch(item,{size:item.normalized?size/item.parent.w:size,bold:$('quick-text-bold').checked,align:$('quick-text-align').value,color:$('quick-text-color').value,...(rotationChanged?{angle:degrees*Math.PI/180,rotationMode:'fixed'}:{})});
+ setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...patch}});
+}
+$('quick-text-edit').onclick=()=>editOnDoubleClick([...drawingSelection][0]);
+for(const id of ['quick-text-size','quick-text-bold','quick-text-align','quick-text-color','quick-text-angle'])$(id).onchange=()=>task(()=>{try{quickTextChange(id==='quick-text-angle');}finally{const item=pages[active]&&drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));syncQuickText(item);revealSelectedText();}});
+function revealSelectedText(){const key=drawingSelection.size===1?[...drawingSelection][0]:null;if(!key)return;requestAnimationFrame(()=>{if(drawingSelection.size!==1||!drawingSelection.has(key))return;const item=pages[active]&&drawingObjects(pages[active]).find(o=>o.editKey===key);if(rotatable(item)){const bounds=drawingBounds(item);viewport.reveal({...bounds,y:bounds.y-28,h:bounds.h+28});}});}
+function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();revealSelectedText();}
 function selectedCable(){return drawingSelection.size===1?pages[active]?.items.find(i=>i.type==='path'&&drawingSelection.has(i.editKey)):null;}
 function selectedConnectionLabel(){
  return drawingSelection.size===1?pages[active]?.items.find(item=>item.labelRole&&item.relatedCableKey&&drawingSelection.has(item.editKey)):null;
@@ -211,10 +233,10 @@ document.addEventListener('pointerdown',event=>{if(contextMenu&&!contextMenu.con
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contextMenu){dismissEditorContextMenu();event.preventDefault();}},true);
 function handleEditorContextMenu(event){
  const target=event.target;if(target.closest('input,textarea,select,[data-inline-editor]'))return;
- const tab=target.closest('#tabs button[role="tab"]');
+ const tab=target.closest('#page-families button[data-page]');
  if(tab){
-  const visible=pages.filter(page=>familyOf(page)===familyOf(pages[active])),index=[...$('tabs').querySelectorAll('button[role="tab"]')].indexOf(tab),page=visible[index];
-  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Page options',pageOptions],['Pages & layout',()=>layoutOptions(page.name)]]);
+  const page=pages.find(page=>page.name===tab.dataset.page);
+  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Page options',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Pages & layout',()=>layoutOptions(page.name)]]);
   return;
  }
  if(!target.closest('#canvas'))return;
@@ -252,7 +274,7 @@ function handleEditorContextMenu(event){
   if(d)actions.push(['Edit device and port details',()=>editDevice(d)]);
  }
  if(!item&&!socket)actions.push(['Page',null]);
- actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Page options',pageOptions],['Pages & layout',()=>layoutOptions(page.name)]);
+ actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Page options',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Pages & layout',()=>layoutOptions(page.name)]);
  showEditorContextMenu(event,actions);
 }
 function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...unpresentPatch(item,{points})}});}
@@ -346,6 +368,12 @@ $('drawing-arrange').onchange=()=>task(()=>{
 function startDrawingMove(key,event){
  if(besidePick)return null;
  if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]'),axisFor=dragAxis();
+ const transform=event.target.closest('[data-transform]');
+ if(transform){
+  const item=drawingObjects(page).find(i=>i.editKey===key),handle=transform.dataset.transform,svg=$('canvas').querySelector('svg'),box=svg.querySelector('.diagram-selection'),bounds=drawingBounds(item);
+  const preview=(dx,dy,e)=>{const g=transformGeometry(item,handle,dx,dy,e);if(box){if(g.angle!=null)box.setAttribute('transform',`rotate(${-(g.angle-(item.angle||0))*180/Math.PI} ${bounds.x+bounds.w/2} ${bounds.y+bounds.h/2})`);else for(const [k,v]of Object.entries({x:bounds.x+g.dx,y:bounds.y+g.dy,width:bounds.w*g.factor,height:bounds.h*g.factor}))box.setAttribute(k,v);}};
+  return {preview,commit(dx,dy,e){task(()=>{try{setDrawingEdits(transformEdits(page,project.layout?.drawingEdits,item,transformGeometry(item,handle,dx,dy,e)));say(handle==='rotate'?'Text rotation saved.':'Item resized. Connections remain attached.');}finally{syncDrawingSelection();}});},cancel:syncDrawingSelection};
+ }
  if(control){if(control.hasAttribute('data-cable-segment'))return {preview(){},commit(){},cancel(){}};
   const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),merge=8/(svg.getScreenCTM()?.a||1),path=[...svg.children].find(n=>n.matches('path.diagram-cable')&&n.getAttribute('data-drawing-key')===key),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
   if(settings.cablePoints)for(const [i,p] of item.points.entries())if(i!==index)targets.push({axis:0,value:p[0]},{axis:1,value:p[1]});drawingSelection.clear();drawingSelection.add(key);cablePoint=index;
@@ -627,7 +655,7 @@ function layoutOptions(selected=pages[active]?.name){
 $('page-layout').onclick=()=>task(()=>layoutOptions());
 function pageOptions(){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
- body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Existing diagram objects keep their positions and proportions, and a complete switch stack remains one page.','hint'));
+ body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Auto-fit on physical paper may use wireless continuation sheets for readability. Dynamic pages and Preserve existing layout retain their existing geometry.','hint'));
  const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
  const groupRow=el('div'),pageRow=el('div');body.append(groupRow,pageRow);
  const group=field(groupRow,'Page group',familyOf(pages[active]),pageFamilies),page=field(pageRow,'Individual page',String(active),pages.map((item,i)=>[String(i),(item.displayName||item.name)+'  ('+(pageFamilies.find(([id])=>id===familyOf(item))?.[1]||familyOf(item))+')']));
@@ -653,7 +681,7 @@ function pageOptions(){
   custom.hidden=preset.value!=='custom';orientation.disabled=inherited||preset.value==='dynamic';
   const paper=inherited?(selectedScope==='page'?visible.groups[familyOf(pages[Number(page.value)])]||visible.default:visible.default):cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
   const shape=paperDimensions(paper);
-  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm proportions ('+paper.orientation+'). All existing content fits on one page without being rearranged.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
+  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm proportions ('+paper.orientation+'). Auto-fit may continue dense wireless content onto additional sheets; Preserve existing layout keeps the current arrangement.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
  }
  function load(){
   groupRow.hidden=selectedScope!=='group';pageRow.hidden=selectedScope!=='page';
@@ -677,8 +705,9 @@ function pageOptions(){
  function updatePrint(){printCustom.hidden=printSize.value!=='custom';printOrientation.disabled=printSize.value==='drawing';}
  printSize.onchange=updatePrint;updatePrint();
  printing.append(el('p','By default, print paper matches each visible page. Choose a separate output size here without changing the displayed drawing.','hint'));
- const numbering=el('details');numbering.append(el('summary','Page numbering'));body.append(numbering);
+ const numbering=el('details');numbering.append(el('summary','Footer and page numbering'));body.append(numbering);
  const row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));numbering.append(row);
+ const footerRow=el('label','','check-option'),footer=el('input');footer.type='checkbox';footer.checked=p.footer;footer.setAttribute('aria-label','Show footer');footerRow.append(footer,document.createTextNode('Show footer'));numbering.append(footerRow);
  const numberRow=el('div','','form-columns');numbering.append(numberRow);
  const first=field(numberRow,'First page number',p.start),pad=field(numberRow,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(numbering,'Page number format',p.format);
  first.type='number';first.min=0;first.max=9999;first.step=1;format.maxLength=100;
@@ -690,9 +719,9 @@ function pageOptions(){
   if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');
   store();visible.fitMode=fitMode.value;
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
-  const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,start:+first.value,pad:+pad.value,format:format.value})};
+  const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
   let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
-  perform('page-options',prepared);close();viewport.fit();say('Visible page proportions, print settings and page numbering saved. Diagram arrangement preserved.');
+  perform('page-options',prepared);close();viewport.fit();say('Visible page proportions, print settings and page numbering saved. Visible page layout updated.');
  },'primary');
 }
 $('page-options').onclick=()=>task(pageOptions);
@@ -796,20 +825,6 @@ function evidence(){
 }
 const warningText=x=>typeof x==='string'?x:(x?.message||x?.text||'Review imported evidence.');
 function familyOf(page){return page?.family||pageFamily(page?.title||page?.name||'');}
-// A single open group menu may be dismissed by an outside click or Escape.
-// The handlers are installed once even though the navigation tabs are rebuilt.
-function closePageGroupMenus(except=null){
- for(const menu of $('page-families').querySelectorAll('details.page-group[open]'))if(menu!==except)menu.open=false;
-}
-document.addEventListener('pointerdown',event=>{
- if(!event.target.closest('#page-families details.page-group'))closePageGroupMenus();
-},true);
-document.addEventListener('keydown',event=>{
- if(event.key!=='Escape')return;
- const opened=$('page-families').querySelector('details.page-group[open]');
- if(!opened)return;
- const focus=opened.querySelector('summary');closePageGroupMenus();focus?.focus();event.preventDefault();
-},true);
 let pageTabClickTimer=null;
 function renamePageTab(page,button){
  if(!commitInlineEdit())return;
@@ -829,7 +844,7 @@ function renamePageTab(page,button){
   layout.presentation||={defaults:{},pages:{}};layout.presentation.pages||={};
   layout.presentation.pages[page.name]={...layout.presentation.pages[page.name],name};
   project.layout=cleanLayout(layout,project.devices.map(device=>device.id));
-  try{const prepared=buildDrawing();finished=true;perform('page-rename',prepared);say('Page renamed to '+name+'. Tab, page selector and drawing heading updated.');}
+  try{const prepared=buildDrawing();finished=true;perform('page-rename',prepared);say('Page renamed to '+name+'. Page list, page selector and drawing heading updated.');}
   catch(error){project.layout=before;cancel();say('Page rename failed: '+error.message);}
  };
  input.addEventListener('click',event=>event.stopPropagation());
@@ -840,29 +855,39 @@ function renamePageTab(page,button){
 }
 function pageNavigation(){
  const navigation=$('page-navigation'),families=$('page-families'),picker=$('page-select');
+ const expanded=new Set([...families.querySelectorAll('details[open]')].map(item=>item.dataset.family));
+ const scroll=families.scrollTop,previous=families.querySelector('[aria-current="page"]')?.dataset.page,focused=families.contains(document.activeElement)?document.activeElement.dataset.page:null;
  navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
  const current=familyOf(pages[active]),labels=[...pageFamilies,['switchports','Switchport reports']],groups=[...new Set(pages.map(familyOf))];
  for(const group of groups){
   const entries=pages.map((page,index)=>({page,index})).filter(({page})=>familyOf(page)===group);
   const title=labels.find(([id])=>id===group)?.[1]||group;
   const menu=el('details','','page-group'),summary=el('summary',title+' ('+entries.length+')');
+  menu.dataset.family=group;menu.open=group===current||expanded.has(group);
   summary.classList.toggle('active',group===current);
   summary.setAttribute('aria-label','Choose '+title+' page');
-  const list=el('div','','page-group-menu');list.setAttribute('role','menu');list.setAttribute('aria-label',title+' pages');
+  const list=el('div','','page-group-menu');list.setAttribute('role','group');list.setAttribute('aria-label',title+' pages');
+  if(group===current)list.id='tabs';
   for(const {page,index} of entries){
    const item=el('button',page.displayName||page.name);
-   item.type='button';item.setAttribute('role','menuitemradio');
-   item.setAttribute('aria-checked',String(index===active));
+   item.type='button';item.dataset.page=page.name;
+   if(index===active)item.setAttribute('aria-current','page');
    item.classList.toggle('active',index===active);
-   item.onclick=()=>{if(!commitInlineEdit())return;menu.open=false;active=index;draw(pages);};
+   item.title='Double-click to rename this page. Use Pages & layout for additional settings.';
+   item.ondblclick=event=>{event.preventDefault();clearTimeout(pageTabClickTimer);renamePageTab(page,item);};
+   item.onclick=event=>{if(event.target.matches('.page-tab-rename')||event.detail>1)return;if(!commitInlineEdit())return;clearTimeout(pageTabClickTimer);if(index===active)return;pageTabClickTimer=setTimeout(()=>{active=index;draw(pages);},230);};
    list.append(item);
   }
-  menu.addEventListener('toggle',()=>{if(menu.open)closePageGroupMenus(menu);});
   menu.append(summary,list);families.append(menu);
   const options=el('optgroup');options.label=title;
   for(const {page,index} of entries){const option=el('option',page.displayName||page.name);option.value=index;options.append(option);}
   picker.append(options);
  }
+ if(!pages.length){const empty=el('div');empty.id='tabs';families.append(empty);}
+ families.scrollTop=scroll;
+ const selected=families.querySelector('[aria-current="page"]');
+ if(focused===pages[active]?.name)selected?.focus({preventScroll:true});
+ if(selected&&previous!==pages[active]?.name){const row=selected.getBoundingClientRect(),bounds=families.getBoundingClientRect();if(row.top<bounds.top)families.scrollTop+=row.top-bounds.top;else if(row.bottom>bounds.bottom)families.scrollTop+=row.bottom-bounds.bottom;}
  picker.value=String(active);
  picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};
  $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
@@ -873,25 +898,11 @@ function draw(prepared){
  const subset=scoped();const live=subset.devices.length>0;
  $('link-count').textContent='('+project.links.length+')';$('stats').textContent=subset.devices.length+' of '+project.devices.length+' devices   /   '+subset.links.length+' links';
  $('art-count').textContent=Object.keys(project.stencils).length+' local hardware shapes';$('hardware').title='Local stencil library: '+$('art-count').textContent;
- const tabs=$('tabs'),canvas=$('canvas');
- if(!tabs.dataset.wheelNavigation){tabs.dataset.wheelNavigation='1';tabs.addEventListener('wheel',event=>{if(tabs.scrollWidth>tabs.clientWidth&&Math.abs(event.deltaY)>Math.abs(event.deltaX)){tabs.scrollLeft+=event.deltaY;event.preventDefault();}},{passive:false});}
- const previousTabScroll=tabs.scrollLeft;
- try{const rebuilt=prepared||(live?buildDrawing(subset):[]);pages=rebuilt;drawingReady=pages.length>0;displayedProject=project;}catch(e){drawingReady=false;for(const id of ['export','export-menu','print','svg'])$(id).disabled=true;say('Diagram could not be rebuilt: '+e.message+(displayedProject===project&&pages.length?' The last valid drawing is retained. Undo the last change or correct its settings.':''));if(displayedProject===project&&pages.length){syncDrawingSelection();return;}pages=[];viewport.clear();canvas.replaceChildren(el('p','The drawing needs a layout correction. '+e.message,'error'));tabs.replaceChildren();pageNavigation();return;}
- tabs.replaceChildren();
+ const canvas=$('canvas');
+ try{const rebuilt=prepared||(live?buildDrawing(subset):[]);pages=rebuilt;drawingReady=pages.length>0;displayedProject=project;}catch(e){drawingReady=false;for(const id of ['export','export-menu','print','svg'])$(id).disabled=true;say('Diagram could not be rebuilt: '+e.message+(displayedProject===project&&pages.length?' The last valid drawing is retained. Undo the last change or correct its settings.':''));if(displayedProject===project&&pages.length){syncDrawingSelection();return;}pages=[];viewport.clear();canvas.replaceChildren(el('p','The drawing needs a layout correction. '+e.message,'error'));pageNavigation();return;}
  $('warnings').hidden=!project.warnings.length;$('warnings').textContent='Review '+project.warnings.length+' import '+(project.warnings.length===1?'note':'notes');
  active=Math.max(0,Math.min(active,pages.length-1));
  pageNavigation();
- pages.forEach((page,i)=>{if(familyOf(page)!==familyOf(pages[active]))return;
- const b=el('button',page.displayName||page.name);
- b.title='Double-click to rename this page. Use Pages & layout for additional settings.';
- b.ondblclick=event=>{event.preventDefault();clearTimeout(pageTabClickTimer);renamePageTab(page,b);};
- b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);
- b.onclick=event=>{if(event.target.matches('.page-tab-rename')||event.detail>1)return;if(!commitInlineEdit())return;clearTimeout(pageTabClickTimer);if(i===active)return;pageTabClickTimer=setTimeout(()=>{active=i;draw(pages);},230);};
- tabs.append(b);
-});
- tabs.scrollLeft=previousTabScroll;
- const selectedTab=tabs.querySelector('button.active');
- if(selectedTab){const left=selectedTab.offsetLeft-tabs.offsetLeft,right=left+selectedTab.offsetWidth;if(left<tabs.scrollLeft)tabs.scrollLeft=left;else if(right>tabs.scrollLeft+tabs.clientWidth)tabs.scrollLeft=right-tabs.clientWidth;}
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
   if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),pages[active]);}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}

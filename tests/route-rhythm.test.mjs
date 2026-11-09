@@ -65,7 +65,7 @@ test('parallel cables keep a visible gap and exterior rails share one even pitch
 test('captions that cannot sit beside a dense bundle use inline connector text without spreading the rails',()=>{
  const page=core(campus()),paths=page.items.filter(i=>i.type==='path'&&i.sourceLink),inline=page.items.filter(i=>i.type==='text'&&i.background);
  for(const label of inline){const own=paths.find(p=>p.linkId===label.linkId);assert.ok(own);assert.equal(label.background,'#FFFFFF');assert.ok(['media','port'].includes(label.labelRole),'only cable captions and port names sit on their own line');}
- assert.ok(/<rect[^>]*fill="#FFFFFF"[^>]*pointer-events="none"/.test(page.svg)||!inline.length);
+ assert.ok(/<path[^>]*pointer-events="none"[^>]*fill="#FFFFFF"/.test(page.svg)||!inline.length);
 });
 
 test('empty chassis bays open the way toward the peer but never turn a lead away',()=>{

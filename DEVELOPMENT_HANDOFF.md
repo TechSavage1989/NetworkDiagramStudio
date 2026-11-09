@@ -1,3 +1,124 @@
+# Native device-drag smoke target
+
+The native smoke gesture previously started 5 screen pixels inside a device corner, which is now the resize handle hit area. It now selects a verified interior artwork point and rejects text, ports and editor overlays; the SW-1 identity, Shift axis lock, scaling, undo and selection assertions remain mandatory. Hosted browser coverage also moves a two-device Shift selection and checks unchanged widths and locked vertical positions. This is a test-target correction, not a production interaction change.
+
+# Direct transform follow-up
+
+Hosted Edge exposed a real accessibility issue: full-width alignment controls expanded the text toolbar, clipping the selected title and its handles above the canvas. The toolbar now uses bounded field widths, and selection/font changes reveal the selected text after layout at the existing zoom. Active gestures are never rebased. The browser regression checks the actual pointer hit target, compact toolbar height, committed resize status and persisted dimensions rather than dragging clipped coordinates.
+
+# Preview.42 candidate: unified requested improvements
+
+The owner explicitly authorized pushing and publishing this requested update on
+2026-11-09. Draft PR #41 combines page layout/readability, sidebar navigation,
+centered/default inline labels, direct editing and Switchport integration fixes.
+Version/release intent is now 0.1.0-preview.42. Do not announce availability until
+the final combined browser/native Windows jobs, merged-main release workflow,
+public tag/feed and all three asset digests are verified. Prior notes below
+record implementation stages, not the current authorization state.
+
+The remote review source is created through the authenticated GitHub connector
+because shell GitHub credentials are unavailable. Every uploaded Git tree must
+match the locally tested tree exactly. Remote commit hashes differ from local
+cherry-pick hashes; verify tree identity and the exact remote head's CI.
+
+Local interactive Chromium is blocked by IPC restrictions even after escalation.
+Actual synthetic SVG/PDF renders were inspected. Hosted run 42674168964 supplied real current editor captures for the hero,
+port map, wireless sheet, connection legend and organization preview. Run 42675679821 passed all hosted Edge browser suites, including strict direct
+transform hit-testing and saved-width checks. Its direct transform capture is
+now included in docs/images/direct-transforms.png. No customer data or supplied
+customer screenshots are included in this repository.
+# Unreleased: inline port defaults and cable-safe caption backings
+
+Port labels now prefer centered placement over their associated cable, including
+aligned banks and individual departures. Beside-line placement remains a clear
+fallback. Pinned positions and saved cable-side attachments win over automatic
+banking; captions retain their endpoint association and readable measured size.
+
+`diagram/label-backings.mjs` subtracts unrelated visible cable stroke envelopes
+from white backings, including jump arcs and rotated captions, without changing
+cable paint order, jump masks or underlying artwork. SVG and PDF use matching
+vector fragments. Native Visio keeps those fragments in the editable text shape
+so native movement/rotation/resizing carries the backing. Exports use the current
+scene snapshot; desktop Visio interaction remains untested locally.
+
+Synthetic tests cover horizontal, vertical and oblique text, either cable paint
+order, hops, hidden paths, missing associations, link ID zero, negative-origin
+normalization, saved label placements, actual SVG/PDF pixel renders and native
+Visio geometry. The inline-port-labels image is actual generated fictional sample output,
+not an interactive browser capture. The editor hero is unchanged. Run `node --test`, `node scripts/build-web.mjs`,
+`node scripts/check-repo.mjs`, `node scripts/export-test-fixtures.mjs` and
+`python3 scripts/check-visio-package.py .artifacts/visio`. No version bump or
+remote publication is included in this local change. Local validation: all 464
+Node tests passed with no skips, plus seven Python package tests, nine independent
+Visio package checks, the offline build, repository guard and whitespace check.
+
+# Unreleased: Switchport 1.18.6 parity reconciliation
+
+Native report layout and workspace migration incorporate upstream 1.18.6 fixes while retaining NDS six-point reference-scene number text and normalized-data persistence. Browser parsing/report projection now covers management/mirror notes, configured speed/SVI data, IOS all/except edits and tagged-native state. See docs/SWITCHPORT_INTEGRATION.md for exact remaining browser-only gaps; do not call this exhaustive browser parser parity.
+
+Fresh native source imports now hydrate uniquely matched configuration ports before manual edits/evidence replay, retaining names/topology/observations and warning about unresolved route equivalence. Source disable/re-enable and later edits are covered by synthetic regression.
+
+Category selection now masks retained native report data and supplementary observations as well as visible editor records; exact hardware geometry remains. Ports-off, VLAN/route ownership, source immutability, manual replay and reopen are covered by regression tests.
+
+Native workspace, geometry, mixed-scale, raster-fit and paper regression tests are added to the existing build gates. Local .NET is unavailable, so native execution and hosted Windows/browser validation remain pending. No version bump, release intent, merge or publication is included.
+# Direct editing controls (pending hosted verification)
+
+Single selected objects now expose proportional corner resize handles; text also exposes a rotation handle (Shift snaps to 15 degrees). Text can be selected directly, including native device text, with a compact content/style/angle toolbar. Changes use the existing validated project history and saved edit pipeline. Hardware rotation remains unsupported because physical glue/routing has no rotated-device model. Transform overlays are editor-only. Escape cancels a gesture. The size buttons remain the keyboard-accessible resize alternative.
+
+Verification: transform geometry, presentation coordinates, saved/rebuilt text angles and SVG/Visio export tests are in tests/transform-controls.test.mjs. Local Chromium cannot start because socket() is prohibited even with escalation; hosted browser interactions and a current screenshot remain required before release.
+
+# Unreleased: readable paper layouts and wireless row alignment
+
+Working from preview.41 main `43d9752b697aa044e8083ae35af959e4a0be2034` on
+`fix/wireless-alignment-footer`. No new release, version bump or publication
+intent is authorized by this change. The existing preview.41 remains published.
+
+- Page groups are persistent expandable lists in the project sidebar, with
+  current-page highlighting, keyboard navigation, double-click/context rename,
+  internal scrolling and the existing page picker/controls retained. Top page
+  tabs are removed. The active family retains the native-test `#tabs` contract.
+- Cable labels and port numbers default to centered text in their measured
+  boxes, including banked/inline/multiline labels and physical map numbers.
+  Explicit saved alignment still wins. SVG/PDF/Visio alignment and ordinary/
+  stacked map regressions pass; actual synthetic output was rendered/reviewed.
+- Footer and page numbers are independent, opt-in Page options. Explicit saved
+  settings and formats survive; unspecified old/new projects start with both off.
+  Dynamic content and fixed-paper tables reuse the unused footer band. Main
+  drawing-set builder maps obey these settings; standalone Switchport Reports
+  retain their separate native behavior.
+- All port map sheets precede the port inventory sheets, retaining relative
+  device/page order and edit identities. The editor and exports share that order.
+- Wireless alignment now operates on final, actual route directions, including
+  bounded stack-gap rows that the initial rank pass cannot align. Disjoint
+  opposite runs can share a row only if full route scoring and painted-lead
+  clearance checks accept it. Same-side/overlapping routes remain separated;
+  manual bend restoration is unchanged. The synthetic 8-member/32-AP regression
+  reduces crossings from 106 to 34 with zero obstruction/merged-segment costs.
+- Explicit physical paper in Auto-fit mode constrains wireless planning before
+  whole-page fitting, avoiding unreadably shrunken large dynamic canvases.
+  Dynamic pages and Preserve existing layout retain their existing geometry.
+  Auto-fit regenerates the same paper-aware base before applying manual edits,
+  so the first edit cannot collapse its continued sheets. Continuation retains every AP/link and
+  complete physical members; no source observations are removed. Saved numbered
+  paper overrides conservatively constrain the shared plan to the smallest
+  applicable physical width/height, while each final sheet retains its own paper.
+  The fictional 8-member/32-AP Letter fixture improves minimum AP detail from
+  3.54pt to 8.47pt; A4, A3, A5 and Letter portrait also exceed 8pt. Larger paper
+  needs fewer sheets. First-edit/reopen and explicit font overrides are tested.
+
+Validation is synthetic only. Current local Chromium cannot launch because its
+required IPC socket is blocked, including an escalated launch. Do not call this
+an interactive browser pass. Inspect actual renderer output locally and require
+both hosted browser and native Windows checks on the final source before merge.
+Normal checks: `node scripts/check-repo.mjs`, `node --test`,
+`node scripts/build-web.mjs`, `node scripts/export-test-fixtures.mjs`,
+`python3 scripts/check-visio-package.py .artifacts/visio`, and
+`python3 -m unittest discover -s tests -p 'test_*.py'`. Export fixtures must be
+generated before the Python package tests. Local aggregate validation: 446 JavaScript tests pass with zero skips; the
+offline build, repository/whitespace guards, nine independent Visio packages
+and seven Python package checks pass. Draft PR validation is authorized;
+merging and release publication remain pending explicit approval.
+
 # Preview.41: measured paper-aware port-map reflow
 
 Requested correction: use the measured layout approach of Switchport Diagram Builder rather than shrinking a forced horizontal member arrangement. src/web/reports/adaptive-port-map.mjs compares complete ordered banks, bounded number/heading styles and side/below key positions on the selected physical paper. It maximizes shared socket width, favors readable type near a size tie and retains all VLAN memberships, ports and member order. Chassis module pairs are never rewrapped as independent members. Standalone native and browser Switchport Reports retain their existing behavior.

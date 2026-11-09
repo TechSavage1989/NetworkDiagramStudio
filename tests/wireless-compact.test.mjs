@@ -88,3 +88,15 @@ test('small hardware and thick wireless leads retain clear, aligned numbers at t
   if(textScale>1){const number=pages[0].items.find(i=>i.portNumberRole==='text');site.layout.drawingEdits[number.editKey]={size:17};const reopened=wireless(JSON.parse(JSON.stringify(site))).flatMap(p=>p.items).find(i=>i.editKey===number.editKey);assert.equal(reopened.size,17);}
  }
 });
+
+// Stack gaps override preliminary side ranks, so inspect final rendered routes.
+test('opposite wireless routes share safe final stack-gap rows instead of staircase offsets',()=>{
+ const site=wirelessLab(8,32,true),page=wireless(site)[0];assertClear(page);
+ const rows=page.items.filter(i=>i.type==='path').map(path=>{
+  const points=path.points;const run=points.slice(1).map((b,i)=>({a:points[i],b})).find(s=>s.a[1]===s.b[1]&&Math.abs(s.b[0]-s.a[0])>100);
+  assert.ok(run);return {...run,path,dir:Math.sign(run.b[0]-run.a[0])};
+ });
+ const paired=rows.filter((a,i)=>rows.some((b,j)=>j!==i&&a.dir===-b.dir&&Math.abs(a.a[1]-b.a[1])<.001&&overlap(a.a[0],a.b[0],b.a[0],b.b[0])<=-24));
+ assert.ok(paired.length>=16,'at least eight disjoint left/right pairs share final levels');
+ assert.equal(wireless(JSON.parse(JSON.stringify(site)))[0].svg,page.svg,'save/reopen remains deterministic');
+});

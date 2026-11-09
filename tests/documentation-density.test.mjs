@@ -15,7 +15,7 @@ const site=devices=>({name:'Fictional documentation lab',devices,links:[]});
 const logical=pages=>pages.filter(page=>page.title==='VLANs and Routing');
 const words=pages=>pages.flatMap(page=>page.items.filter(item=>item.type==='text').map(item=>item.value)).join(' ');
 const rows=sections=>sections.flatMap(section=>section.rows.map((values,index)=>({scope:section.sourceDeviceIds,values,key:section.recordKeys[index]})));
-const clear=pages=>{for(const page of pages)for(const item of page.items.filter(item=>item.logicalColumn!==undefined)){assert.equal(textLayout(item).size,item.size);assert.ok(item.x>=36&&item.x+item.w<=page.width-36+.01);assert.ok(item.y>=160&&item.y+item.h<=page.height-69+.01);}};
+const clear=pages=>{for(const page of pages)for(const item of page.items.filter(item=>item.logicalColumn!==undefined)){assert.equal(textLayout(item).size,item.size);assert.ok(item.x>=36&&item.x+item.w<=page.width-36+.01);assert.ok(item.y>=160&&item.y+item.h<=page.height-(page.items.some(item=>/^footer-/.test(item.pageFrame||''))?69:36)+.01);}};
 
 test('concise documentation shares exact definitions with an explicit scope and fewer complete pages',()=>{
  const devices=Array.from({length:8},(_,i)=>({...switchDevice(String(i+1)),vlans:Array.from({length:16},(_,n)=>({id:n+1,name:'Department '+(n+1)})),routes:[{destination:'0.0.0.0/0',nextHop:'192.0.2.254',type:'static'}]})),project=site(devices),before=copy(project);

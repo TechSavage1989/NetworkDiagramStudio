@@ -344,16 +344,17 @@ function composeRoute(r){
  return clean([...lead(r.a),[r.rail,r.a.ay],[r.rail,r.b.ay],...lead(r.b).reverse()]);
 }
 function sameRoute(points,r){const next=composeRoute(r);return next.length===points.length&&next.every((p,i)=>Math.abs(p[0]-points[i][0])<.01&&Math.abs(p[1]-points[i][1])<.01);}
-function rowItems(routes){
+function rowItems(routes,allowGap=false){
+ const fixed=v=>fixedEnd(v)&&!(allowGap&&v?.anchor.escapeRange);
  const items=[],row=(r,ends,c,xs)=>({r,ends,c,lo:Math.min(...xs),hi:Math.max(...xs),w:r.weight||4,set:c=>{for(const k of ends)r[k]={...r[k],ay:c};}});
  for(const r of routes){
   if(r.shape==='direct'||!sameRoute(r.points,r))continue;
-  if(r.v){if(!fixedEnd(r.v))items.push(row(r,['v'],r.v.ay,[r.v.exitX,r.x]));continue;}
+  if(r.v){if(!fixed(r.v))items.push(row(r,['v'],r.v.ay,[r.v.exitX,r.x]));continue;}
   if(r.shape==='z'||Math.abs(r.a.ay-r.b.ay)<.01){
-   if(fixedEnd(r.a)||fixedEnd(r.b))continue;
+   if(fixed(r.a)||fixed(r.b))continue;
    items.push(row(r,['a','b'],r.a.ay,r.shape==='z'?[r.a.anchor.x,r.b.anchor.x]:[r.a.exitX,r.b.exitX,r.rail]));continue;
   }
-  for(const k of ['a','b'])if(!fixedEnd(r[k]))items.push(row(r,[k],r[k].ay,[r[k].exitX,r.rail]));
+  for(const k of ['a','b'])if(!fixed(r[k]))items.push(row(r,[k],r[k].ay,[r[k].exitX,r.rail]));
  }
  return items;
 }
@@ -430,7 +431,7 @@ function layout1d(group,pitch,minPitch){
  }
  return out;
 }
-function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0}){
+function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0,directionNeutralLevels=false}){
  // Only the moved cables need rescoring against the rest of the page.
  const local=list=>{const total=[0,0,0];for(const r of list){const others=[];for(const o of routes)if(o!==r)others.push(...geometry(o).lines);const v=routeScore(r,nodes,obstacles,others,minX,maxX,railPitch);total[0]+=v[0];total[1]+=v[1];total[2]+=v[3];}return total;};
  const snapshot=list=>list.map(r=>[r,r.points,r.rail,r.a,r.b,r.v,r.x]);
@@ -595,6 +596,37 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
   }
  };
  repair('row');repair('rail');
+ // Wireless rows going away from one another can reuse a level. Stack-gap
+ // departures are deliberately fixed during general channel spacing, but may
+ // share a row here when the complete painted paths remain clear. Work from
+ // actual final directions, not the router's initial left/right preference.
+ if(directionNeutralLevels){
+  const items=rowItems(routes,true).filter(i=>i.ends.length===1),paired=new Set();
+  const end=i=>i.r[i.ends[0]],direction=i=>Math.sign(i.r.rail-end(i).exitX);
+  const sameBank=(a,b)=>{const x=end(a),y=end(b);return x.node.key===y.node.key&&x.anchor.side===y.anchor.side&&
+   (x.anchor.escapeRange||y.anchor.escapeRange?JSON.stringify(x.anchor.escapeRange)===JSON.stringify(y.anchor.escapeRange):Math.abs(x.anchor.edge-y.anchor.edge)<.01);};
+  const allowed=(i,c)=>{const v=end(i),a=v.anchor,dir=a.side==='top'?-1:1;
+   return a.escapeRange?c>=a.escapeRange[0]+i.w/2+.25&&c<=a.escapeRange[1]-i.w/2-.25:
+    dir*(c-a.edge)>=Math.min(ROUTE_STYLE.clearance,dir*(i.c-a.edge))-.001;
+  };
+  const pairs=[];
+  for(let i=0;i<items.length;i++)for(const b of items.slice(i+1)){const a=items[i];
+   if(a.r===b.r||!sameBank(a,b)||direction(a)*direction(b)!==-1||overlap(a.lo,a.hi,b.lo,b.hi)>-ROUTE_STYLE.clearance)continue;
+   pairs.push([a,b]);
+  }
+  pairs.sort((a,b)=>Math.abs(a[0].c-a[1].c)-Math.abs(b[0].c-b[1].c));
+  for(const [a,b] of pairs){
+   if(paired.has(a)||paired.has(b))continue;
+   if(Math.abs(a.c-b.c)<.01){paired.add(a);paired.add(b);continue;}
+   for(const c of [a.c,b.c,(a.c+b.c)/2]){
+    if(!allowed(a,c)||!allowed(b,c))continue;
+    const saved=snapshot([a.r,b.r]),before=leadConflicts(a.r)+leadConflicts(b.r);
+    if(!apply([[a,c],[b,c]]))continue;
+    if(leadConflicts(a.r)+leadConflicts(b.r)>before){restore(saved);continue;}
+    a.c=b.c=c;paired.add(a);paired.add(b);break;
+   }
+  }
+ }
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}
 }
 export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0,referenceLabel=0,directionNeutralLevels=false}){
@@ -714,7 +746,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    routes[i]=best;
    for(const v of [best.a,best.b])ends.set(v.e.idx+'/'+v.which,v);
   }
-  if(neat)neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform});
+  if(neat)neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform,directionNeutralLevels});
   // Off-page tags line up in one column outside every finished left rail and
   // every lane of the other off-page cables, so no cable crosses a tag.
   if(references.length&&[...nodes.values()].every(n=>n.x>=minX&&n.x+n.w<=maxX)){
