@@ -35,6 +35,7 @@ try{
  await tabs.evaluate(e=>{e.style.width='';e.style.flex='';});
  const before=await page.locator('#canvas svg').getAttribute('viewBox');
  await page.locator('#page-options').click();
+ await page.locator('#dialog details').filter({hasText:'Printing'}).locator('summary').click();
  await page.locator('#dialog').getByLabel('Print paper',{exact:true}).selectOption('a4');
  await page.locator('#dialog').getByLabel('Print orientation',{exact:true}).selectOption('portrait');
  await page.locator('#dialog').getByRole('button',{name:'Save page options'}).click();
