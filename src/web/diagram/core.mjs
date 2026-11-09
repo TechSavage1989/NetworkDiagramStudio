@@ -184,6 +184,8 @@ function memoRoutes(internal,external,endData,banks,nodes,options){
  return planned;
 }
 function moduleLegend(page,project){
+ const panelSettings=presentation(project,page).panel;
+ if(!panelSettings.visible||!panelSettings.sections.includes('modules'))return [];
  const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
  if(!modules.size)return [];
  // Older drawings shared one SFP legend across reaches. Keep its saved edits
@@ -196,11 +198,11 @@ function moduleLegend(page,project){
  const side=page.sidebar||coreSidebar(),s=side.scale,extra=[],scope=page.name,edits=project.layout?.drawingEdits||{};let target=page,y=Math.max(147+263*s,(page.legendBottom||320)+38*s),heading=false;
  const caption=(key,value,size,width,bold)=>{const patch=edits[key]||{},font=patch.size||size*(side.textScale||1),w=patch.w||width,full=patch.value??value;return {value:full,size:font,w,h:Math.max(patch.h||0,wrapPortText(full,w,font,patch.bold??bold).length*font*1.2),bold:patch.bold??bold};};
  for(const [key,{plug,ports}] of modules){
-  const titleKey=scope+'|module-legend|'+key+'|title',portsKey=scope+'|module-legend|'+key+'|ports',description=[...new Set(ports)].join(' / ');
+  const titleKey=scope+'|module-legend|'+key+'|title',portsKey=scope+'|module-legend|'+key+'|ports',unique=[...new Set(ports)],hosts=new Set(unique.map(p=>p.split(' ').slice(0,-1).join(' '))),description=panelSettings.modulesMode==='full'?unique.join(' / '):unique.length+' assigned port'+(unique.length===1?'':'s')+' across '+hosts.size+' device'+(hosts.size===1?'':'s');
   let iconScale=target===page?s:1,title=caption(titleKey,plug.asset?.name||plug.name,Math.max(12,13*iconScale),target===page?side.width-78*iconScale:target.width-152,true),detail=caption(portsKey,description,11,target===page?side.width:target.width-80,false),top=Math.max(42*iconScale,title.h),height=top+8*iconScale+detail.h+20*iconScale;
   if(!target.dynamic&&y+(heading?0:48*iconScale)+height>target.height-75){target=fresh(scope+' Port Modules'+(extra.length?' '+(extra.length+1):''),'Port modules',scope+' - physical interface assignments',project);extra.push(target);y=174;heading=false;iconScale=1;title=caption(titleKey,plug.asset?.name||plug.name,13,target.width-152,true);detail=caption(portsKey,description,11,target.width-80,false);top=Math.max(42,title.h);height=top+8+detail.h+20;}
   if(!target.dynamic&&y+(heading?0:48*iconScale)+height>target.height-75)throw Error('This port module description needs more space. Enlarge its text box or reduce the module assignments on this core page.');
-  if(!heading){label(target.items,38,y,target===page?side.width:target.width-80,26*iconScale*(side.textScale||1),'PORT MODULES',16*iconScale*(side.textScale||1),true,C.teal);target.items.at(-1).editKey=scope+'|module-legend|heading'+(target===page?'':'|continued'+extra.length);y+=48*iconScale*(side.textScale||1);heading=true;}
+  if(!heading){label(target.items,38,y,target===page?side.width:target.width-80,26*iconScale*(side.textScale||1),(panelSettings.sectionTitles.modules||'PORT MODULES').toUpperCase(),16*iconScale*(side.textScale||1),true,C.teal);target.items.at(-1).editKey=scope+'|module-legend|heading'+(target===page?'':'|continued'+extra.length);y+=48*iconScale*(side.textScale||1);heading=true;}
   const ratio=plug.w/plug.h,w=(plug.asset?Math.min(64,44*ratio):64)*iconScale,h=plug.asset?w/ratio:42*iconScale,copy={...plug,key:'module-legend-'+key,sourceId:'module-legend-'+key,x:38,y:y+(top-h)/2,w,h,host:null,instanceKey:'module-legend',ports:JSON.parse(JSON.stringify(plug.ports)),children:JSON.parse(JSON.stringify(plug.children))};if(!plug.asset){
    const face=copy.children.map((child,i)=>({...child,editSlot:i,x:9/64+child.x*46/64,y:9.5/42+child.y*23/42,w:child.w*46/64,h:child.h*23/42}));
    copy.children=[];rect(copy.children,0,0,1,1,'#EEF2F7','#9AA9C0',1);Object.assign(copy.children[0],{name:'Module frame',editSlot:'frame'});copy.children.push(...face);copy.masterKey+=':legend-frame';
