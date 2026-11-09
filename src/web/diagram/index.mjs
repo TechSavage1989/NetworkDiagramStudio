@@ -641,7 +641,10 @@ function portMaps(project,db){
  // Letter (or the chosen fixed port-map paper) and painted in each device's
  // artwork colors. The realistic faceplate is a choice in Port map options.
  const mapOptions=project.layout?.portMap||{},sheetGeometry=pageGeometry(project,'ports');
- const paper=sheetGeometry.dynamic?{width:1056,height:816,preset:'letter',widthMm:279.4,heightMm:215.9}:{width:sheetGeometry.width,height:sheetGeometry.height,preset:'page',widthMm:sheetGeometry.width*25.4/96,heightMm:sheetGeometry.height*25.4/96};paper.fill=true;
+ // Drawing-port-map proportions are independent of print paper. The renderer
+ // grows a single logical sheet for large member stacks; the paper preset
+ // only scales that completed scene at print/export time.
+ const paper={width:1056,height:816,preset:'letter',widthMm:279.4,heightMm:215.9,fill:true};
  const sheets=mapOptions.mapStyle==='faceplate'||mapOptions.presentation==='combined'?new Map():portMapSheets(project,switches,paper,new Map(switches.map(d=>[d.id,artworkColors(project,d)])));
  let initial=portEquipmentPlan(project,switches),best;
  // A narrower common scale may change stack member ranges. An existing

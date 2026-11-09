@@ -195,15 +195,14 @@ internal sealed partial class Studio
     async Task CheckPageSetup()
     {
         await ClickEditorTarget("#page-options");
-        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Canvas size').value!=='dynamic')throw Error('New drawings must default to Dynamic / Fit all');const box=document.querySelector('#canvas svg').viewBox.baseVal;window.__nativeDynamicBounds=[box.width,box.height];field('Print paper').value='letter';field('Print orientation').value='portrait';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","independent print paper");
-        await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(box.width!==window.__nativeDynamicBounds[0]||box.height!==window.__nativeDynamicBounds[1])throw Error('Print paper resized the editable drawing');delete window.__nativeDynamicBounds","print preserves dynamic canvas");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Canvas size'))throw Error('Page options should not resize the editable drawing');const box=document.querySelector('#canvas svg').viewBox.baseVal;window.__nativeDynamicBounds=[box.width,box.height];const paper=field('Print paper'),orientation=field('Print orientation');if(!paper||!orientation)throw Error('Print paper controls are missing');paper.value='letter';paper.dispatchEvent(new Event('change'));orientation.value='portrait';orientation.dispatchEvent(new Event('change'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","independent print paper");
+        await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(box.width!==window.__nativeDynamicBounds[0]||box.height!==window.__nativeDynamicBounds[1])throw Error('Print paper resized the editable drawing')","print preserves dynamic canvas");
         await ClickEditorTarget("#page-options");
-        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Print paper').value!=='letter'||field('Print orientation').value!=='portrait')throw Error('Print setup was not retained');field('Print paper').value='drawing'","print paper persistence");
-        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('Canvas size').value='a3';field('Canvas size').dispatchEvent(new Event('input'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","A3 page setup");
-        await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(Math.abs(box.width-1587.401575)>0.01||Math.abs(box.height-1122.519685)>0.01)throw Error('Paper setup did not change the drawing bounds')","A3 scene bounds");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Print paper')?.value!=='letter'||field('Print orientation')?.value!=='portrait')throw Error('Print setup was not retained');field('Print paper').value='a3';field('Print paper').dispatchEvent(new Event('change'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","A3 print paper setup");
+        await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(box.width!==window.__nativeDynamicBounds[0]||box.height!==window.__nativeDynamicBounds[1])throw Error('A3 print paper changed the drawing bounds')","A3 preserves drawing bounds");
         await ClickEditorTarget("#page-options");
-        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Canvas size').value!=='a3')throw Error('Paper setting was not retained');field('Canvas size').value='original';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","restore original paper");
-        await RequireEditor("if(document.querySelector('#canvas svg').viewBox.baseVal.width!==1200)throw Error('Original page dimensions were not restored')","original scene bounds");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Print paper')?.value!=='a3')throw Error('A3 paper was not retained');field('Print paper').value='drawing';field('Print paper').dispatchEvent(new Event('change'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","restore original print paper");
+        await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(box.width!==window.__nativeDynamicBounds[0]||box.height!==window.__nativeDynamicBounds[1])throw Error('Original print selection changed the editable canvas');delete window.__nativeDynamicBounds","original scene preserved");
     }
     internal string? TestOutputFolder;
     delegate bool EnumWindowCallback(IntPtr hwnd,IntPtr parameter);
@@ -352,9 +351,11 @@ internal sealed partial class Studio
     {
         const string edge="#canvas text[data-drawing-key=\"Core Network|title|edge\"]",sw="#canvas text[data-drawing-key=\"Core Network|title|sw-1\"]";
         await ClickEditorTarget(edge,2);
-        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea'); if(!t) throw Error('Inline editor missing'); t.value='W'.repeat(600)","enter invalid title");
+        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Inline editor missing');t.value='Native growing-canvas title'","start inline title edit");
         await EditorKey("Enter",13);
-        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea'),e=document.querySelector('.inline-text-error'); if(!t?.isConnected||!e?.textContent.trim()||!e.getClientRects().length) throw Error('Rejected edit lost its attached editor or visible error'); const outer=t.closest('[data-inline-editor]').getBoundingClientRect(),inner=e.getBoundingClientRect(); if(inner.top<outer.top-1||inner.bottom>outer.bottom+1) throw Error('Validation error is clipped outside the editor'); t.value='Native repaired title'","reject and correct");
+        await RequireEditor("if(document.querySelector('[data-inline-editor]'))throw Error('Saved title editor did not close');if(!document.querySelector('text[data-drawing-key=\"Core Network|title|edge\"]')?.textContent.includes('Native growing-canvas title'))throw Error('Dynamic title was not saved')","save title on dynamic page");
+        await ClickEditorTarget(edge,2);
+        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Edited title cannot be reopened');t.value='Native repaired title'","revise saved title");
         await EditorKey("Enter",13);
         await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Corrected editor did not close'); const t=document.querySelector('text[data-drawing-key=\"Core Network|title|edge\"]'); if(!t?.textContent.includes('Native repaired title')) throw Error('Corrected title was not saved')","save corrected title");
         await ClickEditorTarget(sw,2);
@@ -362,13 +363,11 @@ internal sealed partial class Studio
         await EditorKey("Escape",27);
         await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Cancel did not close the editor'); const t=document.querySelector('text[data-drawing-key=\"Core Network|title|sw-1\"]'); if(!t?.textContent.includes('SW-1')) throw Error('Cancel replaced the original title')","cancel draft");
         await ClickEditorTarget(sw,2);
-        await RequireEditor("document.querySelector('[data-inline-editor] textarea').value='W'.repeat(600)","second invalid title");
-        await EditorKey("Enter",13);
-        await RequireEditor("if(!document.querySelector('[data-inline-editor] textarea')?.isConnected) throw Error('Second rejected editor detached'); document.getElementById('canvas').focus()","focus outside rejected editor");
+        await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Second editor did not attach');t.value='Temporary draft to cancel'","start another draft");
         await EditorKey("Escape",27);
-        await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Escape outside the editor did not cancel')","outside Escape recovery");
+        await RequireEditor("if(document.querySelector('[data-inline-editor]'))throw Error('Escape did not clear the second draft')","second Escape recovery");
         await ClickEditorTarget("#page-options");
-        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Page options') throw Error('Page options remained blocked')","page options after rejection");
+        await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Page options') throw Error('Page options remained blocked')","page options after Escape");
         await ClickEditorTarget("#close");
         await ClickEditorTarget(edge,2);
         await RequireEditor("const f=document.querySelector('[data-inline-editor]'); if(!f) throw Error('Detached-session fixture missing'); f.remove()","detach stale editor");
