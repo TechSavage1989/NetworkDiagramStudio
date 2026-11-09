@@ -187,3 +187,16 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 .editor-context-menu button:hover,.editor-context-menu button:focus-visible{background:#dfedf1;outline:none}
 #tabs .page-tab-rename{min-width:120px;max-width:260px;font:inherit;font-size:12px;padding:3px 5px;background:#fff;border:1px solid #117d96;border-radius:3px;box-shadow:0 0 0 2px #a8d6df;color:#173746}
 @media print{.editor-context-menu{display:none}}
+
+/* Editor-only association highlighting, never written to exported SVG or Visio. */
+#canvas svg path.diagram-cable.connection-type-active{filter:drop-shadow(0 0 4px #079eb5)}
+#canvas svg .diagram-legend-line.connection-type-active{filter:drop-shadow(0 0 4px #079eb5)}
+#canvas svg .connection-legend-text.connection-type-active{font-weight:700;paint-order:stroke fill;stroke:#b8eaf0;stroke-width:1.7px}
+#canvas svg .connection-type-muted{opacity:.3}
+#canvas svg .connection-legend-text{cursor:pointer}
+.global-text-styles{display:grid;gap:6px;margin:12px 0}
+.text-style-section{border:1px solid #b4c9ce;border-radius:6px;background:#f6fafb;overflow:hidden}
+.text-style-section summary{padding:9px 12px;font-weight:650;color:#193746;cursor:pointer}
+.text-style-section summary:hover{background:#e3eff2}
+.text-style-section .form-grid{padding:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:9px}
+.text-style-section button{margin:0 10px 10px}
