@@ -1,8 +1,9 @@
 import {connectionMediaInfo,cleanConnectionDetails} from './connection-types.mjs';
 import {sameConnection,prepareConnection} from './connection-edit.mjs';
-import {changeLinkStyle} from './link-styles.mjs';
+import {changeLinkStyle,migrateLegendEdits} from './link-styles.mjs';
 import {cleanDrawingEdits} from './drawing-edits.mjs';
 import {buildPages} from './diagram/index.mjs';
+import {unpresentPatch} from './presentation.mjs';
 
 const typeOf=(project,link)=>connectionMediaInfo(link.media,[link.a,link.b].some(id=>project.devices.find(d=>d.id===id)?.kind==='ap')).name;
 export function legendConnections(project,pages,type){
@@ -18,7 +19,7 @@ export function commonConnectionDetails(records){
 // Prepare the entire legend edit without mutating the accepted project. One
 // validation/history commit owns metadata, styles and migrated drawing patches.
 export function changeLegendConnections(project,pages,type,details,style,extraEdits={},build=buildPages){
- const records=legendConnections(project,pages,type),changes={};
+ const records=legendConnections(project,pages,type),changes={},widthChanged=Object.hasOwn(style,'weight');
  for(const key of ['media','speed'])if(Object.hasOwn(details,key))changes[key]=cleanConnectionDetails({[key]:details[key]})[key];
  const changed=records.filter(({link})=>Object.entries(changes).some(([key,value])=>value!==String(link[key]??(key==='media'?'unknown':''))));
  let next={...project,devices:project.devices.slice(),links:project.links.slice(),layout:{...project.layout,drawingEdits:cleanDrawingEdits({...project.layout?.drawingEdits,...extraEdits})}};
@@ -31,17 +32,16 @@ export function changeLegendConnections(project,pages,type,details,style,extraEd
   for(const label of pages.find(page=>page.name===name)?.items||[])if(label.labelRole==='media'&&label.linkId===item.linkId&&edits[label.editKey]){const patch={...edits[label.editKey]};delete patch.value;edits[label.editKey]=patch;}
  }
  const types=[...new Set(records.map(({link})=>typeOf(next,{...link,...changes})))];
- for(const target of types){const value={...project.layout?.linkStyles?.[type],...style,showSpeed:true};for(const key of ['title','lineTitle'])if(value[key]===type)value[key]=target;next.layout={...next.layout,...changeLinkStyle(next,pages,target,value)};}
- const rebuilt=build(next),migrated=next.layout.drawingEdits;
+ for(const target of types){const value={...project.layout?.linkStyles?.[type],...style,showSpeed:true};for(const key of ['title','lineTitle'])if(value[key]===type)value[key]=target;next.layout={...next.layout,...changeLinkStyle(next,pages,target,value,{applyWeight:widthChanged,migrate:false})};}
+ let rebuilt=build(next),widthGroupsChanged=false;const migrated=next.layout.drawingEdits;
  for(const page of rebuilt)for(const path of page.items.filter(item=>item.type==='path')){
   const old=oldPaths.find(old=>old.page===page.name&&sameConnection(old.item.sourceLink,path.sourceLink));if(!old)continue;
-  if(old.patch){const patch={...old.patch};delete patch.color;delete patch.opacity;migrated[path.editKey]=patch;}
+  if(old.patch){const patch={...old.patch};delete patch.color;delete patch.opacity;if(widthChanged)delete patch.weight;else if(patch.weight&&Math.abs(unpresentPatch(path,{weight:path.weight}).weight-patch.weight)>1e-8)widthGroupsChanged=true;migrated[path.editKey]=patch;}
  }
- // Preserve moved legend samples/text when their cable type changes identity.
- for(const page of pages)for(const old of page.items.filter(item=>item.legendEntry&&item.linkType===type)){
-  const patch=edits[old.editKey];if(!patch)continue;
-  const part=old.editKey.slice(old.editKey.lastIndexOf('|'));
-  for(const target of rebuilt.find(p=>p.name===page.name)?.items||[])if(target.legendEntry&&types.includes(target.linkType)&&target.type===old.type&&!!target.legendDescription===!!old.legendDescription&&target.editKey.endsWith(part)&&!migrated[target.editKey])migrated[target.editKey]={...patch};
- }
+ // A restored per-line width can recreate a distinct legend row. Migrate
+ // against that accepted identity, not the temporary default-width rebuild.
+ if(widthGroupsChanged)rebuilt=build(next);
+ let legendEdits=migrateLegendEdits(pages,rebuilt,migrated,type,types,{widthChanged});for(const target of types)if(target!==type)legendEdits=migrateLegendEdits(pages,rebuilt,legendEdits,target,[target],{widthChanged});
+ next.layout.drawingEdits=legendEdits;
  return next;
 }

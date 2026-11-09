@@ -6,7 +6,7 @@ import {coreSidebar} from './sidebar.mjs';
 import {deviceFaceplate} from './faceplate.mjs';
 import {editDeviceShape} from '../drawing-edits.mjs';
 import {simplifyRoute,ROUTE_STYLE} from './routing.mjs';
-import {linkDefaults,legendStyleId,cleanLinkStyles} from '../link-styles.mjs';
+import {linkDefaults,legendEntryId,defaultLinkWeight,cleanLinkStyles} from '../link-styles.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {connectionMediaInfo} from '../connection-types.mjs';
 import {genericDeviceSymbol} from '../device-symbols.mjs';
@@ -15,7 +15,7 @@ export const W = 1200, H = 975;
 export const C = {ink:'#16364A',muted:'#536779',teal:'#166574',rule:'#CEDCE0',pale:'#F0F5F6',white:'#FFFFFF',up:'#D8F0DE',down:'#E2E7EA',amber:'#805400'};
 export const xml = s => String(s ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
 export const round = n => Math.round(n*1e5)/1e5;
-export const cableWeight = 4;
+export const cableWeight = defaultLinkWeight;
 export function rect(box,x,y,w,h,fill,stroke='none',weight=1){box.push({type:'rect',x,y,w,h,fill,stroke,weight});}
 export function label(box,x,y,w,h,value,size=15,bold=false,color=C.ink,align='left'){
   box.push({type:'text',x,y,w,h,value:String(value ?? ''),size,bold,color,align});
@@ -53,7 +53,7 @@ export function linkLegend(page){
   const side=page.sidebar||coreSidebar(),s=side.scale,tf=side.textScale||1,textX=38+64*s,textSpan=side.width-64*s-4,size=Math.max(12,14*s)*tf,detailSize=Math.max(11,12*s)*tf,lineHeight=Math.max(size*1.25,18*s),detailHeight=Math.max(detailSize*1.25,15*s);
   label(page.items,38,147,side.width,26*s*tf,'CONNECTION TYPES',16*s*tf,true,C.teal);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});let y=147+51*s*tf;
   const rank=name=>({Copper:0,'AP copper':1,'SR fiber':2,DAC:3,'LR fiber':4})[name]??5;
-  for(const {name,color,opacity,weight,style,speeds} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight),title=titleOf({name,style,speeds,opacity}),lines=wrapPortText(title,textSpan,size),description=style?.description?wrapPortText(style.description,textSpan,detailSize):[];
+  for(const {name,color,opacity,weight,style,speeds} of values.slice().sort((a,b)=>rank(a.name)-rank(b.name))){const id=legendEntryId(name,color,opacity,!!style,weight),title=titleOf({name,style,speeds,opacity}),lines=wrapPortText(title,textSpan,size),description=style?.description?wrapPortText(style.description,textSpan,detailSize):[];
    rect(page.items,38,y+11*s,52*s,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
    lines.forEach((text,n)=>{label(page.items,textX,y+n*lineHeight,textSpan,lineHeight,text,size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
    description.forEach((text,n)=>{label(page.items,textX,y+lines.length*lineHeight+n*detailHeight,textSpan,detailHeight,text,detailSize,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});y+=Math.max(44*s,lines.length*lineHeight+description.length*detailHeight+12*s);
@@ -63,7 +63,7 @@ export function linkLegend(page){
  const entriesWithText=values.map(entry=>({...entry,lines:wrapPortText(titleOf(entry),width,size),description:entry.style?.description?wrapPortText(entry.style.description,width,11):[]}));
  for(let i=0;i<entriesWithText.length;i+=cols)rows.push(Math.max(...entriesWithText.slice(i,i+cols).map(e=>Math.max(22,e.lines.length*15+e.description.length*14+5))));
  label(page.items,38,148,(page.width||W)-80,15,'LINK COLORS',11,true,C.muted);Object.assign(page.items.at(-1),{editKey:scope+'|legend|heading',full:true});
- entriesWithText.forEach(({name,color,opacity,weight,style,lines,description},i)=>{const x=38+(i%cols)*span/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendStyleId(name,color,opacity,!!style)+(weight===cableWeight?'':'|weight|'+weight);
+ entriesWithText.forEach(({name,color,opacity,weight,style,lines,description},i)=>{const x=38+(i%cols)*span/cols,y=167+rows.slice(0,Math.floor(i/cols)).reduce((a,b)=>a+b,0),id=legendEntryId(name,color,opacity,!!style,weight);
   rect(page.items,x,y+6,22,weight,color);Object.assign(page.items.at(-1),{opacity,sampleWeight:weight,name:name+' color key',legendEntry:true,linkType:name,editKey:scope+'|legend|'+id+'|swatch'});
   lines.forEach((text,n)=>{label(page.items,x+30,y+n*15,width,15,text,size,false,C.ink);Object.assign(page.items.at(-1),{legendEntry:true,linkType:name,legendFullText:style?.title||name,editKey:scope+'|legend|'+id+'|text'+(n?'|wrap'+n:''),full:true});});
   description.forEach((text,n)=>{label(page.items,x+30,y+lines.length*15+n*14,width,14,text,11,false,C.muted);Object.assign(page.items.at(-1),{legendEntry:true,legendDescription:true,legendFullText:style.description,linkType:name,editKey:scope+'|legend|'+id+'|description'+(n?'|wrap'+n:''),full:true});});
@@ -385,10 +385,49 @@ function svgText(i){
   const background=i.background?'<rect x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+xml(i.background)+'"'+rotation+' pointer-events="none"/>':'';
   return background+'<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
 }
+// Retain one complete path for drawing and hit testing. The jump clearance is
+// cut out of other cables only, so device artwork remains visible underneath.
+function svgCableGeometry(item){
+  let last=null;const hops=[],segments=[],weight=item.weight||cableWeight;
+  const bounds=(points,pad)=>{const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);return {x:Math.min(...xs)-pad,y:Math.min(...ys)-pad,w:Math.max(...xs)-Math.min(...xs)+2*pad,h:Math.max(...ys)-Math.min(...ys)+2*pad};};
+  const path=item.commands.map(cmd=>{
+    const [t,x,y,ex,ey]=cmd;
+    if(t==='A'){
+      const dx=ex-last[0],dy=ey-last[1],rx=Math.hypot(dx,dy)/2,ry=Math.hypot(x-(last[0]+ex)/2,y-(last[1]+ey)/2);
+      const sweep=dx*(y-last[1])-dy*(x-last[0])<0?1:0,vertical=Math.abs(dy)>Math.abs(dx);
+      // SVG radii follow the page axes: a vertical cable's bridge is tall.
+      const arc='A '+round(vertical?ry:rx)+' '+round(vertical?rx:ry)+' 0 0 '+sweep+' '+round(ex)+' '+round(ey),points=[last,[x,y],[ex,ey]];
+      hops.push({d:'M '+last.map(round).join(' ')+' '+arc,bounds:bounds(points,(weight+3.5)/2)});segments.push(bounds(points,weight/2));last=[ex,ey];return arc;
+    }
+    if(t==='L'&&last)segments.push(bounds([last,[x,y]],weight/2));last=[x,y];return t+' '+round(x)+' '+round(y);
+  }).join(' ');
+  return {path,hops,segments,weight};
+}
+function svgCableMasks(page,geometries){
+  const visible=[...geometries].filter(([item])=>(item.opacity??1)>0),hops=visible.flatMap(([item,g])=>g.hops.map(hop=>({...hop,item,weight:g.weight})));
+  if(!hops.length)return {defs:'',masks:new Map()};
+  // IDs must be stable for cached renders but different for different scenes
+  // placed together by Print/PDF or the current/proposed layout comparison.
+  let a=2166136261,b=5381;const signature=JSON.stringify([page.originX||0,page.originY||0,page.width||1200,page.height||975,visible.map(([,g])=>[g.path,g.weight])]);
+  for(let n=0;n<signature.length;n++){const c=signature.charCodeAt(n);a=Math.imul(a^c,16777619);b=Math.imul(b,33)^c;}
+  const prefix='nds-hops-'+(a>>>0).toString(36)+'-'+(b>>>0).toString(36);
+  const overlap=(a,b)=>a.x<=b.x+b.w&&a.x+a.w>=b.x&&a.y<=b.y+b.h&&a.y+a.h>=b.y,masks=new Map(),definitions=[];
+  hops.forEach((hop,n)=>{hop.id=prefix+'-arc-'+n;definitions.push('<path id="'+hop.id+'" class="link-hop-clearance" d="'+hop.d+'" fill="none" stroke="#000000" stroke-width="'+(hop.weight+3.5)+'" pointer-events="none" aria-hidden="true"/>');});
+  visible.forEach(([item,g],n)=>{
+    const cutters=hops.filter(hop=>hop.item!==item&&g.segments.some(segment=>overlap(segment,hop.bounds)));if(!cutters.length)return;
+    const id=prefix+'-cable-'+n;masks.set(item,id);
+    // Bound each mask to its cable, not the full dynamic sheet. This avoids
+    // allocating a page-sized masking surface for every crossed connection.
+    const x=Math.min(...g.segments.map(s=>s.x))-2,y=Math.min(...g.segments.map(s=>s.y))-2,w=Math.max(...g.segments.map(s=>s.x+s.w))-x+2,h=Math.max(...g.segments.map(s=>s.y+s.h))-y+2,extent=' x="'+round(x)+'" y="'+round(y)+'" width="'+round(w)+'" height="'+round(h)+'"';
+    definitions.push('<mask id="'+id+'" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse"'+extent+' style="mask-type:luminance"><rect'+extent+' fill="#FFFFFF"/>'+cutters.map(hop=>'<use href="#'+hop.id+'"/>').join('')+'</mask>');
+  });
+  return {defs:'<defs>'+definitions.join('')+'</defs>',masks};
+}
 export function svgPage(p){
   const W=p.width||1200,H=p.height||975;
+  const geometries=new Map(p.items.filter(i=>i.type==='path').map(i=>[i,svgCableGeometry(i)])),{defs,masks}=svgCableMasks(p,geometries);
   const draw=(i)=>{
-    if(i.type==='rect')return '<rect'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></rect>':'/>');
+    if(i.type==='rect')return '<rect'+(i.legendEntry?' class="diagram-legend-line" data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></rect>':'/>');
     if(i.type==='ellipse')return '<ellipse'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' cx="'+round(i.x+i.w/2)+'" cy="'+round(i.y+i.h/2)+'" rx="'+round(i.w/2)+'" ry="'+round(i.h/2)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></ellipse>':'/>');
     if(i.type==='vector')return '<path'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+i.commands.map(([op,x,y])=>op==='Z'?'Z':op+' '+round(x)+' '+round(y)).join(' ')+'" fill="'+(i.fill||'none')+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+(i.stroke||'none')+'" stroke-width="'+(i.weight||1)+'"'+(i.name?'><title>'+xml(i.name)+'</title></path>':'/>');
     if(i.type==='text')return svgText(i);
@@ -397,20 +436,8 @@ export function svgPage(p){
       const artwork=a?.native?a.native.paths.filter(p=>!p.hidden).map((p,n)=>'<path data-drawing-key="'+xml(i.editKey+'|vector|'+n)+'" d="'+p.commands.map(([op,x,y])=>op==='Z'?'Z':op+' '+round(i.x+x*i.w)+' '+round(i.y+y*i.h)).join(' ')+'" fill="'+xml(p.fill)+'" stroke="'+xml(p.stroke)+'" stroke-width="'+round(p.weight*i.w)+'"/>').join('')+a.native.texts.filter(t=>!t.hidden).map((t,n)=>svgText({x:i.x+t.x*i.w-t.w*i.w/2,y:i.y+t.y*i.h-t.size*i.w*.7,w:t.w*i.w,h:t.size*i.w*1.4,size:t.size*i.w,value:t.text,color:t.color,bold:t.bold||false,align:t.align||'center',angle:t.angle,full:true,editKey:i.editKey+'|arttext|'+n})).join(''):a?'<image x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" href="'+a.dataUrl+'"/>':child;
       return '<g'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.sourceId?' data-device-id="'+xml(i.sourceId)+'" tabindex="0" role="button" aria-label="Find stencil for '+xml(i.name)+'"':'')+'><title>'+xml(i.name+(i.fallback&&i.kind!=='plug'?' (schematic)':''))+'</title>'+artwork+'</g>';
     }
-    // Convert three-point jumps to precise SVG arcs: a semicircle for one
-    // crossing, a flatter half-ellipse when one bridge spans several.
-    let last=null;const hopPaths=[];
-    const path=i.commands.map(cmd=>{
-      const [t,x,y,ex,ey]=cmd;
-      if(t==='A'){
-        const dx=ex-last[0],dy=ey-last[1],rx=Math.hypot(dx,dy)/2,ry=Math.hypot(x-(last[0]+ex)/2,y-(last[1]+ey)/2);
-        const sweep=dx*(y-last[1])-dy*(x-last[0])<0?1:0;
-        // SVG radii follow the page axes: a vertical cable's bridge is tall.
-        const vertical=Math.abs(dy)>Math.abs(dx),arc='A '+round(vertical?ry:rx)+' '+round(vertical?rx:ry)+' 0 0 '+sweep+' '+round(ex)+' '+round(ey);hopPaths.push('M '+last.map(round).join(' ')+' '+arc);last=[ex,ey];return arc;
-      }
-      last=[x,y];return t+' '+round(x)+' '+round(y);
-    }).join(' ');
-    return ((i.opacity??1)>0?hopPaths:[]).map(d=>'<path class="link-hop-clearance" d="'+d+'" fill="none" stroke="#FFFFFF" stroke-width="'+((i.weight||cableWeight)+3.5)+'" pointer-events="none" aria-hidden="true"/>').join('')+'<path class="diagram-cable"'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+(i.weight||cableWeight)+'" stroke-linejoin="round"><title>'+xml(i.name)+'</title></path>';
+    const {path,weight}=geometries.get(i)||svgCableGeometry(i),mask=masks.get(i);
+    return '<path class="diagram-cable"'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+weight+'" stroke-linejoin="round"'+(mask?' mask="url(#'+mask+')"':'')+'><title>'+xml(i.name)+'</title></path>';
   };
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title><rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title>'+defs+'<rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
 }

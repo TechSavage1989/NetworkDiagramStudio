@@ -10,7 +10,7 @@ import {coreSidebar} from './sidebar.mjs';
 import {coreRoutes,ROUTE_STYLE} from './routing.mjs';
 import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth} from './labels.mjs';
 import {applyDrawingEdits,editDeviceShape} from '../drawing-edits.mjs';
-import {linkCaption} from '../link-styles.mjs';
+import {linkCaption,hasLineCaption,linkWeight} from '../link-styles.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {C,addDevice,bridge,cableWeight,displayPortCaption,fresh,getAnchor,label,linkLegend,mediaInfo,optic,physicalPorts,portList,rate,rect,route} from './scene.mjs';
@@ -69,6 +69,7 @@ function cablePatch(project,page,name){
  let hash=0;for(const c of JSON.stringify([name.replace(/^L\d+ /,'')]))hash=Math.imul(hash,31)+c.charCodeAt(0)|0;
  return project.layout?.drawingEdits?.[page.name+'|path|'+hash+'|0'];
 }
+function cableStrokeWeight(project,page,db,edge){const type=mediaInfo(edge.media,db.devices.get(edge.a)?.kind==='ap'||db.devices.get(edge.b)?.kind==='ap').name;return linkWeight(project,type,cablePatch(project,page,cableName(db,edge))?.weight);}
 function captionReserve(project,sheet,edges,db){
  const font=12*presentation(project,sheet.name).textScale,counts=new Map();let pitch=12;
  for(const edge of edges){
@@ -76,7 +77,7 @@ function captionReserve(project,sheet,edges,db){
   for(const id of [edge.a,edge.b])if(sheet.ids.includes(id))counts.set(id,(counts.get(id)||0)+1);
   const info=mediaInfo(edge.media,db.devices.get(edge.a)?.kind==='ap'||db.devices.get(edge.b)?.kind==='ap');
   // Without cable captions only the one-line port names need room.
-  const lines=cableCaptions(project)?linkCaption(project,info.name,rate(edge.speed)).filter(Boolean).reduce((n,text)=>n+wrapPortText(text,180,font,true).length,0):1;
+  const lines=cableCaptions(project)||hasLineCaption(project,info.name)?linkCaption(project,info.name,rate(edge.speed)).filter(Boolean).reduce((n,text)=>n+wrapPortText(text,180,font,true).length,0):1;
   pitch=Math.max(pitch,lines*(font+4)+12);
  }
  return Math.max(0,20+(Math.max(1,...counts.values())-1)*pitch-124);
@@ -87,7 +88,7 @@ const TOP=164,BOTTOM=901,LEFT=430,WIDTH=700;
 // labels trapped between parallel cables; tighter padding recovers unused space.
 const FITS=[244,208,176].flatMap(sidebarWidth=>[1,.85,.7].flatMap(padding=>[12,60].map(railPitch=>({padding,railPitch,sidebarWidth}))));
 const spacing=(padding,weight=4,wide=false)=>({pitch:Math.max(wide?24:10,weight+3)*padding,topClearance:Math.max((wide?38:28)+(wide?12:8)*padding,weight/2+4),bottomClearance:Math.max((wide?14:10)+4*padding,weight/2+4)});
-const strokeWidth=(project,page)=>Math.max(cableWeight,...Object.entries(project.layout?.drawingEdits||{}).filter(([key,patch])=>key.startsWith(page+'|path|')&&Number.isFinite(patch.weight)).map(([,patch])=>patch.weight));
+const strokeWidth=(project,page,db,edges)=>Math.max(cableWeight,...edges.map(edge=>cableStrokeWeight(project,{name:page},db,edge)),...Object.entries(project.layout?.drawingEdits||{}).filter(([key,patch])=>key.startsWith(page+'|path|')&&Number.isFinite(patch.weight)).map(([,patch])=>patch.weight));
 function handoffs(db,suppressed=[]){
  const devices=new Map(),links=[...db.links];
  let nextIndex=db.links.reduce((max,link)=>Math.max(max,link.idx),-1)+1;
@@ -263,8 +264,8 @@ export function corePages(project,inventory){
   // both route spacing and horizontal room when a measured caption needs it.
   const stableReserve=dynamic?Math.max(Math.max(0,edges.length-8)*24,captionReserve(aliasProject,sheet,edges,db)):0;
   const railReserve=Math.max(stableReserve,Math.max(0,edges.length-8)*24+Math.max(0,edges.length-1)*(railPitch-12));
-  const weight=strokeWidth(aliasProject,sheet.name),owners=sheet.ids.filter(id=>!db.devices.get(id).owner||!sheet.ids.includes(db.devices.get(id).owner)),hasPositions=Object.entries(aliasProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|device|')&&(Number.isFinite(patch.x)||Number.isFinite(patch.y)));
-  const measuredEdges=edges.map(e=>({...e,weight:cablePatch(aliasProject,{name:sheet.name},cableName(db,e))?.weight||cableWeight}));
+  const weight=strokeWidth(aliasProject,sheet.name,db,edges.filter(e=>sheet.ids.includes(e.a)||sheet.ids.includes(e.b))),owners=sheet.ids.filter(id=>!db.devices.get(id).owner||!sheet.ids.includes(db.devices.get(id).owner)),hasPositions=Object.entries(aliasProject.layout?.drawingEdits||{}).some(([key,patch])=>key.startsWith(sheet.name+'|device|')&&(Number.isFinite(patch.x)||Number.isFinite(patch.y)));
+  const measuredEdges=edges.map(e=>({...e,weight:cableStrokeWeight(aliasProject,{name:sheet.name},db,e)}));
   const measured=new Map(dynamic?owners.map(id=>[id,measure(aliasProject,viewDevice(sheet,id),measuredEdges.filter(e=>e.a===id||e.b===id),(attachments.get(id)||[]).filter(v=>sheet.ids.includes(v)).map(v=>db.devices.get(v)),WIDTH,1,weight,railPitch>12)]):[]);
   const arrangement=sheet.columnOnly?'vertical':sheet.arrangement||coreArrangement(aliasProject,sheet.corePageId);
   // Several columns leave only the first column's exterior rails, and any
@@ -337,7 +338,7 @@ export function corePages(project,inventory){
    const node=nodes.get(id),info=mediaInfo(e.media,db.devices.get(e.a).kind==='ap'||db.devices.get(e.b).kind==='ap');
    const peer=nodes.get(other),preferred=peer?(peer.y+peer.h/2<node.y+node.h/2?'top':'bottom'):positions.get(other)<positions.get(id)?'top':'bottom';
    const peerPort=which==='a'?e.bp:e.ap,peerPoint=peer&&Object.entries(peer.ports).find(([name])=>name.toLowerCase()===String(peerPort).toLowerCase())?.[1];
-   const weight=cablePatch(pageProject,page,cableName(db,e))?.weight||cableWeight,anchorOptions={weight,...(peer?{peer:{x:peer.x+(peerPoint?.[0]??.5)*peer.w,y:peer.y+(peerPoint?.[1]??.5)*peer.h}}:{})};
+   const weight=cableStrokeWeight(pageProject,page,db,e),anchorOptions={weight,...(peer?{peer:{x:peer.x+(peerPoint?.[0]??.5)*peer.w,y:peer.y+(peerPoint?.[1]??.5)*peer.h}}:{})};
    let anchor=getAnchor(node,port,preferred,e.idx*2+(which==='b'?1:0),anchorOptions);
    if(node.kind==='ap'){
     const k='uplink.core.'+which+e.idx,side=preferred;node.ports[k]=[.5,side==='top'?0:1];anchor=getAnchor(node,k,side,0,anchorOptions);
@@ -362,7 +363,7 @@ export function corePages(project,inventory){
    const y=(a.ay+b.ay)/2,text=linkCaption(project,a.info.name,rate(e.speed));
    const horizontal=r.points.slice(1).map((p,i)=>[r.points[i],p]).filter(([a,b])=>a[1]===b[1]).sort((a,b)=>Math.abs(b[1][0]-b[0][0])-Math.abs(a[1][0]-a[0][0]))[0];
    const mediaKey=page.name+'|media|'+linkKey(e);
-   if(cableCaptions(pageProject)||Object.keys(pageProject.layout?.drawingEdits||{}).some(key=>key.startsWith(mediaKey+'|')))requests.push({role:'media',editKey:mediaKey,linkId:e.idx,value:text,y,side:r.side,outer:outer[r.side],...(r.points.length<=4?horizontal?{segment:horizontal}:{near:{x:r.points[0][0]+9,y:(r.points[0][1]+r.points.at(-1)[1])/2}}:{}),color:a.info.color==='#FFD965'?C.ink:a.info.color});
+   if(cableCaptions(pageProject)||hasLineCaption(pageProject,a.info.name)||Object.keys(pageProject.layout?.drawingEdits||{}).some(key=>key.startsWith(mediaKey+'|')))requests.push({role:'media',editKey:mediaKey,linkId:e.idx,value:text,y,side:r.side,outer:outer[r.side],...(r.points.length<=4?horizontal?{segment:horizontal}:{near:{x:r.points[0][0]+9,y:(r.points[0][1]+r.points.at(-1)[1])/2}}:{}),color:a.info.color==='#FFD965'?C.ink:a.info.color});
   }
   // Every tag on a page shares one width, so the column reads as a list.
   const tags=planned.references.map(r=>{const remote=r.which==='a'?r.e.b:r.e.a,destination=edgeLocations.get(remote+'/'+r.e.idx)||locations.get(remote)||'Core Network';return {r,destination,...referenceTag(project,db,r.e,r.which,destination)};});

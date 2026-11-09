@@ -7,14 +7,14 @@ export function toHSL(hex){const [h,s,v]=toHSV(hex),l=v*(1-s/2);return [h,l===0|
 export function hslHex(h,s,l){const v=l+s*Math.min(l,1-l);return hsvHex(h,v?2*(1-l/v):0,v);}
 // Keep everyday color choices visible without expanding the properties dialog.
 const defaults=[['Red','#FF0000'],['Blue','#00B0F0'],['Black','#000000'],['Yellow','#FFD965'],['Green','#00B050'],['Grey','#707A83'],['Teal','#006775'],['Navy','#17364A'],['Purple','#815AC0'],['Orange','#ED7D31'],['White','#FFFFFF']];
-export function colorPicker(parent,{color='#17364A',opacity=1,kind='line'}={}){
+export function colorPicker(parent,{color='#17364A',opacity=1,width=4,kind='line'}={}){
  const textMode=kind==='text';
  const make=(tag,attrs={},text='',where=parent)=>{const n=document.createElement(tag);for(const [k,v] of Object.entries(attrs)){if(k==='class')n.className=v;else n.setAttribute(k,String(v));}n.textContent=text;where.append(n);return n;};
  const root=make('fieldset',{class:'color-picker'});make('legend',{},textMode?'Text color':'Line color',root);
- let value=parseHex(color)||'#17364A',alpha=Number.isFinite(opacity)?Math.max(0,Math.min(1,opacity)):1;
+ let value=parseHex(color)||'#17364A',alpha=Number.isFinite(opacity)?Math.max(0,Math.min(1,opacity)):1,lineWidth=Number.isFinite(width)&&width>0?width:4;
  const row=make('div',{class:'color-choice-row'},'',root),custom=make('label',{class:'color-choice'},'Choose color',row),native=make('input',{type:'color','aria-label':'Color selector'},'',custom);
  const hexWrap=make('label',{class:'color-hex'},'HEX',row),hex=make('input',{type:'text','aria-label':'HEX',maxlength:7,spellcheck:'false',autocomplete:'off'},'',hexWrap);
- const preview=make('div',{class:'line-preview'},'',row),sample=document.createElementNS('http://www.w3.org/2000/svg','svg');sample.setAttribute('viewBox','0 0 140 40');sample.setAttribute('aria-label',textMode?'Selected text color':'Selected line color');preview.append(sample);sample.innerHTML=textMode?'<text x="14" y="29" font-family="Arial" font-size="23">Aa Bb</text>':'<path d="M 12 28 V 12 H 128" fill="none" stroke-width="4" stroke-linejoin="round"/>';
+ const preview=make('div',{class:'line-preview'},'',row),sample=document.createElementNS('http://www.w3.org/2000/svg','svg');sample.setAttribute('viewBox','0 0 140 40');sample.setAttribute('role','img');preview.append(sample);sample.innerHTML=textMode?'<text x="14" y="29" font-family="Arial" font-size="23">Aa Bb</text>':'<path d="M 12 28 V 12 H 128" fill="none" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>';
  const swatches=make('div',{class:'color-swatches','aria-label':'Standard colors'},'',root);make('p',{class:'color-caption'},'Standard colors',swatches);
  for(const [name,c] of defaults){const b=make('button',{type:'button',class:'color-swatch',title:name+' '+c,'aria-label':'Use '+name+' '+c},'',swatches);b.style.setProperty('--swatch',c);b.onclick=()=>set(c);}
  let opacityRange=null,opacityNumber=null;
@@ -25,9 +25,14 @@ export function colorPicker(parent,{color='#17364A',opacity=1,kind='line'}={}){
  native.oninput=()=>set(native.value);
  hex.oninput=()=>{const c=parseHex(hex.value);hex.setAttribute('aria-invalid',String(!c));error.textContent=c?'':'Enter a 3-digit or 6-digit HEX color.';if(c)set(c,hex);};
  function set(c,source){const next=parseHex(c);if(!next)return;error.textContent='';value=next;sync(source);}
- function sync(source){native.value=value;if(source!==hex){hex.value=value;hex.setAttribute('aria-invalid','false');}if(opacityRange&&source!==opacityRange)opacityRange.value=Math.round(alpha*100);if(opacityNumber&&source!==opacityNumber)opacityNumber.value=Math.round(alpha*100);const item=sample.querySelector(textMode?'text':'path');item.setAttribute(textMode?'fill':'stroke',value);item.setAttribute(textMode?'fill-opacity':'stroke-opacity',textMode?1:alpha);for(const b of root.querySelectorAll('.color-swatch'))b.setAttribute('aria-pressed',String(parseHex(b.style.getPropertyValue('--swatch'))===value));}
+ // Keep thickness in CSS pixels at 100%, independent of the responsive
+ // preview's viewBox scaling. Color and opacity use the same painted sample.
+ function updatePreview(){const item=sample.querySelector(textMode?'text':'path');item.setAttribute(textMode?'fill':'stroke',value);item.setAttribute(textMode?'fill-opacity':'stroke-opacity',textMode?1:alpha);if(!textMode)item.setAttribute('stroke-width',String(lineWidth));const label=textMode?'Selected text color':'Line preview at 100%: '+lineWidth+' px';sample.setAttribute('aria-label',label);preview.title=label;}
+ function setWidth(next){if(!Number.isFinite(next)||next<=0)throw Error('Line width must be a positive number.');lineWidth=next;updatePreview();}
+ function bindWidth(input){const update=()=>{const text=input.value.trim(),next=Number(text);if(text&&Number.isFinite(next)&&next>0)setWidth(next);};input.addEventListener('input',update);input.addEventListener('change',update);update();return ()=>{input.removeEventListener('input',update);input.removeEventListener('change',update);};}
+ function sync(source){native.value=value;if(source!==hex){hex.value=value;hex.setAttribute('aria-invalid','false');}if(opacityRange&&source!==opacityRange)opacityRange.value=Math.round(alpha*100);if(opacityNumber&&source!==opacityNumber)opacityNumber.value=Math.round(alpha*100);updatePreview();for(const b of root.querySelectorAll('.color-swatch'))b.setAttribute('aria-pressed',String(parseHex(b.style.getPropertyValue('--swatch'))===value));}
  sync();
- return {get value(){if(!parseHex(hex.value))throw Error('Enter a valid HEX color.');if(opacityNumber&&(opacityNumber.value===''||!Number.isFinite(+opacityNumber.value)||+opacityNumber.value<0||+opacityNumber.value>100))throw Error('Opacity must be between 0 and 100.');return value;},set value(next){if(!parseHex(next))throw Error('Enter a valid HEX color.');set(next);},get opacity(){return alpha;},set opacity(next){if(!Number.isFinite(next)||next<0||next>1)throw Error('Opacity must be between 0 and 1.');alpha=next;error.textContent='';sync();},remember(){}};
+ return {get value(){if(!parseHex(hex.value))throw Error('Enter a valid HEX color.');if(opacityNumber&&(opacityNumber.value===''||!Number.isFinite(+opacityNumber.value)||+opacityNumber.value<0||+opacityNumber.value>100))throw Error('Opacity must be between 0 and 100.');return value;},set value(next){if(!parseHex(next))throw Error('Enter a valid HEX color.');set(next);},get opacity(){return alpha;},set opacity(next){if(!Number.isFinite(next)||next<0||next>1)throw Error('Opacity must be between 0 and 1.');alpha=next;error.textContent='';sync();},get width(){return lineWidth;},set width(next){setWidth(next);},bindWidth,remember(){}};
 }
 
 export const lineColorPicker=colorPicker;
