@@ -403,36 +403,30 @@ function layoutOptions(selected=pages[active]?.name){
 $('page-layout').onclick=()=>task(()=>layoutOptions());
 function pageOptions(){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
- body.append(el('p','Dynamic / Fit all grows each drawing page around its contents. All devices assigned to a core page stay together at a readable size. Choose paper separately when printing.','hint'));
- const target=field(body,'Drawing page type','default',[['default','All page types (default)'],...pageFamilies]),paperRow=el('div','','form-columns');body.append(paperRow);
- const preset=field(paperRow,'Canvas size','dynamic',[['dynamic','Dynamic / Fit all (default)'],...paperSizes.map(([id,title])=>[id,title])]),orientation=field(paperRow,'Orientation','landscape',[['landscape','Landscape'],['portrait','Portrait']]);
- const custom=el('div','','form-columns');body.append(custom);const width=field(custom,'Width (mm)',297),height=field(custom,'Height (mm)',420);for(const input of [width,height]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
- const preview=el('p','','page-size-preview');body.append(preview);let selected='default';
- function store(){const value=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});if(selected==='default')setup.default=value;else setup.overrides[selected]=value;}
- function update(){custom.hidden=preset.value!=='custom';orientation.disabled=preset.value==='dynamic';const paper=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value}),g=pageGeometry({layout:{pageSetup:{default:paper}}});preview.textContent=paper.preset==='dynamic'?'Fits all objects on each page automatically. No fixed paper boundary or device-count limit.':g.widthMm.toFixed(1)+' × '+g.heightMm.toFixed(1)+' mm. Devices fit at a consistent scale; readable text and automatic continuation pages are preserved.';}
- function load(){const value=selected==='default'?setup.default:setup.overrides[selected]||setup.default;preset.value=value.preset;orientation.value=value.orientation;width.value=value.widthMm;height.value=value.heightMm;update();}
- for(const input of [preset,orientation,width,height])input.oninput=update;
- target.onchange=()=>{store();selected=target.value;load();};load();
- const reset=button(body,'Use drawing default for all page types',()=>{setup.overrides={};selected='default';target.value='default';load();});reset.classList.add('paper-reset');
- body.append(el('p','Drawing overrides: '+(Object.keys(setup.overrides).map(key=>pageFamilies.find(p=>p[0]===key)?.[1]).join(', ')||'None')+'. Custom dimensions may be 148 to 1500 mm. Existing manual object sizing and positions are retained.','hint'));
- const printSection=el('details');printSection.open=true;printSection.append(el('summary','Printing'));body.append(printSection);
- const printSize=field(printSection,'Print paper',setup.printPaper?.preset||'drawing',[['drawing','Match drawing (full-size PDF)'],...paperSizes]),printOrientation=field(printSection,'Print orientation',setup.printPaper?.orientation||'landscape',[['landscape','Landscape'],['portrait','Portrait']]);
- const printCustom=el('div','','form-columns');printSection.append(printCustom);const printWidth=field(printCustom,'Print width (mm)',setup.printPaper?.widthMm||297),printHeight=field(printCustom,'Print height (mm)',setup.printPaper?.heightMm||420);
+ body.append(el('p','Print paper changes only the output proportions. The drawing, equipment positions, port maps and number of logical pages remain unchanged. Each full drawing is fitted onto its selected printed sheet without cropping.','hint'));
+ const printSection=el('section');body.append(printSection);
+ const printSize=field(printSection,'Print paper',setup.printPaper?.preset||'drawing',[['drawing','Original drawing / full-size PDF'],...paperSizes.filter(([id])=>id!=='original')]);
+ const printOrientation=field(printSection,'Print orientation',setup.printPaper?.orientation||'landscape',[['landscape','Landscape'],['portrait','Portrait']]);
+ const printCustom=el('div','','form-columns');printSection.append(printCustom);
+ const printWidth=field(printCustom,'Print width (mm)',setup.printPaper?.widthMm||297),printHeight=field(printCustom,'Print height (mm)',setup.printPaper?.heightMm||420);
  for(const input of [printWidth,printHeight]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
- function updatePrint(){printCustom.hidden=printSize.value!=='custom';printOrientation.disabled=printSize.value==='drawing';}printSize.onchange=updatePrint;updatePrint();
- printSection.append(el('p','Paper sizes scale each complete drawing page to one printed sheet. The editable canvas and device sizes stay unchanged. For large drawings, use a full-size PDF to retain detail.','hint'));
+ function updatePrint(){printCustom.hidden=printSize.value!=='custom';printOrientation.disabled=printSize.value==='drawing';}
+ printSize.onchange=updatePrint;updatePrint();
+ printSection.append(el('p','Paper presets set the printed sheet and its aspect ratio, not the size of the editable network diagram. Large drawings may be smaller on paper; use original-size PDF for maximum detail.','hint'));
  const numbering=el('details');numbering.append(el('summary','Page numbering'));body.append(numbering);
  const row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));numbering.append(row);
- const numberRow=el('div','','form-columns');numbering.append(numberRow);const start=field(numberRow,'First page number',p.start),pad=field(numberRow,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(numbering,'Page number format',p.format);start.type='number';start.min=0;start.max=9999;start.step=1;format.maxLength=100;
+ const numberRow=el('div','','form-columns');numbering.append(numberRow);
+ const first=field(numberRow,'First page number',p.start),pad=field(numberRow,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(numbering,'Page number format',p.format);
+ first.type='number';first.min=0;first.max=9999;first.step=1;format.maxLength=100;
  numbering.append(el('p','Available fields: {page}, {last}, {total}.','hint'));
  button(actions(body),'Save page options',()=>{
-  if(preset.value==='custom'&&[width,height].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter custom dimensions from 148 to 1500 mm.');
-  if(start.value===''||!Number.isInteger(+start.value)||+start.value<0||+start.value>9999)throw Error('Use a first page number from 0 to 9999.');if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');store();
   if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
+  if(first.value===''||!Number.isInteger(+first.value)||+first.value<0||+first.value>9999)throw Error('Use a first page number from 0 to 9999.');
+  if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
-  const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,start:+start.value,pad:+pad.value,format:format.value})};
+  const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,start:+first.value,pad:+pad.value,format:format.value})};
   let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
-  perform('page-options',prepared);close();viewport.fit();say('Drawing size, print paper and page numbering saved.');
+  perform('page-options',prepared);close();say('Print paper and page numbering saved without changing the drawing layout.');
  },'primary');
 }
 $('page-options').onclick=()=>task(pageOptions);
@@ -537,12 +531,32 @@ function evidence(){
 const warningText=x=>typeof x==='string'?x:(x?.message||x?.text||'Review imported evidence.');
 function familyOf(page){return page?.family||pageFamily(page?.title||page?.name||'');}
 function pageNavigation(){
- const navigation=$('page-navigation'),families=$('page-families'),picker=$('page-select');navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
+ const navigation=$('page-navigation'),families=$('page-families'),picker=$('page-select');
+ navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
  const current=familyOf(pages[active]),labels=[...pageFamilies,['switchports','Switchport reports']],groups=[...new Set(pages.map(familyOf))];
- for(const group of groups){const entries=pages.map((p,i)=>({page:p,index:i})).filter(({page})=>familyOf(page)===group),title=labels.find(([id])=>id===group)?.[1]||group,b=el('button',title+' ('+entries.length+')');b.type='button';b.setAttribute('role','tab');b.setAttribute('aria-selected',String(group===current));b.classList.toggle('active',group===current);b.onclick=()=>{if(!commitInlineEdit())return;active=entries[0].index;draw(pages);};families.append(b);
-  const options=el('optgroup');options.label=title;for(const {page,index} of entries){const option=el('option',page.displayName||page.name);option.value=index;options.append(option);}picker.append(options);
+ for(const group of groups){
+  const entries=pages.map((page,index)=>({page,index})).filter(({page})=>familyOf(page)===group);
+  const title=labels.find(([id])=>id===group)?.[1]||group;
+  const menu=el('details','','page-group'),summary=el('summary',title+' ('+entries.length+')');
+  summary.classList.toggle('active',group===current);
+  summary.setAttribute('aria-label','Choose '+title+' page');
+  const list=el('div','','page-group-menu');list.setAttribute('role','menu');list.setAttribute('aria-label',title+' pages');
+  for(const {page,index} of entries){
+   const item=el('button',page.displayName||page.name);
+   item.type='button';item.setAttribute('role','menuitemradio');
+   item.setAttribute('aria-checked',String(index===active));
+   item.classList.toggle('active',index===active);
+   item.onclick=()=>{if(!commitInlineEdit())return;menu.open=false;active=index;draw(pages);};
+   list.append(item);
+  }
+  menu.append(summary,list);families.append(menu);
+  const options=el('optgroup');options.label=title;
+  for(const {page,index} of entries){const option=el('option',page.displayName||page.name);option.value=index;options.append(option);}
+  picker.append(options);
  }
- picker.value=String(active);picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};$('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
+ picker.value=String(active);
+ picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};
+ $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
 }
 function draw(prepared){
  cancelBesidePick();
@@ -551,12 +565,17 @@ function draw(prepared){
  $('link-count').textContent='('+project.links.length+')';$('stats').textContent=subset.devices.length+' of '+project.devices.length+' devices   /   '+subset.links.length+' links';
  $('art-count').textContent=Object.keys(project.stencils).length+' local hardware shapes';$('hardware').title='Local stencil library: '+$('art-count').textContent;
  const tabs=$('tabs'),canvas=$('canvas');
+ if(!tabs.dataset.wheelNavigation){tabs.dataset.wheelNavigation='1';tabs.addEventListener('wheel',event=>{if(tabs.scrollWidth>tabs.clientWidth&&Math.abs(event.deltaY)>Math.abs(event.deltaX)){tabs.scrollLeft+=event.deltaY;event.preventDefault();}},{passive:false});}
+ const previousTabScroll=tabs.scrollLeft;
  try{const rebuilt=prepared||(live?buildDrawing(subset):[]);pages=rebuilt;drawingReady=pages.length>0;displayedProject=project;}catch(e){drawingReady=false;for(const id of ['export','export-menu','print','svg'])$(id).disabled=true;say('Diagram could not be rebuilt: '+e.message+(displayedProject===project&&pages.length?' The last valid drawing is retained. Undo the last change or correct its settings.':''));if(displayedProject===project&&pages.length){syncDrawingSelection();return;}pages=[];viewport.clear();canvas.replaceChildren(el('p','The drawing needs a layout correction. '+e.message,'error'));tabs.replaceChildren();pageNavigation();return;}
  tabs.replaceChildren();
  $('warnings').hidden=!project.warnings.length;$('warnings').textContent='Review '+project.warnings.length+' import '+(project.warnings.length===1?'note':'notes');
  active=Math.max(0,Math.min(active,pages.length-1));
  pageNavigation();
  pages.forEach((page,i)=>{if(familyOf(page)!==familyOf(pages[active]))return;const b=el('button',page.displayName||page.name);b.title='Double-click to rename or customize this page';b.ondblclick=()=>task(()=>layoutOptions(page.name));b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{if(!commitInlineEdit())return;active=i;draw(pages);};tabs.append(b);});
+ tabs.scrollLeft=previousTabScroll;
+ const selectedTab=tabs.querySelector('button.active');
+ if(selectedTab){const left=selectedTab.offsetLeft-tabs.offsetLeft,right=left+selectedTab.offsetWidth;if(left<tabs.scrollLeft)tabs.scrollLeft=left;else if(right>tabs.scrollLeft+tabs.clientWidth)tabs.scrollLeft=right-tabs.clientWidth;}
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
   if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true));}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
