@@ -26,7 +26,12 @@ try{
  await labelButton.click();
  assert.equal(await page.locator('#dialog-title').textContent(),'Align label to connection');
  assert.ok(await page.locator('#dialog').getByLabel('Position on line',{exact:true}).count());
- await page.locator('#close').click();
+ const relative=page.locator('#dialog').getByLabel('Position relative to line',{exact:true});
+ assert.deepEqual(await relative.locator('option').evaluateAll(items=>items.map(n=>n.value)),['above','on','below']);
+ await relative.selectOption('above');
+ await page.getByRole('button',{name:'Align label',exact:true}).click();
+ await page.screenshot({path:resolve(output,'above-line-label.png')});
+ assert.deepEqual(errors,[],'aligning a label above its connection must not cause browser errors');
  const linkedStroke=page.locator('#canvas svg path.diagram-cable.linked-association').first();
  const linkPoint=await linkedStroke.evaluate(node=>{const point=node.getPointAtLength(node.getTotalLength()*.45),screen=point.matrixTransform(node.getScreenCTM());return {x:screen.x,y:screen.y};});
  await page.mouse.click(linkPoint.x,linkPoint.y);
