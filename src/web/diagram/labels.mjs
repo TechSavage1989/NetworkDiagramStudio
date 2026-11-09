@@ -89,6 +89,8 @@ function boxDistance(box,path){
  }
  return best;
 }
+import {positionOnCable} from '../connection-selection.mjs';
+
 export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const minY=page.dynamic?(page.originY||0)+36:158,maxY=(page.originY||0)+(page.height||975)-69,maxX=(page.originX||0)+(page.width||1200)-38;
  const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path');
@@ -160,6 +162,8 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  // One request at one text size: the chosen box, or null when nothing fits.
  const placeOne=req=>{
   const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)return {skip:true};
+  const snapped=patches.find(p=>Number.isFinite(p.cableFraction)),snapOwner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);
+  if(snapped&&snapOwner){const hit=positionOnCable(snapOwner.points,snapped.cableFraction);if(hit)return {box:{x:hit.x-w/2,y:hit.y-h/2,w,h,angle:hit.angle,manual:true},lines,size};}
   // A moved label is pinned, not an automatic-placement suggestion. Preserve
   // its exact saved coordinates across redraws and page format changes.
   const pinned=patches.find(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
