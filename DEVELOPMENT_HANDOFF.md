@@ -1,3 +1,47 @@
+# Preview.44: page fit, selection and off-page transforms
+
+Release intent is 0.1.0-preview.44. New visible wireless paper choices fit the
+complete dynamic arrangement proportionally by default. Page options offers
+explicit readable continuation for minimum 8pt AP details. The 32-uplink lab
+fits one Letter sheet in default mode or four readable continuation sheets
+(previously six). New wireless lock frames record their layout mode; unmarked
+legacy continuation frames retain their old planner until Page options resets
+frames. Preserve mode and manual coordinates remain authoritative.
+
+Auto-fit now measures actual painted body bounds and keeps generated site/title/
+brand text in physical paper units. New contentFit:1 frames preserve this mode;
+legacy locks retain their old transform. Explicit drawing edits snapshot the
+active unlocked presentationFrame into visible.editFrames, so a deliberate
+scale changes its size relative to the page instead of being fitted away. Page
+options clears the accepted editing frame and recomputes the fit.
+
+Unlocked Auto-fit uses 12-unit gutters. Adaptive port maps enlarge hardware to
+available width instead of stopping at reference socket size. Fictional Letter
+exports show 17% larger five-member sockets, 25% larger chassis sockets and 3%
+larger eight-member sockets. Generated output images are genuine SVG rasters.
+
+Physical locks retain sheet size and the saved presentation frame, but allow
+intentional off-page scaling/moving. pageOverflow drives a visible clipping
+warning; only the editor exposes off-sheet content. Choosing physical paper no
+longer enables its lock automatically. Native report print margins are unchanged.
+
+Ctrl/Meta+A selects diagram content without panel/frame items; text inputs keep
+native Select All. Chrome/canvas gestures prevent incidental browser selection.
+Full-selection scale/rotation/move browser checks cover Undo/redo, reopen,
+explicit locks and off-page transforms.
+
+Bounded right-hand AP return-track swaps lower the regression's right crossings
+from 11 to 7 (total 34 to 30), without changing the left side or paired switch
+departure rows. Candidate improvements must preserve obstruction, merged-stroke,
+per-side crossing, manual-position and endpoint constraints. Some crossings
+remain; blanket reversal was rejected because it worsens other routes.
+
+All 598 Node tests pass (no failures or skips), as do the offline build,
+repository guard, whitespace checks and all nine independent Visio packages. Chromium cannot launch under runtime socket restrictions,
+including the permitted elevated attempt. Both hosted browser/native jobs on
+the final source head and merged-main publication must pass before announcing
+release. No Windows/WebView2 or Microsoft Visio UI verification is claimed locally.
+
 # Accepted inline titles stay visible after re-layout
 
 Run 201 passed all 17 browser suites and the native build, report, paper and

@@ -1,3 +1,4 @@
+import {contentBounds,paperFurniture,placePaperFurniture} from './page-content-fit.mjs';
 export function cleanPageNumbers(raw){const p=raw&&typeof raw==='object'?raw:{};return {show:p.show===true,footer:p.footer===true,start:Number.isInteger(p.start)&&p.start>=0&&p.start<=9999?p.start:1,pad:Number.isInteger(p.pad)&&p.pad>=1&&p.pad<=5?p.pad:2,format:typeof p.format==='string'&&p.format.length<=100?p.format:'{page} / {last}'};}
 export function pageNumber(raw,index,count){const p=cleanPageNumbers(raw);if(!p.show)return null;const values={page:p.start+index,last:p.start+count-1,total:count};return p.format.replace(/\{(page|last|total)\}/g,(_,key)=>String(values[key]).padStart(p.pad,'0'));}
 
@@ -10,12 +11,14 @@ export const pageFamilies=[['core','Core network'],['ports','Port maps'],['wirel
 export function cleanPaper(raw){const p=raw&&typeof raw==='object'?raw:{},preset=p.preset==='dynamic'||paperSizes.some(v=>v[0]===p.preset)?p.preset:'dynamic';return {preset,locked:p.locked===true,orientation:p.orientation==='portrait'?'portrait':'landscape',widthMm:Number.isFinite(+p.widthMm)&&+p.widthMm>=148&&+p.widthMm<=1500?+p.widthMm:297,heightMm:Number.isFinite(+p.heightMm)&&+p.heightMm>=148&&+p.heightMm<=1500?+p.heightMm:420};}
 export function cleanPageSetup(raw){
  const p=raw&&typeof raw==='object'?raw:{},visible=p.visible&&typeof p.visible==='object'?p.visible:{},groups=visible.groups&&typeof visible.groups==='object'?visible.groups:{},individual=visible.pages&&typeof visible.pages==='object'?visible.pages:{};
+ const wirelessFrames=Object.entries(visible.lockFrames||{}).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame);
+ const wirelessFit=['layout','readable'].includes(visible.wirelessFit)?visible.wirelessFit:wirelessFrames.length&&!wirelessFrames.some(frame=>frame?.wirelessFit==='layout')?'readable':'layout';
  const safe=name=>typeof name==='string'&&name.length>0&&name.length<=300&&!['__proto__','prototype','constructor'].includes(name);
  return {
   default:cleanPaper(p.default),
   overrides:Object.fromEntries(pageFamilies.filter(([key])=>p.overrides?.[key]).map(([key])=>[key,cleanPaper(p.overrides[key])])),
   printPaper:p.printPaper&&p.printPaper.preset!=='dynamic'?cleanPaper(p.printPaper):null,
-  visible:{lockFrames:Object.fromEntries(Object.entries(visible.lockFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]]))])),fitMode:visible.fitMode==='preserve'?'preserve':'optimize',default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
+  visible:{lockFrames:Object.fromEntries(Object.entries(visible.lockFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),editFrames:Object.fromEntries(Object.entries(visible.editFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),fitMode:visible.fitMode==='preserve'?'preserve':'optimize',wirelessFit,default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
  };
 }
 export function pageFamily(name){return /^Switchport reports/i.test(name)?'switchports':/^(?:MDF Port Map|Port Inventory)/i.test(name)?'ports':/^Wireless Connections/i.test(name)?'wireless':/^VLANs and Routing/i.test(name)?'logical':/^Trunk VLAN/i.test(name)?'trunk':'core';}
@@ -73,24 +76,36 @@ export function fitVisiblePage(page,project){
  }
  const sourceW=page.width,sourceH=page.height,originX=page.originX||0,originY=page.originY||0,ratio=dimensions.ratio;
  const preserve=visibleFitMode(project)==='preserve',locked=paper.locked===true,physicalW=dimensions.widthMm*96/25.4,physicalH=dimensions.heightMm*96/25.4,width=locked?physicalW:Math.max(sourceW,sourceH*ratio),height=locked?physicalH:Math.max(sourceH,sourceW/ratio);
- if(locked&&preserve&&(sourceW>width+1e-6||sourceH>height+1e-6))throw Error('The drawing exceeds the locked page size. Choose Auto-fit, a larger paper size, or unlock the page in Page options.');
- const frozen=locked?cleanPageSetup(project?.layout?.pageSetup).visible.lockFrames[page.name]:null;
+ const visible=cleanPageSetup(project?.layout?.pageSetup).visible,editFrame=!locked?visible.editFrames[page.name]:null;
+ const frozen=locked?visible.lockFrames[page.name]:editFrame;
+ const contentFit=!preserve&&(!frozen||frozen.contentFit===1)&&page.items.some(i=>i.pageHeading);
+ let furniture=null,measured=null;
  let factor=1,dx=(width-sourceW)/2,dy=(height-sourceH)/2;
  if(!preserve||frozen){
   // Calculate a size-independent page frame. Scaling to fill it gives an
   // effective fit on either portrait or landscape paper; device proportions,
   // socket glue and exact manual relative positions remain unchanged.
   const area=Math.max(1,sourceW*sourceH);
-  const targetW=locked?physicalW:Math.sqrt(area*ratio),targetH=locked?physicalH:targetW/ratio;
-  const margin=24,fit=Math.min((targetW-2*margin)/sourceW,(targetH-2*margin)/sourceH);
-  if(locked&&fit<.05)throw Error('The drawing is too large for the locked page. Choose a larger paper size or unlock the page in Page options.');
+  const targetW=editFrame?.width??(locked?physicalW:Math.sqrt(area*ratio)),targetH=editFrame?.height??(locked?physicalH:targetW/ratio);
+  // Retain the established quarter-inch inset for locked physical sheets.
+  const margin=locked?24:12,fit=Math.min((targetW-2*margin)/sourceW,(targetH-2*margin)/sourceH);
   factor=Math.max(.05,Math.min(4,fit));
   dx=originX+margin+(targetW-2*margin-sourceW*factor)/2-originX*factor;
   dy=originY+margin+(targetH-2*margin-sourceH*factor)/2-originY*factor;
+  if(contentFit){
+   const unit=targetW/physicalW;
+   furniture=paperFurniture(frozen?{...page,originX:frozen.originX,originY:frozen.originY}:page,project,targetW,targetH,unit,margin*unit);
+   measured=contentBounds(page,furniture.automatic);
+   if(measured){
+    const body=furniture.body;factor=Math.min(4,body.w/measured.w,body.h/measured.h);
+    dx=body.x+(body.w-measured.w*factor)/2-measured.x*factor;
+    dy=body.y+(body.h-measured.h*factor)/2-measured.y*factor;
+   }
+  }
   if(frozen){factor=frozen.scale;dx=frozen.x;dy=frozen.y;
-   if(originX*factor+dx<frozen.originX-1e-6||originY*factor+dy<frozen.originY-1e-6||(originX+sourceW)*factor+dx>frozen.originX+frozen.width+1e-6||(originY+sourceH)*factor+dy>frozen.originY+frozen.height+1e-6)throw Error('This change exceeds the locked page. Move or resize items, choose a larger paper, or unlock the page in Page options.');
   }
   for(const item of page.items){
+   if(furniture?.automatic.has(item))continue;
    const prev=item.presentation||{scale:1,x:0,y:0,fontScale:1};
    item.presentation={...prev,scale:(prev.scale||1)*factor,x:(prev.x||0)*factor+dx,y:(prev.y||0)*factor+dy,fontScale:(prev.fontScale||1)*factor};
    for(const key of ['x','y','w','h','weight','sampleWeight']){
@@ -107,6 +122,7 @@ export function fitVisiblePage(page,project){
     if(factor!==1)item.masterKey+=':visible-fit:'+factor.toFixed(6);
    }
   }
+  if(furniture)placePaperFurniture(furniture,factor,dx,dy,measured||{x:0,y:0,w:0,h:0});
   if(page.sidebar)page.sidebar={...page.sidebar,...Object.fromEntries(['divider','contentLeft','titleLeft','bodyLeft'].filter(k=>Number.isFinite(page.sidebar[k])).map(k=>[k,page.sidebar[k]*factor+dx])),...(Number.isFinite(page.sidebar.width)?{width:page.sidebar.width*factor}:{})};
   page.originX=frozen?.originX??originX;page.originY=frozen?.originY??originY;
   page.width=targetW;page.height=targetH;
@@ -114,7 +130,13 @@ export function fitVisiblePage(page,project){
   page.originX=originX-(width-sourceW)/2;page.originY=originY-(height-sourceH)/2;
   page.width=width;page.height=height;
  }
- if(locked)page.pageLockFrame={scale:factor,x:preserve&&!frozen?0:dx,y:preserve&&!frozen?0:dy,originX:page.originX,originY:page.originY,width:page.width,height:page.height};
+ // A lock fixes the sheet and saved presentation frame, not the user's items.
+ // Preserve deliberate off-page edits and expose their printable clipping risk.
+ const contentX=originX*factor+(preserve&&!frozen?0:dx),contentY=originY*factor+(preserve&&!frozen?0:dy);
+ page.pageOverflow=locked&&(contentX<(page.originX||0)-1e-6||contentY<(page.originY||0)-1e-6||contentX+sourceW*factor>(page.originX||0)+page.width+1e-6||contentY+sourceH*factor>(page.originY||0)+page.height+1e-6);
+ {const bounds=contentBounds(page);page.pageOverflow=(!contentFit&&page.pageOverflow)||!!(locked||editFrame)&&!!bounds&&(bounds.x<(page.originX||0)-1e-6||bounds.y<(page.originY||0)-1e-6||bounds.x+bounds.w>(page.originX||0)+page.width+1e-6||bounds.y+bounds.h>(page.originY||0)+page.height+1e-6);}
+ page.presentationFrame={scale:factor,x:preserve&&!frozen?0:dx,y:preserve&&!frozen?0:dy,originX:page.originX,originY:page.originY,width:page.width,height:page.height,...(contentFit?{contentFit:1}:{}),...(page.wirelessLayout?{wirelessFit:page.wirelessLayout.paperFit||'layout'}:{})};
+ if(locked)page.pageLockFrame={...page.presentationFrame};
  page.widthMm=page.width*25.4/96;page.heightMm=page.height*25.4/96;
  page.visiblePaper=paper;page.visibleFitMode=preserve?'preserve':'optimize';
  page.printPaper=cleanPageSetup(project?.layout?.pageSetup).printPaper||paper;

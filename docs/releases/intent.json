@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0-preview.43",
-  "tag": "v0.1.0-preview.43",
+  "version": "0.1.0-preview.44",
+  "tag": "v0.1.0-preview.44",
   "prerelease": true,
   "revision": 1,
-  "notes": "docs/releases/0.1.0-preview.43.md"
+  "notes": "docs/releases/0.1.0-preview.44.md"
 }

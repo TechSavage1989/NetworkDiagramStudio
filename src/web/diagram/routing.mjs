@@ -319,10 +319,10 @@ function fixedEnd(v){return !v||v.anchor.escapeY!=null||!!v.anchor.escapeRange;}
 // Off-page cables that leave one side of a device trade their rows so the
 // lane farthest out ends nearest the device: none then crosses another on its
 // way to the tag column. Kept only when the page has fewer crossings.
-function crossingCount(paths){
+function crossingCount(paths,minX=-Infinity,maxX=Infinity){
  const segments=paths.flatMap((points,owner)=>points.slice(1).map((b,i)=>({owner,a:points[i],b})));let count=0;
  for(const h of segments.filter(s=>s.a[1]===s.b[1]&&s.a[0]!==s.b[0]))for(const v of segments.filter(s=>s.a[0]===s.b[0]&&s.a[1]!==s.b[1])){
-  if(h.owner===v.owner)continue;const x=v.a[0],y=h.a[1];
+  if(h.owner===v.owner)continue;const x=v.a[0],y=h.a[1];if(x<minX||x>maxX)continue;
   if(x>Math.min(h.a[0],h.b[0])+.5&&x<Math.max(h.a[0],h.b[0])-.5&&y>Math.min(v.a[1],v.b[1])+.5&&y<Math.max(v.a[1],v.b[1])-.5)count++;
  }
  return count;
@@ -627,6 +627,30 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
     if(leadConflicts(a.r)+leadConflicts(b.r)>before){restore(saved);continue;}
     a.c=b.c=c;paired.add(a);paired.add(b);break;
    }
+  }
+ }
+ // Wireless return bundles include a rail that can coincide with an AP's
+ // vertical lead. Include that collapsed elbow when exchanging whole lanes;
+ // the ordinary rail list omits it because it has no independent segment.
+ if(directionNeutralLevels){
+  const entries=routes.filter(r=>r.a&&r.b&&r.shape!=='direct'&&r.shape!=='z'&&Number.isFinite(r.rail)).map(r=>{const key=r.a.node.kind==='ap'?'a':r.b.node.kind==='ap'?'b':null;return key?{r,key,peer:r[key==='a'?'b':'a'],ap:r[key]}:null;}).filter(Boolean);
+  let budget=128;
+  for(let pass=0;pass<3&&budget>0;pass++){
+   let improved=false;
+   for(let i=0;i<entries.length&&budget>0;i++)for(const b of entries.slice(i+1)){
+    const a=entries[i];if(!budget||a.peer.node.key!==b.peer.node.key||a.ap.anchor.side!==b.ap.anchor.side||Math.abs(a.ap.anchor.y-b.ap.anchor.y)>.01||a.r.rail<a.peer.node.x+a.peer.node.w||b.r.rail<b.peer.node.x+b.peer.node.w||Math.abs(a.r.rail-b.r.rail)<.01||!crossingCount([a.r.points,b.r.points]))continue;
+    const lane=v=>({r:v.r,set:c=>v.r.rail=c}),row=v=>({r:v.r,set:c=>v.r[v.key]={...v.r[v.key],ay:c}});
+    for(const mode of ['row','lane','both']){
+     if(budget<=0)break;budget--;const saved=snapshot([a.r,b.r]),before=leadConflicts(a.r)+leadConflicts(b.r),merges=local([a.r,b.r])[1],changes=mode==='row'?[]:[[lane(a),b.r.rail],[lane(b),a.r.rail]];
+     if(mode!=='lane')changes.push([row(a),b.r[b.key].ay],[row(b),a.r[a.key].ay]);
+     if(!apply(changes,true))continue;
+     const middle=a.peer.node.x+a.peer.node.w/2,oldPaths=routes.map(r=>saved.find(v=>v[0]===r)?.[1]||r.points),newPaths=routes.map(r=>r.points);
+     const regresses=[[-Infinity,middle],[middle,Infinity]].some(([lo,hi])=>crossingCount(newPaths,lo,hi)>crossingCount(oldPaths,lo,hi));
+     if(regresses||local([a.r,b.r])[1]>merges||leadConflicts(a.r)+leadConflicts(b.r)>before){restore(saved);continue;}
+     improved=true;break;
+    }
+   }
+   if(!improved)break;
   }
  }
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}

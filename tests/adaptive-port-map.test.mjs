@@ -77,3 +77,32 @@ test('semantic legend edits survive reflow without retargeting old incidental sh
  assert.equal(changed.items.find(i=>i.reportKeyTitle===10).value,'10  Custom lab management');
  assert.equal(changed.items.filter(i=>i.editKey===title.editKey).length,1);
 });
+
+test('Auto-fit uses spare paper for larger chassis sockets with narrow safe gutters',async()=>{
+ const {standardMapDevices}=await import('./fixtures/standard-port-maps.mjs');
+ for(const preset of ['a5','letter','a4','a3','a2','legal','tabloid'])for(const orientation of ['landscape','portrait']){
+  const project=adaptiveProject(preset,orientation);project.devices=[standardMapDevices()[0]];
+  const page=maps(project)[0];
+  // A5 portrait cannot hold two physical chassis columns at the readable
+  // minimum; retain the complete proportional fallback instead of clipping.
+  if(!(preset==='a5'&&orientation==='portrait'))assert.ok(page.adaptivePortMap,preset+' '+orientation);
+  if(page.adaptivePortMap)assert.deepEqual(validateReportScene(page),[]);
+  else assert.deepEqual(validateReportScene(page),['Text is below the readable report minimum.'],'retain the existing complete small-paper fallback');
+  const faces=page.items.filter(i=>i.reportPortRole==='native');
+  assert.equal(faces.length,96);assert.equal(panels(page).length,6);
+  for(const face of faces){
+   const copper=/RJ|copper/i.test(face.socketForm);
+   assert.ok(Math.abs(face.h/face.w-(copper?23.2:16.2)/25.2)<1e-9);
+   assert.ok(face.x>=12&&face.x+face.w<=page.width-12);
+  }
+  if(preset==='letter'&&orientation==='landscape')assert.ok(page.adaptivePortMap.socketWidth>30,'do not cap Auto-fit at the reference socket width');
+ }
+});
+
+test('locked port maps keep their established reference ceiling and printable inset',()=>{
+ const project=adaptiveProject('letter','landscape',5);project.layout.pageSetup.visible.groups.ports.locked=true;
+ const page=maps(project)[0];assert.ok(page.pageLockFrame);
+ assert.ok(page.adaptivePortMap.socketWidth<=30.001);
+ const header=page.items[0];assert.ok(header.x>=24-1e-6);
+ assert.ok(header.x+header.w<=page.width-24+1e-6);
+});

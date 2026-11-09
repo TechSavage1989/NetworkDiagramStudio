@@ -242,3 +242,10 @@ main:not(:has(>.pages-sidebar:not([hidden]))){grid-template-columns:250px minmax
 }
 
 .port-vlan-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px;max-height:180px;overflow:auto;padding:6px}.port-vlan-options label{margin:0;font-weight:400}.port-vlan-picker summary{cursor:pointer;font-weight:600}
+
+/* Editor chrome is not drawing content. Keep native selection in real editors. */
+.appbar,.project-sidebar,.pages-sidebar,.stagebar,.pagebar,#drawing-tools,#canvas.diagram-view{user-select:none;-webkit-user-select:none}
+input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-editor]{user-select:text;-webkit-user-select:text}
+/* The editor can show and select off-sheet content; exports keep their page frame. */
+#canvas.diagram-view>svg{overflow:visible}
+#page-overflow-notice{font-size:11px;text-align:left;white-space:normal}

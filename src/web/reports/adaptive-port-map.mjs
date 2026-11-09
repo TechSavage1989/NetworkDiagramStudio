@@ -4,7 +4,7 @@ import {portMapPrimitives as P,ReportCapacityError,validateReportScene} from './
 // Follows Switchport Diagram Builder's measured side/below-key search. Keep
 // physical banks in order, reserve readable text, then maximize socket size.
 // Never mistake landscape paper for a requirement to split a stack in half.
-const MARGIN=24,GAP=12;
+const GAP=12;
 const styles=[
  {scale:1,numberFont:12,groupFont:12,markerRadius:2.1,compact:false},
  {scale:1,numberFont:10,groupFont:11,markerRadius:2.1,compact:false},
@@ -64,13 +64,15 @@ function preserveLegacyKeys(page,previous){
 }
 export function adaptivePortMap(item,palette,request,identity){
  const sheet=request.paper,inv=item.inventory;
+ // Locked sheets retain their established base for saved presentation frames.
+ const margin=sheet?.locked?24:12;
  if(!sheet||!(sheet.width>0&&sheet.height>0))throw new ReportCapacityError('Adaptive port maps require measured paper dimensions.');
  const make=()=>{
   const p=P.page(request,item.id+'|adaptive',P.displayName(inv),[P.modelLabel(inv),inv.ports.length+' interfaces'].filter(Boolean).join(' | '),identity.role,[item.id],sheet.width,sheet.height,true);
   p.name=identity.name;return p;
  };
- const sample=make(),top=sample.contentTop,contentWidth=sheet.width-2*MARGIN;
- const footerSpace=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?24:65,guideHeight=P.symbolKeyHeight(inv,contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
+ const sample=make(),top=sample.contentTop,contentWidth=sheet.width-2*margin;
+ const footerSpace=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?margin:65,guideHeight=P.symbolKeyHeight(inv,sheet.width-48),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
  const keys=[{side:false,key:keyPlan(inv,palette,contentWidth)},...[160,190,220,260].filter(width=>width<contentWidth*.4).map(width=>({side:true,key:keyPlan(inv,palette,width)}))];
  const candidates=[];
  for(const style of styles){
@@ -81,7 +83,9 @@ export function adaptivePortMap(item,palette,request,identity){
    const at=width=>arrange(P.devicePlan(item,style,width,true),columns);
    const fits=plan=>plan&&plan.width<=roomWidth+.001&&plan.height<=roomHeight+.001;
    if(!fits(at(base.portWidth)))continue;
-   let low=base.portWidth,high=Math.max(low,item.standardPortWidth??56);
+   // A reference socket size is a starting point, not an Auto-fit ceiling.
+   // The measured paper, complete key and physical bank proportions bound growth.
+   let low=base.portWidth,high=Math.max(low,sheet.locked?(item.standardPortWidth??56):roomWidth);
    for(let step=0;step<15;step++){const mid=(low+high)/2;if(fits(at(mid)))low=mid;else high=mid;}
    const plan=at(low),radius=P.fillRadius(inv,plan);
    if(radius==null)continue;
@@ -98,10 +102,10 @@ export function adaptivePortMap(item,palette,request,identity){
   if(radius!=null)for(const band of plan.bands)for(const panel of band.panels)if(panel.plan)panel.plan.markerRadius=radius;
   // Center the measured bank/key pair, not a page-sized mostly-empty canvas.
   const occupied=side?plan.width+GAP+key.width:contentWidth;
-  const x=side?MARGIN+(contentWidth-occupied)/2:MARGIN+(roomWidth-plan.width)/2;
+  const x=side?margin+(contentWidth-occupied)/2:margin+(roomWidth-plan.width)/2;
   try{
    const bankBottom=P.drawBlock(p,plan,x,top,palette,{heading:false});
-   drawKey(p,key,side?x+plan.width+GAP:MARGIN,side?top:bankBottom+GAP);
+   drawKey(p,key,side?x+plan.width+GAP:margin,side?top:bankBottom+GAP);
    P.symbolKey(p,sheet.height-footerSpace-guideHeight,palette,inv);
    P.finish(p,request,palette,inv);preserveLegacyKeys(p,identity);
    const errors=validateReportScene(p);if(errors.length)continue;

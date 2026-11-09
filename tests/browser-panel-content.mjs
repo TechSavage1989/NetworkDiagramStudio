@@ -1,3 +1,4 @@
+import {checkDiagramSelection} from './browser-diagram-selection.mjs';
 // Synthetic saved-project and actual dialog interactions.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -26,4 +27,5 @@ try{
  const saved=JSON.parse(await readFile(path,'utf8'));assert.equal(saved.project.layout.presentation.defaults.panel.vlanMode,'summary');await open(path);
  d=await edit();assert.equal(await d.getByLabel('Show VLANs',{exact:true}).isChecked(),true);assert.equal(await d.getByLabel('Sections without data',{exact:true}).inputValue(),'explain');await d.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.screenshot({path:resolve(output,'panel-content.png')});
+ await checkDiagramSelection(page,output,open);
 }finally{await browser.close();}

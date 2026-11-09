@@ -69,9 +69,9 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
  let prepared;try{prepared=prepare({...project,layout:{...project.layout,switchport:{...(project.layout?.switchport||{}),enabled:true,deviceIds:ids}}},ids);}catch{return sheets;}
  const {items,palette}=prepared;
  // All port maps start with the same stack-reference socket size. Increase
- // the shared size only when complete VLAN markers require it, never merely
- // because a small chassis has spare page space. Adaptive paper fitting may
- // uniformly reduce a whole sheet, preserving these media proportions.
+ // the shared base size only when complete VLAN markers require it. Preserve
+ // mode keeps that reference; explicit Auto-fit paper may enlarge sockets
+ // within measured banks while preserving the same media proportions.
  const standardWidths=[];for(const item of items.filter(item=>item.validation.ok))try{standardWidths.push(standardPortMapWidth(item.inventory));}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;item.validation.ok=false;item.validation.errors.push(error.message);}
  const standardWidth=Math.max(30,...standardWidths);
  for(const item of items)item.standardPortWidth=standardWidth;

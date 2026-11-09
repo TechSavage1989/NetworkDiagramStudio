@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPages,printDocument} from '../src/web/diagram/index.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
-import {cleanPageSetup,visiblePagePaper,paperDimensions,pageFamily} from '../src/web/page-options.mjs';
+import {cleanPageSetup,visiblePagePaper,paperDimensions,pageFamily,fitVisiblePage} from '../src/web/page-options.mjs';
 import {cleanLayout} from '../src/web/layout.mjs';
 
 const site=visible=>{const project=sampleSite();project.layout={...project.layout,pageSetup:{visible}};return project;};
@@ -72,4 +72,18 @@ test('automatic fit reuses the full sheet and uniformly scales content rather th
  }
  const preserved=build({fitMode:'preserve',pages:{[target]:{preset:'a4',orientation:'portrait'}}}).find(p=>p.name===target);
  assert.equal(signature(preserved),signature(src),'preserve mode keeps the original drawing');
+});
+
+
+test('Auto-fit halves the presentation gutter while locked and preserve frames stay authoritative',()=>{
+ for(const preset of ['letter','a4','a3','a5'])for(const orientation of ['portrait','landscape'])for(const locked of [false,true]){
+  const paper={preset,orientation,locked},dimensions=paperDimensions(paper),width=dimensions.widthMm*96/25.4,height=dimensions.heightMm*96/25.4;
+  const original={name:'Synthetic page',width,height,items:[{type:'rect',x:0,y:0,w:width,h:height}]};
+  const fitted=fitVisiblePage(structuredClone(original),{layout:{pageSetup:{visible:{default:paper}}}}),item=fitted.items[0],inset=locked?24:12;
+  const gaps=[item.x,item.y,fitted.width-item.x-item.w,fitted.height-item.y-item.h];
+  assert.ok(Math.min(...gaps)>=inset-1e-6);assert.ok(Math.abs(Math.min(...gaps)-inset)<1e-6);
+  assert.ok(Math.abs(item.w/item.h-width/height)<1e-9);
+  const preserved=fitVisiblePage(structuredClone(original),{layout:{pageSetup:{visible:{default:paper,fitMode:'preserve'}}}});
+  assert.deepEqual(preserved.items,original.items);
+ }
 });

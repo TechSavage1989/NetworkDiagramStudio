@@ -1,3 +1,4 @@
+import {diagramContentKeys,textEditingTarget} from './drawing-selection.mjs';
 import {portRoleOptions,portSpeedOptions,existingVlanOptions,portVlanIds} from './port-config-options.mjs';
 import {expandDrawingGroups,groupDrawingSelection,ungroupDrawingSelection,drawingGroupItem,transformDrawingGroup} from './drawing-groups.mjs';
 import {stackCaption} from './device-stacks.mjs';
@@ -306,7 +307,9 @@ function removeSelectedCablePoint(){const item=selectedCable();if(!item||cablePo
 const ownCaption=(path,label)=>label.background&&path.linkId!=null&&path.linkId===label.linkId,sameCaption=(a,b)=>a.background&&b.background&&a.linkId!=null&&a.linkId===b.linkId&&a.labelRole===b.labelRole;
 function validateDrawing(){const rebuilt=buildDrawing();for(const p of rebuilt.filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&!sameCaption(a,b)&&intersects(a,b,0))||paths.some(r=>ownCaption(r,a)?(r.hops||[]).some(hop=>intersects(hop,a,1)):pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}return rebuilt;}
 function setDrawingEdits(next){
- project.layout||={};const previous=project.layout;const setup=cleanPageSetup(previous.pageSetup);for(const page of pages)if(page.pageLockFrame)setup.visible.lockFrames[page.name]=page.pageLockFrame;project.layout={...previous,pageSetup:setup,drawingEdits:cleanDrawingEdits(next)};
+ project.layout||={};const previous=project.layout;const setup=cleanPageSetup(previous.pageSetup);for(const page of pages)if(page.pageLockFrame)setup.visible.lockFrames[page.name]=page.pageLockFrame;
+ const accepted=pages[active];if(accepted?.presentationFrame&&!accepted.pageLockFrame)(setup.visible.editFrames||={})[accepted.name]??={...accepted.presentationFrame};
+ project.layout={...previous,pageSetup:setup,drawingEdits:cleanDrawingEdits(next)};
  const format=pages[active]?.portMap?.presentation;if(format&&(!previous.portMap?.presentation||previous.portMap.presentation==='auto'))project.layout.portMap={...previous.portMap,presentation:format};
  // Validation has not changed the displayed SVG. Keep its editor and draft
  // attached when rejecting an edit, rather than leaving an invisible input lock.
@@ -541,9 +544,10 @@ function nudgeSelection(event){
  $('canvas').focus({preventScroll:true});say('Selected items nudged.');
 }
 document.addEventListener('keydown',event=>{
- if(event.defaultPrevented||event.target.closest('input,textarea,select,[contenteditable=true]'))return;
+ if(event.defaultPrevented||textEditingTarget(event.target))return;
  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){if($('dialog').open&&!modalHistoryScope)return;event.preventDefault();task(()=>drawingHistory(event.shiftKey));return;}
  if(besidePick&&event.key==='Escape'){cancelBesidePick();say('Placement cancelled.');return;}
+ if(editDrawing&&!$('dialog').open&&event.target.closest('#canvas,#drawing-tools,.stagebar,.pagebar')&&(event.ctrlKey||event.metaKey)&&!event.altKey&&event.key.toLowerCase()==='a'){event.preventDefault();drawingSelection.clear();for(const key of diagramContentKeys(pages[active]))drawingSelection.add(key);cablePoint=-1;syncDrawingSelection();return;}
  if(!editDrawing||!$('canvas').contains(event.target))return;
  if(event.key==='Escape'){drawingSelection.clear();syncDrawingSelection();}
  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();task(()=>nudgeSelection(event));}
@@ -677,7 +681,7 @@ function layoutOptions(selected=pages[active]?.name){
 $('page-layout').onclick=()=>task(()=>layoutOptions());
 function pageOptions(){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
- body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Auto-fit on physical paper may use wireless continuation sheets for readability. Dynamic pages and Preserve existing layout retain their existing geometry.','hint'));
+ body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Wireless drawings scale proportionally to the selected paper by default, keeping the complete arrangement together. Readable continuation is available separately.','hint'));
  const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
  const groupRow=el('div'),pageRow=el('div');body.append(groupRow,pageRow);
  const group=field(groupRow,'Page group',familyOf(pages[active]),pageFamilies),page=field(pageRow,'Individual page',String(active),pages.map((item,i)=>[String(i),(item.displayName||item.name)+'  ('+(pageFamilies.find(([id])=>id===familyOf(item))?.[1]||familyOf(item))+')']));
@@ -690,7 +694,9 @@ function pageOptions(){
  const lockRow=el('label','','check-option'),paperLock=el('input');paperLock.type='checkbox';paperLock.setAttribute('aria-label','Lock physical page size');lockRow.append(paperLock,document.createTextNode('Lock physical page size'));body.append(lockRow);
  const preview=el('p','','page-size-preview');body.append(preview);
  const visible=setup.visible,fitMode=field(body,'Content fit mode',visible.fitMode||'optimize',[['optimize','Auto-fit and optimize content'],['preserve','Preserve existing layout']]);
- body.append(el('p','Auto-fit uses the available page area, and network and wireless diagrams may choose better arrangements. Manually positioned devices and labels retain their saved positions. Preserve layout changes the page boundary without resizing or repacking content. A locked physical page never grows: Auto-fit fits content once, then keeps its scale and positions during edits; overflowing edits are rejected. Preserve rejects content that does not fit. Unlock to allow a growing canvas.','hint'));
+ const wirelessFit=field(body,'Wireless paper layout',visible.wirelessFit,[['layout','Keep complete layout (proportional fit)'],['readable','Continue on sheets (AP details at least 8 pt)']]);
+ body.append(el('p','Keep complete layout scales the whole wireless drawing together without splitting or rearranging it. Dense drawings may print with small text. Continue on sheets retains readable AP details and may repeat switches across sheets. This choice applies to wireless pages when Auto-fit is selected.','hint'));
+ body.append(el('p','Auto-fit uses the available page area, and network diagrams may choose better arrangements. Manually positioned devices and labels retain their saved positions. Preserve layout changes the page boundary without resizing or repacking content. A locked physical page keeps its dimensions and saved presentation scale; you can still move and resize content beyond its edges. Off-page content stays editable, but print/PDF and page-sized exports may clip it. Choosing a paper size does not enable the lock.','hint'));
  let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';
  const lookup=()=>selectedScope==='all'?visible.default:selectedScope==='group'?visible.groups[selectedGroup]:visible.pages[selectedPage];
  function store(){
@@ -704,7 +710,7 @@ function pageOptions(){
   paperLock.disabled=inherited||preset.value==='dynamic';custom.hidden=preset.value!=='custom';orientation.disabled=inherited||preset.value==='dynamic';
   const paper=inherited?(selectedScope==='page'?visible.groups[familyOf(pages[Number(page.value)])]||visible.default:visible.default):cleanPaper({preset:preset.value,locked:paperLock.checked,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
   const shape=paperDimensions(paper);
-  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm '+(paperLock.checked?'locked size':'proportions')+' ('+paper.orientation+'). Auto-fit may continue dense wireless content onto additional sheets; Preserve existing layout keeps the current arrangement.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
+  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm '+(paperLock.checked?'locked size':'proportions')+' ('+paper.orientation+'). Wireless drawings keep their complete layout unless readable continuation is selected.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
  }
  function load(){
   groupRow.hidden=selectedScope!=='group';pageRow.hidden=selectedScope!=='page';
@@ -718,7 +724,7 @@ function pageOptions(){
  group.onchange=()=>{store();selectedGroup=group.value;load();};
  page.onchange=()=>{store();selectedPage=pages[Number(page.value)]?.name||'';load();};
  for(const input of [orientation,width,height,paperLock])input.oninput=update;
- preset.oninput=()=>{paperLock.checked=!['dynamic','inherit'].includes(preset.value);update();};
+ preset.oninput=()=>{if(['dynamic','inherit'].includes(preset.value))paperLock.checked=false;update();};
  load();
  const printing=el('details');printing.append(el('summary','Printing'));body.append(printing);
  const printSize=field(printing,'Print paper',setup.printPaper?.preset||'drawing',[['drawing','Match visible drawing page'],...paperSizes.filter(([id])=>id!=='original')]);
@@ -741,7 +747,7 @@ function pageOptions(){
   if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
   if(first.value===''||!Number.isInteger(+first.value)||+first.value<0||+first.value>9999)throw Error('Use a first page number from 0 to 9999.');
   if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');
-  store();visible.fitMode=fitMode.value;visible.lockFrames={};
+  store();visible.fitMode=fitMode.value;visible.wirelessFit=wirelessFit.value;visible.lockFrames={};visible.editFrames={};
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
   let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
@@ -916,6 +922,8 @@ function pageNavigation(){
  picker.value=String(active);
  picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};
  $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
+ let overflow=$('page-overflow-notice');if(!overflow){overflow=el('button','','warning');overflow.id='page-overflow-notice';overflow.onclick=()=>task(pageOptions);$('feedback').after(overflow);}
+ overflow.hidden=!pages[active]?.pageOverflow;overflow.textContent='Content extends beyond the page. Print/PDF and page-sized exports may clip it. Open Page options to change the sheet.';
 }
 function draw(prepared){
  cancelBesidePick();
