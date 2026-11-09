@@ -128,13 +128,29 @@ static class Program
         var snapshotDevice = new JsonObject { ["name"] = "LAB-SNAPSHOT", ["routerosSnapshot"] = JsonNode.Parse(snapshot), ["ports"] = new JsonArray() };
         var snapshotResult = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "snapshot", ["device"] = snapshotDevice }), ["combined"] = false }.ToJsonString()));
         Check(snapshotResult["items"]![0]!["success"]!.GetValue<bool>() && snapshotResult["items"]![0]!["inventory"]!["ports"]!.AsArray().Count == 9, "Browser-decoded RouterOS snapshots feed the exact native physical adapter.");
+        // The upstream parser adds a tagged native VLAN until an explicit
+        // allowed command replaces membership. The normalized tagged array is
+        // likewise the complete effective list, not an additive list.
+        foreach(var allowed in new string?[] { null, "10,20", "20" })
+        {
+            var nativeParsed = Parser.Parse("; JL256A Configuration Editor\nhostname LAB-NATIVE-TAGGING\ninterface 1\n vlan trunk native 10 tag\n" + (allowed == null ? "" : " vlan trunk allowed " + allowed + "\n") + " exit\n");
+            var nativePort = nativeParsed.Ports.Single(port => port.Id == "1");
+            var expected = allowed == null ? new[] {10} : allowed == "10,20" ? new[] {10,20} : new[] {20};
+            Check(nativePort.UntaggedVlan == null && nativePort.UntaggedState == "None" && nativePort.TaggedVlans.SequenceEqual(expected), "Upstream parser distinguishes implicit, included and excluded tagged-native membership.");
+            var normalizedPort = new JsonObject { ["name"] = "1", ["native"] = 10, ["nativeTagged"] = true };
+            if(allowed != null)normalizedPort["tagged"] = new JsonArray(expected.Select(id => (JsonNode)JsonValue.Create(id)!).ToArray());
+            var normalized = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "membership", ["device"] = new JsonObject { ["name"] = "LAB-NORMALIZED-TAGGING", ["model"] = "JL256A", ["ports"] = new JsonArray(normalizedPort) } }), ["combined"] = false }.ToJsonString()));
+            Check(normalized["items"]![0]!["success"]!.GetValue<bool>(), "Native membership comparison renders.");
+            var rendered = normalized["items"]![0]!["inventory"]!["ports"]!.AsArray().Single(port => port!["id"]!.GetValue<string>() == "1")!;
+            Check(rendered["untaggedVlan"] == null && rendered["untaggedState"]!.GetValue<string>() == "None" && rendered["taggedVlans"]!.AsArray().Select(id => id!.GetValue<int>()).SequenceEqual(nativePort.TaggedVlans), "Normalized tagged-native membership agrees with the source parser without inventing excluded VLANs.");
+        }
         var semantics = new JsonObject { ["name"] = "LAB-SEMANTICS", ["model"] = "JL256A", ["ports"] = new JsonArray(
-            new JsonObject { ["name"] = "1", ["native"] = 10, ["nativeTagged"] = true, ["tagged"] = new JsonArray(20), ["admin"] = "down", ["state"] = "up", ["ingressPvid"] = 10 },
+            new JsonObject { ["name"] = "1", ["native"] = 10, ["nativeTagged"] = true, ["tagged"] = new JsonArray(10,20), ["admin"] = "down", ["state"] = "up", ["ingressPvid"] = 10 },
             new JsonObject { ["name"] = "2", ["state"] = "down" }, new JsonObject { ["name"] = "3", ["admin"] = "disable" }, new JsonObject { ["name"] = "4", ["admin"] = "enable" }) };
         var semanticResult = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "semantics", ["device"] = semantics }), ["combined"] = false }.ToJsonString()));
         Check(semanticResult["items"]![0]!["success"]!.GetValue<bool>(), "Normalized configuration semantics render successfully.");
         var semanticPorts = semanticResult["items"]![0]!["inventory"]!["ports"]!.AsArray();
-        Check(semanticPorts[0]!["untaggedVlan"] == null && semanticPorts[0]!["untaggedState"]!.GetValue<string>() == "None" && semanticPorts[0]!["taggedVlans"]!.AsArray().Any(id => id!.GetValue<int>() == 10), "Tagged native VLAN is not painted as an untagged fill.");
+        Check(semanticPorts[0]!["untaggedVlan"] == null && semanticPorts[0]!["untaggedState"]!.GetValue<string>() == "None" && semanticPorts[0]!["taggedVlans"]!.AsArray().Select(id => id!.GetValue<int>()).SequenceEqual(new[] {10,20}), "Tagged native VLAN is not painted as an untagged fill.");
         Check(semanticPorts[0]!["disabled"]!.GetValue<bool>() && semanticPorts[1]!["disabled"] == null, "Configured admin state remains independent of observed link state.");
         Check(semanticPorts[2]!["disabled"]!.GetValue<bool>() && !semanticPorts[3]!["disabled"]!.GetValue<bool>(), "FortiOS enable/disable administrative spellings remain explicit configured states.");
         Check(semanticPorts[0]!["notes"]!.AsArray().Any(note => note!.GetValue<string>() == "Configured ingress PVID: 10"), "Configured ingress PVID is retained for complete CSV export.");

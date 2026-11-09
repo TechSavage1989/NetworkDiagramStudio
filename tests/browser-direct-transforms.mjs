@@ -17,11 +17,15 @@ try{
  await page.waitForFunction(key=>[...document.querySelectorAll('#canvas text')].find(n=>n.dataset.drawingKey===key)?.getAttribute('transform')?.includes('rotate(-15'),key);
  await page.locator('#quick-text-edit').click();await page.locator('[data-inline-editor] textarea').fill('Fictional direct editing');await page.keyboard.press('Enter');
  await page.waitForSelector('[data-inline-editor]',{state:'detached'});
- const handle=page.locator('[data-transform="se"]'),box=await handle.boundingBox();assert.ok(box);
+ const handle=page.locator('[data-transform="se"]');
+ const handlePoint=async()=>{await page.waitForFunction(()=>{const n=document.querySelector('[data-transform="se"]');if(!n)return false;const b=n.getBoundingClientRect();return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)===n;});const b=await handle.boundingBox();assert.ok(b);return {x:b.x+b.width/2,y:b.y+b.height/2};};
+ const start=await handlePoint(),box={x:start.x,y:start.y,width:0,height:0};
+ assert.ok(await page.locator('#quick-text-tools').evaluate(n=>n.getBoundingClientRect().height<70),'Text tools must remain compact');
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.mouse.move(box.x+box.width/2+30,box.y+box.height/2+10,{steps:5});await page.keyboard.press('Escape');await page.mouse.up();
  assert.equal(await page.locator('[data-transform]').count(),5);
  await page.locator('#quick-text-angle').fill('0');await page.locator('#quick-text-angle').press('Tab');
- const after=await page.locator('[data-transform="se"]').boundingBox();await page.mouse.move(after.x+after.width/2,after.y+after.height/2);await page.mouse.down();await page.mouse.move(after.x+after.width/2+35,after.y+after.height/2+8,{steps:5});await page.mouse.up();
+ const point=await handlePoint(),after={x:point.x,y:point.y,width:0,height:0};await page.mouse.move(after.x+after.width/2,after.y+after.height/2);await page.mouse.down();await page.mouse.move(after.x+after.width/2+35,after.y+after.height/2+8,{steps:5});await page.mouse.up();
+ await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent.includes('Item resized.'));
  await page.screenshot({path:resolve(output,'direct-transforms.png')});
  const waiting=page.waitForEvent('download');await page.locator('#save').click();const file=await waiting,path=resolve(output,'direct.nds');await file.saveAs(path);
  const saved=JSON.parse(await readFile(path,'utf8'));assert.equal(saved.project.layout.drawingEdits[key].value,'Fictional direct editing');assert.equal(saved.project.layout.drawingEdits[key].angle,0);assert.ok(saved.project.layout.drawingEdits[key].w>0);

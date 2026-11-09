@@ -161,8 +161,9 @@ function quickTextChange(rotationChanged=false){
  setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...patch}});
 }
 $('quick-text-edit').onclick=()=>editOnDoubleClick([...drawingSelection][0]);
-for(const id of ['quick-text-size','quick-text-bold','quick-text-align','quick-text-color','quick-text-angle'])$(id).onchange=()=>task(()=>{try{quickTextChange(id==='quick-text-angle');}finally{const item=pages[active]&&drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));syncQuickText(item);}});
-function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();}
+for(const id of ['quick-text-size','quick-text-bold','quick-text-align','quick-text-color','quick-text-angle'])$(id).onchange=()=>task(()=>{try{quickTextChange(id==='quick-text-angle');}finally{const item=pages[active]&&drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));syncQuickText(item);revealSelectedText();}});
+function revealSelectedText(){const key=drawingSelection.size===1?[...drawingSelection][0]:null;if(!key)return;requestAnimationFrame(()=>{if(drawingSelection.size!==1||!drawingSelection.has(key))return;const item=pages[active]&&drawingObjects(pages[active]).find(o=>o.editKey===key);if(rotatable(item)){const bounds=drawingBounds(item);viewport.reveal({...bounds,y:bounds.y-28,h:bounds.h+28});}});}
+function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();revealSelectedText();}
 function selectedCable(){return drawingSelection.size===1?pages[active]?.items.find(i=>i.type==='path'&&drawingSelection.has(i.editKey)):null;}
 function selectedConnectionLabel(){
  return drawingSelection.size===1?pages[active]?.items.find(item=>item.labelRole&&item.relatedCableKey&&drawingSelection.has(item.editKey)):null;

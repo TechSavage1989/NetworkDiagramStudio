@@ -53,7 +53,7 @@ Network engineers can use the Windows application or the offline browser edition
 <p align="center"><img src="docs/images/legend-connections.png" width="900" alt="Connection-key properties with integrated cable settings, live line preview and clear buttons"></p>
 
 **Document each switch with VLAN-marked faceplates, trunks and a port inventory.**
-<p align="center"><img src="docs/images/port-map.png" width="900" alt="Actual generated A4 port map of a fictional eight-member stack, with readable ports and a side VLAN/LAG key"></p>
+<p align="center"><img src="docs/images/port-map.png" width="900" alt="Current editor showing a fictional switch port map, VLAN and LAG markers, and consecutive port maps before inventories in the sidebar"></p>
 
 **Review connection improvements before applying one undoable layout change.**
 <p align="center"><img src="docs/images/organize-connections.png" width="1000" alt="Organization preview with current and proposed cable length, bends, crossings and drawing footprint"></p>

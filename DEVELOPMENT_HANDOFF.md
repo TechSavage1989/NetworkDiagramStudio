@@ -1,3 +1,7 @@
+# Direct transform follow-up
+
+Hosted Edge exposed a real accessibility issue: full-width alignment controls expanded the text toolbar, clipping the selected title and its handles above the canvas. The toolbar now uses bounded field widths, and selection/font changes reveal the selected text after layout at the existing zoom. Active gestures are never rebased. The browser regression checks the actual pointer hit target, compact toolbar height, committed resize status and persisted dimensions rather than dragging clipped coordinates.
+
 # Preview.42 candidate: unified requested improvements
 
 The owner explicitly authorized pushing and publishing this requested update on
@@ -14,8 +18,9 @@ match the locally tested tree exactly. Remote commit hashes differ from local
 cherry-pick hashes; verify tree identity and the exact remote head's CI.
 
 Local interactive Chromium is blocked by IPC restrictions even after escalation.
-Actual synthetic SVG/PDF renders were inspected. Hosted browser captures must
-replace affected editor screenshots before release. No customer data or supplied
+Actual synthetic SVG/PDF renders were inspected. Hosted run 42674168964 supplied real current editor captures for the hero,
+port map, wireless sheet, connection legend and organization preview. Direct
+transform captures await the toolbar regression correction. No customer data or supplied
 customer screenshots are included in this repository.
 # Unreleased: inline port defaults and cable-safe caption backings
 
