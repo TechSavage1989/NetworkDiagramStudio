@@ -28,7 +28,7 @@ test('wireless switch departure levels follow physical port order, not cable dir
   directionNeutralLevels:true,neat:false
  });
  const ordered=edges.map(e=>planned.ends.get(e.idx+'/a'));
- assert.deepEqual(ordered.map(v=>v.rank),[0,1,2,3,4,5],'port departure ranks are independent of left/right path choice');
+ assert.deepEqual(ordered.map(v=>v.rank),[0,0,1,1,2,2],'opposite-direction leads share a departure level while same-side leads remain separated');
  assert.equal(planned.routes.length,edges.length);
  for(const route of planned.routes){
   assert.deepEqual(route.points[0],[route.a.anchor.x,route.a.anchor.y]);

@@ -41,9 +41,30 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   const settings=config.panel,show=check(panel,'Show information panel',settings.visible),panelGrid=el('div','','layout-grid');panel.append(panelGrid);
   const placement=field(panelGrid,'Panel position',settings.position,[['left','Left of drawing'],['right','Right of drawing'],['top','Above drawing'],['free','Custom position']]),width=numeric(panelGrid,'Panel width',settings.width,120,1000),scale=numeric(panelGrid,'Panel scale (%)',settings.scale*100,10,400),panelText=numeric(panelGrid,'Panel text scale (%)',settings.textScale*100,10,400);
   const position=el('div','','layout-grid');panel.append(position);const x=numeric(position,'Panel left',settings.x,-1e6,1e6),y=numeric(position,'Panel top',settings.y,-1e6,1e6);position.hidden=placement.value!=='free';placement.onchange=()=>position.hidden=placement.value!=='free';
-  const fields=el('div','','layout-fields');panel.append(fields);const choices=panelFields.map(([id,title])=>[id,check(fields,title,settings.sections.includes(id))]);
-  const notes=field(panel,'Custom notes',settings.notes,'multiline');notes.rows=3;notes.maxLength=10000;
-  panel.append(el('p','Choose only the details you want. Panel content uses the devices on this page. Port locations and cable connections stay attached when sizes change.','hint'));
+  const moduleDetails=field(panel,'Port modules detail','summary',[['summary','Summarize each module type'],['full','List every device and connected port']]);moduleDetails.value=settings.modulesMode;
+  const fields=el('div','','panel-section-editor');panel.append(fields);
+  const builtin=new Map(panelFields),custom=new Map(settings.customSections.map(item=>[item.id,item.title])),sectionControls=[];
+  const sectionOrder=[...new Set([...settings.sections,...panelFields.map(([id])=>id),...settings.customSections.map(s=>s.id)])];
+  const makeSection=id=>{
+   const title=custom.get(id)||builtin.get(id)||'Custom section';
+   const card=el('section','','panel-section-row');card.dataset.sectionId=id;fields.append(card);
+   const header=el('div','','panel-section-header');card.append(header);
+   const toggle=check(header,'Show '+title,settings.sections.includes(id));
+   const buttons=el('div','','actions');header.append(buttons);
+   button(buttons,'Up',()=>{const above=card.previousElementSibling;if(above)fields.insertBefore(card,above);});
+   button(buttons,'Down',()=>{const after=card.nextElementSibling;if(after)fields.insertBefore(after,card);});
+   if(custom.has(id))button(buttons,'Remove',()=>{card.remove();});
+   const heading=field(card,'Section heading',settings.sectionTitles[id]||title);heading.maxLength=80;
+   const override=field(card,'Custom content (optional, one item per line)',settings.sectionContent[id]||'','multiline');override.rows=2;override.maxLength=16000;
+   card.append(el('p','Leave custom content empty to use imported project details. This section is editable in the drawing after it is generated.','hint'));
+   sectionControls.push({id,card,toggle,heading,override});
+  };
+  sectionOrder.forEach(makeSection);
+  const newSection=el('div','','layout-card');panel.append(newSection);
+  const customTitle=field(newSection,'New sidebar section','');customTitle.maxLength=80;
+  button(newSection,'Add custom section',()=>{const title=customTitle.value.trim();if(!title)throw Error('Enter a section name.');const id='custom-'+crypto.randomUUID().slice(0,18);custom.set(id,title);settings.sections.push(id);makeSection(id);customTitle.value='';});
+  const notes=field(panel,'Legacy notes text',settings.notes,'multiline');notes.rows=2;notes.maxLength=10000;
+  panel.append(el('p','Enable or disable any section, change its heading, enter custom rows, and use Up or Down to choose the order. Custom content does not alter device configurations or original inventory.','hint'));
   const updateInheritance=()=>{sizes.disabled=panel.disabled=!!inherited?.checked;};if(inherited)inherited.onchange=updateInheritance;updateInheritance();
   let deviceChecks=[],definition=page?.reportId?layout.reportPages.find(p=>p.id===page.reportId):page?.corePageId?layout.corePages.find(p=>p.id===page.corePageId):null;
   if(!global&&(page?.coreDeviceIds||page?.reportId)){
@@ -61,7 +82,11 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   store=()=>{
    const numericFields=[drawing,text,equipment,width,scale,panelText,x,y].filter(Boolean);if(numericFields.some(n=>!n.value||!Number.isFinite(+n.value)||+n.value<+n.min||+n.value>+n.max))throw Error('Enter sizes within the ranges shown.');
    const next=global?layout.presentation.defaults:{...(name?.value.trim()?{name:name.value.trim()}:{}),...(!visible?.checked?{hidden:true}:{})};
-   if(global||!inherited.checked)Object.assign(next,{drawingScale:+drawing.value/100,textScale:+text.value/100,panel:{visible:show.checked,position:placement.value,width:+width.value,scale:+scale.value/100,textScale:+panelText.value/100,x:+x.value,y:+y.value,sections:choices.filter(([,input])=>input.checked).map(([id])=>id),notes:notes.value}});
+   if(global||!inherited.checked)Object.assign(next,{drawingScale:+drawing.value/100,textScale:+text.value/100,panel:{visible:show.checked,position:placement.value,width:+width.value,scale:+scale.value/100,textScale:+panelText.value/100,x:+x.value,y:+y.value,sections:[...fields.children].filter(card=>sectionControls.find(c=>c.card===card)?.toggle.checked).map(card=>card.dataset.sectionId),
+    customSections:sectionControls.filter(c=>c.card.isConnected&&c.id.startsWith('custom-')).map(c=>({id:c.id,title:c.heading.value.trim().slice(0,80)||'Custom section'})),
+    sectionTitles:Object.fromEntries(sectionControls.filter(c=>c.card.isConnected).map(c=>[c.id,c.heading.value.trim().slice(0,80)]).filter(([,title])=>title)),
+    sectionContent:Object.fromEntries(sectionControls.filter(c=>c.card.isConnected&&c.override.value.trim()).map(c=>[c.id,c.override.value.slice(0,16000)])),
+    modulesMode:moduleDetails.value,notes:notes.value}});
    if(global){next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;if(hops.value==='bundle')layout.hopStyle='bundle';else delete layout.hopStyle;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
    if(deviceChecks.length){const chosen=deviceChecks.filter(([,input])=>input.checked).map(([id])=>id);
     if(!page.reportId)layout.coreExclude=(layout.coreExclude||[]).filter(id=>!chosen.includes(id));

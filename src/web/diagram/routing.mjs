@@ -624,11 +624,18 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
     if(!module&&sorted.some(o=>o!==v&&Math.abs(o.anchor.x-v.anchor.x)<(weight+(o.anchor.weight||4))/2))while(reserved.some(o=>Math.min(high,o.high)>Math.max(low,o.low)&&Math.abs(o.x-x)<(weight+o.weight)/2+.25))x+=dir*Math.max(6,weight+.25);
     escapeChoices.set(v,x);reserved.push({x,weight,low,high});
    }
+   const sideRanks=new Map();
    sorted.forEach((v,i)=>{
     const side=sides.get(v.e.idx)||'left',dir=side==='right'?1:-1;
+    // Wireless cables to opposite sides do not occupy the same outward
+    // corridor. Give them independent level counters so the first left and
+    // right lead can share the same row, while parallel same-side cables still
+    // receive separate lanes and collision checks.
+    const rank=directionNeutralLevels?(sideRanks.get(side)||0):i;
+    sideRanks.set(side,rank+1);
     const moduleEscape=moduleEscapes.get(v.anchor);
     const weight=v.anchor.weight||4;
-    let escapeX=escapeChoices.get(v),x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?topClearance+pitch*i:bottomClearance+pitch*i)*scale;
+    let escapeX=escapeChoices.get(v),x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?topClearance+pitch*rank:bottomClearance+pitch*rank)*scale;
     if(v.anchor.escapeRange){
      const matching=sorted.filter(o=>o.anchor.escapeRange&&near(o.anchor.escapeRange[0],v.anchor.escapeRange[0])&&near(o.anchor.escapeRange[1],v.anchor.escapeRange[1])),[lo,hi]=v.anchor.escapeRange,index=matching.indexOf(v),widths=matching.map(o=>o.anchor.weight||4),required=widths.reduce((sum,width)=>sum+width,0)+.25*(matching.length+1);
      if(hi-lo<required)throw Object.assign(Error('This stack gap is too narrow for the selected cable widths. Enlarge the device or reduce the cable width.'),{code:'CORE_LAYOUT_CAPACITY',owner:v.node.sourceId});
@@ -638,7 +645,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
     // device titles are fitted after routing instead of forcing cable doglegs.
     let detour=false;for(const box of obstacles)if(!moduleEscape&&crossesText([[x,v.anchor.y],[x,ay]],box,3)){x=dir>0?Math.max(x,box.x+box.w+7):Math.min(x,box.x-7);detour=true;}
     if(detour)escapeX=x;
-    ends.set(v.e.idx+'/'+v.which,{...v,rank:i,escapeX,exitX:x,ay,moduleEscape});
+    ends.set(v.e.idx+'/'+v.which,{...v,rank,escapeX,exitX:x,ay,moduleEscape});
    });
   }
   fitNeighborDepartures(ends,nodes,obstacles);

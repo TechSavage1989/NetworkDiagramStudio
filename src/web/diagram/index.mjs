@@ -5,6 +5,7 @@ import {luminance} from '../reports/palette.mjs';
 import {portLabelLayout,portLabelText} from './port-label-layout.mjs';
 import {informationPanel} from './information-panel.mjs';
 import {presentation,scaleText,scalePage,displayPageName,cleanReportPages,deviceScale} from '../presentation.mjs';
+import {applyGlobalTextStyles} from '../global-text-styles.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {deviceModel,deviceDetails,macCaption} from '../device-details.mjs';
 import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,canContinueEquipment} from './equipment-layout.mjs';
@@ -440,11 +441,14 @@ function builderLayout(project,db,info,palette,plan,{sheetLabel='1 / 1'}={},colu
 }
 function bookletInventory(project,db,device,ports,options,palette,grouped,start=null){
  // Natural order keeps chassis slots together (A1-A8, then B1) and numeric member/port order.
+ // Dense, still-editable inventory typography. Compact columns and reduced
+ // vertical padding affect the tabular inventory only, never port faceplates.
+ const type={cell:10,line:12,row:18,pad:3,header:10,headerLine:13,maxChunk:9};
  const {width:W,height:H}=pageGeometry(project,'ports'),filter=options.detailFilter||'all',sorted=ports.slice().sort((a,b)=>cmp(a.name,b.name)||comparePorts(a,b)),prefix=portColumnPrefix(sorted.map(p=>p.name));
  // Short columns keep their heading readable; Description, Tagged VLANs and
  // Connected to share the rest of the page width.
- const spec=[['Ports'+(prefix?' ('+prefix+')':''),112],['Description',180,true],['Mode',132,false,textWidth('255.255.255.255/32',12)+18],['Native',80],['Tagged VLANs',150,true],['LAG',52],['Voice',52],['Link',122],['Connected to',220,true]],span=W-72,total=spec.reduce((n,c)=>n+c[1],0);
- const widths=spec.map(([title,w,,minimum=0])=>Math.max(w*span/total,textWidth(title,12,true)+16,minimum));let excess=widths.reduce((n,w)=>n+w,0)-span;
+ const spec=[['Ports'+(prefix?' ('+prefix+')':''),112],['Description',180,true],['Mode',132,false,textWidth('255.255.255.255/32',type.cell)+14],['Native',80],['Tagged VLANs',150,true],['LAG',52],['Voice',52],['Link',122],['Connected to',220,true]],span=W-72,total=spec.reduce((n,c)=>n+c[1],0);
+ const widths=spec.map(([title,w,,minimum=0])=>Math.max(w*span/total,textWidth(title,type.header,true)+12,minimum));let excess=widths.reduce((n,w)=>n+w,0)-span;
  for(let pass=0;pass<3&&excess>.01;pass++){const flexible=spec.map((c,i)=>c[2]&&widths[i]>60?i:-1).filter(i=>i>=0),room=flexible.reduce((n,i)=>n+widths[i]-60,0);if(!room)break;for(const i of flexible){const take=Math.min(widths[i]-60,excess*(widths[i]-60)/room);widths[i]-=take;}excess=widths.reduce((n,w)=>n+w,0)-span;}
  if(excess>.01){const scale=span/(span+excess);for(let i=0;i<widths.length;i++)widths[i]*=scale;}
  const columns=spec.map(([title],i)=>[title,widths[i]]);
@@ -468,35 +472,35 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   const link=[states.length===1?label3(states[0]):['up','down','unknown'].map(s=>{const n=record.members.filter(m=>m.state===s).length;return n?n+' '+label3(s).toLowerCase():'';}).filter(Boolean).join(', '),speeds.length===1?speeds[0]:'',media.length===1?media[0]:''].filter(Boolean).join(' · ');
   const connected=record.members.filter(m=>m.peers.length).map(m=>(names.length>1?portRanges([m.name],prefix)+': ':'')+m.peers.join(', ')).join('; ');
   const values=[portRanges(names,prefix)+(names.length>1?' ('+names.length+')':''),...record.fields.slice(0,1),...record.fields.slice(1),link,connected];
-  const lines=values.map((v,i)=>v?wrapPortText(v,columns[i][1]-16,12,i===0):[]),size=Math.max(1,...lines.map(l=>l.length)),chunks=[];
+  const lines=values.map((v,i)=>v?wrapPortText(v,columns[i][1]-12,type.cell,i===0):[]),size=Math.max(1,...lines.map(l=>l.length)),chunks=[];
   let hash=2166136261;for(const char of JSON.stringify([record.signature,names]))hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;
-  for(let from=0;from<size;from+=7){const slice=lines.map(l=>l.slice(from,from+7));if(from&&!slice[0].length)slice[0]=wrapPortText(portRanges(names,prefix)+' (continued)',columns[0][1]-16,12,true);chunks.push({record,names,lines:slice,part:from/7,key:hash.toString(36),height:Math.max(22,8+14*Math.max(...slice.map(l=>l.length)))});}
+  for(let from=0;from<size;from+=type.maxChunk){const slice=lines.map(l=>l.slice(from,from+type.maxChunk));if(from&&!slice[0].length)slice[0]=wrapPortText(portRanges(names,prefix)+' (continued)',columns[0][1]-12,type.cell,true);chunks.push({record,names,lines:slice,part:from/type.maxChunk,key:hash.toString(36),height:Math.max(type.row,2*type.pad+type.line*Math.max(...slice.map(l=>l.length)))});}
   return chunks;
  });
- const headings=columns.map(([title,w])=>wrapPortText(title,w-12,12,true)),header=Math.max(26,9+17*Math.max(...headings.map(l=>l.length)));
- const barTitle=wrapPortText(nameOf(device)+'  /  Port inventory',W-100,17,true),barDetailLines=wrapPortText(deviceDetails(device)+'  |  Ports 0000-0000 of 0000',W-100,12).length,barHeight=12+barTitle.length*20+barDetailLines*15;
+ const headings=columns.map(([title,w])=>wrapPortText(title,w-12,type.header,true)),header=Math.max(24,6+type.headerLine*Math.max(...headings.map(l=>l.length)));
+ const barTitle=wrapPortText(nameOf(device)+'  /  Port inventory',W-100,15,true),barDetailLines=wrapPortText(deviceDetails(device)+'  |  Ports 0000-0000 of 0000',W-100,10).length,barHeight=10+barTitle.length*17+barDetailLines*12;
  const out=[],scopeBase=(project._reportPrefix?project._reportPrefix+'|':'')+'Port Inventory|'+equipmentScope(device);let at=0,sheet=0;
  do{
   // A combined sheet starts the table under its faceplates when the bar,
   // heading and first row fit there; the rest continues on inventory pages.
   // On a combined sheet the faceplate bar already names the device, so its
   // table opens with a slim section bar instead of a second dark bar.
-  const filterLine=sheet===0&&shown<ports.length?22:0,slim=26,slimFits=wrapPortText(nameOf(device)+'  /  Port inventory  |  Ports '+ports.length+'-'+ports.length+' of '+ports.length,W-88,12,true).length===1,host=sheet===0&&start&&slimFits&&start.top+slim+filterLine+header+(rows[0]?.height||22)<=H-124?start.page:null,bar=host?slim-8:barHeight;
+  const filterLine=sheet===0&&shown<ports.length?20:0,slim=26,slimFits=wrapPortText(nameOf(device)+'  /  Port inventory  |  Ports '+ports.length+'-'+ports.length+' of '+ports.length,W-88,11,true).length===1,host=sheet===0&&start&&slimFits&&start.top+slim+filterLine+header+(rows[0]?.height||type.row)<=H-82?start.page:null,bar=host?slim-8:barHeight;
   const p=host||fresh('MDF Port Map','MDF port map','Port assignments, descriptions, VLANs and link state',project),a=p.items,scope=scopeBase+'|sheet:'+sheet;if(!host)p.editScope=scope;
   let y=host?start.top:150;const barTop=y,tableTop=barTop+bar+8+filterLine;y=tableTop;
   if(sheet===0&&shown<ports.length){label(a,38,barTop+bar+6,W-80,18,shown+' of '+ports.length+' port records in details | '+(ports.length-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
   const tableStart=a.length;if(!host)p.tableTop=tableTop;else p.tableTop??=tableTop;
   rect(a,36,y,W-72,header,'#E3ECF5','#C4D3E3',.75);a.at(-1).editKey=scope+'|inventory-header';let x=36;
-  columns.forEach(([,w],column)=>{headings[column].forEach((text,line)=>{label(a,x+8,y+4+line*17,w-12,16,text,12,true,'#1B3A4B');Object.assign(a.at(-1),{editKey:scope+'|column|'+column+'|'+line,full:true});});x+=w;});y+=header;
+  columns.forEach(([,w],column)=>{headings[column].forEach((text,line)=>{label(a,x+6,y+3+line*type.headerLine,w-10,type.headerLine,text,type.header,true,'#1B3A4B');Object.assign(a.at(-1),{editKey:scope+'|column|'+column+'|'+line,full:true});});x+=w;});y+=header;
   const members=[];let count=0;
   while(at<rows.length&&y+rows[at].height<=H-124){
    const row=rows[at++],rowKey=scopeBase+'|row|'+row.key+'|part:'+row.part;members.push(...(row.part?[]:row.names));
    rect(a,36,y,W-72,row.height,count%2?'#F3F7FA':C.white);a.at(-1).editKey=rowKey+'|background';rect(a,36,y+row.height-1,W-72,1,'#DCE5E9');a.at(-1).editKey=rowKey+'|rule';
    let cx=36;
    row.lines.forEach((lines,column)=>{
-    const indent=column===3&&!row.part?28:8;
-    if(column===3&&!row.part){rect(a,cx+8,y+6,12,11,row.record.swatch,'#5B6B82',.6);a.at(-1).editKey=rowKey+'|swatch';}
-    lines.forEach((text,line)=>{label(a,cx+indent,y+4+line*14,columns[column][1]-indent-6,14,text,12,column===0,column===0?'#1B3A4B':column===1&&row.record.inferred?C.muted:C.ink);Object.assign(a.at(-1),{editKey:rowKey+'|cell:'+column+'|line:'+line,portTableRole:column===0?'interface':'detail',portAssignmentRole:roles[column],full:true});});
+    const indent=column===3&&!row.part?24:6;
+    if(column===3&&!row.part){rect(a,cx+6,y+5,10,9,row.record.swatch,'#5B6B82',.6);a.at(-1).editKey=rowKey+'|swatch';}
+    lines.forEach((text,line)=>{label(a,cx+indent,y+type.pad+line*type.line,columns[column][1]-indent-4,type.line,text,type.cell,column===0,column===0?'#1B3A4B':column===1&&row.record.inferred?C.muted:C.ink);Object.assign(a.at(-1),{editKey:rowKey+'|cell:'+column+'|line:'+line,portTableRole:column===0?'interface':'detail',portAssignmentRole:roles[column],full:true});});
     cx+=columns[column][1];
    });
    y+=row.height;count++;
@@ -508,9 +512,9 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   if(host)sectionBar(a,36,barTop,W-72,nameOf(device)+'  /  Port inventory  |  '+(records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'),scope+'|section');
   else{
    rect(a,36,barTop,W-72,barHeight,'#14283D');a.at(-1).editKey=scope+'|bar';
-   barTitle.forEach((text,line)=>{label(a,50,barTop+5+line*20,W-100,20,text,17,true,C.white);Object.assign(a.at(-1),{editKey:scope+'|bar-title'+(line?'|'+line:''),full:true});});
-   const detail=wrapPortText([deviceDetails(device),records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'].filter(Boolean).join('  |  '),W-100,12);
-   detail.slice(0,barDetailLines).forEach((text,line)=>{label(a,50,barTop+7+barTitle.length*20+line*15,W-100,15,text,12,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|bar-detail'+(line?'|'+line:''),full:true});});
+   barTitle.forEach((text,line)=>{label(a,50,barTop+4+line*17,W-100,17,text,15,true,C.white);Object.assign(a.at(-1),{editKey:scope+'|bar-title'+(line?'|'+line:''),full:true});});
+   const detail=wrapPortText([deviceDetails(device),records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'].filter(Boolean).join('  |  '),W-100,10);
+   detail.slice(0,barDetailLines).forEach((text,line)=>{label(a,50,barTop+5+barTitle.length*17+line*12,W-100,12,text,10,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|bar-detail'+(line?'|'+line:''),full:true});});
   }
   const note=wrapPortText('Confirm live link, LLDP/CDP and MAC address tables before moving production cables.'+(grouped?' Ports with the same settings share a row (port count in brackets).':''),W-76,11);
   const noted=(!host||start.last&&start.note!==false)&&y+12+note.length*15<=H-75;if(noted)note.forEach((text,line)=>{label(a,38,y+12+line*15,W-76,15,text,11,false,C.muted);a.at(-1).editKey=scope+'|note'+(line?'|'+line:'');});
@@ -859,7 +863,7 @@ export function buildPages(project={},options={}){
     if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p,{style:hopStyle(project)});fitDynamicPage(p,project);
     const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
     rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
-    applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});
+    applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);applyGlobalTextStyles(p,project.layout?.textStyles,project.layout?.drawingEdits);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});
   });
   return options.includeHidden?pages:visible;
 }

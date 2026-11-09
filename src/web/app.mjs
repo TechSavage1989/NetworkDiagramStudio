@@ -16,11 +16,13 @@ import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
 import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
 import {diagramViewport} from './viewport.mjs';
-import {arrangeAnchors,arrangeBoxes} from './arrange.mjs';
+import {arrangeAnchors,arrangeBoxes,arrangeBoxesAtGap} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
 import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
+import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
+import {globalTextCategories,cleanGlobalTextStyles} from './global-text-styles.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
@@ -31,7 +33,7 @@ import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionD
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
 import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
-import {relatedConnectionItems,nearestOnCable,positionOnCable} from './connection-selection.mjs';
+import {relatedConnectionItems,nearestOnCable,positionOnCable,describeCableEnds,labelPositionRelativeToCable} from './connection-selection.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog,findDeviceIdentity} from './imports/index.mjs';
 import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
@@ -45,9 +47,10 @@ import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reope
 
 // Keep browser navigation/debug actions out of the drawing workspace.
 installFormControls();
-document.addEventListener('contextmenu',event=>event.preventDefault());
+document.addEventListener('contextmenu',handleEditorContextMenu);
 const $=id=>document.getElementById(id);
-const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{
+const typeHighlights=connectionTypeHighlights($('canvas'));
+const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onCableHover:element=>typeHighlights.setCableHover(element),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{
  if(editDrawing){
   if(snapLabelPick){snapSelectedLabelAtClick(key,e);return true;}
   if(besidePick){pickBesideReference(key);return true;}
@@ -68,7 +71,7 @@ let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceS
 const pageCache=new Map(),buildDrawing=(source=scoped(),options={})=>buildPages(source,{...options,cache:pageCache});
 const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
 let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null;
-let cablePoint=-1,snapLabelPick=null;
+let cablePoint=-1,snapLabelPick=null,contextMenu=null;
 const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:project.links,warnings:project.warnings}));
 const modelKinds=deviceKinds;
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
@@ -128,8 +131,10 @@ function syncDrawingSelection(){
 
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
- for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
+ for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
+ $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
  $('drawing-snap-label').disabled=!editDrawing||!selectedConnectionLabel();
+ typeHighlights.setSelected(connectionTypeForSelection(pages[active],drawingSelection));
  const selectedDevices=selectedDrawingDevices();syncBesideTools();$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
  const cable=selectedCable();$('cable-tools').hidden=!editDrawing||!cable;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
  if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
@@ -141,34 +146,115 @@ function selectedCable(){return drawingSelection.size===1?pages[active]?.items.f
 function selectedConnectionLabel(){
  return drawingSelection.size===1?pages[active]?.items.find(item=>item.labelRole&&item.relatedCableKey&&drawingSelection.has(item.editKey)):null;
 }
-function saveSnappedLabel(key,point){
+function saveSnappedLabel(key,point,{rotation='auto',placement='on'}={}){
  const label=pages[active]?.items.find(item=>item.editKey===key&&item.labelRole),cable=label&&pages[active].items.find(item=>item.editKey===label.relatedCableKey&&item.type==='path');
  if(!label||!cable||!point)throw Error('Select a label associated with a visible cable.');
- const patch=unpresentPatch(label,{x:point.x-label.w/2,y:point.y-label.h/2,angle:point.angle});
+ const radians=rotation==='auto'?point.angle:Number(rotation)*Math.PI/180;
+ const aligned=labelPositionRelativeToCable(point,{placement,width:label.w,height:label.h,rotation:radians});
+ const patch=unpresentPatch(label,{x:aligned.x-label.w/2,y:aligned.y-label.h/2,angle:radians});
+ patch.rotationMode=rotation==='auto'?'auto':'fixed';
+ patch.cableSide=['above','below'].includes(placement)?placement:'on';
  if(Number.isFinite(point.ratio))patch.cableFraction=point.ratio;
  setDrawingEdits({...project.layout?.drawingEdits,[key]:{...project.layout?.drawingEdits?.[key],...patch}});
- say('Connection label aligned to its cable. Its saved position will not move automatically.');
+ say('Connection label aligned '+(placement==='on'?'on':placement)+' its cable. Its relative position is saved.');
 }
 function snapSelectedLabelAtClick(key,event){
- const labelKey=snapLabelPick,label=pages[active]?.items.find(item=>item.editKey===labelKey),cable=pages[active]?.items.find(item=>item.editKey===label?.relatedCableKey);
+ const labelKey=snapLabelPick?.key||snapLabelPick,rotation=snapLabelPick?.rotation||'auto',placement=snapLabelPick?.placement||'on',label=pages[active]?.items.find(item=>item.editKey===labelKey),cable=pages[active]?.items.find(item=>item.editKey===label?.relatedCableKey);
  if(!label||!cable){snapLabelPick=null;return;}
  if(key!==cable.editKey){say('Click a position on the highlighted connection cable. Escape cancels.');return;}
  const svg=$('canvas').querySelector('svg'),position=new DOMPoint(event.clientX,event.clientY).matrixTransform(svg.getScreenCTM().inverse()),point=nearestOnCable(cable.points,{x:position.x,y:position.y});
- snapLabelPick=null;if(point)task(()=>saveSnappedLabel(labelKey,point));
+ snapLabelPick=null;if(point)task(()=>saveSnappedLabel(labelKey,point,{rotation,placement}));
 }
 function snapSelectedLabelDialog(){
  const label=selectedConnectionLabel();if(!label)throw Error('Select a connection label first.');
  const cable=pages[active].items.find(item=>item.editKey===label.relatedCableKey);
  if(!cable)throw Error('The associated connection is not visible on this page.');
- const body=modal('Align label to connection');
- body.append(el('p','Select a position along the connected line, or choose a position directly on the diagram. Manual label positioning is retained when the page is rebuilt.','hint'));
- const position=field(body,'Position on line','0.5',[['0.1','Near start (10%)'],['0.25','Quarter (25%)'],['0.5','Middle (50%)'],['0.75','Three-quarter (75%)'],['0.9','Near end (90%)']]);
+ const ends=describeCableEnds(cable,project.devices),body=modal('Align label to connection');
+ body.append(el('p','Start and end follow the actual drawn cable, with device names and physical ports identified below. The position remains attached to the cable if routing changes.','hint'));
+ const position=field(body,'Position on line','0.5',[
+  ['0.1','Near '+ends.start+' (10%)'],['0.25','Toward '+ends.start+' (25%)'],
+  ['0.5','Center of cable (50%)'],['0.75','Toward '+ends.end+' (75%)'],
+  ['0.9','Near '+ends.end+' (90%)']
+ ]);
+ const placement=field(body,'Position relative to line',project.layout?.drawingEdits?.[label.editKey]?.cableSide||'on',[
+  ['above','Above line (left of a vertical link)'],['on','On line (centered in a break)'],['below','Below line (right of a vertical link)']
+ ]);
+ const rotation=field(body,'Label orientation','auto',[['auto','Automatically follow the cable'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]);
  const actionBar=actions(body);
- button(actionBar,'Align label',()=>{const point=positionOnCable(cable.points,Number(position.value));if(!point)throw Error('The cable has no usable segment.');saveSnappedLabel(label.editKey,point);close();},'primary');
- button(actionBar,'Pick point on the cable',()=>{snapLabelPick=label.editKey;close();say('Click the desired position on the highlighted cable. Escape cancels.');},'');
+ button(actionBar,'Align label',()=>{const point=positionOnCable(cable.points,Number(position.value));if(!point)throw Error('The cable has no usable segment.');saveSnappedLabel(label.editKey,point,{rotation:rotation.value,placement:placement.value});close();},'primary');
+ button(actionBar,'Pick point on the cable',()=>{snapLabelPick={key:label.editKey,rotation:rotation.value,placement:placement.value};close();say('Click the desired position on the highlighted cable. Escape cancels.');},'');
 }
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&snapLabelPick){snapLabelPick=null;say('Label alignment cancelled.');}},true);
 
+function rotateConnectionLabel(key,angle){
+ const label=pages[active]?.items.find(i=>i.editKey===key&&i.labelRole);
+ if(!label)throw Error('Select a connection label to rotate.');
+ const patch={...project.layout?.drawingEdits?.[key],angle:angle*Math.PI/180,rotationMode:'fixed'};
+ setDrawingEdits({...project.layout?.drawingEdits,[key]:patch});say('Label rotation saved.');
+}
+function dismissEditorContextMenu(){contextMenu?.remove();contextMenu=null;}
+function showEditorContextMenu(event,options){
+ dismissEditorContextMenu();
+ const menu=el('div','','editor-context-menu');menu.setAttribute('role','menu');menu.setAttribute('aria-label','Drawing editing options');
+ for(const [caption,action] of options){
+  if(action==null){menu.append(el('div',caption,'editor-context-heading'));continue;}
+  const b=el('button',caption);b.type='button';b.setAttribute('role','menuitem');
+  b.onclick=e=>{e.stopPropagation();dismissEditorContextMenu();task(action);};menu.append(b);
+ }
+ document.body.append(menu);contextMenu=menu;
+ menu.style.left=Math.max(8,Math.min(event.clientX,window.innerWidth-menu.offsetWidth-12))+'px';
+ menu.style.top=Math.max(8,Math.min(event.clientY,window.innerHeight-menu.offsetHeight-12))+'px';
+ menu.querySelector('button')?.focus({preventScroll:true});
+ event.preventDefault();
+}
+document.addEventListener('pointerdown',event=>{if(contextMenu&&!contextMenu.contains(event.target))dismissEditorContextMenu();},true);
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&contextMenu){dismissEditorContextMenu();event.preventDefault();}},true);
+function handleEditorContextMenu(event){
+ const target=event.target;if(target.closest('input,textarea,select,[data-inline-editor]'))return;
+ const tab=target.closest('#tabs button[role="tab"]');
+ if(tab){
+  const visible=pages.filter(page=>familyOf(page)===familyOf(pages[active])),index=[...$('tabs').querySelectorAll('button[role="tab"]')].indexOf(tab),page=visible[index];
+  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Page options',pageOptions],['Pages & layout',()=>layoutOptions(page.name)]]);
+  return;
+ }
+ if(!target.closest('#canvas'))return;
+ // Suppress the browser's default menu even on an empty canvas before a site loads.
+ // The native startup test checks this before any sample or project exists.
+ event.preventDefault();
+ if(!pages[active])return;
+ const key=target.closest('[data-drawing-key]')?.getAttribute('data-drawing-key');
+ const socket=target.closest('[data-port-name]'),owner=socket?.closest('[data-device-id]');
+ const page=pages[active],item=drawingObjects(page).find(item=>item.editKey===key),actions=[];
+ if(!editDrawing)actions.push(['Enable Edit drawing',()=>$('edit-drawing').click()]);
+ if(item&&editDrawing){
+  actions.push([item.type==='path'?'Connection':item.labelRole?'Connection label':item.type==='device'?'Device':'Drawing object',null]);
+  actions.push(['Edit properties',()=>{selectDrawingItem(item.editKey);editDrawingObject(item.editKey);}],['Select object',()=>selectDrawingItem(item.editKey)]);
+  if(item.labelRole&&item.relatedCableKey){
+   actions.push(['Snap label to associated line',()=>{selectDrawingItem(item.editKey);snapSelectedLabelDialog();}]);
+   for(const [degrees,title] of [[0,'Horizontal'],[90,'Vertical'],[180,'Reverse horizontal'],[-90,'Reverse vertical']])actions.push(['Rotate: '+title,()=>rotateConnectionLabel(item.editKey,degrees)]);
+   actions.push(['Reset automatic label placement',()=>{const edits={...project.layout?.drawingEdits};delete edits[item.editKey];setDrawingEdits(edits);say('Automatic label placement restored.');}]);
+  }
+  if(item.type==='path'){
+   actions.push(['Edit cable bends',()=>editCablePoints(item)]);
+   if(item.sourceLink)actions.push(['Connect endpoints',()=>connectSelectedCable(item)]);
+   actions.push(['Organize connections',()=>$('drawing-organize').click()]);
+  }
+  if(item.type==='device'){
+   const d=project.devices.find(d=>d.id===item.sourceId);
+   if(d)actions.push(['Edit device details',()=>editDevice(d)],['Find hardware stencil',()=>deviceStencil(d)]);
+  }
+ }else if(socket&&owner&&editDrawing){
+  const sourceId=owner.getAttribute('data-device-id'),portName=socket.getAttribute('data-port-name');
+  const related=relatedConnectionItems(page,{sourceId,portName});
+  actions.push(['Port '+portName,null]);
+  if(related.paths.length)actions.push(['Highlight connected cable',()=>selectDrawingItem(related.paths[0].editKey)]);
+  const d=project.devices.find(d=>d.id===sourceId);
+  if(d)actions.push(['Edit device and port details',()=>editDevice(d)]);
+ }
+ if(!item&&!socket)actions.push(['Page',null]);
+ actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Page options',pageOptions],['Pages & layout',()=>layoutOptions(page.name)]);
+ showEditorContextMenu(event,actions);
+}
 function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...unpresentPatch(item,{points})}});}
 function cableControlClick(key,event,target=event.target){
  const add=target.closest('[data-cable-segment]'),point=target.closest('[data-cable-point]');if(!add&&!point)return false;
@@ -277,7 +363,19 @@ function startDrawingMove(key,event){
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
   for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else n.setAttribute('transform','translate('+x+' '+y+') '+(s.transform||''));}
   for(const n of $('canvas').querySelectorAll('.diagram-selection'))n.setAttribute('transform','translate('+x+' '+y+')');$('canvas').querySelector('.cable-controls')?.setAttribute('visibility','hidden');showSnapGuides(next.guides);
- },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta])),{preventSidebarOverlap:true}));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
+ },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{
+    const label=keys.size===1?page.items.find(item=>item.editKey===[...keys][0]&&item.labelRole&&item.relatedCableKey):null;
+    const cable=label&&page.items.find(item=>item.editKey===label.relatedCableKey&&item.type==='path');
+    if(label&&cable){
+      const center={x:label.x+label.w/2+next.delta[0],y:label.y+label.h/2+next.delta[1]};
+      const hit=nearestOnCable(cable.points,center);
+      if(hit&&Math.hypot(hit.x-center.x,hit.y-center.y)<=Math.max(14,label.h/2+8)){
+       saveSnappedLabel(label.editKey,hit);say('Label centered and oriented on the connection line. Rotation remains editable.');return;
+      }
+    }
+    setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta])),{preventSidebarOverlap:true}));
+    say('Drawing items moved.');
+   });},cancel(){restore();syncDrawingSelection();}};
 }
 $('drawing-snap-label').onclick=()=>task(snapSelectedLabelDialog);
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{cancelBesidePick();drawingSelection.clear();syncDrawingSelection();};
@@ -361,6 +459,26 @@ $('cable-remove-point').onclick=()=>task(removeSelectedCablePoint);
 $('cable-endpoints').onclick=()=>task(()=>connectSelectedCable());
 $('cable-edit-points').onclick=()=>task(()=>editCablePoints(selectedCable()));
 for(const button of $('drawing-tools').querySelectorAll('[data-align]'))button.onclick=()=>task(()=>{const page=pages[active],objects=drawingObjects(page).filter(o=>drawingSelection.has(o.editKey)&&!drawingSelection.has(o.parent?.editKey)),boxes=objects.map(drawingBounds).filter(Boolean);setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,arrangeBoxes(boxes,button.dataset.align)));say('Selected drawing items arranged.');});
+$('drawing-spacing').onclick=()=>task(()=>{
+ const page=pages[active];
+ const objects=drawingObjects(page).filter(item=>drawingSelection.has(item.editKey)&&!drawingSelection.has(item.parent?.editKey)&&item.type!=='path'&&item.type!=='vector');
+ if(objects.length<2)throw Error('Select at least two devices, text labels or other objects to adjust spacing.');
+ const body=modal('Spacing for selected objects');
+ body.append(el('p','Adjust only the selected objects at their current positions. The first object in the chosen direction stays in place. Existing cable endpoints stay attached. Undo restores the previous spacing.','hint'));
+ const direction=field(body,'Direction','x',[['x','Horizontal (left to right)'],['y','Vertical (top to bottom)']]);
+ const mode=field(body,'Spacing mode','exact',[['exact','Set an exact gap between objects'],['even','Distribute evenly within selected bounds']]);
+ const gap=field(body,'Gap between objects (drawing units)',48);
+ gap.type='number';gap.min=0;gap.max=2000;gap.step=1;
+ const update=()=>{gap.disabled=mode.value==='even';};mode.onchange=update;update();
+ button(actions(body),'Apply spacing',()=>{
+  const current=pages[active],keys=new Set(objects.map(item=>item.editKey));
+  const bounds=drawingObjects(current).filter(item=>keys.has(item.editKey)).map(drawingBounds).filter(Boolean);
+  const offsets=mode.value==='even'?arrangeBoxes(bounds,direction.value==='x'?'space-x':'space-y'):arrangeBoxesAtGap(bounds,direction.value,Number(gap.value));
+  setDrawingEdits(moveDrawingItems(current,project.layout?.drawingEdits,offsets,{preventSidebarOverlap:true}));
+  close();say('Spacing applied to '+bounds.length+' selected objects. Undo is available.');
+ },'primary');
+});
+
 function drawingHistory(redo=false,all=false,scope=modalHistoryScope){
  const previous=project,next=projectHistory.travel(project,{redo,all,scope,validate(state){project=state;try{validateDrawing();}finally{project=previous;}}});if(next===previous)return;
  inlineCancel?.();project=next;evidenceSnapshot=project.evidence?snapshot():null;dirty=projectHistory.dirty;draw();modalHistoryRefresh?.();say(all?'All available changes undone.':redo?'Change redone.':'Change undone.');
@@ -459,6 +577,46 @@ function linkStyleOptions(selected){
  button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1,weight:4});close();});button(bar,'Cancel',close);
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
+
+function globalTextStyleOptions(){
+ const body=modal('Global text styles');
+ body.append(el('p','Set font size, color, weight and alignment for each category across this project. These are defaults for existing and future items. Individually edited text keeps its own settings; exported diagrams use the same styles.','hint'));
+ const presets=cleanGlobalTextStyles(project.layout?.textStyles),controls=[];
+ const rows=el('div','','global-text-styles');body.append(rows);
+ for(const [id,title] of globalTextCategories){
+  const settings=presets[id]||{},section=el('details','','text-style-section'),heading=el('summary',title);rows.append(section);section.append(heading);
+  const grid=el('div','','form-grid');section.append(grid);
+  const size=field(grid,'Font size (%)',Math.round((settings.scale||1)*100));size.type='number';size.min=40;size.max=250;size.step=5;
+  const color=field(grid,'Text color (hex, blank for default)',settings.color||'');color.placeholder='Default';color.maxLength=7;
+  const weight=field(grid,'Weight',settings.bold==null?'default':String(settings.bold),[['default','Use built-in weight'],['true','Bold'],['false','Regular']]);
+  const align=field(grid,'Alignment',settings.align||'default',[['default','Use built-in alignment'],['left','Left'],['center','Center'],['right','Right']]);
+  const reset=button(section,'Reset '+title,()=>{size.value=100;color.value='';weight.value='default';align.value='default';});
+  reset.classList.add('secondary');
+  controls.push({id,size,color,weight,align});
+ }
+ const bar=actions(body);
+ button(bar,'Apply all text styles',()=>{
+  const next={};
+  for(const c of controls){
+   const percent=Number(c.size.value),color=c.color.value.trim();
+   if(!Number.isFinite(percent)||percent<40||percent>250)throw Error('Choose font sizes between 40% and 250% in '+globalTextCategories.find(([id])=>id===c.id)[1]+'.');
+   if(color&&!/^#[0-9a-fA-F]{6}$/.test(color))throw Error('Enter a six-digit hex color (for example #16364A), or leave the color blank.');
+   const style={scale:percent/100};
+   if(color)style.color=color;
+   if(c.weight.value!=='default')style.bold=c.weight.value==='true';
+   if(c.align.value!=='default')style.align=c.align.value;
+   next[c.id]=style;
+  }
+  const previous=project.layout||{},cleaned=cleanGlobalTextStyles(next);
+  project.layout={...previous,textStyles:cleaned};
+  let prepared;try{prepared=validateDrawing();}catch(error){project.layout=previous;throw error;}
+  perform('text-styles',prepared);close();say('Global text styles saved for all drawing pages. Undo restores the previous styles.');
+ },'primary');
+ button(bar,'Reset all styles',()=>{for(const c of controls){c.size.value=100;c.color.value='';c.weight.value='default';c.align.value='default';}});
+ button(bar,'Cancel',close);
+}
+$('global-text-styles').onclick=()=>task(globalTextStyleOptions);
+
 function layoutOptions(selected=pages[active]?.name){
  pageLayoutEditor({project,pages:buildPages(scoped(),{includeHidden:true}),selected,modal,field,button,close,apply(layout,include=[]){
   const previous=project;project={...project,devices:project.devices.map(d=>include.includes(d.id)?{...d,hidden:false,scopeOverride:true}:d),layout:cleanLayout(layout,project.devices.map(d=>d.id))};
@@ -652,6 +810,34 @@ document.addEventListener('keydown',event=>{
  if(!opened)return;
  const focus=opened.querySelector('summary');closePageGroupMenus();focus?.focus();event.preventDefault();
 },true);
+let pageTabClickTimer=null;
+function renamePageTab(page,button){
+ if(!commitInlineEdit())return;
+ clearTimeout(pageTabClickTimer);
+ const previous=page.displayName||page.name,input=el('input');
+ input.className='page-tab-rename';input.value=previous;input.maxLength=80;input.setAttribute('aria-label','Rename page '+previous);
+ button.replaceChildren(input);button.title='Enter saves. Escape cancels.';
+ let finished=false;
+ const cancel=()=>{if(finished)return;finished=true;button.replaceChildren(previous);};
+ const commit=()=>{
+  if(finished)return;
+  const name=input.value.trim();
+  if(!name||name.length>80){input.setCustomValidity('Enter a page name up to 80 characters.');input.reportValidity();return;}
+  if(pages.some(other=>other.name!==page.name&&(other.displayName||other.name).toLowerCase()===name.toLowerCase())){input.setCustomValidity('Another page already has that name.');input.reportValidity();return;}
+  if(name===previous){cancel();return;}
+  const before=project.layout,layout=structuredClone(before||{});
+  layout.presentation||={defaults:{},pages:{}};layout.presentation.pages||={};
+  layout.presentation.pages[page.name]={...layout.presentation.pages[page.name],name};
+  project.layout=cleanLayout(layout,project.devices.map(device=>device.id));
+  try{const prepared=buildDrawing();finished=true;perform('page-rename',prepared);say('Page renamed to '+name+'. Tab, page selector and drawing heading updated.');}
+  catch(error){project.layout=before;cancel();say('Page rename failed: '+error.message);}
+ };
+ input.addEventListener('click',event=>event.stopPropagation());
+ input.addEventListener('dblclick',event=>event.stopPropagation());
+ input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();commit();}else if(event.key==='Escape'){event.preventDefault();cancel();}});
+ input.addEventListener('blur',commit);
+ input.focus({preventScroll:true});input.select();
+}
 function pageNavigation(){
  const navigation=$('page-navigation'),families=$('page-families'),picker=$('page-select');
  navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
@@ -695,7 +881,14 @@ function draw(prepared){
  $('warnings').hidden=!project.warnings.length;$('warnings').textContent='Review '+project.warnings.length+' import '+(project.warnings.length===1?'note':'notes');
  active=Math.max(0,Math.min(active,pages.length-1));
  pageNavigation();
- pages.forEach((page,i)=>{if(familyOf(page)!==familyOf(pages[active]))return;const b=el('button',page.displayName||page.name);b.title='Double-click to rename or customize this page';b.ondblclick=()=>task(()=>layoutOptions(page.name));b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);b.onclick=()=>{if(!commitInlineEdit())return;active=i;draw(pages);};tabs.append(b);});
+ pages.forEach((page,i)=>{if(familyOf(page)!==familyOf(pages[active]))return;
+ const b=el('button',page.displayName||page.name);
+ b.title='Double-click to rename this page. Use Pages & layout for additional settings.';
+ b.ondblclick=event=>{event.preventDefault();clearTimeout(pageTabClickTimer);renamePageTab(page,b);};
+ b.setAttribute('role','tab');b.setAttribute('aria-selected',String(i===active));b.classList.toggle('active',i===active);
+ b.onclick=event=>{if(event.target.matches('.page-tab-rename')||event.detail>1)return;if(!commitInlineEdit())return;clearTimeout(pageTabClickTimer);if(i===active)return;pageTabClickTimer=setTimeout(()=>{active=i;draw(pages);},230);};
+ tabs.append(b);
+});
  tabs.scrollLeft=previousTabScroll;
  const selectedTab=tabs.querySelector('button.active');
  if(selectedTab){const left=selectedTab.offsetLeft-tabs.offsetLeft,right=left+selectedTab.offsetWidth;if(left<tabs.scrollLeft)tabs.scrollLeft=left;else if(right>tabs.scrollLeft+tabs.clientWidth)tabs.scrollLeft=right-tabs.clientWidth;}
@@ -703,6 +896,7 @@ function draw(prepared){
   if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),pages[active]);}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
  for(const id of ['export','export-menu','print','svg'])$(id).disabled=!pages.length||working;
+ typeHighlights.show(canvas.querySelector('svg'));
  $('port-map-options').hidden=!pages[active]?.portMap;syncDrawingSelection();
 }
 function cleanStencil(s){
@@ -1011,6 +1205,7 @@ function editDrawingObject(key){
  for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
  if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
+ const labelRotation=item.labelRole&&item.relatedCableKey?field(body,'Connection label rotation',project.layout?.drawingEdits?.[item.editKey]?.rotationMode==='fixed'?String(Math.round((project.layout.drawingEdits[item.editKey].angle||0)*180/Math.PI)):'auto',[['auto','Follow cable automatically'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]):null;
  const initialWeight=linkedSwatch?item.sampleWeight??item.h:item.weight||1;
  if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',initialWeight);inputs.weight.type='number';inputs.weight.step=.1;inputs.weight.min=.1;inputs.weight.max=12000;}
  let picker=null,captions=null,currentType=item.linkType;
@@ -1026,6 +1221,7 @@ function editDrawingObject(key){
  const scaleObject=item.type!=='path'&&!linkedSwatch?field(body,'Scale this object (%)',100):null;if(scaleObject){scaleObject.type='number';scaleObject.min=10;scaleObject.max=400;}
  const bar=actions(body);button(bar,'Save object',()=>{
   const change={};for(const [k,input] of Object.entries(inputs)){if(['w','h','size','weight'].includes(k)){const n=(k==='weight'?lineWidthValue(input):Number(input.value))/(normalized&&(['w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||n<=0)throw Error('Use a valid positive size.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
+  if(labelRotation){change.rotationMode=labelRotation.value==='auto'?'auto':'fixed';if(change.rotationMode==='fixed')change.angle=Number(labelRotation.value)*Math.PI/180;}
   if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
   if(scaleObject){const factor=Number(scaleObject.value)/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Use an object scale from 10 to 400 percent.');for(const k of ['w','h','size'])if(Number.isFinite(change[k]))change[k]*=factor;if(item.type==='vector'&&Array.isArray(change.commands)){const bounds=drawingBounds(item),x=(bounds.x-item.parent.x)/item.parent.w,y=(bounds.y-item.parent.y)/item.parent.h;change.commands=change.commands.map(c=>c.length===3?[c[0],x+(c[1]-x)*factor,y+(c[2]-y)*factor]:c);}}
   Object.assign(change,unpresentPatch(item,change));

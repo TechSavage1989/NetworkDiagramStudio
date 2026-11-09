@@ -89,7 +89,7 @@ function boxDistance(box,path){
  }
  return best;
 }
-import {positionOnCable} from '../connection-selection.mjs';
+import {positionOnCable,labelPositionRelativeToCable} from '../connection-selection.mjs';
 
 export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const minY=page.dynamic?(page.originY||0)+36:158,maxY=(page.originY||0)+(page.height||975)-69,maxX=(page.originX||0)+(page.width||1200)-38;
@@ -163,7 +163,14 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const placeOne=req=>{
   const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)return {skip:true};
   const snapped=patches.find(p=>Number.isFinite(p.cableFraction)),snapOwner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);
-  if(snapped&&snapOwner){const hit=positionOnCable(snapOwner.points,snapped.cableFraction);if(hit)return {box:{x:hit.x-w/2,y:hit.y-h/2,w,h,angle:hit.angle,manual:true},lines,size};}
+  if(snapped&&snapOwner){
+    const hit=positionOnCable(snapOwner.points,snapped.cableFraction);
+    if(hit){
+     const angle=snapped.rotationMode==='fixed'&&Number.isFinite(snapped.angle)?snapped.angle:hit.angle,side=snapped.cableSide||'on';
+     const aligned=labelPositionRelativeToCable(hit,{placement:side,width:w,height:h,rotation:angle});
+     return {box:{x:aligned.x-w/2,y:aligned.y-h/2,w,h,angle,manual:true,inline:side==='on',stacked:lines.length>1,parts:lines.map(line=>textWidth(line.value,size,true)+8)},lines,size};
+    }
+   }
   // A moved label is pinned, not an automatic-placement suggestion. Preserve
   // its exact saved coordinates across redraws and page format changes.
   const pinned=patches.find(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
