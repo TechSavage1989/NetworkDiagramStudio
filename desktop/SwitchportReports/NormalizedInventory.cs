@@ -226,7 +226,7 @@ internal static class NormalizedInventory
                 if (Boolean(Get(input, "nativeTagged")) == true && Int(Get(input, "native")) is {} taggedNative)
                 {
                     port.UntaggedVlan = null; port.UntaggedState = "None";
-                    if (!port.TaggedVlans.Contains(taggedNative)) { port.TaggedVlans.Add(taggedNative); port.TaggedVlans.Sort(); }
+                    if (!Has(input, "tagged") && !Has(input, "allowedExcept") && !port.TaggedVlans.Contains(taggedNative)) { port.TaggedVlans.Add(taggedNative); port.TaggedVlans.Sort(); }
                     string note = "Configured native VLAN " + taggedNative + " is transmitted tagged.";
                     if (!port.Notes.Contains(note)) port.Notes.Add(note);
                 }
@@ -235,7 +235,8 @@ internal static class NormalizedInventory
                 if (Has(input, "disabled")) port.Disabled = Boolean(Get(input, "disabled"));
                 else if ((Text(input, "adminState", 50) is { Length: > 0 } suppliedAdmin ? suppliedAdmin : Text(input, "admin", 50)) is { Length: > 0 } admin) port.Disabled = Regex.IsMatch(admin, "^(down|disable|disabled|shutdown)$", RegexOptions.IgnoreCase) ? true : Regex.IsMatch(admin, "^(up|enable|enabled)$", RegexOptions.IgnoreCase) ? false : null;
                 if (Has(input, "state")) port.LiveState = Text(input, "state", 100) is { Length: > 0 } state ? state : "Unknown/Confirm before use";
-                if (Has(input, "speed")) port.Speed = Text(input, "speed", 100) is { Length: > 0 } speed ? speed : "Not specified";
+                if (Text(input, "configuredSpeed", 100) is { Length: > 0 } configuredSpeed) port.Speed = configuredSpeed;
+                else if (Has(input, "speed") && !Text(input, "speed", 100).StartsWith("Observed:", StringComparison.OrdinalIgnoreCase)) port.Speed = Text(input, "speed", 100) is { Length: > 0 } speed ? speed : "Not specified";
                 if (Has(input, "stackLink")) port.StackLink = Boolean(Get(input, "stackLink")) == true;
                 if (Has(input, "connectedDevice")) port.ConnectedDevice = Text(input, "connectedDevice", 400);
                 if (Has(input, "usage")) port.Usage = Text(input, "usage", 400);

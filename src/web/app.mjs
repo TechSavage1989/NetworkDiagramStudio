@@ -1,3 +1,4 @@
+import {transformControls,transformGeometry,transformEdits,rotatable} from './transform-controls.mjs';
 import {physicalLink} from './physical-links.mjs';
 import {installFormControls} from './form-controls.mjs';
 import {connectionLayoutEditor} from './connection-layout-ui.mjs';
@@ -108,7 +109,7 @@ function field(parent,labelText,value='',opts=null){
 function perform(scope='project',prepared){captureEdits(project,evidenceSnapshot);if(project.evidence)evidenceSnapshot=snapshot();projectHistory.record(project,scope);dirty=projectHistory.dirty;draw(prepared);}
 function resetDrawingHistory(){inlineCancel?.();drawingSelection.clear();projectHistory.reset(project);cablePoint=-1;snapLabelPick=null;pageCache.clear();reports.reset();}
 function syncDrawingSelection(){
- const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls'))n.remove();
+ const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls,.transform-controls'))n.remove();
  const objects=pages[active]?drawingObjects(pages[active]):[],known=new Set(objects.map(o=>o.editKey));for(const key of drawingSelection)if(!known.has(key))drawingSelection.delete(key);
  if(svg){
   for(const element of svg.querySelectorAll('.linked-association'))element.classList.remove('linked-association');
@@ -130,6 +131,9 @@ function syncDrawingSelection(){
  }
 
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
+ const single=drawingSelection.size===1?objects.find(o=>drawingSelection.has(o.editKey)):null;
+ if(svg&&editDrawing&&single)transformControls(svg,single);
+ syncQuickText(single);
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
  $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
@@ -141,6 +145,23 @@ function syncDrawingSelection(){
  else $('cable-point-info').textContent='Move near a cable to highlight it, then click to select.';
  viewport.syncCableInteraction();
 }
+function syncQuickText(item){
+ const bar=$('quick-text-tools');bar.hidden=!editDrawing||!rotatable(item);if(bar.hidden)return;
+ $('quick-text-size').value=Math.round((item.normalized?item.size*item.parent.w:item.size)*100)/100;
+ $('quick-text-bold').checked=!!item.bold;$('quick-text-align').value=item.align||'left';
+ $('quick-text-color').value=/^#[0-9a-f]{6}$/i.test(item.color||'')?item.color:'#17364a';
+ $('quick-text-angle').value=Math.round((item.angle||0)*180/Math.PI*100)/100;
+}
+function quickTextChange(rotationChanged=false){
+ const item=drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));if(!rotatable(item))return;
+ const size=Number($('quick-text-size').value),degrees=Number($('quick-text-angle').value);
+ if(!Number.isFinite(size)||size<1||size>500||!$('quick-text-size').value)throw Error('Text size must be between 1 and 500.');
+ if(!Number.isFinite(degrees)||!$('quick-text-angle').value||Math.abs(degrees)>360)throw Error('Rotation must be between -360 and 360 degrees.');
+ const patch=unpresentPatch(item,{size:item.normalized?size/item.parent.w:size,bold:$('quick-text-bold').checked,align:$('quick-text-align').value,color:$('quick-text-color').value,...(rotationChanged?{angle:degrees*Math.PI/180,rotationMode:'fixed'}:{})});
+ setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...patch}});
+}
+$('quick-text-edit').onclick=()=>editOnDoubleClick([...drawingSelection][0]);
+for(const id of ['quick-text-size','quick-text-bold','quick-text-align','quick-text-color','quick-text-angle'])$(id).onchange=()=>task(()=>{try{quickTextChange(id==='quick-text-angle');}finally{const item=pages[active]&&drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));syncQuickText(item);}});
 function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();}
 function selectedCable(){return drawingSelection.size===1?pages[active]?.items.find(i=>i.type==='path'&&drawingSelection.has(i.editKey)):null;}
 function selectedConnectionLabel(){
@@ -346,6 +367,12 @@ $('drawing-arrange').onchange=()=>task(()=>{
 function startDrawingMove(key,event){
  if(besidePick)return null;
  if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]'),axisFor=dragAxis();
+ const transform=event.target.closest('[data-transform]');
+ if(transform){
+  const item=drawingObjects(page).find(i=>i.editKey===key),handle=transform.dataset.transform,svg=$('canvas').querySelector('svg'),box=svg.querySelector('.diagram-selection'),bounds=drawingBounds(item);
+  const preview=(dx,dy,e)=>{const g=transformGeometry(item,handle,dx,dy,e);if(box){if(g.angle!=null)box.setAttribute('transform',`rotate(${-(g.angle-(item.angle||0))*180/Math.PI} ${bounds.x+bounds.w/2} ${bounds.y+bounds.h/2})`);else for(const [k,v]of Object.entries({x:bounds.x+g.dx,y:bounds.y+g.dy,width:bounds.w*g.factor,height:bounds.h*g.factor}))box.setAttribute(k,v);}};
+  return {preview,commit(dx,dy,e){task(()=>{try{setDrawingEdits(transformEdits(page,project.layout?.drawingEdits,item,transformGeometry(item,handle,dx,dy,e)));say(handle==='rotate'?'Text rotation saved.':'Item resized. Connections remain attached.');}finally{syncDrawingSelection();}});},cancel:syncDrawingSelection};
+ }
  if(control){if(control.hasAttribute('data-cable-segment'))return {preview(){},commit(){},cancel(){}};
   const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),merge=8/(svg.getScreenCTM()?.a||1),path=[...svg.children].find(n=>n.matches('path.diagram-cable')&&n.getAttribute('data-drawing-key')===key),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
   if(settings.cablePoints)for(const [i,p] of item.points.entries())if(i!==index)targets.push({axis:0,value:p[0]},{axis:1,value:p[1]});drawingSelection.clear();drawingSelection.add(key);cablePoint=index;

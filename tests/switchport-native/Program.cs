@@ -146,6 +146,22 @@ static class Program
         voiceItem["device"]!["vlans"]![1]!["voice"] = false;
         var clearedVoice = Object(SwitchportReportService.PreviewJson(voiceRequest.ToJsonString()));
         Check(!clearedVoice["items"]![0]!["inventory"]!["vlans"]![1]!["voice"]!.GetValue<bool>(), "An explicit voice change still overrides retained configuration evidence.");
+        var maskedInventory = migrated["items"]![0]!["inventory"]!.DeepClone().AsObject();
+        var physicalFields = new HashSet<string>(new[] { "id", "group", "number", "displayNumber", "relatedInterfaces", "media" }, StringComparer.OrdinalIgnoreCase);
+        foreach(string collection in new[] { "ports", "logicalInterfaces" })
+            foreach(var port in maskedInventory[collection]!.AsArray())
+                foreach(string field in port!.AsObject().Select(pair=>pair.Key).ToArray())if(!physicalFields.Contains(field))port.AsObject().Remove(field);
+        var maskedRequest = new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "masked", ["device"] = new JsonObject { ["name"] = "LAB-MASKED", ["switchportInventory"] = maskedInventory, ["ports"] = new JsonArray() } }), ["combined"] = false };
+        var maskedResult = Object(SwitchportReportService.PreviewJson(maskedRequest.ToJsonString()));
+        Check(maskedResult["items"]![0]!["success"]!.GetValue<bool>(), "Geometry-only retained ports satisfy native validation and render.");
+        var maskedPorts = maskedResult["items"]![0]!["inventory"]!["ports"]!.AsArray();
+        Check(maskedPorts.Count == maskedInventory["ports"]!.AsArray().Count && maskedPorts.All(port => port!["untaggedVlan"] == null && port["taggedVlans"]!.AsArray().Count == 0 && port["disabled"] == null), "Category-masked native reports retain socket count without stale configured state.");
+        var taggedRequest = new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "tagged", ["device"] = new JsonObject { ["name"] = "LAB-TAGGED", ["model"] = "JL256A", ["ports"] = new JsonArray(new JsonObject { ["name"] = "1", ["native"] = 27, ["nativeTagged"] = true, ["tagged"] = new JsonArray(57), ["configuredSpeed"] = "1000", ["speed"] = "Observed: 10 Gbps" }) } }), ["combined"] = false };
+        var taggedResult = Object(SwitchportReportService.PreviewJson(taggedRequest.ToJsonString()));
+        Check(taggedResult["items"]![0]!["success"]!.GetValue<bool>(), "Tagged-native normalized fixture renders.");
+        var taggedPort = taggedResult["items"]![0]!["inventory"]!["ports"]!.AsArray().Single(port => port!["id"]!.GetValue<string>() == "1")!;
+        Check(taggedPort["untaggedVlan"] == null && taggedPort["untaggedState"]!.GetValue<string>() == "None" && taggedPort["taggedVlans"]!.AsArray().Select(value => value!.GetValue<int>()).SequenceEqual(new[] {57}), "Explicit allowed membership does not invent an excluded tagged-native VLAN.");
+        Check(taggedPort["speed"]!.GetValue<string>() == "1000", "Native report configured speed wins over observed speed.");
         var largeStack = new JsonObject { ["name"] = "LAB-EIGHT-MEMBERS", ["model"] = "JL256A", ["stackMembers"] = new JsonArray(Enumerable.Range(1, 8).Select(member => (JsonNode)new JsonObject { ["id"] = member.ToString(), ["model"] = "JL256A" }).ToArray()), ["ports"] = new JsonArray() };
         var largeResult = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "large", ["device"] = largeStack }), ["combined"] = false }.ToJsonString()));
         Check(largeResult["items"]![0]!["success"]!.GetValue<bool>(), "An eight-member complete stack retains readable external labels: " + largeResult["items"]![0]!["error"]);

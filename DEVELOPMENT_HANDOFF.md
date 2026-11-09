@@ -2,7 +2,16 @@
 
 Native report layout and workspace migration incorporate upstream 1.18.6 fixes while retaining NDS six-point reference-scene number text and normalized-data persistence. Browser parsing/report projection now covers management/mirror notes, configured speed/SVI data, IOS all/except edits and tagged-native state. See docs/SWITCHPORT_INTEGRATION.md for exact remaining browser-only gaps; do not call this exhaustive browser parser parity.
 
+Fresh native source imports now hydrate uniquely matched configuration ports before manual edits/evidence replay, retaining names/topology/observations and warning about unresolved route equivalence. Source disable/re-enable and later edits are covered by synthetic regression.
+
+Category selection now masks retained native report data and supplementary observations as well as visible editor records; exact hardware geometry remains. Ports-off, VLAN/route ownership, source immutability, manual replay and reopen are covered by regression tests.
+
 Native workspace, geometry, mixed-scale, raster-fit and paper regression tests are added to the existing build gates. Local .NET is unavailable, so native execution and hosted Windows/browser validation remain pending. No version bump, release intent, merge or publication is included.
+# Direct editing controls (pending hosted verification)
+
+Single selected objects now expose proportional corner resize handles; text also exposes a rotation handle (Shift snaps to 15 degrees). Text can be selected directly, including native device text, with a compact content/style/angle toolbar. Changes use the existing validated project history and saved edit pipeline. Hardware rotation remains unsupported because physical glue/routing has no rotated-device model. Transform overlays are editor-only. Escape cancels a gesture. The size buttons remain the keyboard-accessible resize alternative.
+
+Verification: transform geometry, presentation coordinates, saved/rebuilt text angles and SVG/Visio export tests are in tests/transform-controls.test.mjs. Local Chromium cannot start because socket() is prohibited even with escalation; hosted browser interactions and a current screenshot remain required before release.
 
 # Unreleased: readable paper layouts and wireless row alignment
 

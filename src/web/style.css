@@ -207,3 +207,5 @@ aside .page-navigation[hidden]{display:none}
 .text-style-section button{margin:0 10px 10px}
 
 @media(max-width:620px){.appbar .toolbar,.stagebar .toolbar{flex-wrap:wrap}.pagebar .page-picker{max-width:100%;flex-wrap:wrap}.page-picker select{max-width:65vw}.appbar .brand{max-width:100%}}
+
+.transform-controls rect,.transform-controls circle{fill:#fff;stroke:#0078d4;stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:all}.transform-controls line{stroke:#0078d4;pointer-events:none;vector-effect:non-scaling-stroke}.transform-controls [data-transform="nw"],.transform-controls [data-transform="se"]{cursor:nwse-resize}.transform-controls [data-transform="ne"],.transform-controls [data-transform="sw"]{cursor:nesw-resize}.transform-controls circle{cursor:grab}.quick-text-tools{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}.quick-text-tools[hidden]{display:none}.quick-text-tools label{display:inline-flex;align-items:center;gap:3px}.quick-text-tools input[type=number]{width:64px}.quick-text-tools input[type=color]{width:32px;height:28px;padding:1px}

@@ -1,7 +1,7 @@
 import {reportPaperChoices} from './reports/paper.mjs';
 import {parseConfig,mergeModels,findDeviceIdentity} from './imports/index.mjs';
 import {importReportSupplementary,supplementaryPromptHostname} from './reports/supplementary.mjs';
-import {normalizeSupplementarySources} from './reports/supplementary.mjs';
+import {normalizeSupplementarySources,supplementaryInterfaceKey} from './reports/supplementary.mjs';
 
 const value=(row,key)=>row?.[key]??row?.[key[0].toUpperCase()+key.slice(1)];
 const cleanText=(s,limit=400)=>String(s??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').slice(0,limit);
@@ -15,6 +15,30 @@ function nativeDevice(item,{independent=true}={}){
  const input=item.device||{},composition=input.hardwareComposition||{},id=independent?'switchport:'+item.id:input.id;
  const d={...input,id,name:cleanText(input.name||item.name,180),kind:input.kind||'switch',fromConfig:true,ports:(input.ports||[]).map(port=>({...port,...(port.disabled!=null?{admin:port.disabled?'down':'up'}:{})})),vlans:input.vlans||[],routes:input.routes||[],stackMembers:input.stackMembers||composition.stackMembers||[],modules:input.modules||composition.modules||[],reportDetails:lowerRows(item.details||input.reportDetails),switchportInventory:item.inventory||input.switchportInventory,reportSupplementary:normalizeSupplementarySources(item.supplementary||[])};
  delete d.hardwareComposition;return d;
+}
+// This runs on newly parsed source records, before evidence/manual edits are
+// composed. Never replace names, socket identities or topology observations.
+function hydrateNativeConfiguration(device,incoming,warnings){
+ const key=name=>supplementaryInterfaceKey(name).replace(/^(?:portchannel|po)(?=\d)/,'po');
+ const names=port=>[port.name,...(port.relatedInterfaces||[])].map(key).filter(Boolean);
+ const configured=['description','role','native','nativeState','tagged','taggedVlanPolicy','voice','lag','disabled','stackLink','notes'];
+ for(const port of device.ports||[]){
+  const aliases=new Set(names(port)),matches=(incoming.ports||[]).filter(candidate=>names(candidate).some(name=>aliases.has(name)));
+  if(matches.length!==1){if(matches.length>1)warnings.push(device.name+': native configuration matches multiple interfaces for '+port.name+'. Review the interface aliases.');continue;}
+  const native=matches[0];
+  for(const field of configured)if(Object.hasOwn(native,field))port[field]=structuredClone(native[field]);
+  // Browser policy shortcuts and admin aliases must not override the effective
+  // upstream configuration, including explicit none/unknown states.
+  for(const field of ['allowed','allowedExcept','nativeTagged','admin','adminState'])delete port[field];
+  if(typeof native.disabled==='boolean')port.admin=native.disabled?'down':'up';
+  if(Object.hasOwn(native,'speed')){if(native.speed)port.configuredSpeed=native.speed;else delete port.configuredSpeed;}
+  port.relatedInterfaces=[...new Set([...(port.relatedInterfaces||[]),...(native.relatedInterfaces||[]),...(native.name!==port.name?[native.name]:[])])];
+ }
+ for(const native of incoming.vlans||[]){
+  const existing=(device.vlans||=[]).find(vlan=>vlan.id===native.id);
+  if(existing)Object.assign(existing,{name:native.name||'',voice:native.voice===true});
+  else device.vlans.push(structuredClone(native));
+ }
 }
 function workspacePaper(raw){
  if(raw==null)return {preset:'a4',orientation:'landscape'};
@@ -64,7 +88,15 @@ export async function enrichSwitchportSources(files,sources,existingDevices=[]){
   try{
    const result=await nativeImport(files[i]);
    for(const item of result?.items||[]){const incoming=nativeDevice(item,{independent:false}),matches=source.model.devices.filter(d=>d.name.toLowerCase()===incoming.name.toLowerCase());
-    if(matches.length===1){const d=matches[0];d.switchportInventory=item.inventory;d.reportDetails=lowerRows(item.details||d.reportDetails);d.reportSupplementary=item.supplementary||[];
+    if(matches.length===1){const d=matches[0];hydrateNativeConfiguration(d,incoming,source.model.warnings);d.switchportInventory=item.inventory;d.reportDetails=lowerRows(item.details||d.reportDetails);d.reportSupplementary=item.supplementary||[];
+     if(!d.routes?.length&&incoming.routes?.length)d.routes=structuredClone(incoming.routes);
+     else if(d.routes?.length&&incoming.routes?.length){
+      const nativeRoutes=new Set(incoming.routes.map(route=>JSON.stringify(route))),same=d.routes.length===incoming.routes.length&&d.routes.every(route=>nativeRoutes.has(JSON.stringify(route)));
+      if(!same){const notice='Browser topology routes are retained; equivalence to the native configured route text is unconfirmed. Review both route inventories before use.';
+       source.model.warnings.push(d.name+': '+notice);
+       const field=Object.hasOwn(item.inventory,'Assumptions')?'Assumptions':'assumptions';(item.inventory[field]||=[]).push(notice);
+      }
+     }
      // The report parser can recover a supported configuration for which the
      // topology parser has no model. Existing network observations remain primary.
      if(!d.model&&incoming.model)d.model=incoming.model;if(!d.modules?.length&&incoming.modules?.length)d.modules=incoming.modules;if(!d.stackMembers?.length&&incoming.stackMembers?.length>1)d.stackMembers=incoming.stackMembers;

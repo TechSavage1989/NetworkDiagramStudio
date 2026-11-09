@@ -117,3 +117,61 @@ test('differing browser SVI addresses retain native evidence with an explicit re
  assert.equal(same.svis.length,3);
  assert.ok(!same.assumptions.some(note=>note.startsWith('SVI vlan 27:')));
 });
+
+test('native source hydration preserves effective channel settings, aliases, topology and later manual edits',async()=>{
+ const {enrichSwitchportSources}=await import('../src/web/switchport-import.mjs');
+ const {readSources,ensureEvidence,composeEvidence,captureEdits}=await import('../src/web/evidence.mjs');
+ const file=new File([`version 17
+hostname LAB-AUTHORITY
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+ channel-group 1 mode active
+!
+interface Port-channel1
+ switchport mode access
+ switchport access vlan 30
+!
+`],'fictional-channel.cfg');
+ const sources=await readSources([file]),d=sources[0].model.devices[0],original=d.ports[0];
+ original.name='GigabitEthernet1/0/1';original.ip='192.0.2.10/24';original.state='down';original.speed='Observed: 1 Gbps';original.media='Copper';original.allowedExcept=[30];original.nativeTagged=true;
+ sources[0].model.links=[{a:d.id,ap:original.name,b:'lab-peer',bp:'1'}];
+ const nativePort={name:'Gi1/0/1',description:'',role:'access',native:30,nativeState:'known',tagged:[],taggedVlanPolicy:null,voice:null,lag:'Po1',disabled:null,stackLink:false,notes:['Port-channel configuration applied from Po1.'],speed:'1000',relatedInterfaces:[]};
+ const inventory={hostname:d.name,groups:[],ports:[{id:'Gi1/0/1',mode:'Access',untaggedVlan:30,untaggedState:'Known',taggedVlans:[],aggregate:'Po1',notes:nativePort.notes}],vlans:[{id:30,name:'Native data'}]};
+ const priorReader=globalThis.FileReader,priorDesktop=globalThis.NDSDesktop;
+ try{
+  globalThis.FileReader=class{async readAsDataURL(input){this.result='data:text/plain;base64,'+Buffer.from(await input.arrayBuffer()).toString('base64');this.onload();}};
+  globalThis.NDSDesktop={report:async()=>({items:[{id:'native',inventory,device:{name:d.name,ports:[nativePort],vlans:[{id:30,name:'Native data',voice:false},{id:40,name:'Voice',voice:true}]}}]})};
+  await enrichSwitchportSources([file],sources);
+ }finally{if(priorReader===undefined)delete globalThis.FileReader;else globalThis.FileReader=priorReader;if(priorDesktop===undefined)delete globalThis.NDSDesktop;else globalThis.NDSDesktop=priorDesktop;}
+ assert.equal(original.native,30);assert.equal(original.name,'GigabitEthernet1/0/1');assert.equal(original.ip,'192.0.2.10/24');assert.equal(original.state,'down');assert.equal(original.speed,'Observed: 1 Gbps');assert.equal(original.media,'Copper');assert.equal(original.configuredSpeed,'1000');
+ assert.equal(original.allowedExcept,undefined);assert.equal(original.nativeTagged,undefined);
+ assert.equal(d.ports.length,2);assert.equal(sources[0].model.links[0].ap,original.name);
+ assert.ok(d.vlans.some(v=>v.id===40&&v.voice));
+ assert.equal(inventoryForDevice(d).ports[0].untaggedVlan,30);
+ const project={devices:[],links:[],warnings:[]};ensureEvidence(project).sources=sources;
+ const snapshot=composeEvidence(project);project.devices[0].ports[0].native=50;captureEdits(project,snapshot);
+ composeEvidence(project);assert.equal(project.devices[0].ports[0].native,50);
+ sources[0].enabled=false;composeEvidence(project);assert.equal(project.devices.length,0);
+ sources[0].enabled=true;composeEvidence(project);assert.equal(project.devices[0].ports[0].native,50);
+ assert.equal(sources[0].model.devices[0].ports[0].native,30);
+});
+
+test('native route fallback fills empty source routes but qualifies unmatched structured routes',async()=>{
+ const {enrichSwitchportSources}=await import('../src/web/switchport-import.mjs');
+ const priorReader=globalThis.FileReader,priorDesktop=globalThis.NDSDesktop;
+ try{
+  globalThis.FileReader=class{async readAsDataURL(input){this.result='data:text/plain;base64,'+Buffer.from(await input.arrayBuffer()).toString('base64');this.onload();}};
+  const nativeText='0.0.0.0/0 192.0.2.254',nativeRoutes=[{destination:nativeText}];
+  globalThis.NDSDesktop={report:async()=>({items:[{id:'native',inventory:{routes:[nativeText]},device:{name:'LAB-ROUTES',ports:[],routes:nativeRoutes}}]})};
+  for(const populated of [false,true]){
+   const d=parse('hostname LAB-ROUTES\n'),structured={destination:'0.0.0.0/0',nextHop:'192.0.2.254',interface:'Vlan27',type:'static'};
+   if(populated)d.routes=[structured];
+   const source={kind:'Configuration',model:{devices:[d],links:[],warnings:[]}};
+   await enrichSwitchportSources([new File(['hostname LAB-ROUTES'],'fictional-route.cfg')],[source]);
+   assert.deepEqual(d.routes,populated?[structured]:nativeRoutes);
+   assert.equal(source.model.warnings.some(note=>note.includes('equivalence')),populated);
+   if(populated)assert.match(technicianSummary(inventoryForDevice(d)),/equivalence to the native configured route text is unconfirmed/);
+  }
+ }finally{if(priorReader===undefined)delete globalThis.FileReader;else globalThis.FileReader=priorReader;if(priorDesktop===undefined)delete globalThis.NDSDesktop;else globalThis.NDSDesktop=priorDesktop;}
+});
