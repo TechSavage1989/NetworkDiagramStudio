@@ -212,7 +212,11 @@ function handleEditorContextMenu(event){
   if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Page options',pageOptions],['Pages & layout',()=>layoutOptions(page.name)]]);
   return;
  }
- if(!target.closest('#canvas')||!pages[active])return;
+ if(!target.closest('#canvas'))return;
+ // Suppress the browser's default menu even on an empty canvas before a site loads.
+ // The native startup test checks this before any sample or project exists.
+ event.preventDefault();
+ if(!pages[active])return;
  const key=target.closest('[data-drawing-key]')?.getAttribute('data-drawing-key');
  const socket=target.closest('[data-port-name]'),owner=socket?.closest('[data-device-id]');
  const page=pages[active],item=drawingObjects(page).find(item=>item.editKey===key),actions=[];
