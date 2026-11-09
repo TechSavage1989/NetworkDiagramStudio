@@ -66,7 +66,8 @@ jobs:
             @{ name = 'editor-properties'; script = 'tests/browser-editor-properties.mjs' },
             @{ name = 'documentation'; script = 'tests/browser-documentation.mjs' },
             @{ name = 'page-navigation'; script = 'tests/browser-page-navigation.mjs' },
-            @{ name = 'connection-labels'; script = 'tests/browser-connection-labels.mjs' }
+            @{ name = 'connection-labels'; script = 'tests/browser-connection-labels.mjs' },
+            @{ name = 'adaptive-port-map'; script = 'tests/browser-adaptive-port-map.mjs' }
           )
           $results = @()
           foreach ($check in $checks) {
