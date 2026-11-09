@@ -259,7 +259,6 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
   // Preserve legacy partial-axis edits as candidates; complete pinned positions above never reflow.
   const preferred=patches.find(p=>Number.isFinite(p.x)||Number.isFinite(p.y));if(preferred)candidates.unshift({x:preferred.x??(req.side==='right'?req.outer+8:req.outer-w-8),y:preferred.y??req.y-h/2,w:Math.max(w,preferred.w||0),h:Math.max(h,preferred.h||0),angle:preferred.angle});
   candidates.push(...late);
-  if(owner&&req.role==='media')candidates.sort((a,b)=>Number(!!b.inline)-Number(!!a.inline));
   const gutter=req.side==='right'?Math.max(req.outer+8,984):sidebar?req.outer-w-8:Math.min(req.outer-w-8,322-w),mainBodies=bodies.filter(b=>b.kind!=='handoff'),gutters=[gutter,...(sidebar?[Math.min(...(mainBodies.length?mainBodies:bodies).map(b=>b.x))-26-w]:[])];
   for(let n=0;n<740;n+=4)for(const sign of [1,-1])for(const x of gutters)candidates.push({x,y:req.y-h/2+n*sign,w,h});
   // A label set beside its cable must read as that cable's: prefer spots
