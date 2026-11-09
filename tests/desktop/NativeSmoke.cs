@@ -347,16 +347,17 @@ internal sealed partial class Studio
                     await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
                     const r=n.getBoundingClientRect(),center={x:r.x+r.width/2,y:r.y+r.height/2};
                     if(!n.matches('svg text'))return center;
+                    const describe=node=>{const chain=[];for(let at=node;at&&chain.length<5;at=at.parentElement)chain.push({tag:at.localName,id:at.id,class:at.getAttribute?.('class')});return chain;};
                     const count=n.getNumberOfChars(),matrix=n.getScreenCTM(),hits=[];
                     for(let step=0;step<count;step++){
                         const index=(Math.floor(count/2)+step)%count,b=n.getExtentOfChar(index);
                         if(!b.width||!b.height)continue;
                         const point=new DOMPoint(b.x+b.width/2,b.y+b.height/2).matrixTransform(matrix),hit=document.elementFromPoint(point.x,point.y);
                         if(hit?.closest('text')===n)return {x:point.x,y:point.y,glyph:index,key:n.dataset.drawingKey};
-                        if(hits.length<8)hits.push({glyph:index,x:point.x,y:point.y,hit:hit?.localName,key:hit?.closest('[data-drawing-key]')?.dataset.drawingKey});
+                        if(hits.length<8)hits.push({glyph:index,x:point.x,y:point.y,hit:hit?.localName,key:hit?.closest('[data-drawing-key]')?.dataset.drawingKey,ancestors:describe(hit)});
                     }
                     const hit=document.elementFromPoint(center.x,center.y);
-                    return {error:'No visible text glyph hit',bounds:{x:r.x,y:r.y,w:r.width,h:r.height},count,centerHit:hit?.localName,centerKey:hit?.closest('[data-drawing-key]')?.dataset.drawingKey,hits,feedback:document.getElementById('feedback')?.textContent};
+                    return {error:'No visible text glyph hit',bounds:{x:r.x,y:r.y,w:r.width,h:r.height},count,centerHit:hit?.localName,centerAncestors:describe(hit),viewport:{width:innerWidth,height:innerHeight},canvas:document.querySelector('#canvas')?.getBoundingClientRect().toJSON(),centerKey:hit?.closest('[data-drawing-key]')?.dataset.drawingKey,hits,feedback:document.getElementById('feedback')?.textContent};
                 })()
                 """,
                 awaitPromise=true,returnByValue=true}));

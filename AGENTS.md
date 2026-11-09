@@ -227,3 +227,5 @@ Browser tests open the sample through the accessible "Open sample site" button. 
 Filled native device artwork must retain visible-painted pointer hit-testing in Edit drawing. Do not let the generic stroke-only cable/path rule make device interiors click through to the background; verify actual interior hits before rotation/group/size gestures.
 
 Native repeated SVG text clicks must hit a verified rendered character, not an assumed overall bounding-box center. Re-measure between clicks after selection/viewport callbacks, retain real CDP mouse input and full recovery assertions, and log the obstructing target when no glyph is reachable.
+
+After an accepted inline text save rebuilds automatic title placement, reveal the current selected text at the existing zoom. Do not leave its new bounds behind wrapped editor controls, and do not pan or redraw on rejected validation.

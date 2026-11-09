@@ -62,11 +62,14 @@ try{
 
  // Repeated title edits must still be accessible after the accepted SVG is
  // replaced. Keep revision, Escape and detached-session recovery strict.
- await page.close();page=await freshPage();await page.setViewportSize({width:1280,height:820});await page.locator('#sample').click();await page.locator('#canvas svg').waitFor();
+ await page.close();page=await freshPage();await page.setViewportSize({width:1024,height:720});await page.locator('#sample').click();await page.locator('#canvas svg').waitFor();
  const edgeTitle='#canvas text[data-drawing-key="Core Network|title|edge"]',switchTitle='#canvas text[data-drawing-key="Core Network|title|sw-1"]';
  for(const [previous,value] of [[null,'Native growing-canvas title'],['Native growing-canvas title','Native repaired title']]){
   await doubleClickText(edgeTitle);const editor=page.locator('[data-inline-editor] textarea');if(previous)assert.equal(await editor.inputValue(),previous);
+  const zoom=await page.locator('#zoom-level').textContent();
   await editor.fill(value);await editor.press('Enter');await page.locator('[data-inline-editor]').waitFor({state:'detached'});assert.ok((await page.locator(edgeTitle).textContent()).includes(value));
+  await settled();assert.equal(await page.locator('#zoom-level').textContent(),zoom,'Revealing the saved title must not refit or zoom the drawing');
+  const visible=await page.evaluate(selector=>{const n=document.querySelector(selector),b=n.getBoundingClientRect(),canvas=document.querySelector('#canvas').getBoundingClientRect();return b.top>=canvas.top&&b.bottom<=canvas.bottom;},edgeTitle);assert.ok(visible,'The accepted title remains inside the visible canvas after re-layout');
  }
  for(const value of ['Do not keep this','Temporary draft to cancel']){
   await doubleClickText(switchTitle);const editor=page.locator('[data-inline-editor] textarea');assert.equal(await editor.inputValue(),'SW-1');await editor.fill(value);await editor.press('Escape');await page.locator('[data-inline-editor]').waitFor({state:'detached'});assert.ok((await page.locator(switchTitle).textContent()).includes('SW-1'));

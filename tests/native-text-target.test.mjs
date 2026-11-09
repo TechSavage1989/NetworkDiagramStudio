@@ -9,9 +9,9 @@ const script=source.match(/expression=\$\$"""([\s\S]*?)"""/)[1].replace('{{query
 function context({visible=[0],text=true,offset=0}={}){
  const n={dataset:{drawingKey:'Core Network|title|edge'},scrollIntoView(){},matches(){return text;},getBoundingClientRect(){return {x:offset,y:0,width:90,height:50};},getNumberOfChars(){return 3;},getScreenCTM(){return {a:1,b:0,c:0,d:1,e:offset,f:0};},getExtentOfChar(i){return {x:i*30,y:i%2?30:0,width:10,height:10};}};
  const wrong={localName:'svg',closest(){return null;}},hit={localName:'tspan',closest(selector){return selector==='text'?n:null;}};
- const document={querySelector(){return n;},getElementById(){return {textContent:'Ready'};},elementFromPoint(x,y){const i=Math.round((x-offset-5)/30);return visible.includes(i)&&Math.abs(x-(offset+i*30+5))<.01&&Math.abs(y-(i%2?35:5))<.01?hit:wrong;}};
+ const document={querySelector(selector){return selector==='#canvas'?null:n;},getElementById(){return {textContent:'Ready'};},elementFromPoint(x,y){const i=Math.round((x-offset-5)/30);return visible.includes(i)&&Math.abs(x-(offset+i*30+5))<.01&&Math.abs(y-(i%2?35:5))<.01?hit:wrong;}};
  class DOMPoint{constructor(x,y){this.x=x;this.y=y;}matrixTransform(m){return {x:this.x*m.a+this.y*m.c+m.e,y:this.x*m.b+this.y*m.d+m.f};}}
- return {document,DOMPoint,requestAnimationFrame:fn=>queueMicrotask(fn)};
+ return {document,DOMPoint,innerWidth:1280,innerHeight:820,requestAnimationFrame:fn=>queueMicrotask(fn)};
 }
 test('native title target chooses an actual glyph rather than blank enclosing center',async()=>{
  const result=await vm.runInNewContext(script,context());assert.equal(result.glyph,0);assert.equal(result.x,5);assert.equal(result.y,5);

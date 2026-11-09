@@ -331,6 +331,9 @@ function saveTextEdit(item,value,color){
  const patch={...project.layout?.drawingEdits?.[item.editKey],color};if(!item.legendEntry)patch.value=value;
  if(item.legendEntry&&item.linkType&&value!==editableText(item)){delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:value},{[item.editKey]:patch});}
  else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});
+ // A longer accepted title may be placed elsewhere in the rebuilt scene.
+ // Reveal that current selection after toolbar layout, not its stale bounds.
+ revealSelectedText();
 }
 function editOnDoubleClick(key){
  const item=pages[active]&&drawingObjects(pages[active]).find(i=>i.editKey===key);if(!item)return;

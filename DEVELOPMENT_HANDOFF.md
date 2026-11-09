@@ -1,3 +1,19 @@
+# Accepted inline titles stay visible after re-layout
+
+Run 201 passed all 17 browser suites and the native build, report, paper and
+packaging checks. Native lifecycle diagnostics then established why the second
+title edit failed: every painted glyph of the successfully saved title was
+obstructed by an HTML span after the new scene moved that title under editor
+controls. The accepted-save path now reveals the currently selected rebuilt
+text after toolbar layout, preserving the current zoom. Rejected edits still
+keep their existing scene and editor without panning.
+
+The browser recovery sequence now also checks a 1024 × 720 viewport, unchanged
+zoom and title visibility after each save. Native failures include obstruction
+ancestry and viewport/canvas bounds. Twelve focused Node checks, syntax, build
+and repository checks pass locally. The next hosted run must confirm native
+recovery and all remaining timer, install and rollback stages.
+
 # Native repeated-title recovery targeting
 
 Hosted run 200 passed all 17 browser suites but the native lifecycle check
@@ -23,8 +39,11 @@ viewer now disables native selection only on its pan surface and cancels the
 pointer default before starting pan. Search reads the full SVG title when
 present, so wrapped/painted text is not concatenated with that title. The hosted
 gate asserts one full label per result, the exact inspection label, and no native
-selection after dragging from actual SVG text or fitting the page. Regenerate
-and inspect the genuine hosted viewer capture before adding it to docs.
+selection after dragging from actual SVG text or fitting the page. Run 201
+passed the viewer gate. Its genuine capture in artifact 13713080937 was visually
+reviewed and confirmed clean: no selected text after panning and no duplicated
+inspection label. It has not been uploaded into the repository. The final
+source head still requires both validation jobs.
 # Hosted browser validation: all 17 suites passed
 
 [Run 200](https://github.com/TechSavage1989/NetworkDiagramStudio/actions/runs/42701077407)
@@ -36,11 +55,11 @@ port/VLAN drafts, save/reopen and Undo/redo. Sidebar reset/reload and white/
 transparent backing controls also pass. No browser errors were reported.
 
 Four inspected, unchanged captures now document device rotation, grouped
-models, locked-page rejection and backing options. The remaining viewer
-capture is held back: visual review found browser text selection after panning
-and a possible repeated inspection label. A narrow viewer follow-up and its
-fresh hosted capture are pending. Native Windows verification is tracked
-separately, and any later source head still needs both required jobs.
+models, locked-page rejection and backing options. The viewer issues found
+in run 200 were corrected, and the run 201 viewer capture was visually checked
+clean in artifact 13713080937 without a repository image upload. Native Windows
+verification is tracked separately, and any later source head still needs
+both required jobs.
 
 # Reviewed hosted editor captures
 
@@ -156,7 +175,7 @@ browser verification uses the hosted
 menu/download, viewer navigation/search/zoom/pan, mobile width, hostile markup,
 embedded image retention and zero network requests. It captures
 `interactive-html.png`; the visual-review follow-up above must finish before
-integrating a corrected capture into docs.
+adding the run 201 visually verified capture to docs if separately approved.
 No publication or release-version changes are included in this work.
 # Configurable model sizing and panel docking
 
