@@ -25,6 +25,8 @@ export function informationPanel(page,project){
   });y+=18*options.textScale;
  };
  const auto=automaticPanelContent(project,devices),labels=new Map(panelFields),custom=new Map(options.customSections.map(item=>[item.id,item.title]));
+ // Preserve established printed headings while allowing fully editable display titles.
+ for(const [id,title] of [['addresses','Device addresses'],['models','Device details'],['ports','Port details']])labels.set(id,title);
  for(const id of options.sections){
   if((id==='connections'||id==='modules')&&!options.sectionContent[id]?.trim())continue;
   const heading=options.sectionTitles[id]||custom.get(id)||labels.get(id)||id;
