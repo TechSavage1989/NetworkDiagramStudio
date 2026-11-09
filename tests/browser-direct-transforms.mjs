@@ -11,6 +11,18 @@ const errors=[];
 const freshPage=async()=>{const p=await browser.newPage({viewport:{width:1500,height:1000}});p.on('pageerror',e=>errors.push(e.message));p.on('dialog',dialog=>dialog.accept());await p.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);return p;};
 let page=await freshPage();
 const settled=()=>page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
+// Use the same checked glyph target as the native CDP helper, so both gates
+// cover double-click recovery instead of invoking editor internals.
+const nativeTargetSource=await readFile(new URL('./desktop/NativeSmoke.cs',import.meta.url),'utf8');
+const nativeTargetScript=nativeTargetSource.match(/expression=\$\$"""([\s\S]*?)"""/)[1];
+const doubleClickText=async selector=>{
+ for(let click=1;click<=2;click++){
+  const point=await page.evaluate(nativeTargetScript.replace('{{query}}',JSON.stringify(selector)));
+  assert.ok(!point.error,'Text is genuinely pointer-reachable: '+JSON.stringify(point));
+  await page.mouse.click(point.x,point.y,{clickCount:click});
+ }
+ await page.locator('[data-inline-editor] textarea').waitFor();
+};
 try{
  await page.locator('#sample').click();await page.waitForSelector('#canvas svg');await page.locator('#edit-drawing').click();
  const text=page.locator('#canvas text[data-drawing-key]').filter({hasText:'Harbor Workshop'}).first();await text.click();
@@ -47,5 +59,20 @@ try{
  await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent.includes('Drawing items moved.'));
  const moved=await deviceBoxes();for(const id of ['sw-1','sw-2']){assert.ok(moved[id].x-before[id].x>50,id+' moves with the selection');assert.ok(Math.abs(moved[id].y-before[id].y)<.5,id+' keeps the locked vertical coordinate');assert.ok(Math.abs(moved[id].w-before[id].w)<.1,id+' moves rather than resizing');}
  assert.equal(await page.locator('#drawing-selection').textContent(),'2 selected');assert.deepEqual(errors,[]);
- console.log('Direct text toolbar, arbitrary angle, inline content, transform cancel/resize, persistence and undo/redo passed.');
-}finally{await browser.close();}
+
+ // Repeated title edits must still be accessible after the accepted SVG is
+ // replaced. Keep revision, Escape and detached-session recovery strict.
+ await page.close();page=await freshPage();await page.setViewportSize({width:1280,height:820});await page.locator('#sample').click();await page.locator('#canvas svg').waitFor();
+ const edgeTitle='#canvas text[data-drawing-key="Core Network|title|edge"]',switchTitle='#canvas text[data-drawing-key="Core Network|title|sw-1"]';
+ for(const [previous,value] of [[null,'Native growing-canvas title'],['Native growing-canvas title','Native repaired title']]){
+  await doubleClickText(edgeTitle);const editor=page.locator('[data-inline-editor] textarea');if(previous)assert.equal(await editor.inputValue(),previous);
+  await editor.fill(value);await editor.press('Enter');await page.locator('[data-inline-editor]').waitFor({state:'detached'});assert.ok((await page.locator(edgeTitle).textContent()).includes(value));
+ }
+ for(const value of ['Do not keep this','Temporary draft to cancel']){
+  await doubleClickText(switchTitle);const editor=page.locator('[data-inline-editor] textarea');assert.equal(await editor.inputValue(),'SW-1');await editor.fill(value);await editor.press('Escape');await page.locator('[data-inline-editor]').waitFor({state:'detached'});assert.ok((await page.locator(switchTitle).textContent()).includes('SW-1'));
+ }
+ await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Page options');await page.locator('#close').click();
+ await doubleClickText(edgeTitle);await page.locator('[data-inline-editor]').evaluate(node=>node.remove());await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Page options');await page.locator('#close').click();
+ assert.deepEqual(errors,[]);await page.screenshot({path:resolve(output,'inline-title-recovery.png')});
+ console.log('Direct controls, transform geometry, repeated real title double-clicks, Escape, detached-session recovery and persistence passed.');
+}catch(error){await page.screenshot({path:resolve(output,'failure.png')});throw error;}finally{await browser.close();}
