@@ -1,0 +1,75 @@
+name: Prepare preview.41 candidate
+on:
+  push:
+    branches: [fix/adaptive-port-map-page-fit]
+    paths: [.github/workflows/apply-page-fit.yml]
+permissions:
+  contents: write
+jobs:
+  prepare:
+    if: github.repository == 'TechSavage1989/NetworkDiagramStudio'
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Apply exact reviewed source patch
+        shell: python
+        run: |
+          import base64, gzip, hashlib, os, subprocess
+          from pathlib import Path
+          parent = subprocess.check_output(['git','rev-parse','HEAD^'],text=True).strip()
+          if parent != 'd4ef30074f0cb6f3dd75cc46062f4cfa77ded7ce':
+              raise RuntimeError('The preparation branch changed; inspect before applying this patch.')
+          encoded = '''H4sIAAAAAAAC/819+XPbRrLw7/orYGefQYogeEjUQRlyZFtOvOtDn+Ukb8ulSoEEKCImAS4ASmIk/e+vrxkMQFDSHu+rl4pFEhjM9PT03T2DIJpMrHb7Msotv+PCx3Q56lwn6ffJLLnOOgv/MmxPorydJct0HLqr+cwaPa3dVhDOwjwMrEk0C615EoRWr9vd293diuIgvLH2/cl4r+e7bpf/22q320+FYavValmdILzqxMvZbOvHH612z9nZsVpdp2v9+ONWO/bn4dA6kyctftK68mdR4OdRElujZRzMwq12Eg+32pa1WGZT+mJZo9SPx9MwG1rfJtFNxw/8RR5dhe1Fkubtub9oK3guuP3Cz6fY+EmAwzOLMJ1HWQZAZDTiOInzMM6hizT0g632H8mIb/BTAlW6jDME1loC5PmyPfPzMMv5Xh7Nw2QJwEXxMkfAB3w9y8NFJs9bVttaZnjTHyMCsg7McfwdHvux1wsGh3tdf6e/tz/oBoODnYPu/kG4szee7ByMDgb+ZG9/v7/XVx1Z1jXMdFj8BByEaRZleXuchgHMJfJnMNAE/obF6LwkJ+l4Cti0whuAQ63LJEmtKEtwToE1S8bJPMzTlSH6UfBZSTxbWfk0xE62rF9JyFtnb9+RmOUb4cJPgesAyWGMqgPmkcKogABUboDX8AY/ELWOFSc5PXX+60/wZAq6KPoTRJr1tzBcWNNkYY1noY9WVmj5mbWMF34Uo+Yf+6NZ2CZowpvxbIk2ErSNFhkOlE/9nMSulSeJa72HR9IsRCNCAacfgqknVnIVpjMfnh37MUKUhsDJMQFGAx2pFnRphMIQYUjiK1iiRRSOYe6AgICskzy6nOYWfJmAkWKNl+kVYiax/KskCiyfFG4Ek8lCf5651ptkDjCFxkRpYTLGNxhwyRLWiEzjWYeXDpcI9G9mTdJkzkhHYsdlgMmEN6DcQQkDfDOA4h9LHPJPNmWjjDAORmXuf4cZIry+BSsfZwhEPF5ZASz4OHetL2EOuLaueIlBYaJgdXg+QkK4fiFKELiSpNFlFMOVaRSAVdFOrkE1WaNwCkIGn48DtDvaESgrC3TTYhqNAQU5iucta8t6mxBgYppAc5j5eOrHlzDzS6CjlOw9mlH7e7iyktEfuJ7E5NdTmEmUZ7xWVr5aADbpWUDvh5AJLA6v+U4aqv6YTEiMONAJuh4L4OcwvULsgUsSjbjdeJnlgGgcLKOZhEANAAP0m1pB6l9je1QC7lZrq/XDD9aJyBFLyREgRpgarGGOK4Ot3hFSYLEWs2gMYuAqyiKEnhsC4k+WeUIOCbpDDgzpz5YIzDz0syVYblYWBWEHYE+urRnOKWDYkhT5DXGFNAIPjPwYGHwUokQCpgTiiy8BL9AWfgBC/FkCfDqHOdISQDOgQVhtXB0QXIDz5TzOhCWzZPwdMOpnC0R/ilQFa+7PZtbcT78D5PNwDljLpsCJDnkptCbxEq8iKApKGFJDCAt6hKgHSUNrNfNTWDvg1qlPE+UxM5AMzBS62zy8AVgAbmAdixSv9Wbqg8MEpDVLgCJSJmLoNEqtxXSVRegwgBBJoekvWYh24RKuTKIY/iKFAx8gC4J+lPUmhyMOoqsowJYoCFLAPDx/Sn4JLVh7MQPJgbCi0ANsrxYABgrTEKREANSVgLiiXmlJYYJRjDxm0KJwsdJBgCyEbwKiiwgFyMvBVrHlLxYg9mB1UAQSMyiYjgAT8N1CKs4N2SGLAlincSYwfaSrq9C1zpjiQyGzYAWzjsYoCK9gfFhD1EMLFOIxzDWNYpkxrSLAEAdMPzGLARbxBd9Di5WWujjhfyzBNWAxCtZpLraTtaZ5LdHJ1iVihwZbxfBYDsCphWwjSXSI4Dtg6PmizNyyen17+uvph89OaDDcqTwFAAA='''
+          patch = gzip.decompress(base64.b64decode(encoded))
+          if hashlib.sha256(patch).hexdigest() != 'af3b6c6b7ed6e591daa7b0d750cd8711d625777886c93635b55603808e7e6398':
+              raise RuntimeError('Patch checksum mismatch.')
+          target = Path(os.environ['RUNNER_TEMP'])/'preview41.patch'
+          target.write_bytes(patch)
+          subprocess.run(['git','config','core.autocrlf','false'],check=True)
+          subprocess.run(['git','checkout-index','-a','-f'],check=True)
+          subprocess.run(['git','apply','--check',str(target)],check=True)
+          subprocess.run(['git','apply',str(target)],check=True)
+      - name: Validate layout and build the offline editor
+        shell: pwsh
+        run: |
+          node scripts/check-repo.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node --test tests/adaptive-port-map.test.mjs tests/portmap-stack-fit.test.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          node scripts/build-web.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Capture the actual fictional editor on Microsoft Edge
+        shell: pwsh
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          $tools = Join-Path $env:RUNNER_TEMP 'page-fit-tools'
+          npm install --prefix $tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:PLAYWRIGHT_MODULE_PATH = Join-Path $tools 'node_modules/playwright'
+          $env:BROWSER_EXECUTABLE_PATH = "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe"
+          if (-not (Test-Path $env:BROWSER_EXECUTABLE_PATH)) { throw 'Microsoft Edge is unavailable.' }
+          $env:NDS_QA_OUTPUT = Join-Path $env:RUNNER_TEMP 'page-fit-captures'
+          node tests/browser-adaptive-port-map.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Copy-Item (Join-Path $env:NDS_QA_OUTPUT 'adaptive-8-a4.png') docs/images/port-map.png -Force
+      - name: Commit validated source and remove temporary preparation workflow
+        shell: pwsh
+        run: |
+          Remove-Item .github/workflows/apply-page-fit.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          git commit -m 'Fix adaptive paper-aware port maps for preview.41'
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          git push origin HEAD:refs/heads/fix/adaptive-port-map-page-fit
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          git rev-parse HEAD
