@@ -36,3 +36,14 @@ export function positionOnCable(points,fraction){
  }
  return points?.length?{x:points.at(-1)[0],y:points.at(-1)[1],angle:0,ratio:fraction}:null;
 }
+
+export function describeCableEnds(cable,devices=[]){
+ const byId=new Map(devices.map(device=>[device.id,device.name||device.id]));
+ const link=cable?.sourceLink||{},a={device:link.a,port:link.ap},b={device:link.b,port:link.bp};
+ const fromPort=String(cable?.from?.port||'').toLowerCase(),toPort=String(cable?.to?.port||'').toLowerCase();
+ const reverse=(fromPort&&fromPort===String(b.port||'').toLowerCase()&&fromPort!==String(a.port||'').toLowerCase())||
+  (toPort&&toPort===String(a.port||'').toLowerCase()&&toPort!==String(b.port||'').toLowerCase());
+ const ordered=reverse?[b,a]:[a,b];
+ const label=value=>[byId.get(value.device)||value.device||'Device',value.port||'port not specified'].join(' / ');
+ return {start:label(ordered[0]),end:label(ordered[1])};
+}
