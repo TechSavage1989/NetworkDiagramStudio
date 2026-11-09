@@ -38,7 +38,7 @@ test('existing page labels receive global defaults while individual edits retain
  applyGlobalTextStyles(page,{deviceNames:{scale:1.5,color:'#AA0011',bold:true},linkLabels:{scale:.8,color:'#0022BB',align:'right'}},{'site|device':{color:'#008800'}});
  assert.equal(device.size,18); // explicit color remains authoritative
  assert.equal(device.color,'#008800');assert.equal(device.bold,true);
- assert.equal(cable.size,9.6);assert.equal(cable.color,'#0022BB');assert.equal(cable.align,'right');
+ assert.ok(Math.abs(cable.size-9.6)<1e-9);assert.equal(cable.color,'#0022BB');assert.equal(cable.align,'right');
  const oldSize=device.size;applyGlobalTextStyles({items:[device]},{},{});assert.equal(device.size,oldSize);
 });
 
