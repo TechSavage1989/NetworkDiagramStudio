@@ -26,7 +26,7 @@ jobs:
           from pathlib import Path
           from urllib.request import Request, urlopen
           parent = subprocess.check_output(['git','rev-parse','HEAD^'],text=True).strip()
-          if parent != 'cc8d54a73a6b96f1cb85244a80dac064d008c561':
+          if parent != '3d6a64fe11376318e4e8d5134828950879c137b5':
               raise RuntimeError('The preparation branch changed; inspect before applying this patch.')
           chunks = []
           for sha in [
@@ -78,10 +78,13 @@ jobs:
           node tests/browser-adaptive-port-map.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           Copy-Item (Join-Path $env:NDS_QA_OUTPUT 'adaptive-8-a4.png') docs/images/port-map.png -Force
-      - name: Commit validated source and remove temporary preparation workflow
+      - name: Commit validated application source without modifying workflows
         shell: pwsh
         run: |
-          Remove-Item .github/workflows/apply-page-fit.yml
+          # The existing authorized repository connector owns workflow updates.
+          # Keep the Actions token restricted to ordinary application files.
+          git restore --source=HEAD --staged --worktree .github
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
@@ -92,3 +95,11 @@ jobs:
           git push origin HEAD:refs/heads/fix/adaptive-port-map-page-fit
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           git rev-parse HEAD
+      - name: Preserve fictional browser verification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: adaptive-port-map-browser
+          path: ${{ runner.temp }}/page-fit-captures
+          if-no-files-found: warn
+          retention-days: 7
