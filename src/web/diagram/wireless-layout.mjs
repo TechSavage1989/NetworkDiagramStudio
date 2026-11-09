@@ -1,5 +1,5 @@
 import {deviceScale,presentation} from '../presentation.mjs';
-import {pageGeometry} from '../page-options.mjs';
+import {pageGeometry,targetPageAspect} from '../page-options.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
 import {applyLinkStyles,linkWeight} from '../link-styles.mjs';
 import {deviceModel,macCaption} from '../device-details.mjs';
@@ -72,7 +72,7 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
  const ends=edges.map(e=>({e,anchor:getAnchor(panel,e.sp,panel.moduleChannel?'auto':'top',e.idx,{weight:pathWeight(project,e)}),apGeometry:addDevice({items:[]},project,db.devices.get(e.apId),[0,0,apSize,apSize],'measure-ap')}));
  const byHeight=ends.slice().sort((a,b)=>a.anchor.y-b.anchor.y||a.anchor.x-b.anchor.x||a.e.idx-b.e.idx),natural=new Set(ends.filter(v=>v.anchor.y<panel.h/2).map(v=>v.e.idx)),balanced=new Set(byHeight.slice(0,Math.ceil(ends.length/2)).map(v=>v.e.idx)),splits=[natural];
  if([...balanced].some(id=>!natural.has(id))||balanced.size!==natural.size)splits.push(balanced);
- const choices=[],captionCache=new Map(),legendCache=new Map(),maxWeight=Math.max(cableWeight,...ends.map(v=>v.anchor.weight)),pitch=Math.max(7,maxWeight+3),margin=Math.max(46,22+Math.ceil(edges.length/2)*pitch);
+ const targetAspect=targetPageAspect(project,{name:'Wireless Connections',family:'wireless'}),choices=[],captionCache=new Map(),legendCache=new Map(),maxWeight=Math.max(cableWeight,...ends.map(v=>v.anchor.weight)),pitch=Math.max(7,maxWeight+3),margin=Math.max(46,22+Math.ceil(edges.length/2)*pitch);
  for(const topIds of splits)for(const rowCount of geometry.dynamic&&edges.length>12?[1,2,3]:[1])for(const col of geometry.dynamic?[132,180,245,360,680]:[132,180,245,360,680].filter(w=>w<=geometry.width-100)){
   const banks={top:[],bottom:[]};for(const v of ends){const key=v.e.idx+'/'+col;if(!captionCache.has(key))captionCache.set(key,captions(project,db,v.e,col));banks[topIds.has(v.e.idx)?'top':'bottom'].push({...v,caption:captionCache.get(key)});}
   for(const bank of Object.values(banks))bank.sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx);
@@ -84,7 +84,7 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
   const start=legendCache.get(W),switchY=start+metrics.top.height,H=switchY+panel.h+metrics.bottom.height+64;
   if(!geometry.dynamic&&H>geometry.height)continue;
   const travel=ends.reduce((sum,v)=>sum+(topIds.has(v.e.idx)?v.anchor.y:panel.h-v.anchor.y),0);
-  const score=Math.max(W,H)**2+.15*W*H+travel*60;
+  const score=(Math.max(W,H)**2+.15*W*H+travel*60)*(targetAspect?1+.75*Math.abs(Math.log((W/H)/targetAspect)):1);
   choices.push({W,H,start,switchY,width,...spacing,apSize,pitch,banks,rows,metrics,col,score,panel,rowCount});
  }
  return choices.sort((a,b)=>a.score-b.score||a.col-b.col);
