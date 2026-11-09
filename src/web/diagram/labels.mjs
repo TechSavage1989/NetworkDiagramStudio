@@ -163,7 +163,7 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const placeOne=req=>{
   const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)return {skip:true};
   const snapped=patches.find(p=>Number.isFinite(p.cableFraction)),snapOwner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);
-  if(snapped&&snapOwner){const hit=positionOnCable(snapOwner.points,snapped.cableFraction);if(hit)return {box:{x:hit.x-w/2,y:hit.y-h/2,w,h,angle:snapped.rotationMode==='fixed'&&Number.isFinite(snapped.angle)?snapped.angle:hit.angle,manual:true,inline:true,parts:lines.map(line=>textWidth(line.value,size,true)+8)},lines,size};}
+  if(snapped&&snapOwner){const hit=positionOnCable(snapOwner.points,snapped.cableFraction);if(hit)return {box:{x:hit.x-w/2,y:hit.y-h/2,w,h,angle:snapped.rotationMode==='fixed'&&Number.isFinite(snapped.angle)?snapped.angle:hit.angle,manual:true,inline:true,stacked:lines.length>1,parts:lines.map(line=>textWidth(line.value,size,true)+8)},lines,size};}
   // A moved label is pinned, not an automatic-placement suggestion. Preserve
   // its exact saved coordinates across redraws and page format changes.
   const pinned=patches.find(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
