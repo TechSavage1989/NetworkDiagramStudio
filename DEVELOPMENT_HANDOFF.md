@@ -1,3 +1,9 @@
+# Preview.37: dynamic full-stack port maps and scrollable page navigation
+
+The next preview keeps a large VSF stack on one logical builder-style port map instead of dividing member rows among paper-sized map tabs and repeating its VLAN/LAG legend. Print paper is selected separately from the editable canvas; changing paper sizes or orientation does not reflow objects, create logical continuation pages or change port coordinates. The Page options dialog now presents print settings and page numbering without changing saved legacy canvas settings. Fixed Letter/A4/A3 print outputs scale the complete logical drawing proportionally. Very large prints may be too small to read at standard paper sizes.
+
+The page tabs scroll horizontally with mouse wheel/trackpad or scrollbar. Selecting a top-level group opens a styled, vertically scrollable list of its pages; the active page is marked, and clicking one navigates directly. Keep the old page picker. Fictional eight-member VSF and real Edge interaction tests cover the one-map layout, paper independence, group selection and scrolling. Validate the final PR head in both Windows jobs before merging. The merged release workflow must pass and publish preview.37, after which the public release assets and updater feed must be verified. No client configuration may enter the repository.
+
 ## Preview.36: clearer controls and consolidated connection properties
 
 Prepared from published preview.35 at babdb16cbec4333a00a471a343066eeeede5d646 on feat/editor-controls-and-line-styles. The existing switch-compatibility checkout has separate unfinished work and is not included. Standing source, PR, merge and release authorization continues for this requested UI change. Require both exact-head validation jobs, merged-main publication, then public tag/feed/asset verification before announcing availability. Do not restart or replace the user's running application.
