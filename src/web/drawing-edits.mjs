@@ -14,6 +14,7 @@ export function cleanDrawingEdits(raw){
   if(Number.isFinite(input.opacity)&&input.opacity>=0&&input.opacity<=1)out.opacity=input.opacity;
   if(Number.isFinite(input.cableFraction)&&input.cableFraction>=0&&input.cableFraction<=1)out.cableFraction=input.cableFraction;
   if(['auto','fixed'].includes(input.rotationMode))out.rotationMode=input.rotationMode;
+   if(['above','on','below'].includes(input.cableSide))out.cableSide=input.cableSide;
   for(const k of ['fill','stroke','color'])if(colors.test(input[k]||''))out[k]=input[k];
   if(typeof input.value==='string')out.value=input.value.slice(0,10000);
   if(typeof input.name==='string')out.name=input.name.slice(0,300);
