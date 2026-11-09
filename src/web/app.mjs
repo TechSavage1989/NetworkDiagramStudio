@@ -277,7 +277,7 @@ function startDrawingMove(key,event){
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
   for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else n.setAttribute('transform','translate('+x+' '+y+') '+(s.transform||''));}
   for(const n of $('canvas').querySelectorAll('.diagram-selection'))n.setAttribute('transform','translate('+x+' '+y+')');$('canvas').querySelector('.cable-controls')?.setAttribute('visibility','hidden');showSnapGuides(next.guides);
- },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta]))));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
+ },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta])),{preventSidebarOverlap:true}));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
 }
 $('drawing-snap-label').onclick=()=>task(snapSelectedLabelDialog);
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{cancelBesidePick();drawingSelection.clear();syncDrawingSelection();};
