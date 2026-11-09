@@ -1,3 +1,5 @@
+import {deviceDetails,macCaption} from '../device-details.mjs';
+
 // Information panel data is derived only from the current project's declared
 // devices and connections. A missing record is never guessed or synthesized.
 const text=value=>typeof value==='string'?value.trim():value==null?'':String(value);
@@ -40,10 +42,15 @@ export function automaticPanelContent(project,devices){
  }),...devices.flatMap(d=>devicePorts(d).filter(p=>/uplink|trunk|wan/i.test([p.role,p.description,p.purpose].map(text).join(' '))).map(p=>[name(d),portLabel(p),text(p.description||p.role)].filter(Boolean).join(' · ')))]);
  const optics=rows(devices.flatMap(d=>devicePorts(d).filter(p=>p.optic||p.transceiver||p.sfp||p.gbic).map(p=>[describePort(d,p),text(p.optic||p.transceiver||p.sfp||p.gbic)].filter(Boolean).join(' · '))));
  const status=devices.map(d=>{const ports=devicePorts(d),up=ports.filter(p=>/^(?:up|connected|online|active)$/i.test(text(p.state))).length,down=ports.filter(p=>/^(?:down|disabled|offline|disconnected)$/i.test(text(p.state))).length;return ports.length?name(d)+' · '+up+' up, '+down+' down, '+(ports.length-up-down)+' unknown ('+ports.length+' ports)':'';}).filter(Boolean);
- const addresses=devices.flatMap(d=>[d.ip,...(d.ips||[])].filter(Boolean).map(ip=>name(d)+' · '+text(ip)));
- const models=devices.map(d=>[name(d),text(d.vendor),text(d.model)].filter(Boolean).join(' · '));
+ const addresses=devices.map(d=>{
+  // Keep the complete, sourced address inventory (including interface MACs).
+  // A summarized count here silently discards information engineers need.
+  const mac=macCaption(d,undefined,{full:true});
+  return [name(d),...new Set([d.ip,...(d.ips||[])].filter(Boolean)).values(),mac].filter(Boolean).join(' · ');
+ }).filter(value=>value.includes(' · '));
+ const models=devices.map(d=>[name(d),deviceDetails(d)].filter(Boolean).join(' · '));
  const routes=devices.flatMap(d=>(d.routes||[]).map(r=>name(d)+' · '+(typeof r==='string'?r:[r.destination||r.prefix||r.network,r.gateway||r.nextHop,r.interface].map(text).filter(Boolean).join(' · '))));
- const ports=devices.flatMap(d=>devicePorts(d).filter(p=>p.description||p.native!=null||p.tagged?.length).map(p=>[describePort(d,p),text(p.description),p.native!=null?'Native '+text(p.native):'',p.tagged?.length?'Tagged '+p.tagged.join(', '):''].filter(Boolean).join(' · ')));
+ const ports=devices.flatMap(d=>devicePorts(d).filter(p=>p.description||p.native!=null||p.tagged?.length).map(p=>[describePort(d,p),text(p.description),p.native!=null?'Native VLAN '+text(p.native):'',p.tagged?.length?'Tagged '+p.tagged.join(', '):'',text(p.speed),text(p.state)].filter(Boolean).join(' · ')));
  return {vlans, lags:rows(groups),apPorts,vsfPorts,uplinks,optics,status,addresses:rows(addresses),models:rows(models),routes:rows(routes),ports:rows(ports)};
 }
 export function panelRows(id,auto,options){
