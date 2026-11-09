@@ -492,7 +492,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   rect(a,36,y,W-72,header,'#E3ECF5','#C4D3E3',.75);a.at(-1).editKey=scope+'|inventory-header';let x=36;
   columns.forEach(([,w],column)=>{headings[column].forEach((text,line)=>{label(a,x+6,y+3+line*type.headerLine,w-10,type.headerLine,text,type.header,true,'#1B3A4B');Object.assign(a.at(-1),{editKey:scope+'|column|'+column+'|'+line,full:true});});x+=w;});y+=header;
   const members=[];let count=0;
-  while(at<rows.length&&y+rows[at].height<=H-82){
+  while(at<rows.length&&y+rows[at].height<=H-124){
    const row=rows[at++],rowKey=scopeBase+'|row|'+row.key+'|part:'+row.part;members.push(...(row.part?[]:row.names));
    rect(a,36,y,W-72,row.height,count%2?'#F3F7FA':C.white);a.at(-1).editKey=rowKey+'|background';rect(a,36,y+row.height-1,W-72,1,'#DCE5E9');a.at(-1).editKey=rowKey+'|rule';
    let cx=36;
