@@ -162,9 +162,21 @@ export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
    const edges=assigned[partIndex];if(!edges.length)continue;const batches=prepared?.[partIndex]||pageBatches(project,db,device,edges,width,geometry);if(!batches)throw capacityError('This wireless caption needs more space. Choose a larger or dynamic page.');
    for(let batchIndex=0;batchIndex<batches.length;batchIndex++){const batch=batches[batchIndex],candidate=organizing(project,pageScope(project,device,batchIndex));
     const spacing=stackSpacing(project,device,batch,width),choices=bankLayout(project,db,device,batch,width,spacing,geometry);if(!choices.length)throw capacityError('This wireless caption needs more space. Choose a larger or dynamic page.');
-    let selected,error,attempts=0,candidates=0;
+    let selected,error,attempts=0,candidates=0,clearChecks=0;
     const alternatives=[...new Map(choices.map(choice=>[choice.rowCount,choice])).keys()].map(rows=>choices.find(choice=>choice.rowCount===rows));alternatives.push(...choices.filter(choice=>!alternatives.includes(choice)).slice(0,3));
-    for(const choice of alternatives.slice(0,candidate?1:6)){attempts++;try{const page=renderBankPage(project,db,device,batch,choice,batchIndex,portNumbers);candidates+=page.wirelessLayout.routingStats.candidates;if(!selected||page.wirelessLayout.routingCost[0]+page.wirelessLayout.routingCost[1]<selected.wirelessLayout.routingCost[0]+selected.wirelessLayout.routingCost[1])selected=page;if(!page.wirelessLayout.routingCost[0]&&!page.wirelessLayout.routingCost[1])break;}catch(e){if(e.code!=='CORE_LAYOUT_CAPACITY')throw e;error=e;}}
+    // A zero-collision result is necessary, not sufficient: compare several
+    // valid arrangements for crossings, bends and footprint instead of always
+    // keeping the first layout. Bound this search on large wireless sites.
+    const aesthetic=page=>{const c=page.wirelessLayout.routingCost;return c[2]+c[3]*55+c[4]*8+page.width*page.height*.00035;};
+    for(const choice of alternatives.slice(0,candidate?1:Math.min(4,alternatives.length))){
+     attempts++;
+     try{
+      const page=renderBankPage(project,db,device,batch,choice,batchIndex,portNumbers),cost=page.wirelessLayout.routingCost;
+      candidates+=page.wirelessLayout.routingStats.candidates;
+      if(!selected||cost[0]+cost[1]<selected.wirelessLayout.routingCost[0]+selected.wirelessLayout.routingCost[1]||cost[0]+cost[1]===selected.wirelessLayout.routingCost[0]+selected.wirelessLayout.routingCost[1]&&aesthetic(page)<aesthetic(selected))selected=page;
+      if(!cost[0]&&!cost[1]&&++clearChecks>=3&&cost[3]===0)break;
+     }catch(e){if(e.code!=='CORE_LAYOUT_CAPACITY')throw e;error=e;}
+    }
     if(!selected||selected.wirelessLayout.routingCost[0]||selected.wirelessLayout.routingCost[1]){
      if(!candidate&&batch.length>1){const middle=Math.ceil(batch.length/2);batches.splice(batchIndex,1,batch.slice(0,middle),batch.slice(middle));batchIndex--;continue;}
      else throw error||capacityError('This wireless page needs more room for its connections.');
