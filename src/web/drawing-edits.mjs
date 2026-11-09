@@ -130,7 +130,14 @@ export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='a
  const selected=new Set(movementOffsets({items:devices},{},new Map([...picked].map(k=>[k,[0,0]])),{exclude:[referenceKey]}).keys()),chosen=devices.filter(i=>selected.has(i.editKey));
  const scale=reference.presentation?.scale||1,padding=typeof spacing==='number'?spacing:spacing==='auto'?automaticDeviceGap(page,[...chosen,reference],side):({compact:56,normal:96,wide:160}[spacing]??96)*scale;
  if(!Number.isFinite(padding))throw Error('Choose a valid placement spacing.');
- const others=devices.filter(i=>!selected.has(i.editKey)),offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,others.filter(i=>i!==reference).map(drawingBounds),padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});
+ const others=devices.filter(i=>!selected.has(i.editKey)),obstacles=others.filter(i=>i!==reference).map(drawingBounds);
+ // The information sidebar is a reserved, solid region. Place beside must
+ // search for a clear location or report a capacity issue, never overlap it.
+ if(page.legendLayout==='sidebar'&&Number.isFinite(page.sidebar?.divider)){
+  const x=page.originX||0,y=page.originY||0,right=page.sidebar.divider+20;
+  obstacles.push({key:'reserved-sidebar',x,y,w:Math.max(0,right-x),h:page.height});
+ }
+ const offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,obstacles,padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});
  // Pin every visible reference, including generated WAN cards, before core
  // routing retries can choose a new automatic arrangement. This is one edit.
  for(const item of others)offsets.set(item.editKey,[0,0]);
