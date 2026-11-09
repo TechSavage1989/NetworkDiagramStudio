@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import {buildPages} from '../src/web/diagram/index.mjs';
 
 // Fictional eight-member VSF fixture. No customer configuration or secrets.
-const stack=()=>({
+const stack=(members=8)=>({
  id:'fictional-stack',name:'LAB-8-MEMBER-VSF',kind:'switch',vendor:'Aruba',model:'JL558A',
- stackMembers:Array.from({length:8},(_,i)=>({id:String(i+1),model:i===7?'JL256A':'JL558A'})),
+ stackMembers:Array.from({length:members},(_,i)=>({id:String(i+1),model:i===members-1?'JL256A':'JL558A'})),
  vlans:[{id:10,name:'Lab management'},{id:110,name:'Lab voice',voice:true},{id:120,name:'Lab data'},{id:150,name:'Lab security'},{id:160,name:'Lab display'}],
- ports:Array.from({length:8},(_,i)=>Array.from({length:48},(_,j)=>{
+ ports:Array.from({length:members},(_,i)=>Array.from({length:48},(_,j)=>{
   const member=i+1,number=j+1,security=member===8&&number>=21,display=member===8&&number>=45;
   return {name:member+'/'+number,state:'up',native:display?160:security?150:120,tagged:security||display?[]:[110]};
  })).flat()
 });
-const project=pageSetup=>({name:'Synthetic stack documentation',devices:[stack()],links:[],layout:{pageSetup,portMap:{mapStyle:'switchport',presentation:'separate'}}});
+const project=(pageSetup,members=8)=>({name:'Synthetic stack documentation',devices:[stack(members)],links:[],layout:{pageSetup,portMap:{mapStyle:'switchport',presentation:'separate'}}});
 const map=site=>buildPages(site).filter(page=>page.portMap?.device==='fictional-stack'&&page.portMap.switchportSheet&&page.portMap.bookletRole!=='inventory');
 
 test('eight-member VSF stays on one dynamic logical port-map page with one legend',()=>{
@@ -40,4 +40,15 @@ test('print paper and fixed legacy canvas settings do not repaginate builder-sty
  }
  const legacy=map(project({default:{preset:'a4',orientation:'portrait'},overrides:{ports:{preset:'a2',orientation:'portrait'}}}))[0];
  assert.equal(signature(legacy),signature(reference),'a saved paper shape must not divide the builder map');
+});
+
+test('every one-through-eight-member VSF map keeps the full stack and one key on a single page',()=>{
+ for(let members=1;members<=8;members++){
+  const pages=map(project(undefined,members));
+  assert.equal(pages.length,1,members+' members should be a single logical map');
+  const page=pages[0],groups=new Set(page.items.filter(item=>item.reportPanel).map(item=>String(item.reportGroup)));
+  assert.equal(groups.size,members,'all member faceplates retained');
+  assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
+  assert.ok(page.items.filter(item=>item.reportPortRole==='number').length>=members*48);
+ }
 });
