@@ -90,6 +90,7 @@ export function fitVisiblePage(page,project){
     if(factor!==1)item.masterKey+=':visible-fit:'+factor.toFixed(6);
    }
   }
+  if(page.sidebar)page.sidebar={...page.sidebar,...Object.fromEntries(['divider','contentLeft','titleLeft','bodyLeft'].filter(k=>Number.isFinite(page.sidebar[k])).map(k=>[k,page.sidebar[k]*factor+dx])),...(Number.isFinite(page.sidebar.width)?{width:page.sidebar.width*factor}:{})};
   page.originX=originX;page.originY=originY;
   page.width=targetW;page.height=targetH;
  }else{
