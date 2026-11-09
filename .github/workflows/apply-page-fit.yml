@@ -19,18 +19,37 @@ jobs:
           node-version: 22
       - name: Apply exact reviewed source patch
         shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          import base64, gzip, hashlib, os, subprocess
+          import base64, gzip, hashlib, json, os, subprocess
           from pathlib import Path
+          from urllib.request import Request, urlopen
           parent = subprocess.check_output(['git','rev-parse','HEAD^'],text=True).strip()
-          if parent != 'd4ef30074f0cb6f3dd75cc46062f4cfa77ded7ce':
+          if parent != 'cc8d54a73a6b96f1cb85244a80dac064d008c561':
               raise RuntimeError('The preparation branch changed; inspect before applying this patch.')
-          encoded = '''H4sIAAAAAAAC/819+XPbRrLw7/orYGefQYogeEjUQRlyZFtOvOtDn+Ukb8ulSoEEKCImAS4ASmIk/e+vrxkMQFDSHu+rl4pFEhjM9PT03T2DIJpMrHb7Msotv+PCx3Q56lwn6ffJLLnOOgv/MmxPorydJct0HLqr+cwaPa3dVhDOwjwMrEk0C615EoRWr9vd293diuIgvLH2/cl4r+e7bpf/22q320+FYavValmdILzqxMvZbOvHH612z9nZsVpdp2v9+ONWO/bn4dA6kyctftK68mdR4OdRElujZRzMwq12Eg+32pa1WGZT+mJZo9SPx9MwG1rfJtFNxw/8RR5dhe1Fkubtub9oK3guuP3Cz6fY+EmAwzOLMJ1HWQZAZDTiOInzMM6hizT0g632H8mIb/BTAlW6jDME1loC5PmyPfPzMMv5Xh7Nw2QJwEXxMkfAB3w9y8NFJs9bVttaZnjTHyMCsg7McfwdHvux1wsGh3tdf6e/tz/oBoODnYPu/kG4szee7ByMDgb+ZG9/v7/XVx1Z1jXMdFj8BByEaRZleXuchgHMJfJnMNAE/obF6LwkJ+l4Cti0whuAQ63LJEmtKEtwToE1S8bJPMzTlSH6UfBZSTxbWfk0xE62rF9JyFtnb9+RmOUb4cJPgesAyWGMqgPmkcKogABUboDX8AY/ELWOFSc5PXX+60/wZAq6KPoTRJr1tzBcWNNkYY1noY9WVmj5mbWMF34Uo+Yf+6NZ2CZowpvxbIk2ErSNFhkOlE/9nMSulSeJa72HR9IsRCNCAacfgqknVnIVpjMfnh37MUKUhsDJMQFGAx2pFnRphMIQYUjiK1iiRRSOYe6AgICskzy6nOYWfJmAkWKNl+kVYiax/KskCiyfFG4Ek8lCf5651ptkDjCFxkRpYTLGNxhwyRLWiEzjWYeXDpcI9G9mTdJkzkhHYsdlgMmEN6DcQQkDfDOA4h9LHPJPNmWjjDAORmXuf4cZIry+BSsfZwhEPF5ZASz4OHetL2EOuLaueIlBYaJgdXg+QkK4fiFKELiSpNFlFMOVaRSAVdFOrkE1WaNwCkIGn48DtDvaESgrC3TTYhqNAQU5iucta8t6mxBgYppAc5j5eOrHlzDzS6CjlOw9mlH7e7iyktEfuJ7E5NdTmEmUZ7xWVr5aADbpWUDvh5AJLA6v+U4aqv6YTEiMONAJuh4L4OcwvULsgUsSjbjdeJnlgGgcLKOZhEANAAP0m1pB6l9je1QC7lZrq/XDD9aJyBFLyREgRpgarGGOK4Ot3hFSYLEWs2gMYuAqyiKEnhsC4k+WeUIOCbpDDgzpz5YIzDz0syVYblYWBWEHYE+urRnOKWDYkhT5DXGFNAIPjPwYGHwUokQCpgTiiy8BL9AWfgBC/FkCfDqHOdISQDOgQVhtXB0QXIDz5TzOhCWzZPwdMOpnC0R/ilQFa+7PZtbcT78D5PNwDljLpsCJDnkptCbxEq8iKApKGFJDCAt6hKgHSUNrNfNTWDvg1qlPE+UxM5AMzBS62zy8AVgAbmAdixSv9Wbqg8MEpDVLgCJSJmLoNEqtxXSVRegwgBBJoekvWYh24RKuTKIY/iKFAx8gC4J+lPUmhyMOoqsowJYoCFLAPDx/Sn4JLVh7MQPJgbCi0ANsrxYABgrTEKREANSVgLiiXmlJYYJRjDxm0KJwsdJBgCyEbwKiiwgFyMvBVrHlLxYg9mB1UAQSMyiYjgAT8N1CKs4N2SGLAlincSYwfaSrq9C1zpjiQyGzYAWzjsYoCK9gfFhD1EMLFOIxzDWNYpkxrSLAEAdMPzGLARbxBd9Di5WWujjhfyzBNWAxCtZpLraTtaZ5LdHJ1iVihwZbxfBYDsCphWwjSXSI4Dtg6PmizNyyen17+uvph89OaDDcqTwFAAA='''
-          patch = gzip.decompress(base64.b64decode(encoded))
+          chunks = []
+          for sha in [
+              'f8a2be0269de756cdbd180860a2b83feed5e7487',
+              'b3c11a4f3a0c637576ecf3ea7203830d54f67610',
+              'e691fb5c5ca872ae8b9f1073ad52ae182790bfab',
+              '874820a1f207e2b12a9457be03afba3f4c391ccf'
+          ]:
+              request = Request('https://api.github.com/repos/TechSavage1989/NetworkDiagramStudio/git/blobs/' + sha,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'User-Agent': 'NetworkDiagramStudio-candidate-preparation'})
+              with urlopen(request, timeout=45) as response:
+                  blob = json.load(response)
+              chunk = base64.b64decode(blob['content'])
+              actual = hashlib.sha1(('blob ' + str(len(chunk)) + '\0').encode() + chunk).hexdigest()
+              if actual != sha:
+                  raise RuntimeError('Source transfer chunk checksum mismatch.')
+              chunks.append(chunk)
+          patch = gzip.decompress(b''.join(chunks))
           if hashlib.sha256(patch).hexdigest() != 'af3b6c6b7ed6e591daa7b0d750cd8711d625777886c93635b55603808e7e6398':
               raise RuntimeError('Patch checksum mismatch.')
           target = Path(os.environ['RUNNER_TEMP'])/'preview41.patch'
           target.write_bytes(patch)
+          print('Verified complete source patch:', len(patch), 'bytes.')
           subprocess.run(['git','config','core.autocrlf','false'],check=True)
           subprocess.run(['git','checkout-index','-a','-f'],check=True)
           subprocess.run(['git','apply','--check',str(target)],check=True)
