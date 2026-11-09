@@ -16,7 +16,7 @@ import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
 import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
 import {diagramViewport} from './viewport.mjs';
-import {arrangeAnchors,arrangeBoxes} from './arrange.mjs';
+import {arrangeAnchors,arrangeBoxes,arrangeBoxesAtGap} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
 import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
@@ -130,7 +130,8 @@ function syncDrawingSelection(){
 
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
- for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
+ for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
+ $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
  $('drawing-snap-label').disabled=!editDrawing||!selectedConnectionLabel();
  typeHighlights.setSelected(connectionTypeForSelection(pages[active],drawingSelection));
  const selectedDevices=selectedDrawingDevices();syncBesideTools();$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
@@ -457,6 +458,26 @@ $('cable-remove-point').onclick=()=>task(removeSelectedCablePoint);
 $('cable-endpoints').onclick=()=>task(()=>connectSelectedCable());
 $('cable-edit-points').onclick=()=>task(()=>editCablePoints(selectedCable()));
 for(const button of $('drawing-tools').querySelectorAll('[data-align]'))button.onclick=()=>task(()=>{const page=pages[active],objects=drawingObjects(page).filter(o=>drawingSelection.has(o.editKey)&&!drawingSelection.has(o.parent?.editKey)),boxes=objects.map(drawingBounds).filter(Boolean);setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,arrangeBoxes(boxes,button.dataset.align)));say('Selected drawing items arranged.');});
+$('drawing-spacing').onclick=()=>task(()=>{
+ const page=pages[active];
+ const objects=drawingObjects(page).filter(item=>drawingSelection.has(item.editKey)&&!drawingSelection.has(item.parent?.editKey)&&item.type!=='path'&&item.type!=='vector');
+ if(objects.length<2)throw Error('Select at least two devices, text labels or other objects to adjust spacing.');
+ const body=modal('Spacing for selected objects');
+ body.append(el('p','Adjust only the selected objects at their current positions. The first object in the chosen direction stays in place. Existing cable endpoints stay attached. Undo restores the previous spacing.','hint'));
+ const direction=field(body,'Direction','x',[['x','Horizontal (left to right)'],['y','Vertical (top to bottom)']]);
+ const mode=field(body,'Spacing mode','exact',[['exact','Set an exact gap between objects'],['even','Distribute evenly within selected bounds']]);
+ const gap=field(body,'Gap between objects (drawing units)',48);
+ gap.type='number';gap.min=0;gap.max=2000;gap.step=1;
+ const update=()=>{gap.disabled=mode.value==='even';};mode.onchange=update;update();
+ button(actions(body),'Apply spacing',()=>{
+  const current=pages[active],keys=new Set(objects.map(item=>item.editKey));
+  const bounds=drawingObjects(current).filter(item=>keys.has(item.editKey)).map(drawingBounds).filter(Boolean);
+  const offsets=mode.value==='even'?arrangeBoxes(bounds,direction.value==='x'?'space-x':'space-y'):arrangeBoxesAtGap(bounds,direction.value,Number(gap.value));
+  setDrawingEdits(moveDrawingItems(current,project.layout?.drawingEdits,offsets,{preventSidebarOverlap:true}));
+  close();say('Spacing applied to '+bounds.length+' selected objects. Undo is available.');
+ },'primary');
+});
+
 function drawingHistory(redo=false,all=false,scope=modalHistoryScope){
  const previous=project,next=projectHistory.travel(project,{redo,all,scope,validate(state){project=state;try{validateDrawing();}finally{project=previous;}}});if(next===previous)return;
  inlineCancel?.();project=next;evidenceSnapshot=project.evidence?snapshot():null;dirty=projectHistory.dirty;draw();modalHistoryRefresh?.();say(all?'All available changes undone.':redo?'Change redone.':'Change undone.');
