@@ -1,3 +1,4 @@
+import {paperDimensions} from './page-options.mjs';
 // Editor-only page rulers. The tick marks follow the SVG viewBox and the
 // actual selected paper dimensions, not the desktop's display DPI.
 export function pageRulerTicks(lengthPx,originPx,pxPerUnit,{minor=.25,major=1}={}){
@@ -54,8 +55,8 @@ export function createPageRulers(host){
  unit.onclick=()=>{mode=mode==='mm'?'in':'mm';render();};
  return {
   show(svg,paper){
-   widthMm=Number(paper?.widthMm)||svg.viewBox.baseVal.width*25.4/96;
-   heightMm=Number(paper?.heightMm)||svg.viewBox.baseVal.height*25.4/96;
+   const dimensions=paperDimensions(paper?.visiblePaper);widthMm=dimensions?.widthMm||Number(paper?.widthMm)||svg.viewBox.baseVal.width*25.4/96;
+   heightMm=dimensions?.heightMm||Number(paper?.heightMm)||svg.viewBox.baseVal.height*25.4/96;
    const name=paper?.visiblePaper?.preset||paper?.paper?.preset||'';
    mode=/^a[1-5]$/.test(name)?'mm':'in';
    visible=true;host.append(top,side,unit);render();
