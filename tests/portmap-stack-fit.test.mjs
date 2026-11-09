@@ -62,7 +62,7 @@ test('landscape pages arrange eight stack members in balanced columns without sp
  assert.equal(pages.length,1);
  const page=pages[0],bodies=page.items.filter(item=>item.reportPanel&&item.reportGroup);
  assert.equal(bodies.length,8);
- assert.ok(new Set(bodies.map(body=>Math.round(body.x))).size>=2,'member blocks should fill landscape page in columns: '+JSON.stringify(bodies.map(body=>[body.reportGroup,Math.round(body.x),Math.round(body.y)]))+' role='+page.role);
+ assert.ok(new Set(bodies.map(body=>Math.round(body.x))).size>=2,'member blocks should fill landscape page in columns: '+JSON.stringify(bodies.map(body=>[body.reportGroup,Math.round(body.x),Math.round(body.y)]))+' role='+page.role+' standalone='+String(!!page.standaloneConfiguration));
  assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
  assert.ok(page.items.some(item=>item.reportPort?.startsWith('8/')));
  const same=map(project(settings,8))[0];
