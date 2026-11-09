@@ -31,7 +31,7 @@ import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionD
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
 import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
-import {relatedConnectionItems,nearestOnCable,positionOnCable} from './connection-selection.mjs';
+import {relatedConnectionItems,nearestOnCable,positionOnCable,describeCableEnds} from './connection-selection.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog,findDeviceIdentity} from './imports/index.mjs';
 import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
@@ -45,7 +45,7 @@ import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reope
 
 // Keep browser navigation/debug actions out of the drawing workspace.
 installFormControls();
-document.addEventListener('contextmenu',event=>event.preventDefault());
+document.addEventListener('contextmenu',handleEditorContextMenu);
 const $=id=>document.getElementById(id);
 const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{
  if(editDrawing){
@@ -68,7 +68,7 @@ let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceS
 const pageCache=new Map(),buildDrawing=(source=scoped(),options={})=>buildPages(source,{...options,cache:pageCache});
 const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
 let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null;
-let cablePoint=-1,snapLabelPick=null;
+let cablePoint=-1,snapLabelPick=null,contextMenu=null;
 const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:project.links,warnings:project.warnings}));
 const modelKinds=deviceKinds;
 const object=x=>x && typeof x==='object'&&!Array.isArray(x);
@@ -141,34 +141,46 @@ function selectedCable(){return drawingSelection.size===1?pages[active]?.items.f
 function selectedConnectionLabel(){
  return drawingSelection.size===1?pages[active]?.items.find(item=>item.labelRole&&item.relatedCableKey&&drawingSelection.has(item.editKey)):null;
 }
-function saveSnappedLabel(key,point){
+function saveSnappedLabel(key,point,{rotation='auto'}={}){
  const label=pages[active]?.items.find(item=>item.editKey===key&&item.labelRole),cable=label&&pages[active].items.find(item=>item.editKey===label.relatedCableKey&&item.type==='path');
  if(!label||!cable||!point)throw Error('Select a label associated with a visible cable.');
- const patch=unpresentPatch(label,{x:point.x-label.w/2,y:point.y-label.h/2,angle:point.angle});
+ const radians=rotation==='auto'?point.angle:Number(rotation)*Math.PI/180;
+ const patch=unpresentPatch(label,{x:point.x-label.w/2,y:point.y-label.h/2,angle:radians});patch.rotationMode=rotation==='auto'?'auto':'fixed';
  if(Number.isFinite(point.ratio))patch.cableFraction=point.ratio;
  setDrawingEdits({...project.layout?.drawingEdits,[key]:{...project.layout?.drawingEdits?.[key],...patch}});
  say('Connection label aligned to its cable. Its saved position will not move automatically.');
 }
 function snapSelectedLabelAtClick(key,event){
- const labelKey=snapLabelPick,label=pages[active]?.items.find(item=>item.editKey===labelKey),cable=pages[active]?.items.find(item=>item.editKey===label?.relatedCableKey);
+ const labelKey=snapLabelPick?.key||snapLabelPick,rotation=snapLabelPick?.rotation||'auto',label=pages[active]?.items.find(item=>item.editKey===labelKey),cable=pages[active]?.items.find(item=>item.editKey===label?.relatedCableKey);
  if(!label||!cable){snapLabelPick=null;return;}
  if(key!==cable.editKey){say('Click a position on the highlighted connection cable. Escape cancels.');return;}
  const svg=$('canvas').querySelector('svg'),position=new DOMPoint(event.clientX,event.clientY).matrixTransform(svg.getScreenCTM().inverse()),point=nearestOnCable(cable.points,{x:position.x,y:position.y});
- snapLabelPick=null;if(point)task(()=>saveSnappedLabel(labelKey,point));
+ snapLabelPick=null;if(point)task(()=>saveSnappedLabel(labelKey,point,{rotation}));
 }
 function snapSelectedLabelDialog(){
  const label=selectedConnectionLabel();if(!label)throw Error('Select a connection label first.');
  const cable=pages[active].items.find(item=>item.editKey===label.relatedCableKey);
  if(!cable)throw Error('The associated connection is not visible on this page.');
- const body=modal('Align label to connection');
- body.append(el('p','Select a position along the connected line, or choose a position directly on the diagram. Manual label positioning is retained when the page is rebuilt.','hint'));
- const position=field(body,'Position on line','0.5',[['0.1','Near start (10%)'],['0.25','Quarter (25%)'],['0.5','Middle (50%)'],['0.75','Three-quarter (75%)'],['0.9','Near end (90%)']]);
+ const ends=describeCableEnds(cable,project.devices),body=modal('Align label to connection');
+ body.append(el('p','Start and end follow the actual drawn cable, with device names and physical ports identified below. The position remains attached to the cable if routing changes.','hint'));
+ const position=field(body,'Position on line','0.5',[
+  ['0.1','Near '+ends.start+' (10%)'],['0.25','Toward '+ends.start+' (25%)'],
+  ['0.5','Center of cable (50%)'],['0.75','Toward '+ends.end+' (75%)'],
+  ['0.9','Near '+ends.end+' (90%)']
+ ]);
+ const rotation=field(body,'Label orientation','auto',[['auto','Automatically follow the cable'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]);
  const actionBar=actions(body);
- button(actionBar,'Align label',()=>{const point=positionOnCable(cable.points,Number(position.value));if(!point)throw Error('The cable has no usable segment.');saveSnappedLabel(label.editKey,point);close();},'primary');
- button(actionBar,'Pick point on the cable',()=>{snapLabelPick=label.editKey;close();say('Click the desired position on the highlighted cable. Escape cancels.');},'');
+ button(actionBar,'Align label',()=>{const point=positionOnCable(cable.points,Number(position.value));if(!point)throw Error('The cable has no usable segment.');saveSnappedLabel(label.editKey,point,{rotation:rotation.value});close();},'primary');
+ button(actionBar,'Pick point on the cable',()=>{snapLabelPick={key:label.editKey,rotation:rotation.value};close();say('Click the desired position on the highlighted cable. Escape cancels.');},'');
 }
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&snapLabelPick){snapLabelPick=null;say('Label alignment cancelled.');}},true);
 
+function rotateConnectionLabel(key,angle){
+ const label=pages[active]?.items.find(i=>i.editKey===key&&i.labelRole);
+ if(!label)throw Error('Select a connection label to rotate.');
+ const patch={...project.layout?.drawingEdits?.[key],angle:angle*Math.PI/180,rotationMode:'fixed'};
+ setDrawingEdits({...project.layout?.drawingEdits,[key]:patch});say('Label rotation saved.');
+}
 function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...unpresentPatch(item,{points})}});}
 function cableControlClick(key,event,target=event.target){
  const add=target.closest('[data-cable-segment]'),point=target.closest('[data-cable-point]');if(!add&&!point)return false;
@@ -277,7 +289,19 @@ function startDrawingMove(key,event){
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
   for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else n.setAttribute('transform','translate('+x+' '+y+') '+(s.transform||''));}
   for(const n of $('canvas').querySelectorAll('.diagram-selection'))n.setAttribute('transform','translate('+x+' '+y+')');$('canvas').querySelector('.cable-controls')?.setAttribute('visibility','hidden');showSnapGuides(next.guides);
- },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta])),{preventSidebarOverlap:true}));say('Drawing items moved.');});},cancel(){restore();syncDrawingSelection();}};
+ },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{
+    const label=keys.size===1?page.items.find(item=>item.editKey===[...keys][0]&&item.labelRole&&item.relatedCableKey):null;
+    const cable=label&&page.items.find(item=>item.editKey===label.relatedCableKey&&item.type==='path');
+    if(label&&cable){
+      const center={x:label.x+label.w/2+next.delta[0],y:label.y+label.h/2+next.delta[1]};
+      const hit=nearestOnCable(cable.points,center);
+      if(hit&&Math.hypot(hit.x-center.x,hit.y-center.y)<=Math.max(14,label.h/2+8)){
+       saveSnappedLabel(label.editKey,hit);say('Label centered and oriented on the connection line. Rotation remains editable.');return;
+      }
+    }
+    setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,next.delta])),{preventSidebarOverlap:true}));
+    say('Drawing items moved.');
+   });},cancel(){restore();syncDrawingSelection();}};
 }
 $('drawing-snap-label').onclick=()=>task(snapSelectedLabelDialog);
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{cancelBesidePick();drawingSelection.clear();syncDrawingSelection();};
@@ -1046,6 +1070,7 @@ function editDrawingObject(key){
  for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
  if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
+ const labelRotation=item.labelRole&&item.relatedCableKey?field(body,'Connection label rotation',project.layout?.drawingEdits?.[item.editKey]?.rotationMode==='fixed'?String(Math.round((project.layout.drawingEdits[item.editKey].angle||0)*180/Math.PI)):'auto',[['auto','Follow cable automatically'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]):null;
  const initialWeight=linkedSwatch?item.sampleWeight??item.h:item.weight||1;
  if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',initialWeight);inputs.weight.type='number';inputs.weight.step=.1;inputs.weight.min=.1;inputs.weight.max=12000;}
  let picker=null,captions=null,currentType=item.linkType;
@@ -1061,6 +1086,7 @@ function editDrawingObject(key){
  const scaleObject=item.type!=='path'&&!linkedSwatch?field(body,'Scale this object (%)',100):null;if(scaleObject){scaleObject.type='number';scaleObject.min=10;scaleObject.max=400;}
  const bar=actions(body);button(bar,'Save object',()=>{
   const change={};for(const [k,input] of Object.entries(inputs)){if(['w','h','size','weight'].includes(k)){const n=(k==='weight'?lineWidthValue(input):Number(input.value))/(normalized&&(['w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||n<=0)throw Error('Use a valid positive size.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
+  if(labelRotation){change.rotationMode=labelRotation.value==='auto'?'auto':'fixed';if(change.rotationMode==='fixed')change.angle=Number(labelRotation.value)*Math.PI/180;}
   if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
   if(scaleObject){const factor=Number(scaleObject.value)/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Use an object scale from 10 to 400 percent.');for(const k of ['w','h','size'])if(Number.isFinite(change[k]))change[k]*=factor;if(item.type==='vector'&&Array.isArray(change.commands)){const bounds=drawingBounds(item),x=(bounds.x-item.parent.x)/item.parent.w,y=(bounds.y-item.parent.y)/item.parent.h;change.commands=change.commands.map(c=>c.length===3?[c[0],x+(c[1]-x)*factor,y+(c[2]-y)*factor]:c);}}
   Object.assign(change,unpresentPatch(item,change));
