@@ -14,7 +14,7 @@ export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,
  if(out)out.onclick=()=>zoom(1/1.25);if(inside)inside.onclick=()=>zoom(1.25);if(fit)fit.onclick=fitPage;
  canvas.tabIndex=0;canvas.setAttribute('aria-label','Diagram viewport. Scroll to zoom. In Edit drawing, drag a box to select; hold Space or use the middle button to pan.');
  canvas.addEventListener('wheel',e=>{if(!svg||textInput(e.target))return;e.preventDefault();const r=canvas.getBoundingClientRect();zoom(Math.exp(-e.deltaY*.0015),e.clientX-r.left,e.clientY-r.top);},{passive:false});
- canvas.addEventListener('pointerdown',e=>{if(!svg||textInput(e.target)||![0,1].includes(e.button))return;if(onBeforeInteraction?.(e)===false)return;const target=e.button===0&&!space?(cables.resolve(e)||e.target):e.target;cables.clear();canvas.focus({preventScroll:true});const key=itemKey(target,e),box=e.button===0&&!space&&!key?onBoxStart?.(e,point(e)):null;
+ canvas.addEventListener('pointerdown',e=>{if(!svg||textInput(e.target)||e.target.closest('.page-ruler-unit')||![0,1].includes(e.button))return;if(onBeforeInteraction?.(e)===false)return;const target=e.button===0&&!space?(cables.resolve(e)||e.target):e.target;cables.clear();canvas.focus({preventScroll:true});const key=itemKey(target,e),box=e.button===0&&!space&&!key?onBoxStart?.(e,point(e)):null;
   drag={x:e.clientX,y:e.clientY,viewX:current.x,viewY:current.y,id:e.pointerId,moved:false,target,box,move:e.button===0&&!space&&key?onMoveStart?.(key,e):null};
   // A toolbar resize may still be queued when an edit begins. Freeze the
   // visible view now so its observer cannot refit or rebase the gesture.
