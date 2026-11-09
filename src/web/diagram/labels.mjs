@@ -326,6 +326,6 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
    }
    continue;
   }
-  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||b.textAlign||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});}
+  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||b.textAlign||(b.side==='left'?'right':'left'),background:b.manual?'#FFFFFF':undefined,full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});}
  return {ok:true,placed:result};
 }
