@@ -12,6 +12,8 @@ const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[];
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
+ const suppressed=await page.locator('#canvas').evaluate(node=>{const event=new MouseEvent('contextmenu',{bubbles:true,cancelable:true});node.dispatchEvent(event);return event.defaultPrevented;});
+ assert.ok(suppressed,'native and browser shells suppress default menus even on an empty drawing canvas');
  await page.locator('#sample').click();
  await page.waitForSelector('#canvas svg path.diagram-cable',{state:'attached'});
  await page.locator('#edit-drawing').click();
