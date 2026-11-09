@@ -35,12 +35,42 @@ try{
  await tabs.evaluate(e=>{e.style.width='';e.style.flex='';});
  const before=await page.locator('#canvas svg').getAttribute('viewBox');
  await page.locator('#page-options').click();
+ await page.locator('#dialog details').filter({hasText:'Printing'}).locator('summary').click();
  await page.locator('#dialog').getByLabel('Print paper',{exact:true}).selectOption('a4');
  await page.locator('#dialog').getByLabel('Print orientation',{exact:true}).selectOption('portrait');
  await page.locator('#dialog').getByRole('button',{name:'Save page options'}).click();
  await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  assert.equal(await page.locator('#canvas svg').getAttribute('viewBox'),before,'printing paper must not change drawing dimensions');
  await page.screenshot({path:resolve(output,'print-paper-options.png')});
+ // The new visible page control must change the actual editor sheet boundary,
+ // independently of print paper, and must expose all/group/page scopes.
+ await page.locator('#page-options').click();
+ const dialog=page.locator('#dialog'),scope=dialog.getByLabel('Apply visible page proportions to',{exact:true}),size=dialog.getByLabel('Visible page proportions',{exact:true}),orientation=dialog.getByLabel('Page orientation',{exact:true});
+ assert.equal(await scope.inputValue(),'page','individual-page controls are restored');
+ assert.ok(await dialog.getByLabel('Individual page',{exact:true}).count());
+ await size.selectOption('a4');await orientation.selectOption('portrait');
+ await dialog.getByRole('button',{name:'Save page options'}).click();
+ await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ const visible=await page.locator('#canvas svg').getAttribute('viewBox');
+ assert.notEqual(visible,before,'visible paper must change the actual drawing page');
+ const current=await page.locator('#canvas svg').evaluate(svg=>svg.viewBox.baseVal.width/svg.viewBox.baseVal.height);
+ assert.ok(Math.abs(current-210/297)<1e-6,'A4 portrait proportions are visible in the editor');
+ await page.screenshot({path:resolve(output,'visible-a4-portrait.png')});
+ await page.locator('#page-options').click();
+ await scope.selectOption('group');
+ assert.ok(await dialog.getByLabel('Page group',{exact:true}).isVisible());
+ await dialog.getByLabel('Page group',{exact:true}).selectOption('ports');
+ await size.selectOption('a3');await orientation.selectOption('landscape');
+ await scope.selectOption('page');
+ assert.equal(await size.inputValue(),'a4','switching scopes retains the unsaved group choice and individual override');
+ await dialog.getByRole('button',{name:'Save page options'}).click();
+ await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ await page.locator('#page-options').click();
+ await scope.selectOption('group');
+ await dialog.getByLabel('Page group',{exact:true}).selectOption('ports');
+ assert.equal(await size.inputValue(),'a3','group paper choice was saved');
+ await dialog.locator('#close').click();
+
  // A genuine validation rejection must retain its editor and error even
  // though a dynamic drawing can legitimately accept long titles.
  const rejection=await page.evaluate(async()=>{

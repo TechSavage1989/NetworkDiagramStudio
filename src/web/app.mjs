@@ -25,7 +25,7 @@ import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
 import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
-import {cleanPageNumbers,pageNumber,cleanPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles} from './page-options.mjs';
+import {cleanPageNumbers,pageNumber,cleanPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles,paperDimensions} from './page-options.mjs';
 import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
 import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
@@ -403,16 +403,54 @@ function layoutOptions(selected=pages[active]?.name){
 $('page-layout').onclick=()=>task(()=>layoutOptions());
 function pageOptions(){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
- body.append(el('p','Print paper changes only the output proportions. The drawing, equipment positions, port maps and number of logical pages remain unchanged. Each full drawing is fitted onto its selected printed sheet without cropping.','hint'));
- const printSection=el('section');body.append(printSection);
- const printSize=field(printSection,'Print paper',setup.printPaper?.preset||'drawing',[['drawing','Original drawing / full-size PDF'],...paperSizes.filter(([id])=>id!=='original')]);
- const printOrientation=field(printSection,'Print orientation',setup.printPaper?.orientation||'landscape',[['landscape','Landscape'],['portrait','Portrait']]);
- const printCustom=el('div','','form-columns');printSection.append(printCustom);
+ body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Existing diagram objects keep their positions and proportions, and a complete switch stack remains one page.','hint'));
+ const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
+ const groupRow=el('div'),pageRow=el('div');body.append(groupRow,pageRow);
+ const group=field(groupRow,'Page group',familyOf(pages[active]),pageFamilies),page=field(pageRow,'Individual page',String(active),pages.map((item,i)=>[String(i),(item.displayName||item.name)+'  ('+(pageFamilies.find(([id])=>id===familyOf(item))?.[1]||familyOf(item))+')']));
+ const paperRow=el('div','','form-columns');body.append(paperRow);
+ const preset=field(paperRow,'Visible page proportions','dynamic',[['inherit','Inherit drawing default / page group'],['dynamic','Dynamic / Fit all'],...paperSizes.filter(([id])=>id!=='original')]);
+ const orientation=field(paperRow,'Page orientation','landscape',[['landscape','Landscape'],['portrait','Portrait']]);
+ const custom=el('div','','form-columns');body.append(custom);
+ const width=field(custom,'Page width (mm)',297),height=field(custom,'Page height (mm)',420);
+ for(const input of [width,height]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
+ const preview=el('p','','page-size-preview');body.append(preview);
+ const visible=setup.visible;let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';
+ const lookup=()=>selectedScope==='all'?visible.default:selectedScope==='group'?visible.groups[selectedGroup]:visible.pages[selectedPage];
+ function store(){
+  const inherit=preset.value==='inherit',value=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
+  if(selectedScope==='all')visible.default=value;
+  else if(selectedScope==='group'){if(inherit)delete visible.groups[selectedGroup];else visible.groups[selectedGroup]=value;}
+  else if(selectedPage){if(inherit)delete visible.pages[selectedPage];else visible.pages[selectedPage]=value;}
+ }
+ function update(){
+  const inherited=preset.value==='inherit';
+  custom.hidden=preset.value!=='custom';orientation.disabled=inherited||preset.value==='dynamic';
+  const paper=inherited?(selectedScope==='page'?visible.groups[familyOf(pages[Number(page.value)])]||visible.default:visible.default):cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
+  const shape=paperDimensions(paper);
+  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm proportions ('+paper.orientation+'). All existing content fits on one page without being rearranged.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
+ }
+ function load(){
+  groupRow.hidden=selectedScope!=='group';pageRow.hidden=selectedScope!=='page';
+  const paper=lookup(),inherit=!paper&&selectedScope!=='all';
+  preset.value=inherit?'inherit':(paper?.preset||'dynamic');orientation.value=paper?.orientation||'landscape';width.value=paper?.widthMm||297;height.value=paper?.heightMm||420;
+  if(selectedScope==='all')preset.querySelector('option[value="inherit"]').disabled=true;
+  else preset.querySelector('option[value="inherit"]').disabled=false;
+  update();
+ }
+ target.onchange=()=>{store();selectedScope=target.value;load();};
+ group.onchange=()=>{store();selectedGroup=group.value;load();};
+ page.onchange=()=>{store();selectedPage=pages[Number(page.value)]?.name||'';load();};
+ for(const input of [preset,orientation,width,height])input.oninput=update;
+ load();
+ const printing=el('details');printing.append(el('summary','Printing'));body.append(printing);
+ const printSize=field(printing,'Print paper',setup.printPaper?.preset||'drawing',[['drawing','Match visible drawing page'],...paperSizes.filter(([id])=>id!=='original')]);
+ const printOrientation=field(printing,'Print orientation',setup.printPaper?.orientation||'landscape',[['landscape','Landscape'],['portrait','Portrait']]);
+ const printCustom=el('div','','form-columns');printing.append(printCustom);
  const printWidth=field(printCustom,'Print width (mm)',setup.printPaper?.widthMm||297),printHeight=field(printCustom,'Print height (mm)',setup.printPaper?.heightMm||420);
  for(const input of [printWidth,printHeight]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
  function updatePrint(){printCustom.hidden=printSize.value!=='custom';printOrientation.disabled=printSize.value==='drawing';}
  printSize.onchange=updatePrint;updatePrint();
- printSection.append(el('p','Paper presets set the printed sheet and its aspect ratio, not the size of the editable network diagram. Large drawings may be smaller on paper; use original-size PDF for maximum detail.','hint'));
+ printing.append(el('p','By default, print paper matches each visible page. Choose a separate output size here without changing the displayed drawing.','hint'));
  const numbering=el('details');numbering.append(el('summary','Page numbering'));body.append(numbering);
  const row=el('label','','check-option'),show=el('input');show.type='checkbox';show.checked=p.show;show.setAttribute('aria-label','Show page numbers');row.append(show,document.createTextNode('Show page numbers'));numbering.append(row);
  const numberRow=el('div','','form-columns');numbering.append(numberRow);
@@ -420,13 +458,15 @@ function pageOptions(){
  first.type='number';first.min=0;first.max=9999;first.step=1;format.maxLength=100;
  numbering.append(el('p','Available fields: {page}, {last}, {total}.','hint'));
  button(actions(body),'Save page options',()=>{
+  if(preset.value==='custom'&&[width,height].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter custom visible page dimensions from 148 to 1500 mm.');
   if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
   if(first.value===''||!Number.isInteger(+first.value)||+first.value<0||+first.value>9999)throw Error('Use a first page number from 0 to 9999.');
   if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');
+  store();
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,start:+first.value,pad:+pad.value,format:format.value})};
   let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
-  perform('page-options',prepared);close();say('Print paper and page numbering saved without changing the drawing layout.');
+  perform('page-options',prepared);close();viewport.fit();say('Visible page proportions, print settings and page numbering saved. Diagram arrangement preserved.');
  },'primary');
 }
 $('page-options').onclick=()=>task(pageOptions);

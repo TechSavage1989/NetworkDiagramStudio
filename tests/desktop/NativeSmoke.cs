@@ -203,6 +203,12 @@ internal sealed partial class Studio
         await ClickEditorTarget("#page-options");
         await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Print paper')?.value!=='a3')throw Error('A3 paper was not retained');field('Print paper').value='drawing';field('Print paper').dispatchEvent(new Event('change'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","restore original print paper");
         await RequireEditor("const box=document.querySelector('#canvas svg').viewBox.baseVal;if(box.width!==window.__nativeDynamicBounds[0]||box.height!==window.__nativeDynamicBounds[1])throw Error('Original print selection changed the editable canvas');delete window.__nativeDynamicBounds","original scene preserved");
+        await ClickEditorTarget("#page-options");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Apply visible page proportions to')?.value!=='page'||!field('Individual page')||!field('Page group'))throw Error('Page-specific and group settings are missing');const paper=field('Visible page proportions');if(!paper)throw Error('Visible paper control missing');paper.value='a4';paper.dispatchEvent(new Event('input'));const orientation=field('Page orientation');orientation.value='portrait';orientation.dispatchEvent(new Event('input'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","apply visible A4 portrait");
+        await RequireEditor("const view=document.querySelector('#canvas svg').viewBox.baseVal;if(Math.abs(view.width/view.height-210/297)>1e-6)throw Error('A4 portrait is not visible on the editor page');","visible page proportions");
+        await ClickEditorTarget("#page-options");
+        await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;if(field('Visible page proportions')?.value!=='a4')throw Error('Per-page paper was not retained');field('Visible page proportions').value='dynamic';field('Visible page proportions').dispatchEvent(new Event('input'));[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Save page options').click()","restore dynamic visible page");
+
     }
     internal string? TestOutputFolder;
     delegate bool EnumWindowCallback(IntPtr hwnd,IntPtr parameter);
