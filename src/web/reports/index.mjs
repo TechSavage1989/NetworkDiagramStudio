@@ -70,7 +70,7 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
   if(!item.validation.ok)continue;
   // Port maps paint the builder sheet in the device's core-diagram colors.
   if(artwork.get(item.id))item.artwork=artwork.get(item.id);
-  const memberCount=new Set(item.inventory.groups.filter(group=>!group.slot&&group.device).map(group=>group.device)).size;
+  const memberCount=item.inventory.groups.filter(group=>!group.slot).length;
   // The one-page compact solver can fit eight members only by shrinking the
   // front panels. A large stack must instead grow one readable logical canvas.
   let pages=null;if(memberCount>2){try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
