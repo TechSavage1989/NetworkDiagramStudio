@@ -16,15 +16,25 @@ try{
  await page.addScriptTag({type:'module',content:source+'\nwindow.picker=colorPicker(document.querySelector("#picker"),{color:"#000000",width:1});window.unbind=window.picker.bindWidth(document.querySelector("#width"));colorPicker(document.querySelector("#text-picker"),{kind:"text",color:"#17364A"});'});
  await page.waitForFunction(()=>!!window.picker);
  const width=page.getByLabel('Line width',{exact:true}),sample=page.locator('#picker .line-preview svg');
- const paintedWidth=async()=>{
-  const png=await sample.screenshot();
-  return page.evaluate(async base64=>{const image=new Image();image.src='data:image/png;base64,'+base64;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);const {data}=context.getImageData(Math.floor(image.width/2),0,1,image.height);let coverage=0;for(let i=0;i<data.length;i+=4)coverage+=(255-data[i])/255;return coverage;},png.toString('base64'));
+ const paintedWidth=async(name)=>{
+  const png=await sample.screenshot(),path=sample.locator('path');let background;
+  // Playwright rounds fractional clip bounds to whole screenshot pixels. The
+  // resulting SVG crop can include one row of the surrounding frame. Capture
+  // that same geometry with only the stroke hidden and subtract its pixels,
+  // so the measurement counts painted stroke coverage rather than the frame.
+  const visibility=await path.evaluate(node=>{const value=node.style.visibility;node.style.visibility='hidden';return value;});
+  try{background=await sample.screenshot();}finally{await path.evaluate((node,value)=>node.style.visibility=value,visibility);}
+  await Promise.all([writeFile(resolve(output,name+'.png'),png),writeFile(resolve(output,name+'-background.png'),background)]);
+  return page.evaluate(async images=>{
+   const columns=await Promise.all(images.map(async base64=>{const image=new Image();image.src='data:image/png;base64,'+base64;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);return {width:image.width,height:image.height,data:context.getImageData(Math.floor(image.width/2),0,1,image.height).data};}));
+   const [painted,reference]=columns;if(painted.width!==reference.width||painted.height!==reference.height)throw Error('Preview geometry changed during pixel measurement.');let coverage=0;for(let i=0;i<painted.data.length;i+=4)coverage+=(reference.data[i]-painted.data[i])/255;return coverage;
+  },[png.toString('base64'),background.toString('base64')]);
  };
  for(const previewWidth of [104,60]){
   await page.locator('#picker .color-choice-row').evaluate((row,w)=>row.style.gridTemplateColumns='88px minmax(100px,1fr) '+w+'px',previewWidth);
   for(const value of [1,5,12.5]){
    await width.fill(String(value));
-   const actual=await paintedWidth();measurements.push({previewWidth,value,painted:actual});
+   const actual=await paintedWidth('preview-'+previewWidth+'-width-'+value);measurements.push({previewWidth,value,painted:actual});
    assert.ok(Math.abs(actual-value)<.2,'A '+value+' px line paints '+actual+' px in a '+previewWidth+' px preview');
    assert.equal(await page.evaluate(()=>window.picker.width),value);
    assert.equal(await sample.getAttribute('aria-label'),'Line preview at 100%: '+value+' px');

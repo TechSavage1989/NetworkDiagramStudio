@@ -39,8 +39,8 @@ Network engineers can use the Windows application or the offline browser edition
 
 ## Screenshots
 
-**Pack the network page into the least area, in your saved device order.**
-<p align="center"><img src="docs/images/compact-core.png" width="900" alt="Fictional firewall, modular chassis and two switch stacks packed into two columns with evenly spaced cables"></p>
+**Edit connection type, speed, thickness, color and captions in one dialog.**
+<p align="center"><img src="docs/images/legend-connections.png" width="900" alt="Connection-key properties with integrated cable settings, live line preview and clear buttons"></p>
 
 **Document each switch with VLAN-marked faceplates, trunks and a port inventory.**
 <p align="center"><img src="docs/images/port-map.png" width="900" alt="Fictional Harbor Workshop port map with native VLAN fills, tagged VLAN dots, LAG outlines and the VLAN key"></p>
@@ -48,11 +48,8 @@ Network engineers can use the Windows application or the offline browser edition
 **Review connection improvements before applying one undoable layout change.**
 <p align="center"><img src="docs/images/organize-connections.png" width="1000" alt="Organization preview with current and proposed cable length, bends, crossings and drawing footprint"></p>
 
-**Keep a complete eight-member stack and 28 access points on one wireless page.**
-<p align="center"><img src="docs/images/compact-wireless.png" width="900" alt="Fictional eight-member switch stack and 28 access points with readable captions and separate parallel cable lanes"></p>
-
-**Build shared switchport sheets with readable port numbers and one VLAN key.**
-<p align="center"><img src="docs/images/switchport-reports.png" width="900" alt="Two fictional switches on a shared A4 switchport report"></p>
+**Follow wireless connections with readable access-point captions and separate cable lanes.**
+<p align="center"><img src="docs/images/compact-wireless.png" width="900" alt="Fictional wireless connections with readable access-point captions, port modules and separate cable lanes"></p>
 
 
 ## Download
@@ -76,7 +73,7 @@ The releases index includes published previews. A pull request or local build ma
 1. Launch the Windows executable or open the extracted HTML file.
 2. Select **Open sample site** to explore the fictional Harbor Workshop network. Select a drawing tab to inspect its contents.
 3. Select **New project** for your site. Enter the site name, then select **Import files** or **Paste configuration / commands**. Supply Auvik interface reports or supported operational captures for observed neighbors and link speeds.
-4. Open **Review links** and resolve warnings. Select **Save project** to download the working project, then **Export Visio** to create the drawing set.
+4. Open **Connections** and resolve warnings. Select **Save project** to download the working project, then **Visio** to create the drawing set.
 
 ## How to use
 
@@ -99,7 +96,7 @@ The app disables browser right-click menus so browser navigation and inspection 
 
 ## Switchport reports
 
-Open **Switchport reports** in the sidebar. Select the switches or firewalls, choose shared sheets, separate sheets, wall charts or full booklets, then select **Build reports**. The new **Switchport reports** page group appears beside the network views. Report settings, device details, colors, logo and selected observations are saved in the normal project file and use the same Undo history.
+Open **Reports** in the header. Select the switches or firewalls, choose shared sheets, separate sheets, wall charts or full booklets, then select **Build reports**. The new **Switchport reports** page group appears beside the network views. Report settings, device details, colors, logo and selected observations are saved in the normal project file and use the same Undo history.
 
 **Device details** includes per-device, stack-member and module names, serial numbers, asset tags and notes. Choose supported models and installed cards in the existing hardware fields. Unsupported or contradictory hardware remains qualified; the report does not invent sockets. Unknown models and oversized unreadable layouts produce a validation result with the available inventory data.
 
@@ -174,7 +171,7 @@ Windows stores its WebView profile, release cache, staged update and retained ro
 - **A drawing disappears after adding equipment in an older build.** Ctrl+Z can restore the prior inventory/layout. Dynamic / Fit all grows around the selected equipment, reserves space between crowded cables for their captions, and expands wireless pages for complete labels. Fixed-paper core sheets can continue onto another page. A failed rebuild retains the last valid drawing; a rejected device save leaves the form open and preserves the accepted project.
 - **Text needs more room.** Generated captions wrap instead of using ellipses. Increase an edited text box when its full contents cannot fit at a readable size.
 - **Editing appears locked in preview.9.** Use Tab or Shift+Tab to focus **Save project**, then Enter to save accepted edits. Confirm the file exists before restarting with a newer build. Preview.10 fixes the detached text editor that could block selection after a rejected edit.
-- **Missing ports or uncertain topology.** Import the corresponding device configurations and interface reports. Correct conflicting neighbors or unknown port mappings under **Review links** or **Hardware**.
+- **Missing ports or uncertain topology.** Import the corresponding device configurations and interface reports. Correct conflicting neighbors or unknown port mappings under **Connections** or **Hardware**.
 - **Complex or legacy artwork.** Use the included PowerShell converter with installed desktop Visio. Use **-List** to see master names. Use **-HardwarePack** and **-MasterNames** to render selected masters to a local hardware pack, including vector-only artwork the browser cannot import directly. Select a new output path, import the JSON under **Hardware**, then map its ports.
 - **No update offered for a manually supplied build.** A candidate is available through the updater only after it is published in the release feed. Compare the installed and latest published versions in **Update details**. A failed connection can be retried with **Check updates**.
 - **Desktop runtime unavailable.** Install the Microsoft Edge WebView2 Runtime through your normal Windows software process, or open the portable browser edition.

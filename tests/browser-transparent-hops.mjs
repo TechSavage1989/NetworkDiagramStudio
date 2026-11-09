@@ -10,7 +10,10 @@ const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAY
 const output=resolve(process.env.NDS_QA_OUTPUT||'dist/qa-transparent-hops');await mkdir(output,{recursive:true});
 const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE_PATH||undefined,args:['--no-sandbox']}),page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[];
 page.on('pageerror',error=>errors.push(error.message));
-const colors={left:[176,196,213],right:[211,182,170],under:[84,109,121],over:[24,91,104]},samples=[['left clearance',147,120,'left'],['right clearance',160,120,'right'],['jump crest',154,120,'over'],['underpass inside jump',180,120,'under'],['continuous underpass',142,120,'under'],['continuous jumping cable',180,40,'over']];
+// Sample whole pixel cells inside the clearance at both 1x and 4x. The inner
+// curve crosses the cell at (160,120), so that cell legitimately antialiases
+// against the jumping stroke at 1x even when the masking is correct.
+const colors={left:[176,196,213],right:[211,182,170],under:[84,109,121],over:[24,91,104]},samples=[['left clearance',147,120,'left'],['right clearance',161,115,'right'],['jump crest',154,120,'over'],['underpass inside jump',180,120,'under'],['continuous underpass',142,120,'under'],['continuous jumping cable',180,40,'over']];
 const fixture=(dataUrl=null,offset=0)=>({name:'Crossing',title:'Fictional cable crossing',width:360,height:220,originX:-20,originY:-30,items:[
  {type:'device',editKey:'artwork',name:'Fictional two-tone panel',x:-20,y:-30,w:360,h:220,asset:dataUrl?{dataUrl}:null,children:[
   {type:'rect',x:0,y:0,w:1,h:1,fill:'#B0C4D5',stroke:'none',weight:0},
@@ -37,7 +40,7 @@ try{
  // the first scene's masks; inspect the second page before and after printing.
  const first=fixture(null,30),second=fixture(raster);bridge(first);bridge(second);
  await page.setContent('<style>body{margin:0}svg{display:block;width:360px;height:220px;break-after:page}svg:last-child{break-after:auto}@page{size:360px 220px;margin:0}</style>'+svgPage(first)+svgPage(second));
- const inline=await page.locator('svg').nth(1).screenshot({scale:'css'});check(await pixels(inline,1));result.multiPageInline=true;
+ const inline=await page.locator('svg').nth(1).screenshot({path:resolve(output,'multi-page-hop-clearance.png'),scale:'css'});result.multiPagePixels=await pixels(inline,1);check(result.multiPagePixels);result.multiPageInline=true;
  const pdfPath=resolve(output,'hop-clearance.pdf');await page.pdf({path:pdfPath,preferCSSPageSize:true,printBackground:true});result.pdfCreated=true;
  if(process.env.NDS_PDF_RENDERER){
   const stem=resolve(output,'printed-hop');execFileSync(process.env.NDS_PDF_RENDERER,['-f','2','-singlefile','-r','384','-png',pdfPath,stem],{stdio:'pipe'});

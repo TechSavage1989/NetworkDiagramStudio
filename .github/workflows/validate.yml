@@ -63,7 +63,8 @@ jobs:
             @{ name = 'form-controls'; script = 'tests/browser-form-controls.mjs' },
             @{ name = 'transparent-hops'; script = 'tests/browser-transparent-hops.mjs' },
             @{ name = 'cable-proximity'; script = 'tests/browser-cable-proximity.mjs' },
-            @{ name = 'editor-properties'; script = 'tests/browser-editor-properties.mjs' }
+            @{ name = 'editor-properties'; script = 'tests/browser-editor-properties.mjs' },
+            @{ name = 'documentation'; script = 'tests/browser-documentation.mjs' }
           )
           $results = @()
           foreach ($check in $checks) {

@@ -10,7 +10,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.BR
 const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[],results={};page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 const field=name=>page.locator('#dialog').getByLabel(name,{exact:true});
 const ready=()=>page.waitForFunction(()=>!document.querySelector('#dialog').open&&!document.querySelector('#save').disabled);
-const fresh=async()=>{await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);await page.locator('#sample').click();await page.waitForSelector('#canvas svg .diagram-cable');};
+const fresh=async()=>{await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);await page.locator('#sample').click();await page.waitForSelector('#canvas svg .diagram-cable',{state:'attached'});await page.locator('#canvas svg').waitFor();};
 const objectField=()=>field('Drawing object');
 const downloadProject=async name=>{const waiting=page.waitForEvent('download');await page.locator('#save').click();const download=await waiting,path=resolve(output,name);await download.saveAs(path);return {path,doc:JSON.parse(await readFile(path,'utf8'))};};
 const pointer=async locator=>{const box=await locator.boundingBox();assert.ok(box);return {x:box.x+box.width/2,y:box.y+box.height/2};};
@@ -40,7 +40,7 @@ try{
  results.undoRedoReopen=true;
  // Reopen the original cable through the displayed path; there is only one
  // type/speed editor and its Cancel action does not mutate any saved setting.
- const cable=page.locator('#canvas path.diagram-cable').filter({has:page.locator('title',{hasText:'EDGE-01'})}).first();await cable.waitFor();const cableKey=await cable.getAttribute('data-drawing-key');
+ const cable=page.locator('#canvas path.diagram-cable[stroke="#815AC0"]');assert.equal(await cable.count(),1);await cable.waitFor({state:'attached'});const cableKey=await cable.getAttribute('data-drawing-key');
  // Legend double-click opens the same object selector without depending on a
  // thin path being unobscured by its own caption. The selected cable is real.
  const nextPoint=await pointer(changed);await page.mouse.dblclick(nextPoint.x,nextPoint.y);await page.waitForFunction(()=>document.querySelector('#dialog').open);await objectField().selectOption(cableKey);
