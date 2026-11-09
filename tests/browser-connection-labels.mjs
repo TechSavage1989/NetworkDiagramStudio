@@ -13,7 +13,7 @@ page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
  await page.locator('#sample').click();
- await page.waitForSelector('#canvas svg path.diagram-cable');
+ await page.waitForSelector('#canvas svg path.diagram-cable',{state:'attached'});
  await page.locator('#edit-drawing').click();
  const label=page.locator('#canvas svg text[data-drawing-key*="|port|"]').first();
  assert.ok(await label.count()>0,'sample includes port connection labels');
