@@ -12,7 +12,7 @@ export function cleanPageSetup(raw){
   default:cleanPaper(p.default),
   overrides:Object.fromEntries(pageFamilies.filter(([key])=>p.overrides?.[key]).map(([key])=>[key,cleanPaper(p.overrides[key])])),
   printPaper:p.printPaper&&p.printPaper.preset!=='dynamic'?cleanPaper(p.printPaper):null,
-  visible:{default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
+  visible:{fitMode:visible.fitMode==='preserve'?'preserve':'optimize',default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
  };
 }
 export function pageFamily(name){return /^Switchport reports/i.test(name)?'switchports':/^(?:MDF Port Map|Port Inventory)/i.test(name)?'ports':/^Wireless Connections/i.test(name)?'wireless':/^VLANs and Routing/i.test(name)?'logical':/^Trunk VLAN/i.test(name)?'trunk':'core';}
@@ -33,6 +33,15 @@ export function printPageStyles(pages){return pages.map((p,i)=>{const g=printGeo
 
 // A visible paper is a viewport/print frame around the completed drawing, not
 // a constraint passed into device arrangement or logical pagination.
+export function visibleFitMode(project){return cleanPageSetup(project?.layout?.pageSetup).visible.fitMode;}
+export function targetPageAspect(project,page){
+ if(visibleFitMode(project)!=='optimize')return null;
+ return paperDimensions(visiblePagePaper(project,page))?.ratio||null;
+}
+export function hasManualPageLayout(project,page){
+ const name=page?.name||page||'',edits=project?.layout?.drawingEdits||{};
+ return Object.entries(edits).some(([key,patch])=>key.startsWith(name+'|')&&(['x','y','points'].some(field=>patch&&field in patch))&&(/\\|device\\||\\|path\\|/.test(key)||/\\|port\\||\\|media\\|/.test(key)));
+}
 export function visiblePagePaper(project,page){
  const setup=cleanPageSetup(project?.layout?.pageSetup),family=page?.family||pageFamily(page?.name||'');
  return setup.visible.pages[page?.name]||setup.visible.groups[family]||setup.visible.default;
