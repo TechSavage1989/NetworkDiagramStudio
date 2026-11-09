@@ -15,6 +15,28 @@ export function arrangeBoxes(boxes,action){
  }
  return result;
 }
+
+/**
+ * Apply an explicit edge-to-edge gap to objects already on the drawing.
+ * Only the selected objects move; the first in spatial order stays fixed.
+ * Returns the same edit-key offsets consumed by moveDrawingItems (Undo-safe).
+ */
+export function arrangeBoxesAtGap(boxes,axis,gap){
+ if(!Array.isArray(boxes)||boxes.length<2)throw Error('Select at least two existing drawing objects.');
+ if(!['x','y'].includes(axis))throw Error('Choose horizontal or vertical spacing.');
+ if(!Number.isFinite(gap)||gap<0||gap>2000)throw Error('Choose a spacing gap from 0 to 2000 drawing units.');
+ const extent=axis==='x'?'w':'h';
+ if(boxes.some(box=>![box.x,box.y,box.w,box.h].every(Number.isFinite)))throw Error('Selected items have invalid geometry.');
+ const ordered=boxes.slice().sort((a,b)=>a[axis]-b[axis]||String(a.key).localeCompare(String(b.key),'en',{numeric:true}));
+ let next=ordered[0][axis];const shifts=new Map();
+ for(const item of ordered){
+  const delta=next-item[axis];
+  shifts.set(item.key,axis==='x'?[delta,0]:[0,delta]);
+  next+=item[extent]+gap;
+ }
+ return shifts;
+}
+
 export function arrangeAnchors(anchors,keys,action,reference=keys[0]){
  const chosen=[...new Set(keys)].filter(k=>Array.isArray(anchors[k]));if(chosen.length<2)throw Error('Select at least two mapped ports.');
  const out=Object.fromEntries(Object.entries(anchors).map(([k,p])=>[k,[...p]]));
