@@ -11,7 +11,7 @@ test('an exact horizontal gap applies to already positioned selected objects',()
  const shifts=arrangeBoxesAtGap(boxes,'x',20);
  assert.deepEqual(shifts.get('existing-a'),[0,0]);
  assert.deepEqual(shifts.get('existing-b'),[-15,0]);
- assert.deepEqual(shifts.get('existing-c'),[-40,0]);
+ assert.deepEqual(shifts.get('existing-c'),[-55,0]);
  const next=boxes.map(box=>({...box,x:box.x+shifts.get(box.key)[0],y:box.y+shifts.get(box.key)[1]}));
  assert.equal(next[1].x-next[0].x-next[0].w,20);
  assert.equal(next[2].x-next[1].x-next[1].w,20);
