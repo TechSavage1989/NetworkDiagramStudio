@@ -31,7 +31,7 @@ import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionD
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
 import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
-import {relatedConnectionItems,nearestOnCable,positionOnCable,describeCableEnds} from './connection-selection.mjs';
+import {relatedConnectionItems,nearestOnCable,positionOnCable,describeCableEnds,labelPositionRelativeToCable} from './connection-selection.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog,findDeviceIdentity} from './imports/index.mjs';
 import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
@@ -141,21 +141,24 @@ function selectedCable(){return drawingSelection.size===1?pages[active]?.items.f
 function selectedConnectionLabel(){
  return drawingSelection.size===1?pages[active]?.items.find(item=>item.labelRole&&item.relatedCableKey&&drawingSelection.has(item.editKey)):null;
 }
-function saveSnappedLabel(key,point,{rotation='auto'}={}){
+function saveSnappedLabel(key,point,{rotation='auto',placement='on'}={}){
  const label=pages[active]?.items.find(item=>item.editKey===key&&item.labelRole),cable=label&&pages[active].items.find(item=>item.editKey===label.relatedCableKey&&item.type==='path');
  if(!label||!cable||!point)throw Error('Select a label associated with a visible cable.');
  const radians=rotation==='auto'?point.angle:Number(rotation)*Math.PI/180;
- const patch=unpresentPatch(label,{x:point.x-label.w/2,y:point.y-label.h/2,angle:radians});patch.rotationMode=rotation==='auto'?'auto':'fixed';
+ const aligned=labelPositionRelativeToCable(point,{placement,width:label.w,height:label.h,rotation:radians});
+ const patch=unpresentPatch(label,{x:aligned.x-label.w/2,y:aligned.y-label.h/2,angle:radians});
+ patch.rotationMode=rotation==='auto'?'auto':'fixed';
+ patch.cableSide=['above','below'].includes(placement)?placement:'on';
  if(Number.isFinite(point.ratio))patch.cableFraction=point.ratio;
  setDrawingEdits({...project.layout?.drawingEdits,[key]:{...project.layout?.drawingEdits?.[key],...patch}});
- say('Connection label aligned to its cable. Its saved position will not move automatically.');
+ say('Connection label aligned '+(placement==='on'?'on':placement)+' its cable. Its relative position is saved.');
 }
 function snapSelectedLabelAtClick(key,event){
- const labelKey=snapLabelPick?.key||snapLabelPick,rotation=snapLabelPick?.rotation||'auto',label=pages[active]?.items.find(item=>item.editKey===labelKey),cable=pages[active]?.items.find(item=>item.editKey===label?.relatedCableKey);
+ const labelKey=snapLabelPick?.key||snapLabelPick,rotation=snapLabelPick?.rotation||'auto',placement=snapLabelPick?.placement||'on',label=pages[active]?.items.find(item=>item.editKey===labelKey),cable=pages[active]?.items.find(item=>item.editKey===label?.relatedCableKey);
  if(!label||!cable){snapLabelPick=null;return;}
  if(key!==cable.editKey){say('Click a position on the highlighted connection cable. Escape cancels.');return;}
  const svg=$('canvas').querySelector('svg'),position=new DOMPoint(event.clientX,event.clientY).matrixTransform(svg.getScreenCTM().inverse()),point=nearestOnCable(cable.points,{x:position.x,y:position.y});
- snapLabelPick=null;if(point)task(()=>saveSnappedLabel(labelKey,point,{rotation}));
+ snapLabelPick=null;if(point)task(()=>saveSnappedLabel(labelKey,point,{rotation,placement}));
 }
 function snapSelectedLabelDialog(){
  const label=selectedConnectionLabel();if(!label)throw Error('Select a connection label first.');
@@ -168,10 +171,13 @@ function snapSelectedLabelDialog(){
   ['0.5','Center of cable (50%)'],['0.75','Toward '+ends.end+' (75%)'],
   ['0.9','Near '+ends.end+' (90%)']
  ]);
+ const placement=field(body,'Position relative to line',project.layout?.drawingEdits?.[label.editKey]?.cableSide||'on',[
+  ['above','Above line (left of a vertical link)'],['on','On line (centered in a break)'],['below','Below line (right of a vertical link)']
+ ]);
  const rotation=field(body,'Label orientation','auto',[['auto','Automatically follow the cable'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]);
  const actionBar=actions(body);
- button(actionBar,'Align label',()=>{const point=positionOnCable(cable.points,Number(position.value));if(!point)throw Error('The cable has no usable segment.');saveSnappedLabel(label.editKey,point,{rotation:rotation.value});close();},'primary');
- button(actionBar,'Pick point on the cable',()=>{snapLabelPick={key:label.editKey,rotation:rotation.value};close();say('Click the desired position on the highlighted cable. Escape cancels.');},'');
+ button(actionBar,'Align label',()=>{const point=positionOnCable(cable.points,Number(position.value));if(!point)throw Error('The cable has no usable segment.');saveSnappedLabel(label.editKey,point,{rotation:rotation.value,placement:placement.value});close();},'primary');
+ button(actionBar,'Pick point on the cable',()=>{snapLabelPick={key:label.editKey,rotation:rotation.value,placement:placement.value};close();say('Click the desired position on the highlighted cable. Escape cancels.');},'');
 }
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&snapLabelPick){snapLabelPick=null;say('Label alignment cancelled.');}},true);
 
