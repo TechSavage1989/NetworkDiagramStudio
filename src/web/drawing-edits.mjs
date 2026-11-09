@@ -96,8 +96,8 @@ export function safeCoreMoveOffsets(page,offsets){
  }
  return out;
 }
-export function moveDrawingItems(page,edits,offsets){
- offsets=movementOffsets(page,edits,safeCoreMoveOffsets(page,offsets));
+export function moveDrawingItems(page,edits,offsets,{preventSidebarOverlap=false}={}){
+ offsets=movementOffsets(page,edits,preventSidebarOverlap?safeCoreMoveOffsets(page,offsets):offsets);
  const objects=drawingObjects(page),result=cleanDrawingEdits(edits),shapes=new Map(page.items.filter(i=>i.type==='device').map(i=>[i.key,i]));
  if(page.coreDeviceIds&&objects.some(item=>offsets.has(item.editKey)&&(item.type==='device'||item.parent?.type==='device'))){
   // Any positioned device detail disables automatic core packing. Preserve
