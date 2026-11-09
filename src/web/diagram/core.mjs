@@ -185,7 +185,7 @@ function memoRoutes(internal,external,endData,banks,nodes,options){
 }
 function moduleLegend(page,project){
  const panelSettings=presentation(project,page).panel;
- if(!panelSettings.visible||!panelSettings.sections.includes('modules'))return [];
+ if(!panelSettings.visible||!panelSettings.sections.includes('modules')||panelSettings.sectionContent.modules?.trim())return [];
  const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
  if(!modules.size)return [];
  // Older drawings shared one SFP legend across reaches. Keep its saved edits
