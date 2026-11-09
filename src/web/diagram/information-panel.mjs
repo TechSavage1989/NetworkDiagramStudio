@@ -11,7 +11,7 @@ export function informationPanel(page,project){
   page.items=page.items.filter(i=>!isPanel(i));page.legendLayout='sidebar';page.sidebar={scale:1,width:options.width,textScale:options.textScale*config.textScale,connectionHeading:options.sectionTitles.connections||'Connection types'};linkLegend(page);
   for(const item of page.items.filter(isPanel)){const patch=project.layout?.drawingEdits?.[item.editKey];if(patch)Object.assign(item,patch);}
  }
- page.items=page.items.filter(i=>!isPanel(i)||options.visible&&(i.editKey.includes('module-legend')?options.sections.includes('modules'):options.sections.includes('connections')));
+ page.items=page.items.filter(i=>!isPanel(i)||options.visible&&(i.editKey.includes('module-legend')?options.sections.includes('modules')&&!options.sectionContent.modules?.trim():options.sections.includes('connections')&&!options.sectionContent.connections?.trim()));
  if(!options.visible){page.items=page.items.filter(i=>i.pageFrame!=='sidebar');return;}
  const panel=page.items.filter(isPanel);for(const item of panel)if(item.type==='text')item._textFactor=config.textScale;
  const drawn=page.items.filter(i=>i.type==='device'&&i.kind!=='plug').map(i=>i.sourceId),members=page.coreDeviceIds||page.sourceDeviceIds||page.portMap?.devices||(page.portMap?.device?[page.portMap.device]:null)||page.logicalSections?.map(s=>s.deviceId)||(drawn.length?drawn:null);
@@ -26,11 +26,28 @@ export function informationPanel(page,project){
  };
  const auto=automaticPanelContent(project,devices),labels=new Map(panelFields),custom=new Map(options.customSections.map(item=>[item.id,item.title]));
  for(const id of options.sections){
-  if(id==='connections'||id==='modules')continue;
+  if((id==='connections'||id==='modules')&&!options.sectionContent[id]?.trim())continue;
   const heading=options.sectionTitles[id]||custom.get(id)||labels.get(id)||id;
   section(id,heading.toUpperCase(),panelRows(id,auto,options));
  }
  const added=panel.filter(i=>!page.items.includes(i));page.items.push(...added);
+ // The sidebar is a true ordered set of sections, including the generated
+ // Connection types and Port modules. Reposition each section as a whole,
+ // retaining its text, colors, icons, and individual drawing-edit keys.
+ const category=item=>{const key=item.editKey||'';
+  if(key.includes('|info-panel|'))return key.split('|info-panel|')[1].split('|')[0];
+  if(key.includes('|module-legend|')||key.includes('|device|module-legend-'))return 'modules';
+  if(key.includes('|legend|'))return 'connections';
+  return null;};
+ let cursor=147;
+ for(const id of options.sections){
+  const group=panel.filter(item=>category(item)===id);
+  if(!group.length)continue;
+  const lo=Math.min(...group.map(item=>item.y)),hi=Math.max(...group.map(item=>item.y+(item.h||0))),shift=cursor-lo;
+  for(const item of group)item.y+=shift;
+  cursor+=hi-lo+15;
+ }
+
  const factor=options.scale,height=Math.max(0,...panel.map(i=>i.y+(i.h||0)))-147;
  const extent=page.items.filter(i=>!isPanel(i)&&!i.editKey?.includes('|info-panel|')&&(i.type==='device'||i.type==='path'||i.y>=145&&!i.pageFrame)).flatMap(i=>i.points?i.points.map(p=>p[0]):[i.x+(i.w||0)]);
  const x=options.position==='right'?Math.max(38,...extent)+26:options.position==='free'?options.x:page.coreDeviceIds?38:-(options.width+40)*factor;
