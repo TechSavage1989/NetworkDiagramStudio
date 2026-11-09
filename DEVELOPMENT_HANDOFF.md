@@ -1,3 +1,54 @@
+# Reviewed hosted editor captures
+
+The current hero, port map, connection/style dialogs, organization preview,
+wireless page and direct text tools were refreshed from actual hosted Edge
+captures in [run 199](https://github.com/TechSavage1989/NetworkDiagramStudio/actions/runs/42698535059),
+artifact `editor-browser-checks` (13710691710), source head `75714ff`.
+New README links show separate page navigation at 1366, 1024 and 620 px, the
+existing-device stack dialog, port/VLAN controls and configured panel output.
+The PNGs were inspected and copied unchanged; all use fictional data and are
+under 400 KiB. The port capture intentionally shows the scrolled Edit ports
+section rather than the top of the device dialog.
+
+Documentation, panel-content and device-stacks passed that hosted run.
+Page navigation and port editing reached these captures before later test
+failures; the images do not establish a complete browser-suite pass. Device
+rotation, interactive HTML, later size/group/page-lock controls and backing
+settings still need passing hosted captures before publication.
+
+# Hosted sample reload checks
+
+Run 199 reached the real editor and found two test setup errors: page-navigation
+looked for the initial-only `#sample` ID after New project, and page-layout-defaults
+looked for that welcome-only button while a drawing was still open. Both now use
+the visible Open sample site action; the latter first opens New project. Reset,
+sidebar restoration, backing controls, history and persistence assertions remain
+mandatory. Page-layout-defaults now captures any failure. Syntax and repository
+checks pass locally; a new hosted run is required before claiming a browser pass.
+# Interactive HTML hosted selector follow-up
+
+Hosted run 199 stopped before downloading the viewer because the unscoped
+Drawing pages label matched both a sidebar landmark and the export selector.
+The browser gate now scopes its named combobox and download button to the
+Export documentation dialog. It also lets initial/mobile ResizeObserver layout
+settle before viewport assertions and counts only nonlocal resource requests
+(data images are embedded resources, not network calls). The viewer behavior
+and security assertions remain unchanged; a hosted rerun is still required.
+# Filled native artwork hit-testing
+
+Hosted Edge run 199 exposed a real editor interaction bug: the generic
+stroke-only path rule also applied to filled native device artwork, so clicking
+inside a visible body selected the background. Device artwork now restores
+visible-painted hit-testing while cables retain their existing stroke behavior.
+Both hosted rotation and port/sizing suites retain real interior pointer clicks;
+rotation now checks the exact hit target and both tests capture useful failure
+evidence. Save/reopen checks wait for the actual scene replacement, not stale
+feedback or matching device keys. Geometry, socket glue, history and persistence
+assertions remain strict.
+Local syntax, focused tests, offline build and repository guard pass. Local
+Chromium remains blocked by socket/IPC restrictions; the corrected hosted suites
+still need to run before declaring their UI coverage passed.
+
 # Hosted port, sizing, group and page-lock regression
 
 `tests/browser-port-sizing-controls.mjs` is registered in the hosted Edge job.

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {transformGeometry,transformEdits,rotatable} from '../src/web/transform-controls.mjs';
 import {cleanDrawingEdits} from '../src/web/drawing-edits.mjs';
 import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
@@ -47,3 +48,12 @@ test('device rotation pins existing positions and preserves the physical dimensi
 });
 
 test('repeated rotation handles keep the numeric angle in its editable range',()=>{const g=transformGeometry({...item,angle:Math.PI*1.5},'rotate',0,0);assert.ok(Math.abs(g.angle+Math.PI/2)<1e-9);});
+
+// Runtime pointer reachability is exercised by browser-device-rotation and
+// browser-port-sizing-controls. This catches the blanket stroke-only override
+// without pretending a source-level CSS check proves browser hit-testing.
+test('edit mode keeps filled native device paths painted-hit targets',()=>{
+ const css=readFileSync(new URL('../src/web/style.css',import.meta.url),'utf8');
+ assert.match(css,/#canvas\.editing path\[data-drawing-key\]\{pointer-events:stroke\}/);
+ assert.match(css,/#canvas\.editing \[data-device-id\] path\[data-drawing-key\]\{pointer-events:visiblePainted\}/);
+});

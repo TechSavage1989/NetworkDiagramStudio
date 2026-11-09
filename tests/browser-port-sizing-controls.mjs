@@ -13,7 +13,13 @@ const page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[],
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 const dialog=page.locator('#dialog'),field=name=>dialog.getByLabel(name,{exact:true});
 const settle=()=>page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
-const open=async input=>{await page.locator('#project-file').setInputFiles(input);await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent==='Project opened.');await page.locator('#canvas svg').waitFor();};
+const open=async input=>{
+ // A previous open may have left the same feedback text and device keys.
+ // Require replacement of that scene before asserting reopened state.
+ const previous=await page.$('#canvas svg');await page.locator('#project-file').setInputFiles(input);
+ if(previous){await page.waitForFunction(node=>!node.isConnected,previous);await previous.dispose();}
+ await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent==='Project opened.');await page.locator('#canvas svg').waitFor();
+};
 const fixture=project=>({name:'fictional-controls.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project}))});
 const save=async name=>{const waiting=page.waitForEvent('download');await page.locator('#save').click();const download=await waiting,path=resolve(output,name);await download.saveAs(path);return {path,project:JSON.parse(await readFile(path,'utf8')).project};};
 const close=async()=>{await dialog.locator('#close').click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
@@ -37,12 +43,13 @@ const assertRejected=async()=>{
 };
 const body=id=>page.locator(`#canvas g[data-device-id="${id}"][data-drawing-key$="|body"]`);
 const bodyPoint=async id=>body(id).evaluate(group=>{
- const b=group.getBoundingClientRect();
+ const b=group.getBoundingClientRect(),hits=[];
  for(const fx of [.12,.2,.35,.65,.8,.9])for(const fy of [.15,.5,.7,.85]){
   const x=b.x+b.width*fx,y=b.y+b.height*fy,target=document.elementFromPoint(x,y);
   if(target&&group.contains(target)&&!target.closest('text,[data-port-name],.transform-controls,.cable-controls')&&target.closest('[data-device-id]')===group)return {x,y};
+  hits.push({x,y,target:target?.localName,key:target?.getAttribute('data-drawing-key')});
  }
- throw Error('No unobstructed device body point for '+group.dataset.deviceId);
+ throw Error('No unobstructed device body point for '+group.dataset.deviceId+': '+JSON.stringify({bounds:{x:b.x,y:b.y,w:b.width,h:b.height},pointerEvents:getComputedStyle(group.querySelector('path')).pointerEvents,hits}));
 });
 const selectBody=async(id,shift=false)=>{await settle();const point=await bodyPoint(id);if(shift)await page.keyboard.down('Shift');try{await page.mouse.click(point.x,point.y);}finally{if(shift)await page.keyboard.up('Shift');}};
 const geometry=()=>page.evaluate(()=>{

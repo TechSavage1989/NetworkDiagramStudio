@@ -54,7 +54,9 @@ try{
  controls=await options();await controls.footer.uncheck();await apply(controls.dialog);saved=await save('both-disabled.nds.json');await open(saved.path);controls=await options();assert.equal(await controls.footer.isChecked(),false);assert.equal(await controls.numbers.isChecked(),false);await close(controls.dialog);
  assert.deepEqual(await order(),names);
  // Backing controls apply to the actual editor, remain undoable and reopen.
- await page.locator('#sample').click();await page.waitForSelector('#canvas svg');
+ // The sample action exists only on the welcome screen, not an open project.
+ await page.locator('#new').click();await page.locator('#welcome').waitFor();
+ await page.getByRole('button',{name:'Open sample site',exact:true}).click();await page.waitForSelector('#canvas svg');
  const backingCount=()=>page.locator('#canvas path').filter({has:page.locator('title').filter({hasText:'Caption backing'})}).count();
  const backingOptions=async()=>{await page.locator('#page-layout').click();const d=page.locator('#dialog');await d.getByLabel('Edit page',{exact:true}).selectOption('*');return {dialog:d,mode:d.getByLabel('Port/link label backing',{exact:true}),padding:d.getByLabel('Port/link label padding (px)',{exact:true})};};
  const applyBacking=async d=>{await d.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
@@ -68,4 +70,4 @@ try{
  await page.screenshot({path:resolve(output,'label-backing-options.png')});await close(backing.dialog);
  assert.deepEqual(errors,[]);
  await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel'],names},null,2));
-}finally{await browser.close();}
+}catch(error){await page.screenshot({path:resolve(output,'failure.png')});console.error('Browser errors:',errors);throw error;}finally{await browser.close();}

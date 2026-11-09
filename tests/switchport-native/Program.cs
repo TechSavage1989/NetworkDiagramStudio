@@ -97,6 +97,12 @@ static class Program
         var inherited = ports.Single(row => row!["id"]!.GetValue<string>() == "2")!;
         Check(inherited["untaggedVlan"]!.GetValue<int>() == 10 && inherited["voiceVlan"]!.GetValue<int>() == 30 && inherited["taggedVlans"]!.AsArray().Any(id => id!.GetValue<int>() == 20), "Unresolved legacy aggregate members still inherit their aggregate settings.");
 
+        var longNameDevice = portDevice.DeepClone().AsObject();
+        const string longNamedInterface = "UPLINK999999999999999999999999999999";
+        longNameDevice["ports"]![0]!["name"] = longNamedInterface;
+        var longNameProjection = ProjectedInventory(longNameDevice);
+        Check(longNameProjection["ports"]!.AsArray().Any(row => row!["id"]!.GetValue<string>() == longNamedInterface), "Renamed physical IDs with numeric suffixes outside integer range render without truncation or parsing failure.");
+
         var lanes = ProjectedInventory(new JsonObject { ["name"] = "LAB-LANES", ["model"] = "CRS326-24S+2Q+RM", ["ports"] = new JsonArray(Object("""{"name":"LANE-A","relatedInterfaces":["qsfpplus1-1"],"configurationResolved":true}""")) });
         Check(lanes["ports"]!.AsArray().Any(row => row!["id"]!.GetValue<string>() == "qsfpplus1") && !lanes["ports"]!.AsArray().Any(row => row!["id"]!.GetValue<string>() == "LANE-A"), "A renamed QSFP logical lane never renames its shared physical cage.");
     }

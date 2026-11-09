@@ -11,7 +11,7 @@ const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[];
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
- await page.locator('#sample').click();await page.waitForSelector('#page-families .page-group summary');
+ await page.getByRole('button',{name:'Open sample site',exact:true}).click();await page.waitForSelector('#page-families .page-group summary');
  const groups=page.locator('#page-families .page-group'),portGroup=groups.filter({hasText:'Port maps'});
  assert.ok(await groups.count()>=3,'sample has multiple page groups');
  assert.equal(await portGroup.count(),1);
@@ -136,7 +136,8 @@ try{
  assert.equal(await page.locator('.pages-sidebar').isVisible(),false,'new project hides the empty pages rail');
  const blank=await page.evaluate(()=>({left:document.querySelector('#canvas').getBoundingClientRect().left,right:document.querySelector('.project-sidebar').getBoundingClientRect().right}));
  assert.ok(Math.abs(blank.left-blank.right)<1,'hidden pages rail returns its width to the canvas');
- await page.locator('#sample').click();
+ // Reset recreates the welcome button; its accessible name survives that lifecycle.
+ await page.getByRole('button',{name:'Open sample site',exact:true}).click();
  await page.waitForSelector('#page-families .page-group summary');
  assert.equal(await page.locator('.pages-sidebar').isVisible(),true,'loading another drawing restores its separate rail');
  assert.deepEqual(errors,[]);
