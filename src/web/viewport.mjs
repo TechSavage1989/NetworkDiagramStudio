@@ -4,7 +4,7 @@ import {createPageRulers} from './rulers.mjs';
 export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,onBeforeInteraction,onMoveStart,onBoxStart,onBackground,onEdit,canSelectCable,canHighlightCable=canSelectCable}={}){
  const views=new Map();let current=null,svg=null,drag=null,space=false,clickTimer=null,clickTarget=null,lastBox=null;
  const cables=cableProximity(canvas,{enabled:()=>!space&&!drag&&!!canSelectCable?.(),highlight:()=>!space&&!drag&&!!canHighlightCable?.()});
- const rulers=createPageRulers(canvas);
+ const rulers=typeof document==='undefined'?{show(){},sync(){},clear(){}}:createPageRulers(canvas);
  const clamp=v=>Math.max(.0001,Math.min(6,v)),textInput=target=>target.closest('[data-inline-editor]');
  const itemKey=(target,event)=>((!event.altKey&&target.closest('[data-device-id]'))||target.closest('[data-drawing-key]'))?.getAttribute('data-drawing-key');
  const point=e=>{const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());return [p.x,p.y];};
