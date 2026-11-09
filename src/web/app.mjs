@@ -570,6 +570,20 @@ function evidence(){
 }
 const warningText=x=>typeof x==='string'?x:(x?.message||x?.text||'Review imported evidence.');
 function familyOf(page){return page?.family||pageFamily(page?.title||page?.name||'');}
+// A single open group menu may be dismissed by an outside click or Escape.
+// The handlers are installed once even though the navigation tabs are rebuilt.
+function closePageGroupMenus(except=null){
+ for(const menu of $('page-families').querySelectorAll('details.page-group[open]'))if(menu!==except)menu.open=false;
+}
+document.addEventListener('pointerdown',event=>{
+ if(!event.target.closest('#page-families details.page-group'))closePageGroupMenus();
+},true);
+document.addEventListener('keydown',event=>{
+ if(event.key!=='Escape')return;
+ const opened=$('page-families').querySelector('details.page-group[open]');
+ if(!opened)return;
+ const focus=opened.querySelector('summary');closePageGroupMenus();focus?.focus();event.preventDefault();
+},true);
 function pageNavigation(){
  const navigation=$('page-navigation'),families=$('page-families'),picker=$('page-select');
  navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
@@ -589,6 +603,7 @@ function pageNavigation(){
    item.onclick=()=>{if(!commitInlineEdit())return;menu.open=false;active=index;draw(pages);};
    list.append(item);
   }
+  menu.addEventListener('toggle',()=>{if(menu.open)closePageGroupMenus(menu);});
   menu.append(summary,list);families.append(menu);
   const options=el('optgroup');options.label=title;
   for(const {page,index} of entries){const option=el('option',page.displayName||page.name);option.value=index;options.append(option);}
