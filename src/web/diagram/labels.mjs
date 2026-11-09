@@ -133,7 +133,7 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
   // a mixed row only where a side is taken; most names in line wins.
   const sides=axis===1?['left','right']:['above','below'];
   for(let step=0,start=near+dir*8;step<60&&(far-start)*dir>=length+4;step++,start+=dir*4){
-   for(const [rank,mode] of [sides[0],sides[1],'inline',sides[0]+'+inline',sides[1]+'+inline'].entries()){
+   for(const [rank,mode] of ['inline',sides[0],sides[1],sides[0]+'+inline',sides[1]+'+inline'].entries()){
     const placed=[];
     for(const lead of leads){
      const {m}=lead,th=m.h,lo=dir<0?start-m.w:start,middle=lo+m.w/2,inlineLength=m.w+8;
@@ -266,9 +266,9 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
   // nearer its own port; only then any clear spot.
   // A port name takes the spot nearest its own port: beside the cable, or on
   // its own line when the nearest clear spot beside it is much farther.
-  const reach=c=>(c.at??Infinity)+(c.inline?60:0),nearest=req.role==='port'&&owner?[...candidates].sort((p,q)=>reach(p)-reach(q)):candidates;
+  const reach=c=>(c.at??Infinity)+(c.inline?0:12),nearest=req.role==='port'&&owner?[...candidates].sort((p,q)=>reach(p)-reach(q)):candidates;
   for(const strict of owner?req.role==='port'?[true,'half',false]:[true,false]:[false]){
-   for(const candidate of strict==='half'?nearest:candidates){
+   for(const candidate of req.role==='port'&&owner?nearest:candidates){
     if(strict&&req.role==='port'&&owner&&!(candidate.at<=half))continue;
     // The first pass stays close to where the cable leaves its equipment.
     if(strict===true&&req.role==='port'&&owner&&!(candidate.at<=leaves+120))continue;
