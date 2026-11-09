@@ -313,3 +313,7 @@ export function validateReportScene(p){
  for(const box of p.reportNumberBoxes||[])for(const socket of p.reportSockets||[])if(intersects(box,socket,.5))errors.push('A port number overlaps a socket.');
  return unique(errors);
 }
+
+// Shared measured primitives for the drawing-only adaptive paper planner.
+// Standalone reports keep their established geometry and export behavior.
+export const portMapPrimitives={devicePlan,fillRadius,page,finish,drawBlock,keyRows,text,ellipse,diamond,symbolKey,symbolKeyHeight,displayName,modelLabel};
