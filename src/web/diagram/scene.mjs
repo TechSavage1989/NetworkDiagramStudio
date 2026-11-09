@@ -383,7 +383,7 @@ function svgText(i){
   const rotation=i.angle?' transform="rotate('+round(-i.angle*180/Math.PI)+' '+round(i.x+i.w/2)+' '+round(i.y+i.h/2)+')"':'';
   const content=lines.length===1?xml(lines[0]):lines.map((line,n)=>'<tspan x="'+x+'" y="'+round(y+n*lineHeight)+'">'+xml(line)+'</tspan>').join('');
   const background=i.background?'<rect x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+xml(i.background)+'"'+rotation+' pointer-events="none"/>':'';
-  return background+'<text'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
+  return background+'<text'+(i.legendEntry?' class="connection-legend-text" data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+rotation+' x="'+x+'" y="'+round(y)+'" text-anchor="'+anchor+'" font-size="'+size+'" font-weight="'+(i.bold?'700':'400')+'" fill="'+i.color+'"><title>'+xml(i.value)+'</title>'+content+'</text>';
 }
 // Retain one complete path for drawing and hit testing. The jump clearance is
 // cut out of other cables only, so device artwork remains visible underneath.
@@ -437,7 +437,7 @@ export function svgPage(p){
       return '<g'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.sourceId?' data-device-id="'+xml(i.sourceId)+'" tabindex="0" role="button" aria-label="Find stencil for '+xml(i.name)+'"':'')+'><title>'+xml(i.name+(i.fallback&&i.kind!=='plug'?' (schematic)':''))+'</title>'+artwork+'</g>';
     }
     const {path,weight}=geometries.get(i)||svgCableGeometry(i),mask=masks.get(i);
-    return '<path class="diagram-cable"'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+weight+'" stroke-linejoin="round"'+(mask?' mask="url(#'+mask+')"':'')+'><title>'+xml(i.name)+'</title></path>';
+    return '<path class="diagram-cable"'+(i.linkType?' data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+weight+'" stroke-linejoin="round"'+(mask?' mask="url(#'+mask+')"':'')+'><title>'+xml(i.name)+'</title></path>';
   };
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title>'+defs+'<rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+p.items.map(draw).join('')+'</svg>';
 }
