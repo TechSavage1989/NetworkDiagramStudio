@@ -54,7 +54,9 @@ export async function checkDiagramSelection(page,output,open){
  assert.deepEqual(state(await save('selection-reopened')),state(final),'Saved transforms survive reopen');
  // Chrome cannot start a diagram selection or a native text-selection drag.
  if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();
- await page.locator('#drawing-clear').click();await page.locator('#site').focus();await page.keyboard.press('Control+a');
+ assert.equal(await page.locator('#drawing-selection').textContent(),'0 selected','Reopening restores geometry without restoring a transient selection');
+ assert.equal(await page.locator('#drawing-clear').isDisabled(),true,'Clear selection stays disabled for the empty reopened selection');
+ await page.locator('#site').focus();await page.keyboard.press('Control+a');
  assert.deepEqual(await page.locator('#site').evaluate(n=>[n.selectionStart,n.selectionEnd]),[0,await page.locator('#site').inputValue().then(v=>v.length)]);
  assert.equal(await page.locator('#drawing-selection').textContent(),'0 selected');
  await page.locator('#paste').click();const input=page.locator('#dialog textarea').first();await input.fill('Fictional editable text');await input.press('Control+a');
