@@ -1,3 +1,47 @@
+# Preview.42 candidate: unified requested improvements
+
+The owner explicitly authorized pushing and publishing this requested update on
+2026-11-09. Draft PR #41 combines page layout/readability, sidebar navigation,
+centered/default inline labels, direct editing and Switchport integration fixes.
+Version/release intent is now 0.1.0-preview.42. Do not announce availability until
+the final combined browser/native Windows jobs, merged-main release workflow,
+public tag/feed and all three asset digests are verified. Prior notes below
+record implementation stages, not the current authorization state.
+
+The remote review source is created through the authenticated GitHub connector
+because shell GitHub credentials are unavailable. Every uploaded Git tree must
+match the locally tested tree exactly. Remote commit hashes differ from local
+cherry-pick hashes; verify tree identity and the exact remote head's CI.
+
+Local interactive Chromium is blocked by IPC restrictions even after escalation.
+Actual synthetic SVG/PDF renders were inspected. Hosted browser captures must
+replace affected editor screenshots before release. No customer data or supplied
+customer screenshots are included in this repository.
+# Unreleased: inline port defaults and cable-safe caption backings
+
+Port labels now prefer centered placement over their associated cable, including
+aligned banks and individual departures. Beside-line placement remains a clear
+fallback. Pinned positions and saved cable-side attachments win over automatic
+banking; captions retain their endpoint association and readable measured size.
+
+`diagram/label-backings.mjs` subtracts unrelated visible cable stroke envelopes
+from white backings, including jump arcs and rotated captions, without changing
+cable paint order, jump masks or underlying artwork. SVG and PDF use matching
+vector fragments. Native Visio keeps those fragments in the editable text shape
+so native movement/rotation/resizing carries the backing. Exports use the current
+scene snapshot; desktop Visio interaction remains untested locally.
+
+Synthetic tests cover horizontal, vertical and oblique text, either cable paint
+order, hops, hidden paths, missing associations, link ID zero, negative-origin
+normalization, saved label placements, actual SVG/PDF pixel renders and native
+Visio geometry. The inline-port-labels image is actual generated fictional sample output,
+not an interactive browser capture. The editor hero is unchanged. Run `node --test`, `node scripts/build-web.mjs`,
+`node scripts/check-repo.mjs`, `node scripts/export-test-fixtures.mjs` and
+`python3 scripts/check-visio-package.py .artifacts/visio`. No version bump or
+remote publication is included in this local change. Local validation: all 464
+Node tests passed with no skips, plus seven Python package tests, nine independent
+Visio package checks, the offline build, repository guard and whitespace check.
+
 # Unreleased: Switchport 1.18.6 parity reconciliation
 
 Native report layout and workspace migration incorporate upstream 1.18.6 fixes while retaining NDS six-point reference-scene number text and normalized-data persistence. Browser parsing/report projection now covers management/mirror notes, configured speed/SVI data, IOS all/except edits and tagged-native state. See docs/SWITCHPORT_INTEGRATION.md for exact remaining browser-only gaps; do not call this exhaustive browser parser parity.

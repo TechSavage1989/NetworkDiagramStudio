@@ -1,3 +1,4 @@
+import {labelBackingItems} from './label-backings.mjs';
 import {normalizedPage} from './dynamic-page.mjs';
 import {cleanNativeArt} from '../native-art.mjs';
 import {xml,round,textLayout} from './scene.mjs';
@@ -34,13 +35,21 @@ function vectorShape(i,id,H){
   const geometry=i.commands.map(([op,px,py])=>{if(op==='Z'){if(!first)return '';[px,py]=first;op='L';}else if(op==='M')first=[px,py];return xyRow(++row,op==='M'?'MoveTo':'LineTo',inch(px-x),inch(h-py+y),'Width*'+round((px-x)/w),'Height*'+round((h-py+y)/h));}).join('');
   return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+'>'+box(x,y,w,h,H)+cell('LinePattern',!i.stroke||i.stroke==='none'?0:1)+cell('LineColor',!i.stroke||i.stroke==='none'?'#FFFFFF':i.stroke)+lineWeight(i.weight||1)+cell('FillPattern',!i.fill||i.fill==='none'?0:1)+cell('FillForegnd',!i.fill||i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+'<Section N="Geometry" IX="0">'+geometry+'</Section></Shape>';
 }
+function captionOutline(i){
+  if(!i.backingPieces)return outline(i.w,i.h,true,!!i.background);
+  if(!i.backingPieces.length)return outline(i.w,i.h,true,false);
+  let row=0;
+  // Keep cutouts inside the editable text shape, so native movement, rotation
+  // and resizing carry the backing together with its caption.
+  return '<Section N="Geometry" IX="0">'+cell('NoFill',0)+cell('NoLine',1)+i.backingPieces.map(({x,y,w,h})=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]].map(([px,py],n)=>xyRow(++row,n?'LineTo':'MoveTo',inch(px),inch(i.h-py),'Width*'+round(px/i.w),'Height*'+round(1-py/i.h))).join('')).join('')+'</Section>';
+}
 function textShape(i,id,H,masterChild,relative){
   const {lines,size:fontSize}=textLayout(i),shown=lines.join('\n');
   const transform=relative||box(i.x,i.y,i.w,i.h,H).replace(cell('Angle',0),cell('Angle',i.angle||0));
   return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+cell('LinePattern',0)+cell('FillPattern',i.background?1:0)+(i.background?cell('FillForegnd',i.background):'')+
     ['LeftMargin','RightMargin','TopMargin','BottomMargin'].map(n=>cell(n,0)).join('')+cell('VerticalAlign',1)+
     '<Section N="Character"><Row IX="0">'+cell('Font','Calibri')+cell('Size',inch(fontSize))+cell('Color',i.color)+cell('Style',i.bold?1:0)+'</Row></Section>'+
-    '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+outline(i.w,i.h,true,!!i.background)+
+    '<Section N="Paragraph"><Row IX="0">'+cell('HorzAlign',i.align==='right'?2:i.align==='center'?1:0)+'</Row></Section>'+captionOutline(i)+
     '<Text><cp IX="0"/><pp IX="0"/>'+xml(shown)+'</Text></Shape>';
 }
 function connectionRows(ports,w,h,keys){
@@ -192,7 +201,7 @@ function writePackage(pages,stencil){
   let pagesXml='';
   const drawingPages=stencil?[]:pages;
   drawingPages.forEach((source,index)=>{
-    const p=normalizedPage(source);
+    const normalized=normalizedPage(source),p={...normalized,items:labelBackingItems(normalized.items,{nativeText:true})};
     const n=index+1,name=p.displayName||p.name;
     pagesXml+='<Page ID="'+index+'" Name="'+xml(name)+'" NameU="'+xml(name)+'" IsCustomName="1" IsCustomNameU="1" ViewScale="0.75" ViewCenterX="'+round(inch(p.width/2))+'" ViewCenterY="'+round(inch(p.height/2))+'">'+sheet(p.width,p.height,true,p.printPaper||p.paper,!!p.printPaper)+relation(n)+'</Page>';
     const rel=[],relKeys=new Map(),byKey=new Map(),connect=[];

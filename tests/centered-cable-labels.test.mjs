@@ -22,7 +22,8 @@ test('banked port labels center on every departure direction without changing me
  for(const axis of [0,1])for(const dir of [-1,1]){
   const page=bank(axis,dir),labels=page.items.filter(i=>i.labelRole);
   assert.equal(labels.length,2);
-  assert.ok(labels.every(i=>i.align==='center'));
+  assert.ok(labels.every(i=>i.align==='center'&&i.background==='#FFFFFF'));
+  for(const label of labels){const path=page.items.find(i=>i.type==='path'&&i.linkId===label.linkId);assert.equal(axis===0?label.y+label.h/2:label.x+label.w/2,path.points[0][axis===0?1:0],'automatic port text sits directly over its own line');}
   assert.equal(intersects(labels[0],labels[1],3),false);
   for(const label of labels){const box=textFootprint(label);assert.ok(box.x>=0&&box.y>=0&&box.x+box.w<=page.width&&box.y+box.h<=page.height);assert.equal(intersects(label,page.items[0],3),false);}
  }
@@ -76,4 +77,13 @@ test('normal and stacked port maps retain centered port numbers in dynamic and p
   const edited=buildPages(project).flatMap(p=>p.items).find(i=>i.editKey===first.editKey);
   assert.equal(edited.align,'right');
  }
+});
+
+
+test('automatic unbanked port text prefers its own line while saved pinned and cable-side placements win',()=>{
+ const make=edits=>{const page={name:'Inline port defaults',width:1200,height:975,items:[{type:'path',linkId:0,editKey:'own',points:[[400,400],[800,400]],commands:[['M',400,400],['L',800,400]],color:'#164878',weight:4}]};assert.equal(placeCableLabels(page,[{role:'port',endpoint:'a',linkId:0,value:'1/1/48',editKey:'port',side:'right',outer:400,y:400}],edits).ok,true);return page.items.find(i=>i.labelRole);};
+ const auto=make({});assert.equal(auto.background,'#FFFFFF');assert.equal(auto.y+auto.h/2,400);assert.equal(auto.align,'center');
+ const pinned=make({'port|0':{x:430,y:330}});assert.equal(pinned.x,430);assert.equal(pinned.y,330);
+ const snapped=make({'port|0':{cableFraction:.3,cableSide:'above'}});assert.ok(snapped.y+snapped.h<400);
+ const banked=bank(0,1,{'port0|0':{cableFraction:.3,cableSide:'above'}}),saved=banked.items.find(i=>i.editKey==='port0|0');assert.ok(saved.y+saved.h<425,'banking does not override a saved cable-side attachment');
 });

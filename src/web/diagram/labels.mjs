@@ -102,19 +102,18 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  };
  const clear=(b,owner,inline)=>!(b.x<contentLeft||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>inline&&p===owner?(p.hops||[]).some(hop=>intersects(hop,b,2)):pathCrossesText(p,b,2)));
  // Port names of leads leaving the same side of one device sit in line: one
- // shared distance from the device, each beside its lead on a common side,
- // or on its own line (white background) where there is no room beside it.
+ // shared distance from the device, centered over their own lead by default.
+ // A clear beside-line position remains a fallback when inline cannot fit.
  const banked=new Set();
  // Port names of leads leaving the same side of one device sit in line: one
- // shared distance from the device edge, beside each lead on a common side or
- // on its own line (white background) where there is no room beside it. A
+ // shared distance from the device edge, preferring the line itself. A
  // lead belongs to the side it crosses when it actually leaves its device.
  const strictlyInside=([x,y],n)=>x>n.x+.01&&x<n.x+n.w-.01&&y>n.y+.01&&y<n.y+n.h-.01,within=([x,y],n)=>x>=n.x-.01&&x<=n.x+n.w+.01&&y>=n.y-.01&&y<=n.y+n.h+.01;
  const banks=new Map();
  for(const req of requests){
   if(req.role!=='port'||!req.bank||req.linkId==null)continue;
   const owner=paths.find(path=>path.linkId===req.linkId),m=measure(req);
-  if(!owner||m.lines.length!==1||m.patches.some(p=>Number.isFinite(p.x)||Number.isFinite(p.y)))continue;
+  if(!owner||m.lines.length!==1||m.patches.some(p=>Number.isFinite(p.x)||Number.isFinite(p.y)||Number.isFinite(p.cableFraction)))continue;
   const points=req.endpoint&&req.endpoint!==(owner.startEndpoint||'a')?[...owner.points].reverse():owner.points;
   let lead=null;
   for(let i=0;i+1<points.length&&!lead;i++){
@@ -135,14 +134,14 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
   // a mixed row only where a side is taken; most names in line wins.
   const sides=axis===1?['left','right']:['above','below'];
   for(let step=0,start=near+dir*8;step<60&&(far-start)*dir>=length+4;step++,start+=dir*4){
-   for(const [rank,mode] of [sides[0],sides[1],'inline',sides[0]+'+inline',sides[1]+'+inline'].entries()){
+   for(const [rank,mode] of ['inline','inline+'+sides[0],'inline+'+sides[1],sides[0],sides[1]].entries()){
     const placed=[];
     for(const lead of leads){
      const {m}=lead,th=m.h,lo=dir<0?start-m.w:start,middle=lo+m.w/2,inlineLength=m.w+8;
      // Vertical leads carry rotated text; horizontal leads carry level text.
      const inline=axis===1?{x:lead.at-inlineLength/2,y:middle-th/2,w:inlineLength,h:th,angle:Math.PI/2,inline:true,parts:[inlineLength]}:{x:middle-inlineLength/2,y:lead.at-th/2,w:inlineLength,h:th,inline:true,parts:[inlineLength]};
      const beside=side=>axis===1?{x:(side==='left'?lead.at-th-4:lead.at+4)+(th-m.w)/2,y:middle-th/2,w:m.w,h:th,angle:Math.PI/2,attached:true}:{x:lo,y:side==='above'?lead.at-th-4:lead.at+4,w:m.w,h:th,attached:true};
-     const options=mode==='inline'?[inline]:mode.includes('+')?[beside(mode.split('+')[0]),inline]:[beside(mode)];
+     const options=mode.split('+').map(side=>side==='inline'?inline:beside(side));
      for(const box of options){
       const f=textFootprint(box);
       if(clear(f,lead.owner,box.inline)&&!placed.some(q=>intersects(f,q.footprint,3))&&(box.inline||!pathCrossesText(lead.owner,f,1))){placed.push({lead,box,footprint:f});break;}
@@ -229,8 +228,9 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
    }
   }
   if(owner&&req.role==='port'){
-   // A crowded port can still carry its name on its own cable, on a white
-   // background, on the half of the cable nearer that port.
+   // Prefer port names centered on their own cable, on a white backing,
+   // on the half of the cable nearer that port. Clear beside-line positions
+   // remain a fallback, rather than forcing an inline collision.
    const th=size+4,parts=lines.map(s=>textWidth(s.value,size,s.patch.bold!==false)+8),length=parts.reduce((a,b)=>a+b,0);
    // Bounded: a few dozen spots from this end, inside the visible page.
    let spots=0;
@@ -274,11 +274,13 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
   let box;
   // Passes: clearly by its own port; then anywhere on the half of the cable
   // nearer its own port; only then any clear spot.
-  // A port name takes the spot nearest its own port: beside the cable, or on
-  // its own line when the nearest clear spot beside it is much farther.
+  // Try inline port captions first, then the nearest clear fallback. Saved
+  // cable attachments and pinned placements returned above always win.
   const reach=c=>(c.at??Infinity)+(c.inline?60:0),nearest=req.role==='port'&&owner?[...candidates].sort((p,q)=>reach(p)-reach(q)):candidates;
-  for(const strict of owner?req.role==='port'?[true,'half',false]:[true,false]:[false]){
-   for(const candidate of strict==='half'?nearest:candidates){
+  const preferInline=req.role==='port'&&owner&&!preferred;
+  for(const strict of owner?req.role==='port'?[...(preferInline?['inline']:[]),true,'half',false]:[true,false]:[false]){
+   for(const candidate of strict==='half'||strict==='inline'?nearest:candidates){
+    if(strict==='inline'&&!candidate.inline)continue;
     if(strict&&req.role==='port'&&owner&&!(candidate.at<=half))continue;
     // The first pass stays close to where the cable leaves its equipment.
     if(strict===true&&req.role==='port'&&owner&&!(candidate.at<=leaves+120))continue;

@@ -1,3 +1,4 @@
+import {labelBackingItems} from './diagram/label-backings.mjs';
 import {cableWeight,svgPage,textLayout} from './diagram/scene.mjs';
 
 // All report exports are local. The PDF uses the same vector scene and embedded
@@ -105,7 +106,7 @@ export async function exportPdf(pages,{title='Network documentation'}={}){
   if(index)pdf.addPage(format(page),orientation(page));
   const ox=page.originX||0,oy=page.originY||0;
   const x=v=>(v-ox)*scale,y=v=>(v-oy)*scale;
-  const items=flatten(page.items),clips=pdfCableClips(items);
+  const items=labelBackingItems(flatten(page.items)),clips=pdfCableClips(items);
   for(const i of items){
    pdf.saveGraphicsState();
    if(i.opacity!=null&&i.opacity<1)pdf.setGState(new pdf.GState({opacity:i.opacity,'stroke-opacity':i.opacity}));
