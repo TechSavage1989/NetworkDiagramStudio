@@ -76,7 +76,7 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
   // front panels. A large stack must instead grow one readable logical canvas.
   let pages=null;if(memberCount>2){try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
   else try{pages=assertScenes([reportDiagram(item,palette,request)]);}catch{try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
-  if(pages?.length){for(const page of pages)page.printPaper=project.layout?.pageSetup?.printPaper||null;sheets.set(item.id,pages);}
+  if(pages?.length){for(const page of pages){page.printPaper=project.layout?.pageSetup?.printPaper||null;page.family='ports';}sheets.set(item.id,pages);}
  }
  return sheets;
 }
