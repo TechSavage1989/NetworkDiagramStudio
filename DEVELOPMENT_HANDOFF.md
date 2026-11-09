@@ -1,3 +1,7 @@
+## Preview.35: port maps in device colors with larger, centered VLAN dots
+
+Version 0.1.0-preview.35 (PR #34) makes the Switchport builder sheet the default port map, painted in each device's core-diagram artwork colors, and grows jacks and tagged dots to fill the sheet (one centered dot size per map, set by its busiest port). The realistic faceplate remains a Port map style option. Publish only after the merged-main release workflow passes and the GitHub release, updater feed and asset checksums are verified.
+
 ## Preview.34: configurable report paper, outside port numbering and compact network sheets
 
 Version 0.1.0-preview.34 combines the fully validated paper-size implementation from PR #33 with the active port-map/network-layout changes in PR #32. The former PR was merged into the latter, then the version and release intent were updated on the combined branch. Merge only after the exact version commit passes all Windows/browser/native tests. The final merged-main release workflow must pass, publish an immutable preview.34 prerelease, and have its public GitHub release, updater feed and asset checksums verified before announcing publication.
