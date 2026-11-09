@@ -17,7 +17,7 @@ export function installFormControls(doc=document){
  }
  function button(input,cls,title){const node=make('button',cls);node.type='button';node.setAttribute('aria-label',title);node.title=title;node.addEventListener('pointerdown',event=>event.preventDefault());return node;}
  function dispatch(input){input.dispatchEvent(new win.Event('input',{bubbles:true}));input.dispatchEvent(new win.Event('change',{bubbles:true}));}
- function dismiss(){if(!active)return;const record=active;active=null;record.popup.hidden=true;if(record.popup.matches(':popover-open'))record.popup.hidePopover();record.input.setAttribute('aria-expanded','false');record.input.removeAttribute('aria-activedescendant');}
+ function dismiss(){if(!active)return;const record=active;active=null;record.popup.hidden=true;if(typeof record.popup.hidePopover==='function'&&record.popup.matches(':popover-open'))record.popup.hidePopover();record.input.setAttribute('aria-expanded','false');record.input.removeAttribute('aria-activedescendant');}
  function placePopup(record){
   const box=record.input.getBoundingClientRect(),popup=record.popup,spaceBelow=win.innerHeight-box.bottom-8,spaceAbove=box.top-8,height=Math.min(320,Math.max(spaceBelow,spaceAbove));
   if(!box.width||!box.height){dismiss();return;}

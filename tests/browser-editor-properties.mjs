@@ -29,7 +29,7 @@ try{
  await page.locator('#dialog .link-caption-fields summary').click();await field('Legend title').fill('Building uplinks');await field('Line title').fill('Uplink');await field('Line description').fill('Lab link');await field('HEX').fill('#815AC0');
  await page.screenshot({path:resolve(output,'legend-connections.png')});
  await page.getByRole('button',{name:'Save object',exact:true}).click();await ready();
- const changed=page.locator('#canvas rect.diagram-legend-line[data-link-type="AOC"]');await changed.waitFor();assert.equal(Number(await changed.getAttribute('height')),7);assert.equal(await changed.getAttribute('fill'),'#815AC0');
+ const changed=page.locator('#canvas rect.diagram-legend-line[data-link-type="AOC"]');await changed.waitFor();assert.equal(Number(await changed.getAttribute('height')),7);assert.equal(await changed.getAttribute('fill'),'#815AC0');assert.equal(await changed.locator('title').textContent(),'AOC color key');
  const saved=await downloadProject('editor-properties.nds'),connection=saved.doc.project.links.find(link=>link.a==='edge'&&link.b==='sw-1');assert.equal(connection.media,'AOC');assert.equal(connection.speed,'25 Gbps');assert.equal(saved.doc.project.layout.linkStyles.AOC.weight,7);
  assert.ok(await page.locator('#canvas text').filter({hasText:'Uplink'}).count());assert.ok(await page.locator('#canvas text').filter({hasText:'Lab link'}).count());
  results.legend={hover:true,doubleClickEntersEdit:true,actualWidth:true,metadataAndCaptionsSavedTogether:true};

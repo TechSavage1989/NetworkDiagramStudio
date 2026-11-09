@@ -1,4 +1,4 @@
-import {svgPage,textLayout} from './diagram/scene.mjs';
+import {cableWeight,svgPage,textLayout} from './diagram/scene.mjs';
 
 // All report exports are local. The PDF uses the same vector scene and embedded
 // font as the printable report; PNGs carry explicit 300-dpi resolution metadata.
@@ -33,6 +33,66 @@ function pdfPath(commands,scale,ox,oy){
  }
  return result;
 }
+const bounds=(points,pad=0)=>{const xs=points.map(p=>p[0]),ys=points.map(p=>p[1]);return {x:Math.min(...xs)-pad,y:Math.min(...ys)-pad,w:Math.max(...xs)-Math.min(...xs)+2*pad,h:Math.max(...ys)-Math.min(...ys)+2*pad};};
+const overlaps=(a,b)=>a.x<=b.x+b.w&&a.x+a.w>=b.x&&a.y<=b.y+b.h&&a.y+a.h>=b.y;
+function convexHull(points){
+ const sorted=points.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]),cross=(a,b,c)=>(b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
+ const half=list=>{const out=[];for(const point of list){while(out.length>1&&cross(out.at(-2),out.at(-1),point)<=0)out.pop();out.push(point);}return out;};
+ return [...half(sorted).slice(0,-1),...half(sorted.slice().reverse()).slice(0,-1)];
+}
+function pdfHopOutlines(start,command,radius){
+ // Follow the exact cubic approximation that pdfPath paints. Adaptive offset
+ // samples stay within .02 page pixels of their chord, with bounded recursion.
+ // The cap at each endpoint is flat, matching SVG's default butt cap.
+ const end=command.slice(3,5),rx=Math.hypot(end[0]-start[0],end[1]-start[1])/2,ry=Math.hypot(command[1]-(start[0]+end[0])/2,command[2]-(start[1]+end[1])/2),simple=radius<.8*Math.min(rx,ry)**2/Math.max(rx,ry);
+ const samples=[],path=pdfPath([['M',...start],command],1,0,0);let previous=start;
+ for(const part of path.slice(1)){
+  const control=[previous,part.c.slice(0,2),part.c.slice(2,4),part.c.slice(4,6)];
+  const at=t=>{
+   const u=1-t,p=[0,1].map(axis=>u*u*u*control[0][axis]+3*u*u*t*control[1][axis]+3*u*t*t*control[2][axis]+t*t*t*control[3][axis]);
+   const d=[0,1].map(axis=>3*u*u*(control[1][axis]-control[0][axis])+6*u*t*(control[2][axis]-control[1][axis])+3*t*t*(control[3][axis]-control[2][axis])),length=Math.hypot(...d)||1,n=[-d[1]*radius/length,d[0]*radius/length];
+   return {left:[p[0]+n[0],p[1]+n[1]],right:[p[0]-n[0],p[1]-n[1]]};
+  };
+  const subdivide=(t0,a,t1,b,depth)=>{
+   const t=(t0+t1)/2,m=at(t),error=Math.max(...['left','right'].map(side=>Math.hypot(m[side][0]-(a[side][0]+b[side][0])/2,m[side][1]-(a[side][1]+b[side][1])/2)));
+   if(error>(simple?.02:.005)&&depth<8){subdivide(t0,a,t,m,depth+1);subdivide(t,m,t1,b,depth+1);}else samples.push(b);
+  };
+  const first=at(0);if(!samples.length)samples.push(first);subdivide(0,first,1,at(1),0);previous=control[3];
+ }
+ // A conservative curvature bound keeps the ordinary offset band simple.
+ // Tight jumps and flatter bundle arcs can fold their inner offset. Represent
+ // those as separate convex swept pieces instead of a self-crossing band.
+ if(simple)return [[...samples.map(p=>p.left),...samples.slice().reverse().map(p=>p.right)]];
+ // Neighboring pieces overlap by one sampled interval. Merely touching at a
+ // common cross-section can leave antialias seams in rasterized PDF clips.
+ // The tighter sampling above allows each piece to span two intervals.
+ return samples.map((sample,n)=>convexHull(samples.slice(Math.max(0,n-1),n+2).flatMap(point=>[point.left,point.right]))).filter(points=>points.length>=3);
+}
+function pdfCableClips(items){
+ const cables=[],hops=[];
+ for(const item of items.filter(item=>item.type==='path'&&(item.opacity??1)>0)){
+  const weight=item.weight||cableWeight,segments=[],commands=item.commands||item.points?.map(([x,y],n)=>[n?'L':'M',x,y])||[];let last;
+  for(const command of commands){
+   const end=command[0]==='A'?command.slice(3,5):command.slice(1,3);
+   if(last&&command[0]!=='M'){
+    const points=command[0]==='A'?[last,command.slice(1,3),end]:[last,end];segments.push(bounds(points,weight/2));
+    if(command[0]==='A')hops.push({owner:item,bounds:bounds(points,(weight+3.5)/2),start:last,command,radius:(weight+3.5)/2});
+   }
+   last=end;
+  }
+  cables.push({item,segments});
+ }
+ const clips=new Map();
+ for(const hop of hops){
+  const affected=cables.filter(cable=>cable.item!==hop.owner&&cable.segments.some(segment=>overlaps(segment,hop.bounds)));if(!affected.length)continue;
+  const pieces=pdfHopOutlines(hop.start,hop.command,hop.radius).map(points=>({points,bounds:bounds(points)}));
+  for(const cable of affected){
+   const selected=pieces.filter(piece=>cable.segments.some(segment=>overlaps(segment,piece.bounds))).map(piece=>piece.points);
+   if(selected.length)clips.set(cable.item,[...(clips.get(cable.item)||[]),...selected]);
+  }
+ }
+ return clips;
+}
 export async function exportPdf(pages,{title='Network documentation'}={}){
  if(!pages?.length)throw Error('Choose at least one page to export.');
  const Constructor=globalThis.jspdf?.jsPDF;if(!Constructor)throw Error('The local PDF exporter is unavailable. Reopen the application and retry.');
@@ -45,10 +105,11 @@ export async function exportPdf(pages,{title='Network documentation'}={}){
   if(index)pdf.addPage(format(page),orientation(page));
   const ox=page.originX||0,oy=page.originY||0;
   const x=v=>(v-ox)*scale,y=v=>(v-oy)*scale;
-  for(const i of flatten(page.items)){
+  const items=flatten(page.items),clips=pdfCableClips(items);
+  for(const i of items){
    pdf.saveGraphicsState();
    if(i.opacity!=null&&i.opacity<1)pdf.setGState(new pdf.GState({opacity:i.opacity,'stroke-opacity':i.opacity}));
-   pdf.setLineWidth((i.weight||1)*scale);pdf.setDrawColor(color(i.stroke||i.color));pdf.setFillColor(color(i.fill,'#ffffff'));
+   pdf.setLineWidth((i.weight||(i.type==='path'?cableWeight:1))*scale);pdf.setDrawColor(color(i.stroke||i.color));pdf.setFillColor(color(i.fill,'#ffffff'));
    if(i.type==='rect'){
     if(paint(i.fill)||paint(i.stroke))pdf.rect(x(i.x),y(i.y),i.w*scale,i.h*scale,paint(i.fill)?paint(i.stroke)?'FD':'F':'S');
    }else if(i.type==='text'){
@@ -64,12 +125,16 @@ export async function exportPdf(pages,{title='Network documentation'}={}){
     if(/^data:image\/(png|jpeg);base64,/i.test(i.dataUrl||''))pdf.addImage(i.dataUrl,x(i.x),y(i.y),i.w*scale,i.h*scale,undefined,'FAST');
    }else if(i.type==='path'||i.type==='vector'){
     const commands=i.commands||i.points?.map(([x,y],n)=>[n?'L':'M',x,y]);
-    if(i.type==='path'&&(i.opacity??1)>0){
-     let previous;for(const command of commands||[]){
-      if(command[0]==='A'&&previous){pdf.setDrawColor('#ffffff');pdf.setLineWidth(((i.weight||1)+3.5)*scale);pdf.path(pdfPath([['M',...previous],command],scale,ox,oy));pdf.stroke();previous=command.slice(3,5);}
-      else previous=command.slice(1,3);
+    if(i.type==='path'){
+     pdf.setLineJoin('round');pdf.setLineCap('butt');
+     for(const outline of clips.get(i)||[]){
+      // Intersect outside each outline separately. One combined even-odd
+      // path would incorrectly restore cable ink where clearances overlap.
+      // Only this cable is clipped; artwork and later items keep their state.
+      pdf.rect(0,0,page.width*scale,page.height*scale,null);
+      pdf.path([...outline.map((point,n)=>({op:n?'l':'m',c:[x(point[0]),y(point[1])]})),{op:'h',c:[]}]);
+      pdf.clipEvenOdd();pdf.discardPath();
      }
-     pdf.setDrawColor(color(i.stroke||i.color));pdf.setLineWidth((i.weight||1)*scale);
     }
     const path=pdfPath(commands,scale,ox,oy);
     if(path.length){pdf.path(path);if(i.type==='vector'&&paint(i.fill)){paint(i.stroke)?pdf.fillStroke():pdf.fill();}else pdf.stroke();}

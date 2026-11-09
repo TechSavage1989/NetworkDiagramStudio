@@ -49,7 +49,7 @@ Network engineers can use the Windows application or the offline browser edition
 <p align="center"><img src="docs/images/organize-connections.png" width="1000" alt="Organization preview with current and proposed cable length, bends, crossings and drawing footprint"></p>
 
 **Follow wireless connections with readable access-point captions and separate cable lanes.**
-<p align="center"><img src="docs/images/compact-wireless.png" width="900" alt="Fictional wireless connections with readable access-point captions, port modules and separate cable lanes"></p>
+<p align="center"><img src="docs/images/compact-wireless.png" width="900" alt="Fictional wireless connections with readable access-point captions and separate cable lanes"></p>
 
 
 ## Download
