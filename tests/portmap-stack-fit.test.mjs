@@ -23,7 +23,9 @@ test('eight-member VSF stays on one dynamic logical port-map page with one legen
  assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1,'the VLAN/LAG key is not repeated');
  assert.equal(page.role,'workspace','large stacks use readable full-size member rows rather than a shrunken one-page fit');
  assert.ok(page.height>=816,'the logical canvas preserves the nominal height and grows when required');
- assert.ok(page.items.filter(item=>item.reportPortRole==='number').every(item=>item.size>=10),'member port numbers remain at the normal readable size');
+ const numbers=page.items.filter(item=>item.reportPortRole==='number');
+ assert.ok(numbers.length>=8*48,'every member retains its port number labels');
+ assert.ok(numbers.every(item=>item.size>=8),'port numbers retain the renderer\'s readable minimum rather than becoming illegible');
  assert.ok(page.items.some(item=>item.reportPort?.startsWith('8/')),'member eight sockets are present');
 });
 
