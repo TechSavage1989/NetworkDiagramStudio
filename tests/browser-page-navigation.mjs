@@ -17,12 +17,34 @@ try{
  assert.equal(await portGroup.count(),1);
  await portGroup.locator('summary').click();
  assert.ok(await portGroup.evaluate(e=>e.open),'top-level group opens its page menu');
+ // Word-style editor rulers are synchronized with page dimensions and zoom.
+ const rulerTop=page.locator('#canvas .page-ruler-top'),rulerSide=page.locator('#canvas .page-ruler-side'),unit=page.locator('#canvas .page-ruler-unit');
+ assert.equal(await rulerTop.count(),1);assert.equal(await rulerSide.count(),1);
+ const firstUnit=await unit.textContent();await unit.click();assert.notEqual(await unit.textContent(),firstUnit);
+ await page.locator('#zoom-in').click();assert.ok(Number(await rulerTop.getAttribute('width'))>0);
+ // Clicking the ruler or toolbar dismisses an open menu; reopen before choosing.
+ assert.equal(await portGroup.evaluate(el=>el.open),false);
+ await portGroup.locator('summary').click();
  const list=portGroup.locator('.page-group-menu');
  assert.ok(await list.locator('button').count()>0,'menu lists pages');
  await page.screenshot({path:resolve(output,'page-groups.png')});
  await list.locator('button').last().click();
  assert.ok(await page.locator('#page-select').inputValue()!=='','clicking a group page directly navigates');
  assert.equal(await portGroup.count(),1,'group navigation remains available');
+ await portGroup.locator('summary').click();
+ assert.equal(await portGroup.evaluate(el=>el.open),true);
+ await page.locator('#canvas').click({position:{x:30,y:40}});
+ assert.equal(await portGroup.evaluate(el=>el.open),false,'outside clicks dismiss group menus');
+ await portGroup.locator('summary').click();
+ await page.keyboard.press('Escape');
+ assert.equal(await portGroup.evaluate(el=>el.open),false,'Escape dismisses the active page group');
+ const otherGroup=groups.filter({hasText:'Core network'});
+ await portGroup.locator('summary').click();
+ await otherGroup.locator('summary').click();
+ await page.waitForFunction(()=>[...document.querySelectorAll('#page-families details.page-group[open]')].length===1);
+ assert.equal(await otherGroup.evaluate(el=>el.open),true,'opening another group closes previous dropdown');
+ await page.locator('#canvas').click({position:{x:30,y:40}});
+
  const tabs=page.locator('#tabs');
  await tabs.evaluate(e=>{e.style.width='220px';e.style.flex='0 0 220px';e.scrollLeft=0;});
  const scrollable=await tabs.evaluate(e=>e.scrollWidth>e.clientWidth);

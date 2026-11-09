@@ -12,6 +12,7 @@ export function cleanDrawingEdits(raw){
   if(!keyOk(key)||!input||typeof input!=='object'||Array.isArray(input))continue;const out={};
   for(const k of numbers)if(Number.isFinite(input[k])&&Math.abs(input[k])<=(['x','y'].includes(k)?1e7:12000)&&(!['w','h','size','weight'].includes(k)||input[k]>0))out[k]=input[k];
   if(Number.isFinite(input.opacity)&&input.opacity>=0&&input.opacity<=1)out.opacity=input.opacity;
+  if(Number.isFinite(input.cableFraction)&&input.cableFraction>=0&&input.cableFraction<=1)out.cableFraction=input.cableFraction;
   for(const k of ['fill','stroke','color'])if(colors.test(input[k]||''))out[k]=input[k];
   if(typeof input.value==='string')out.value=input.value.slice(0,10000);
   if(typeof input.name==='string')out.name=input.name.slice(0,300);
@@ -83,8 +84,20 @@ export function movementOffsets(page,edits,offsets,{exclude=[]}={}){
  }
  return result;
 }
-export function moveDrawingItems(page,edits,offsets){
- offsets=movementOffsets(page,edits,offsets);
+// Keep manually dragged core equipment clear of the information sidebar.
+// The scene may expand to the right, but the reserved content area is solid.
+export function safeCoreMoveOffsets(page,offsets){
+ if(page?.legendLayout!=='sidebar'||!Number.isFinite(page.sidebar?.divider))return new Map(offsets);
+ const boundary=page.sidebar.divider+20,out=new Map(offsets);
+ for(const [key,[dx,dy]] of out){
+  const item=page.items.find(i=>i.editKey===key);
+  if(item?.type==='device'&&item.kind!=='plug'&&item.kind!=='handoff'&&!item.moduleLegend&&item.sourceId!=='module-legend')
+   out.set(key,[Math.max(dx,boundary-item.x),dy]);
+ }
+ return out;
+}
+export function moveDrawingItems(page,edits,offsets,{preventSidebarOverlap=false}={}){
+ offsets=movementOffsets(page,edits,preventSidebarOverlap?safeCoreMoveOffsets(page,offsets):offsets);
  const objects=drawingObjects(page),result=cleanDrawingEdits(edits),shapes=new Map(page.items.filter(i=>i.type==='device').map(i=>[i.key,i]));
  if(page.coreDeviceIds&&objects.some(item=>offsets.has(item.editKey)&&(item.type==='device'||item.parent?.type==='device'))){
   // Any positioned device detail disables automatic core packing. Preserve
@@ -102,10 +115,11 @@ export function moveDrawingItems(page,edits,offsets){
   else if(item.type==='vector')patch.commands=item.commands.map(c=>c.length===3?[c[0],c[1]+localX,c[2]+localY]:[...c]);
   else {
    Object.assign(patch,{x:item.x+localX,y:item.y+localY});
-   if(item.labelRole&&item.angle)patch.angle=item.angle;
+   if(item.labelRole){delete patch.cableFraction;if(item.angle)patch.angle=item.angle;}
   }
   const changed=item.type==='path'?{points:patch.points}:item.type==='vector'?{commands:patch.commands}:{x:patch.x,y:patch.y,...(item.labelRole&&item.angle?{angle:item.angle}:{})};
   result[key]={...(result[key]||{}),...unpresentPatch(item,changed)};
+  if(item.labelRole)delete result[key].cableFraction;
  }
  return cleanDrawingEdits(result);
 }
@@ -116,7 +130,14 @@ export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='a
  const selected=new Set(movementOffsets({items:devices},{},new Map([...picked].map(k=>[k,[0,0]])),{exclude:[referenceKey]}).keys()),chosen=devices.filter(i=>selected.has(i.editKey));
  const scale=reference.presentation?.scale||1,padding=typeof spacing==='number'?spacing:spacing==='auto'?automaticDeviceGap(page,[...chosen,reference],side):({compact:56,normal:96,wide:160}[spacing]??96)*scale;
  if(!Number.isFinite(padding))throw Error('Choose a valid placement spacing.');
- const others=devices.filter(i=>!selected.has(i.editKey)),offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,others.filter(i=>i!==reference).map(drawingBounds),padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});
+ const others=devices.filter(i=>!selected.has(i.editKey)),obstacles=others.filter(i=>i!==reference).map(drawingBounds);
+ // The information sidebar is a reserved, solid region. Place beside must
+ // search for a clear location or report a capacity issue, never overlap it.
+ if(page.legendLayout==='sidebar'&&Number.isFinite(page.sidebar?.divider)){
+  const x=page.originX||0,y=page.originY||0,right=page.sidebar.divider+20;
+  obstacles.push({key:'reserved-sidebar',x,y,w:Math.max(0,right-x),h:page.height});
+ }
+ const offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,obstacles,padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});
  // Pin every visible reference, including generated WAN cards, before core
  // routing retries can choose a new automatic arrangement. This is one edit.
  for(const item of others)offsets.set(item.editKey,[0,0]);

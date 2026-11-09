@@ -19,7 +19,7 @@ test('paper dimensions represent the selected orientation, not real-world drawin
 
 test('visible page setting changes boundaries while retaining every drawing item and its edit identity',()=>{
  const original=build({}),source=original[0],target=source.name;
- const changed=build({pages:{[target]:{preset:'a4',orientation:'portrait'}}}),page=changed.find(p=>p.name===target);
+ const changed=build({fitMode:'preserve',pages:{[target]:{preset:'a4',orientation:'portrait'}}}),page=changed.find(p=>p.name===target);
  assert.equal(changed.length,original.length,'paper must not repaginate');
  assert.ok(page);
  close(shape(page),210/297);
@@ -54,4 +54,22 @@ test('print paper can be independent from visible page without reshaping the dia
  assert.equal(p.printPaper.preset,'letter');
  assert.equal(p.printPaper.orientation,'portrait');
  assert.ok(printDocument([p]).includes('@page nds0{size:215.9000mm 279.4000mm'));
+});
+
+test('automatic fit reuses the full sheet and uniformly scales content rather than stretching devices',()=>{
+ const baseline=build({}),src=baseline[0],target=src.name;
+ const arranged=build({fitMode:'optimize',pages:{[target]:{preset:'a4',orientation:'portrait'}}}),changed=arranged.find(p=>p.name===target);
+ close(shape(changed),210/297);
+ assert.notEqual(signature(src),signature(changed),'auto-fit must change the visible content');
+ assert.equal(src.items.length,changed.items.length,'fit must not drop drawing objects');
+ const sourceDevice=src.items.find(i=>i.type==='device'),fitted=changed.items.find(i=>i.editKey===sourceDevice?.editKey);
+ if(sourceDevice&&fitted)close(sourceDevice.w/sourceDevice.h,fitted.w/fitted.h);
+ const sourceLinks=src.items.filter(i=>i.type==='path'),fittedLinks=changed.items.filter(i=>i.type==='path');
+ assert.equal(sourceLinks.length,fittedLinks.length);
+ for(const path of fittedLinks){
+  if(path.from)assert.ok(Math.abs(path.points[0][0]-path.from.x)<1e-4&&Math.abs(path.points[0][1]-path.from.y)<1e-4,'source port remains attached');
+  if(path.to)assert.ok(Math.abs(path.points.at(-1)[0]-path.to.x)<1e-4&&Math.abs(path.points.at(-1)[1]-path.to.y)<1e-4,'target port remains attached');
+ }
+ const preserved=build({fitMode:'preserve',pages:{[target]:{preset:'a4',orientation:'portrait'}}}).find(p=>p.name===target);
+ assert.equal(signature(preserved),signature(src),'preserve mode keeps the original drawing');
 });

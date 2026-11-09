@@ -225,9 +225,23 @@ export function reportDiagram(item,palette,request,{wall=false}={}){
  throw failure;
 }
 
+// Responsive port-map workspace layout: wide paper can show member panels in
+// two balanced columns, with one shared key. Port/socket sizing is unchanged;
+// only the measured member bands are grouped into a compact grid.
+export function responsiveStackPlan(plan,targetAspect){
+ const memberCount=plan.item.inventory.groups.filter(group=>!group.slot).length;
+ if(!(targetAspect>1.12)||memberCount<3||memberCount>8||plan.bands.length<3)return plan;
+ const columns=2,cellWidth=Math.max(...plan.bands.map(band=>band.width)),gap=20,bands=[];
+ for(let index=0;index<plan.bands.length;index+=columns){
+  const pair=plan.bands.slice(index,index+columns);
+  const height=Math.max(...pair.map(band=>band.height));
+  bands.push({panels:pair.flatMap((band,column)=>band.panels.map(panel=>({...panel,x:panel.x+column*(cellWidth+gap)}))),width:cellWidth*columns+gap,height});
+ }
+ return {...plan,bands,width:cellWidth*columns+gap,height:bands.reduce((sum,band)=>sum+band.height+plan.gap,0)};
+}
 export function workspaceDiagrams(items,palette,request){
- const plans=items.filter(item=>item.validation?.ok!==false).map(item=>devicePlan(item)),pages=[];let current=null,currentPlans=[],at=0;
- const sheet=paperOf(request),dynamicHeight=request?.dynamicCanvas?Math.max(sheet.height,Math.ceil(page(request,'workspace|measure',request.title||'Switchport reports','Shared port maps and VLAN key','workspace',[]).contentTop+plans.reduce((sum,plan)=>sum+blockHeight(plan)+12,0)+legendHeight(mergeInventories(plans.map(plan=>plan.item)),palette,sheet.width-margin*2,false,!!request?.fill)+80)):null;
+ const plans=items.filter(item=>item.validation?.ok!==false).map(item=>responsiveStackPlan(devicePlan(item),request?.targetAspect)),pages=[];let current=null,currentPlans=[],at=0;
+ const originalSheet=paperOf(request),sheet={...originalSheet,width:request?.dynamicCanvas?Math.max(originalSheet.width,...plans.map(plan=>plan.width+margin*2)):originalSheet.width},dynamicHeight=request?.dynamicCanvas?Math.max(sheet.height,Math.ceil(page(request,'workspace|measure',request.title||'Switchport reports','Shared port maps and VLAN key','workspace',[]).contentTop+plans.reduce((sum,plan)=>sum+blockHeight(plan)+12,0)+legendHeight(mergeInventories(plans.map(plan=>plan.item)),palette,sheet.width-margin*2,false,false)+180)):null;
  const make=()=>{const p=page(request,'workspace|'+pages.length,request.title||request.outputLabel||'Switchport reports','Shared port maps and VLAN key','workspace',[],sheet.width,dynamicHeight??sheet.height);if(dynamicHeight)p.paper={preset:'custom',orientation:p.width>=p.height?'landscape':'portrait',widthMm:p.widthMm,heightMm:p.heightMm};pages.push(p);current=p;currentPlans=[];at=p.contentTop;return p;};
  const close=()=>{if(!current)return;const inv=mergeInventories(currentPlans.map(plan=>plan.item));legend(current,at+10,inv,palette);current.sourceDeviceIds=unique(currentPlans.map(plan=>plan.item.id));current=null;};
  const standalone=plan=>{
@@ -236,9 +250,16 @@ export function workspaceDiagrams(items,palette,request){
   single.name='Switchport reports|workspace|'+plan.item.id;single.role='workspace';single.workspaceTitle=request.title;single.standaloneConfiguration=true;single._reportFinished=true;pages.push(single);return true;
  };
  for(const plan of plans){
-  if(plan.width>paperOf(request).width-margin*2){if(standalone(plan))continue;throw new ReportCapacityError('The complete physical bank of '+displayName(plan.item.inventory)+' is too wide for shared '+reportPageLabel(request.paper)+' sheets.',{deviceId:plan.item.id});}
+  if(plan.width>sheet.width-margin*2){if(standalone(plan))continue;throw new ReportCapacityError('The complete physical bank of '+displayName(plan.item.inventory)+' is too wide for shared '+reportPageLabel(request.paper)+' sheets.',{deviceId:plan.item.id});}
   if(!current)make();let required=blockHeight(plan),candidate=mergeInventories([...currentPlans.map(row=>row.item),plan.item]),keyHeight=legendHeight(candidate,palette,current.width-margin*2);
   if(at+required+keyHeight+69>current.height&&currentPlans.length){close();make();candidate=plan.item.inventory;keyHeight=legendHeight(candidate,palette,current.width-margin*2);}
+  // An editable dynamic sheet must grow before considering compact
+  // standalone pagination. It is not bounded by fixed print paper height.
+  if(request?.dynamicCanvas&&at+required+keyHeight+69>current.height){
+   current.height=Math.ceil(at+required+keyHeight+160);
+   current.heightMm=current.height*25.4/96;
+   current.paper={preset:'custom',orientation:current.width>=current.height?'landscape':'portrait',widthMm:current.widthMm,heightMm:current.heightMm};
+  }
   if(at+required+keyHeight+69<=current.height){at=drawBlock(current,plan,margin,at,palette)+12;currentPlans.push(plan);continue;}
   if(standalone(plan))continue;
   // Whole configurations are preferred. Oversized stacks/chassis continue at

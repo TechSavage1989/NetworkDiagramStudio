@@ -89,6 +89,8 @@ function boxDistance(box,path){
  }
  return best;
 }
+import {positionOnCable} from '../connection-selection.mjs';
+
 export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const minY=page.dynamic?(page.originY||0)+36:158,maxY=(page.originY||0)+(page.height||975)-69,maxX=(page.originX||0)+(page.width||1200)-38;
  const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path');
@@ -160,6 +162,12 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  // One request at one text size: the chosen box, or null when nothing fits.
  const placeOne=req=>{
   const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)return {skip:true};
+  const snapped=patches.find(p=>Number.isFinite(p.cableFraction)),snapOwner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);
+  if(snapped&&snapOwner){const hit=positionOnCable(snapOwner.points,snapped.cableFraction);if(hit)return {box:{x:hit.x-w/2,y:hit.y-h/2,w,h,angle:hit.angle,manual:true},lines,size};}
+  // A moved label is pinned, not an automatic-placement suggestion. Preserve
+  // its exact saved coordinates across redraws and page format changes.
+  const pinned=patches.find(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+  if(pinned)return {box:{x:pinned.x,y:pinned.y,w:Math.max(w,pinned.w||0),h:Math.max(h,pinned.h||0),angle:pinned.angle||0,manual:true},lines,size};
   const owner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);let endpoint=null,nearSegments=1,half=Infinity,leaves=0;
   // The cable read from this label's own end, with the distance along it to
   // each bend, so a port name never settles by the far end's port.
@@ -248,6 +256,7 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
    const positions=[...visibleOffsets(desired,1,10,limit,visibleLo,visibleHi),...visibleOffsets(desired,-1,10,limit,visibleLo,visibleHi)].sort((a,b)=>a.offset-b.offset||b.direction-a.direction);
    for(const dy of [-h-4,4])for(const {x} of positions)candidates.push({x,y:a[1]+dy,w,h});
   }
+  // Preserve legacy partial-axis edits as candidates; complete pinned positions above never reflow.
   const preferred=patches.find(p=>Number.isFinite(p.x)||Number.isFinite(p.y));if(preferred)candidates.unshift({x:preferred.x??(req.side==='right'?req.outer+8:req.outer-w-8),y:preferred.y??req.y-h/2,w:Math.max(w,preferred.w||0),h:Math.max(h,preferred.h||0),angle:preferred.angle});
   candidates.push(...late);
   const gutter=req.side==='right'?Math.max(req.outer+8,984):sidebar?req.outer-w-8:Math.min(req.outer-w-8,322-w),mainBodies=bodies.filter(b=>b.kind!=='handoff'),gutters=[gutter,...(sidebar?[Math.min(...(mainBodies.length?mainBodies:bodies).map(b=>b.x))-26-w]:[])];
@@ -309,17 +318,17 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
     const th=b.h/b.lines.length;
     for(let i=0;i<b.lines.length;i++){
      const shift=(i-(b.lines.length-1)/2)*th,center=b.angle?{x:b.x+b.w/2+shift,y:b.y+b.h/2}:{x:b.x+b.w/2,y:b.y+b.h/2+shift};
-     page.items.push({type:'text',x:center.x-b.w/2,y:center.y-th/2,w:b.w,h:th,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});
+     page.items.push({type:'text',x:center.x-b.w/2,y:center.y-th/2,w:b.w,h:th,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});
     }
     continue;
    }
    let offset=0;
    for(let i=0;i<b.lines.length;i++){
     const w=b.parts[i],center=b.angle?{x:b.x+b.w/2,y:b.y+b.h/2+b.w/2-offset-w/2}:{x:b.x+offset+w/2,y:b.y+b.h/2};offset+=w;
-    page.items.push({type:'text',x:center.x-w/2,y:center.y-b.h/2,w,h:b.h,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});
+    page.items.push({type:'text',x:center.x-w/2,y:center.y-b.h/2,w,h:b.h,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:'center',background:'#FFFFFF',full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});
    }
    continue;
   }
-  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||b.textAlign||(b.side==='left'?'right':'left'),full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,editKey:b.lines[i].key});}
+  for(let i=0;i<b.lines.length;i++)page.items.push({type:'text',x:b.angle?b.x+i*(b.size+4)+(b.size+4-b.h)/2:b.x,y:b.angle?b.y+(b.h-b.size-4)/2:b.y+i*(b.size+4),w:b.w,h:b.size+4,angle:b.angle,value:b.lines[i].value,size:b.size,bold:b.lines[i].patch.bold??true,color:b.lines[i].patch.color||b.color||'#17364A',align:b.lines[i].patch.align||b.textAlign||(b.side==='left'?'right':'left'),background:b.manual?'#FFFFFF':undefined,full:true,labelRole:b.role,_textFactor:b.fontFactor||1,linkId:b.linkId,relatedPort:b.role==='port'?String(b.value):null,relatedEnd:b.endpoint||null,relatedCableKey:paths.find(path=>path.linkId===b.linkId)?.editKey,editKey:b.lines[i].key});}
  return {ok:true,placed:result};
 }

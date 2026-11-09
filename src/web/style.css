@@ -154,3 +154,19 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 #page-families .page-group-menu button{display:block;width:100%;padding:7px 10px;margin:0;border:0;border-radius:3px;text-align:left;white-space:normal;overflow-wrap:anywhere;background:#fff;color:#183544;font-size:12px;font-weight:500}
 #page-families .page-group-menu button:hover,#page-families .page-group-menu button:focus-visible{background:#edf4f6}
 #page-families .page-group-menu button.active{background:#e0eff1;color:#095d6c;font-weight:700}
+
+/* Word-style editor rulers float outside the saved SVG and never print. */
+#canvas .page-ruler-top,#canvas .page-ruler-side{position:absolute;z-index:5;pointer-events:none;background:#f7fafb;box-shadow:0 1px 2px #17364a30}
+#canvas .page-ruler-top{left:24px;top:0;height:24px;border-bottom:1px solid #a2b5bd}
+#canvas .page-ruler-side{left:0;top:24px;width:24px;border-right:1px solid #a2b5bd}
+#canvas .page-ruler-unit{position:absolute;z-index:6;top:0;left:0;width:24px;height:24px;padding:0;border:1px solid #a2b5bd;border-radius:0;background:#dbe9ed;color:#264755;font:10px Segoe UI,Arial,sans-serif;text-align:center;cursor:pointer}
+#canvas .page-ruler-unit:hover{background:#c4dde5}
+@media print{#canvas .page-ruler-top,#canvas .page-ruler-side,#canvas .page-ruler-unit{display:none}}
+
+/* Linked connection highlighting is applied only to the live editor SVG. */
+#canvas svg .linked-association{filter:drop-shadow(0 0 3px #168fa8);paint-order:stroke}
+#canvas svg path.diagram-cable.linked-association{filter:drop-shadow(0 0 4px #0bb7c6)}
+#canvas svg text.linked-association{stroke:#b5f3f4;stroke-width:2px;stroke-linejoin:round;paint-order:stroke fill}
+#canvas svg circle.linked-port-marker{fill:#19a1b6;fill-opacity:.2;stroke:#087a94;stroke-width:2;pointer-events:none;vector-effect:non-scaling-stroke}
+#canvas svg [data-port-name]{cursor:crosshair}
+#drawing-snap-label:not(:disabled){border-color:#5a9cad;color:#0b5967}

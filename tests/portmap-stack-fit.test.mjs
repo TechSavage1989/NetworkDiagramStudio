@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPages} from '../src/web/diagram/index.mjs';
+import {targetPageAspect} from '../src/web/page-options.mjs';
 
 // Fictional eight-member VSF fixture. No customer configuration or secrets.
 const stack=(members=8)=>({
@@ -51,4 +52,19 @@ test('every one-through-eight-member VSF map keeps the full stack and one key on
   assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
   assert.ok(page.items.filter(item=>item.reportPortRole==='number').length>=members*48);
  }
+});
+
+test('landscape pages arrange eight stack members in balanced columns without splitting or repeating the key',()=>{
+ const settings={visible:{fitMode:'optimize',groups:{ports:{preset:'a3',orientation:'landscape'}}}};
+ const shape=targetPageAspect(project(settings,8),{name:'MDF Port Map',family:'ports'});
+ assert.ok(Math.abs(shape-420/297)<1e-8,'selected landscape paper is delivered to port map layout');
+ const pages=map(project(settings,8));
+ assert.equal(pages.length,1);
+ const page=pages[0],bodies=page.items.filter(item=>item.reportPanel&&item.reportGroup);
+ assert.equal(bodies.length,8);
+ assert.ok(new Set(bodies.map(body=>Math.round(body.x))).size>=2,'member blocks should fill landscape page in columns: '+JSON.stringify(bodies.map(body=>[body.reportGroup,Math.round(body.x),Math.round(body.y)]))+' role='+page.role+' standalone='+String(!!page.standaloneConfiguration));
+ assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
+ assert.ok(page.items.some(item=>item.reportPort?.startsWith('8/')));
+ const same=map(project(settings,8))[0];
+ assert.equal(same.svg,page.svg,'responsive stack layout is deterministic');
 });

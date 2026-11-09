@@ -2,6 +2,7 @@ import {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReport
 import {sharedReportPalette} from './palette.mjs';
 import {reportDiagram,workspaceDiagrams,inventoryPages,blockedReport,validateReportScene,ReportCapacityError,numberReportPages} from './scene.mjs';
 import {reportPageLabel,reportFileStem} from './paper.mjs';
+import {targetPageAspect} from '../page-options.mjs';
 export {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReportInventory,validateInventory,inventoryCsv,technicianSummary,reportFolder,reportModelChoice} from './model.mjs';
 export {sharedReportPalette,aggregateKey,validateVlanColor,nativeFill,markerVlans,vlanIds,colorDifference} from './palette.mjs';
 export {ReportCapacityError,validateReportScene} from './scene.mjs';
@@ -65,7 +66,7 @@ export function buildReportPackage(project,selectedIds){
 export function portMapSheets(project,devices,paper,artwork=new Map()){
  const ids=devices.map(device=>device.id),sheets=new Map();if(!ids.length)return sheets;
  let prepared;try{prepared=prepare({...project,layout:{...project.layout,switchport:{...(project.layout?.switchport||{}),enabled:true,deviceIds:ids}}},ids);}catch{return sheets;}
- const {items,palette}=prepared,request={...prepared.request,paper,fill:!!paper?.fill,dynamicCanvas:true};
+ const {items,palette}=prepared,request={...prepared.request,paper,fill:!!paper?.fill,dynamicCanvas:true,targetAspect:targetPageAspect(project,{name:'MDF Port Map',family:'ports'})};
  for(const item of items){
   if(!item.validation.ok)continue;
   // Port maps paint the builder sheet in the device's core-diagram colors.
@@ -75,7 +76,7 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
   // front panels. A large stack must instead grow one readable logical canvas.
   let pages=null;if(memberCount>2){try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
   else try{pages=assertScenes([reportDiagram(item,palette,request)]);}catch{try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
-  if(pages?.length){for(const page of pages)page.printPaper=project.layout?.pageSetup?.printPaper||null;sheets.set(item.id,pages);}
+  if(pages?.length){for(const page of pages){page.printPaper=project.layout?.pageSetup?.printPaper||null;page.family='ports';}sheets.set(item.id,pages);}
  }
  return sheets;
 }
