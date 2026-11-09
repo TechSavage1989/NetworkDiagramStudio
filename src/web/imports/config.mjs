@@ -1,7 +1,11 @@
+import {configuredAddress,parseConfiguredRoute} from './routing-records.mjs';
 import {cidr, device, empty, ensurePort, ensureVlan, portName, vlans} from './model.mjs';
 import {identify} from './hardware.mjs';
 import {parseFirewall} from './firewalls.mjs';
 import {completeConfigHardware} from './config-hardware.mjs';
+import {applyCiscoSemantics,ciscoEvidenceText} from './cisco-semantics.mjs';
+import {parseComware} from './comware.mjs';
+import {routerosTextModel} from './routeros-text.mjs';
 import {routerosSnapshotModel} from './routeros-backup.mjs';
 
 const words = s => [...String(s).matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2] ?? m[3]);
@@ -85,6 +89,7 @@ function joinPortLists(text){
 }
 function switchCLI(text,filename) {
   text=joinPortLists(text.replace(/\r/g,''));
+  text=ciscoEvidenceText(text);
   const out=empty(); let hostname=/^(?:hostname|sysname)\s+(.+)$/im.exec(text)?.[1];
   const ranges=value=>interfaceNames(value,part=>{const note=filename+': unsupported interface range '+part+'. Review its individual ports.';if(!out.warnings.includes(note))out.warnings.push(note);});
   const aruba=/AOS-CX|ArubaOS-CX|^(?:vsf member|interface lag|\s*vlan trunk (?:native|allowed))\b/im.test(text);
@@ -126,14 +131,13 @@ function switchCLI(text,filename) {
     if((m=/^ip default-gateway\s+(\S+)$/i.exec(s))){annotate('management','Default gateway: '+m[1]);continue;}
     if(/^(?:mirror|monitor\s+session)\b/i.test(s)){annotate('mirrors',s);continue;}
     if(section==='management'&&(m=/^ip(?:v6)?\s+(?:address|static)\s+(.+)$/i.exec(s))){annotate('management',scalar(m[1]));continue;}
-    if((m=/^ip route(?:-static)?\s+(\S+)\s+(.+)$/i.exec(s))){let tail=words(m[2]),dst=m[1];if(!dst.includes('/')&&/^\d+\.\d+\.\d+\.\d+$/.test(tail[0]) && tail.length>1)dst=cidr(dst,tail.shift());
-      const hop=tail.find(x=>/^\d+\.\d+\.\d+\.\d+$/.test(x));const intf=tail[0]!==hop?tail[0]:'';pushRoute(d,dst,hop,intf,{type:'static'});continue;}
+    if(/^ip(?:v6)? route(?:-static)?\s+/i.test(s)){const route=parseConfiguredRoute(s);d.routes.push(route||{destination:s,type:'configured-reference'});continue;}
     if(/^(?:exit|quit|!|#)$/.test(s)){section='';ports=[];vids=[];continue;}
     if(!/^\s/.test(raw) && /^(?:hostname|router |line |spanning-tree|snmp|aaa |ntp |ip dns|https-|vlan batch)/i.test(s)){section='';ports=[];vids=[];continue;}
     if(section==='vlan' || section==='svi'){
       if(/^(?:no )?voice$/i.test(s))vids.forEach(id=>{ensureVlan(d,id).voice=!/^no /i.test(s);});
       if((m=/^(?:name|description)\s+(.+)$/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).name=scalar(m[1]);});
-      if((m=/^ip address\s+(\d[\d./]*)(?:\s+(\d[\d.]*))?/i.exec(s)))vids.forEach(id=>{ensureVlan(d,id).ip=cidr(m[1],m[2]);});
+      if((m=/^ip(v6)? address\s+(.+)$/i.exec(s)))vids.forEach(id=>{const v=ensureVlan(d,id),address=configuredAddress(m[2]);if(address){v.addresses=[...new Set([...(v.addresses||[]),address])];if(!m[1])v.ip||=address.split(' ')[0];}});
       if((m=/^(tagged|untagged)\s+(.+)$/i.exec(s)))for(const n of ranges(m[2])){const p=ensurePort(d,n);if(m[1]==='untagged'){p.native=vids[0];delete p.nativeState;}else p.tagged=[...new Set([...(p.tagged||[]),...vids])];}
       // Removed membership, as the Switchport Diagram Builder reads it: a port
       // no longer untagged here has no native VLAN unless another VLAN sets one.
@@ -177,6 +181,7 @@ function switchCLI(text,filename) {
    // One voice VLAN membership marks the port; several need confirmation.
    if(p.voice==null&&voiceVlans.size){const voices=[...new Set([p.native,...(p.tagged||[])].map(Number).filter(id=>voiceVlans.has(id)))];if(voices.length===1)p.voice=voices[0];}
   }
+  if(cisco&&!aruba&&!classic&&vendor==='Cisco')applyCiscoSemantics(d,text,ranges);
   completeConfigHardware(d,text,filename,out.warnings);
   d.fromConfig=true;out.devices.push(d);return out;
 }
@@ -206,37 +211,6 @@ function junos(text,filename){
   d.fromConfig=true;out.devices.push(d);return out;
 }
 
-function routerOS(text,filename){
-  if(!/^\/(?:system identity|interface bridge|interface ethernet|ip address|ip route)(?:\s|$)/m.test(text))return null;
-  const out=empty(), d=device(cleanBase(filename),{vendor:'MikroTik',kind:'unknown',fromConfig:true});
-  let section='';
-  for(const raw of text.replace(/\\\r?\n\s*/g,'').split(/\r?\n/)){
-    const line=raw.trim();if(!line||line.startsWith('#'))continue;
-    let command=line;
-    if(line.startsWith('/')){
-      const m=/^\/([^=]+?)(?:\s+(add|set)\s+(.*))?$/.exec(line);
-      if(!m)continue;section=m[1];if(!m[2])continue;command=m[2]+' '+m[3];
-    }
-    if(!/^(add|set)\s/.test(command))continue;
-    const f=Object.create(null);
-    for(const m of command.matchAll(/(?:^|\s)([\w-]+)=(?:"((?:[^"\\]|\\.)*)"|([^\s\]]+))/g))f[m[1]]=m[2]??m[3];
-    if(section==='system identity' && f.name){d.name=f.name;d.id=f.name.toLowerCase();}
-    else if(section==='interface bridge'&&f.name){(d.bridges||=[]).push({name:f.name,type:'bridge',members:[]});}
-    else if(section==='interface bridge port'&&f.interface&&f.bridge){const b=d.bridges?.find(b=>b.name===f.bridge);
-      if(b)b.members.push(f.interface);const p=ensurePort(d,f.interface);if(f.pvid)p.native=Number(f.pvid);}
-    else if(section==='interface bridge vlan'&&f['vlan-ids'])for(const vid of vlans(f['vlan-ids'])){
-      ensureVlan(d,vid);for(const n of (f.tagged||'').split(',').filter(Boolean)){
-        const p=ensurePort(d,n);p.tagged=[...new Set([...(p.tagged||[]),vid])];}
-      for(const n of (f.untagged||'').split(',').filter(Boolean)){const p=ensurePort(d,n);p.untagged=[...new Set([...(p.untagged||[]),vid])];}
-    }else if(section==='interface vlan' && f.name && f['vlan-id']){const p=ensurePort(d,f.name);p.parent=f.interface;p.vlan=Number(f['vlan-id']);ensureVlan(d,p.vlan).name=f.name;}
-    else if(section==='ip address'&&f.address&&f.interface){const p=ensurePort(d,f.interface);p.ip=f.address;if(p.vlan)ensureVlan(d,p.vlan).ip=f.address;}
-    else if(section==='ip route' && f.gateway)pushRoute(d,f['dst-address']||'0.0.0.0/0',f.gateway,'',{type:'static',...(f.disabled==='yes'?{status:'disabled'}:{})});
-  }
-  const model=/^#\s*model\s*=\s*(.+)$/im.exec(text)?.[1];
-  if(model)Object.assign(d,identify(model.trim()));
-  out.devices.push(d);return out;
-}
-
 export function parseConfig(text,filename='configuration.txt') {
   const s=String(text).replace(/^\uFEFF/,'');
   if(s.startsWith('# Switchport ROUTEROS INVENTORY\n')){try{return routerosSnapshotModel(JSON.parse(s.slice(s.indexOf('\n')+1)),filename);}catch(error){return {devices:[],links:[],warnings:[filename+': '+error.message]};}}
@@ -244,5 +218,5 @@ export function parseConfig(text,filename='configuration.txt') {
   if(/^#config-version=/im.test(s) && !/^\s*config (?:system |vdom|global)/im.test(s))
     return {devices:[],links:[],warnings:[filename+': FortiOS header without clear-text configuration blocks. Supply an unencrypted export, Auvik report, or manual device.']};
   if(/^#config-version=|^config system (?:global|interface|virtual-wire-pair)\s*$/im.test(s))return fortios(s,filename);
-  return parseFirewall(s,filename)||routerOS(s,filename)||junos(s,filename)||switchCLI(s,filename)||{devices:[],links:[],warnings:[filename+': unrecognized or opaque configuration. Supply a clear-text export or Auvik report, or add devices and ports manually.']};
+  return parseFirewall(s,filename)||routerosTextModel(s,filename)||junos(s,filename)||parseComware(s,filename)||switchCLI(s,filename)||{devices:[],links:[],warnings:[filename+': unrecognized or opaque configuration. Supply a clear-text export or Auvik report, or add devices and ports manually.']};
 }

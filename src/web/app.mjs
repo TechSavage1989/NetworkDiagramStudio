@@ -1,3 +1,7 @@
+import {portRoleOptions,portSpeedOptions,existingVlanOptions,portVlanIds} from './port-config-options.mjs';
+import {expandDrawingGroups,groupDrawingSelection,ungroupDrawingSelection,drawingGroupItem,transformDrawingGroup} from './drawing-groups.mjs';
+import {stackCaption} from './device-stacks.mjs';
+import {editDeviceStack} from './device-stacks-ui.mjs';
 import {transformControls,transformGeometry,transformEdits,rotatable} from './transform-controls.mjs';
 import {physicalLink} from './physical-links.mjs';
 import {installFormControls} from './form-controls.mjs';
@@ -19,7 +23,7 @@ import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs
 import {diagramViewport} from './viewport.mjs';
 import {arrangeAnchors,arrangeBoxes,arrangeBoxesAtGap} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
-import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
+import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits,inverseDeviceDelta} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
@@ -91,7 +95,7 @@ const slug=s=>String(s||'Network').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').sli
 function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','export-menu','switchport-reports','drawing-organize','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','export-menu','print','svg'].includes(id)&&(!pages.length||!drawingReady))||(id==='drawing-organize'&&!pages[active]?.items.some(i=>i.type==='path'));
  // The Arrange control depends on the active page; recompute it after busy work.
  if($('drawing-arrange'))$('drawing-arrange').disabled=on||!(pages[active]?.coreDeviceIds&&pages[active]?.dynamic);}
-async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.error');if(!node){node=el('p','','error');$('dialog-body').prepend(node);}node.textContent=e?.message||'The operation failed.';}}finally{busy(false);}}
+async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.dialog-task-error');if(!node){node=el('p','','error dialog-task-error');$('dialog-body').prepend(node);}node.textContent=e?.message||'The operation failed.';node.setAttribute('role','alert');node.tabIndex=-1;node.focus();node.scrollIntoView({block:'nearest'});}}finally{busy(false);}}
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
 function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
 function commitInlineEdit(){if(!inlineSession)return true;if(!inlineSession.connected){inlineSession.cancel();return true;}return inlineSession.save();}
@@ -109,6 +113,7 @@ function field(parent,labelText,value='',opts=null){
 function perform(scope='project',prepared){captureEdits(project,evidenceSnapshot);if(project.evidence)evidenceSnapshot=snapshot();projectHistory.record(project,scope);dirty=projectHistory.dirty;draw(prepared);}
 function resetDrawingHistory(){inlineCancel?.();drawingSelection.clear();projectHistory.reset(project);cablePoint=-1;snapLabelPick=null;pageCache.clear();reports.reset();}
 function syncDrawingSelection(){
+ $('drawing-size-mode').value=project.layout?.sizeMode==='spacing'?'spacing':'models';
  const svg=$('canvas').querySelector('svg');if(svg)for(const n of svg.querySelectorAll('.diagram-selection,.cable-controls,.transform-controls'))n.remove();
  const objects=pages[active]?drawingObjects(pages[active]):[],known=new Set(objects.map(o=>o.editKey));for(const key of drawingSelection)if(!known.has(key))drawingSelection.delete(key);
  if(svg){
@@ -132,8 +137,11 @@ function syncDrawingSelection(){
 
  if(svg&&editDrawing)for(const item of objects.filter(o=>drawingSelection.has(o.editKey))){const b=drawingBounds(item);if(!b)continue;const mark=document.createElementNS('http://www.w3.org/2000/svg','rect');mark.setAttribute('class','diagram-selection');for(const [k,v] of Object.entries({x:b.x-3,y:b.y-3,width:Math.max(6,b.w)+6,height:Math.max(6,b.h)+6}))mark.setAttribute(k,String(v));svg.append(mark);}
  const single=drawingSelection.size===1?objects.find(o=>drawingSelection.has(o.editKey)):null;
- if(svg&&editDrawing&&single)transformControls(svg,single);
+ const grouped=drawingGroupItem(pages[active]||{items:[]},drawingSelection);
+ if(svg&&editDrawing&&(single||grouped))transformControls(svg,single||grouped);
+ $('drawing-group').disabled=drawingSelection.size<2;$('drawing-ungroup').disabled=!(project.layout?.drawingGroups||[]).some(g=>g.keys.some(k=>drawingSelection.has(k)));
  syncQuickText(single);
+ $('device-transform-tools').hidden=!editDrawing||single?.type!=='device';if(single?.type==='device')$('device-angle').value=Math.round((single.angle||0)*180/Math.PI*100)/100;
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
  $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
@@ -146,24 +154,31 @@ function syncDrawingSelection(){
  viewport.syncCableInteraction();
 }
 function syncQuickText(item){
- const bar=$('quick-text-tools');bar.hidden=!editDrawing||!rotatable(item);if(bar.hidden)return;
+ const bar=$('quick-text-tools');bar.hidden=!editDrawing||!['text','arttext'].includes(item?.type);if(bar.hidden)return;
  $('quick-text-size').value=Math.round((item.normalized?item.size*item.parent.w:item.size)*100)/100;
  $('quick-text-bold').checked=!!item.bold;$('quick-text-align').value=item.align||'left';
  $('quick-text-color').value=/^#[0-9a-f]{6}$/i.test(item.color||'')?item.color:'#17364a';
  $('quick-text-angle').value=Math.round((item.angle||0)*180/Math.PI*100)/100;
 }
 function quickTextChange(rotationChanged=false){
- const item=drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));if(!rotatable(item))return;
+ const item=drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));if(!['text','arttext'].includes(item?.type))return;
  const size=Number($('quick-text-size').value),degrees=Number($('quick-text-angle').value);
  if(!Number.isFinite(size)||size<1||size>500||!$('quick-text-size').value)throw Error('Text size must be between 1 and 500.');
  if(!Number.isFinite(degrees)||!$('quick-text-angle').value||Math.abs(degrees)>360)throw Error('Rotation must be between -360 and 360 degrees.');
  const patch=unpresentPatch(item,{size:item.normalized?size/item.parent.w:size,bold:$('quick-text-bold').checked,align:$('quick-text-align').value,color:$('quick-text-color').value,...(rotationChanged?{angle:degrees*Math.PI/180,rotationMode:'fixed'}:{})});
  setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...patch}});
 }
+function setDeviceAngle(degrees){
+ const item=drawingSelection.size===1?pages[active]?.items.find(i=>drawingSelection.has(i.editKey)&&i.type==='device'):null;if(!item)return;
+ if(degrees===''||!Number.isFinite(Number(degrees))||Math.abs(Number(degrees))>360)throw Error('Rotation must be between -360 and 360 degrees.');
+ setDrawingEdits(transformEdits(pages[active],project.layout?.drawingEdits,item,{angle:Number(degrees)*Math.PI/180}));revealSelectedText();say('Device rotation saved. Connections remain attached.');
+}
+$('device-angle').onchange=()=>task(()=>{try{setDeviceAngle($('device-angle').value);}finally{syncDrawingSelection();}});
+$('device-angle-reset').onclick=()=>task(()=>setDeviceAngle(0));
 $('quick-text-edit').onclick=()=>editOnDoubleClick([...drawingSelection][0]);
 for(const id of ['quick-text-size','quick-text-bold','quick-text-align','quick-text-color','quick-text-angle'])$(id).onchange=()=>task(()=>{try{quickTextChange(id==='quick-text-angle');}finally{const item=pages[active]&&drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));syncQuickText(item);revealSelectedText();}});
 function revealSelectedText(){const key=drawingSelection.size===1?[...drawingSelection][0]:null;if(!key)return;requestAnimationFrame(()=>{if(drawingSelection.size!==1||!drawingSelection.has(key))return;const item=pages[active]&&drawingObjects(pages[active]).find(o=>o.editKey===key);if(rotatable(item)){const bounds=drawingBounds(item);viewport.reveal({...bounds,y:bounds.y-28,h:bounds.h+28});}});}
-function selectDrawingItem(key,additive=false){cablePoint=-1;if(!additive)drawingSelection.clear();if(additive&&drawingSelection.has(key))drawingSelection.delete(key);else drawingSelection.add(key);syncDrawingSelection();revealSelectedText();}
+function selectDrawingItem(key,additive=false){cablePoint=-1;const keys=expandDrawingGroups(project.layout?.drawingGroups,[key]),remove=additive&&drawingSelection.has(key);if(!additive)drawingSelection.clear();for(const k of keys)if(remove)drawingSelection.delete(k);else drawingSelection.add(k);syncDrawingSelection();revealSelectedText();}
 function selectedCable(){return drawingSelection.size===1?pages[active]?.items.find(i=>i.type==='path'&&drawingSelection.has(i.editKey)):null;}
 function selectedConnectionLabel(){
  return drawingSelection.size===1?pages[active]?.items.find(item=>item.labelRole&&item.relatedCableKey&&drawingSelection.has(item.editKey)):null;
@@ -263,7 +278,7 @@ function handleEditorContextMenu(event){
   }
   if(item.type==='device'){
    const d=project.devices.find(d=>d.id===item.sourceId);
-   if(d)actions.push(['Edit device details',()=>editDevice(d)],['Find hardware stencil',()=>deviceStencil(d)]);
+   if(d)actions.push(['Edit device details',()=>editDevice(d)],['Configure device stack',()=>configureDeviceStack(d)],['Find hardware stencil',()=>deviceStencil(d)]);
   }
  }else if(socket&&owner&&editDrawing){
   const sourceId=owner.getAttribute('data-device-id'),portName=socket.getAttribute('data-port-name');
@@ -291,7 +306,7 @@ function removeSelectedCablePoint(){const item=selectedCable();if(!item||cablePo
 const ownCaption=(path,label)=>label.background&&path.linkId!=null&&path.linkId===label.linkId,sameCaption=(a,b)=>a.background&&b.background&&a.linkId!=null&&a.linkId===b.linkId&&a.labelRole===b.labelRole;
 function validateDrawing(){const rebuilt=buildDrawing();for(const p of rebuilt.filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&!sameCaption(a,b)&&intersects(a,b,0))||paths.some(r=>ownCaption(r,a)?(r.hops||[]).some(hop=>intersects(hop,a,1)):pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}return rebuilt;}
 function setDrawingEdits(next){
- project.layout||={};const previous=project.layout;project.layout={...previous,drawingEdits:cleanDrawingEdits(next)};
+ project.layout||={};const previous=project.layout;const setup=cleanPageSetup(previous.pageSetup);for(const page of pages)if(page.pageLockFrame)setup.visible.lockFrames[page.name]=page.pageLockFrame;project.layout={...previous,pageSetup:setup,drawingEdits:cleanDrawingEdits(next)};
  const format=pages[active]?.portMap?.presentation;if(format&&(!previous.portMap?.presentation||previous.portMap.presentation==='auto'))project.layout.portMap={...previous.portMap,presentation:format};
  // Validation has not changed the displayed SVG. Keep its editor and draft
  // attached when rejecting an edit, rather than leaving an invisible input lock.
@@ -332,7 +347,7 @@ function startDrawingBox(event,start){
  if(!editDrawing||!pages[active])return null;const svg=$('canvas').querySelector('svg'),baseline=new Set(drawingSelection),rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('class','diagram-marquee');svg.append(rect);
  const objects=drawingObjects(pages[active]).filter(o=>event.altKey?o.parent||o.type!=='device':!o.parent).map(drawingBounds).filter(Boolean);
  function update(end){for(const [k,v] of Object.entries({x:Math.min(start[0],end[0]),y:Math.min(start[1],end[1]),width:Math.abs(end[0]-start[0]),height:Math.abs(end[1]-start[1])}))rect.setAttribute(k,v);
-  const inside=boxSelected(objects,start,end);drawingSelection.clear();if(event.shiftKey||event.ctrlKey||event.metaKey)for(const key of baseline)drawingSelection.add(key);for(const key of inside)if((event.ctrlKey||event.metaKey)&&baseline.has(key))drawingSelection.delete(key);else drawingSelection.add(key);cablePoint=-1;syncDrawingSelection();
+  const inside=expandDrawingGroups(project.layout?.drawingGroups,boxSelected(objects,start,end));drawingSelection.clear();if(event.shiftKey||event.ctrlKey||event.metaKey)for(const key of baseline)drawingSelection.add(key);for(const key of inside)if((event.ctrlKey||event.metaKey)&&baseline.has(key))drawingSelection.delete(key);else drawingSelection.add(key);cablePoint=-1;syncDrawingSelection();
  }return {preview:update,commit(end){update(end);rect.remove();},cancel(){rect.remove();}};
 }
 function snapTargets(page,excluded){
@@ -370,9 +385,9 @@ function startDrawingMove(key,event){
  if(!editDrawing||!pages[active])return null;const page=pages[active],settings=cleanSnap(project.layout?.snapping),control=event.target.closest('[data-cable-point],[data-cable-segment]'),axisFor=dragAxis();
  const transform=event.target.closest('[data-transform]');
  if(transform){
-  const item=drawingObjects(page).find(i=>i.editKey===key),handle=transform.dataset.transform,svg=$('canvas').querySelector('svg'),box=svg.querySelector('.diagram-selection'),bounds=drawingBounds(item);
+  const item=drawingSelection.size>1?drawingGroupItem(page,drawingSelection):drawingObjects(page).find(i=>i.editKey===key),handle=transform.dataset.transform,svg=$('canvas').querySelector('svg'),box=svg.querySelector('.diagram-selection'),bounds=drawingBounds(item);
   const preview=(dx,dy,e)=>{const g=transformGeometry(item,handle,dx,dy,e);if(box){if(g.angle!=null)box.setAttribute('transform',`rotate(${-(g.angle-(item.angle||0))*180/Math.PI} ${bounds.x+bounds.w/2} ${bounds.y+bounds.h/2})`);else for(const [k,v]of Object.entries({x:bounds.x+g.dx,y:bounds.y+g.dy,width:bounds.w*g.factor,height:bounds.h*g.factor}))box.setAttribute(k,v);}};
-  return {preview,commit(dx,dy,e){task(()=>{try{setDrawingEdits(transformEdits(page,project.layout?.drawingEdits,item,transformGeometry(item,handle,dx,dy,e)));say(handle==='rotate'?'Text rotation saved.':'Item resized. Connections remain attached.');}finally{syncDrawingSelection();}});},cancel:syncDrawingSelection};
+  return {preview,commit(dx,dy,e){task(()=>{try{const geometry=transformGeometry(item,handle,dx,dy,e);setDrawingEdits(item.type==='group'?transformDrawingGroup(page,project.layout?.drawingEdits,drawingSelection,geometry.angle!=null?geometry:{...geometry,dx:geometry.dx+item.w*(geometry.factor-1)/2,dy:geometry.dy+item.h*(geometry.factor-1)/2}):transformEdits(page,project.layout?.drawingEdits,item,geometry));say(handle==='rotate'?(item.type==='device'?'Device rotation saved. Connections remain attached.':'Text rotation saved.'):'Item resized. Connections remain attached.');}finally{syncDrawingSelection();}});},cancel:syncDrawingSelection};
  }
  if(control){if(control.hasAttribute('data-cable-segment'))return {preview(){},commit(){},cancel(){}};
   const item=page.items.find(i=>i.editKey===key),index=+control.dataset.cablePoint,svg=$('canvas').querySelector('svg'),merge=8/(svg.getScreenCTM()?.a||1),path=[...svg.children].find(n=>n.matches('path.diagram-cable')&&n.getAttribute('data-drawing-key')===key),before=path.getAttribute('d'),targets=snapTargets(page,new Set([key]));
@@ -381,7 +396,7 @@ function startDrawingMove(key,event){
   const restore=()=>{path.setAttribute('d',before);showSnapGuides();};
   return {preview(dx,dy,e){const next=geometry(dx,dy,e);path.setAttribute('d',next.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));svg.querySelector('.cable-controls')?.remove();cableControls(svg,{...item,points:next.points},next.points.findIndex(p=>p[0]===next.point[0]&&p[1]===next.point[1]));showSnapGuides(next.guides);},commit(dx,dy,e){restore();task(()=>{cablePoint=-1;changeCablePoints(item,geometry(dx,dy,e).points);say('Cable bend moved.');});},cancel(){restore();syncDrawingSelection();}};
  }
- const keys=drawingSelection.has(key)?new Set(drawingSelection):new Set(event.shiftKey||event.ctrlKey||event.metaKey?[...drawingSelection,key]:[key]),
+ const keys=expandDrawingGroups(project.layout?.drawingGroups,drawingSelection.has(key)?drawingSelection:event.shiftKey||event.ctrlKey||event.metaKey?[...drawingSelection,key]:[key]),
   // WAN cards and cables with saved bends that follow the selection move too.
   moving=new Set(movementOffsets(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[1,1]]))).keys()),
   boxes=drawingObjects(page).filter(o=>moving.has(o.editKey)&&!moving.has(o.parent?.editKey)&&!(o.type==='path'&&!keys.has(o.editKey))).map(drawingBounds).filter(Boolean),targets=snapTargets(page,moving),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&moving.has(n.getAttribute('data-drawing-key'))&&!moving.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
@@ -389,7 +404,7 @@ function startDrawingMove(key,event){
  const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey);return snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis);};
  return {preview(dx,dy,e){const next=geometry(dx,dy,e),[x,y]=next.delta;if(!started){drawingSelection.clear();for(const k of keys)drawingSelection.add(k);syncDrawingSelection();started=true;}
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
-  for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else n.setAttribute('transform','translate('+x+' '+y+') '+(s.transform||''));}
+  for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else{const object=drawingObjects(page).find(o=>o.editKey===n.getAttribute('data-drawing-key')),[px,py]=object?.normalized?inverseDeviceDelta(object.parent,x,y):[x,y];n.setAttribute('transform','translate('+px+' '+py+') '+(s.transform||''));}}
   for(const n of $('canvas').querySelectorAll('.diagram-selection'))n.setAttribute('transform','translate('+x+' '+y+')');$('canvas').querySelector('.cable-controls')?.setAttribute('visibility','hidden');showSnapGuides(next.guides);
  },commit(dx,dy,e){const next=geometry(dx,dy,e);restore();task(()=>{
     const label=keys.size===1?page.items.find(item=>item.editKey===[...keys][0]&&item.labelRole&&item.relatedCableKey):null;
@@ -406,18 +421,21 @@ function startDrawingMove(key,event){
    });},cancel(){restore();syncDrawingSelection();}};
 }
 $('drawing-snap-label').onclick=()=>task(snapSelectedLabelDialog);
+$('drawing-group').onclick=()=>task(()=>{project.layout={...project.layout,drawingGroups:groupDrawingSelection(project.layout?.drawingGroups,drawingSelection,'group-'+Date.now().toString(36))};perform('drawing-group');say('Objects grouped. Select any member to move, resize or rotate the group.');});
+$('drawing-ungroup').onclick=()=>task(()=>{project.layout={...project.layout,drawingGroups:ungroupDrawingSelection(project.layout?.drawingGroups,drawingSelection)};perform('drawing-group');say('Objects ungrouped without changing their positions.');});
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{cancelBesidePick();drawingSelection.clear();syncDrawingSelection();};
 $('drawing-organize').onclick=()=>task(()=>connectionLayoutEditor({project:scoped(),page:pages[active],pages,buildPages:source=>buildPages(source,{cache:pageCache}),modal,el,button,actions,run:task,close,apply(result){const before=project.layout;project.layout={...before,lineSpacing:result.lineSpacing||before?.lineSpacing||{}};try{setDrawingEdits(result.edits);}catch(error){project.layout=before;throw error;}viewport.fit();say((result.spacing?'Lines evenly spaced. ':'Connections organized. ')+'Undo restores the previous layout.');}}));
 function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
 // Devices and generated WAN/ISP/egress cards can be placed beside another object.
 const placeable=item=>item?.type==='device'&&item.kind!=='plug'&&(project.devices.some(d=>d.id===item.sourceId)||item.kind==='handoff'&&!!item.ownerKey);
 function selectedPlaceable(){return pages[active]?.items.filter(i=>placeable(i)&&drawingSelection.has(i.editKey))||[];}
-function resizeSelection(factor){if(!drawingObjects(pages[active]).some(i=>drawingSelection.has(i.editKey)&&i.type!=='path'))throw Error('Select a device, text or another object to resize. Cables follow their connected devices.');setDrawingEdits(scaleDrawingItems(pages[active],project.layout?.drawingEdits,drawingSelection,factor));say('Selected items resized. Connections remain attached.');}
+function resizeSelection(factor){if(!drawingObjects(pages[active]).some(i=>drawingSelection.has(i.editKey)&&i.type!=='path'))throw Error('Select a device, text or another object to resize. Cables follow their connected devices.');const grouped=(project.layout?.drawingGroups||[]).some(g=>g.keys.some(k=>drawingSelection.has(k))),mode=project.layout?.sizeMode;if(grouped&&mode==='spacing')throw Error('Ungroup before changing internal spacing.');setDrawingEdits(grouped?transformDrawingGroup(pages[active],project.layout?.drawingEdits,drawingSelection,{factor}):scaleDrawingItems(pages[active],project.layout?.drawingEdits,drawingSelection,factor,{mode}));say(project.layout?.sizeMode==='spacing'?'Layout spacing changed. Model sizes are unchanged.':'Selected models resized in place. Connections remain attached.');}
+$('drawing-size-mode').onchange=()=>{project.layout={...project.layout,sizeMode:$('drawing-size-mode').value};perform('drawing');};
 $('drawing-smaller').onclick=()=>task(()=>resizeSelection(.9));$('drawing-larger').onclick=()=>task(()=>resizeSelection(1.1));
 $('drawing-size').onclick=()=>task(()=>{
  const body=modal('Resize items'),scope=field(body,'Resize',drawingSelection.size?'selected':'page',[['selected','Selected items'],['page','Everything on this page'],['drawing','Everything on all pages']]),percent=field(body,'Size (% of current size)',100);percent.type='number';percent.min=10;percent.max=400;
  const bar=actions(body);button(bar,'Smaller −10%',()=>percent.value=Math.max(10,Math.round(+percent.value*.9)));button(bar,'Larger +10%',()=>percent.value=Math.min(400,Math.round(+percent.value*1.1)));
- body.append(el('p','100% keeps the current size. Device ports and connections stay attached. Use Undo to restore the previous size.','hint'));
+ body.append(el('p','Selected items use the Size changes setting: model size keeps positions, layout spacing keeps sizes. Page and drawing resize scale everything. Connections stay attached. Use Undo to restore.','hint'));
  button(actions(body),'Apply size',()=>{const factor=+percent.value/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Choose a size from 10 to 400 percent.');
   if(scope.value==='selected'){if(!drawingSelection.size)throw Error('Select an item first.');resizeSelection(factor);}
   else {const before=project.layout,next=structuredClone(before||{}),config=cleanPresentation(next.presentation),targets=scope.value==='page'?[config.pages[pages[active].name]={...config.pages[pages[active].name],drawingScale:presentation(project,pages[active]).drawingScale}]:[config.defaults,...Object.values(config.pages).filter(p=>Number.isFinite(p.drawingScale))];
@@ -486,9 +504,10 @@ $('drawing-page').onclick=()=>task(()=>{
 $('cable-remove-point').onclick=()=>task(removeSelectedCablePoint);
 $('cable-endpoints').onclick=()=>task(()=>connectSelectedCable());
 $('cable-edit-points').onclick=()=>task(()=>editCablePoints(selectedCable()));
-for(const button of $('drawing-tools').querySelectorAll('[data-align]'))button.onclick=()=>task(()=>{const page=pages[active],objects=drawingObjects(page).filter(o=>drawingSelection.has(o.editKey)&&!drawingSelection.has(o.parent?.editKey)),boxes=objects.map(drawingBounds).filter(Boolean);setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,arrangeBoxes(boxes,button.dataset.align)));say('Selected drawing items arranged.');});
+for(const button of $('drawing-tools').querySelectorAll('[data-align]'))button.onclick=()=>task(()=>{if((project.layout?.drawingGroups||[]).some(g=>g.keys.some(k=>drawingSelection.has(k))))throw Error('Ungroup these objects before changing their internal alignment or spacing.');const page=pages[active],objects=drawingObjects(page).filter(o=>drawingSelection.has(o.editKey)&&!drawingSelection.has(o.parent?.editKey)),boxes=objects.map(drawingBounds).filter(Boolean);setDrawingEdits(moveDrawingItems(page,project.layout?.drawingEdits,arrangeBoxes(boxes,button.dataset.align)));say('Selected drawing items arranged.');});
 $('drawing-spacing').onclick=()=>task(()=>{
  const page=pages[active];
+ if((project.layout?.drawingGroups||[]).some(g=>g.keys.some(k=>drawingSelection.has(k))))throw Error('Ungroup these objects before changing their internal spacing.');
  const objects=drawingObjects(page).filter(item=>drawingSelection.has(item.editKey)&&!drawingSelection.has(item.parent?.editKey)&&item.type!=='path'&&item.type!=='vector');
  if(objects.length<2)throw Error('Select at least two devices, text labels or other objects to adjust spacing.');
  const body=modal('Spacing for selected objects');
@@ -558,7 +577,7 @@ function deviceList(){
  $('device-count').textContent=matching.length+' of '+project.devices.length+' devices';$('clear-devices').disabled=!project.devices.length;$('undo-devices').disabled=!projectHistory.canUndo();
  for(const d of matching){const row=el('div','','device-row'),include=el('input');include.type='checkbox';include.checked=!d.hidden;include.setAttribute('aria-label','Include '+d.name);include.title='Show '+d.name+' in the drawing';row.classList.toggle('excluded',!!d.hidden);
  include.onchange=()=>{d.scopeOverride=include.checked;d.hidden=!include.checked;perform();};
- const b=el('button',d.name,'device-details');b.type='button';b.title='Edit '+d.name;b.append(el('small',[deviceKindLabel(d.kind),d.model||d.vendor||'Model unspecified'].join(' / ')));if(d.ip)b.append(el('small',d.ip));b.onclick=()=>task(()=>editDevice(d));row.append(include,b);
+ const b=el('button',d.name,'device-details');b.type='button';b.title='Edit '+d.name;b.append(el('small',[deviceKindLabel(d.kind),d.model||d.vendor||'Model unspecified'].join(' / ')));if(d.ip)b.append(el('small',d.ip));if(stackCaption(project,d.id))b.append(el('small',stackCaption(project,d.id)));b.onclick=()=>task(()=>editDevice(d));row.append(include,b);
  const del=button(row,'Delete',()=>removeDevices([d.id]),'delete-device');del.title='Delete '+d.name+' and its connections';del.setAttribute('aria-label','Delete '+d.name);addOrderControls(row,d);panel.append(row);}
  if(!matching.length)panel.append(el('p',project.devices.length?'No matches. Try a device name, model, type or IP address.':'No devices yet. Add a device or import your configurations.','placeholder'));
 }
@@ -665,28 +684,29 @@ function pageOptions(){
  const custom=el('div','','form-columns');body.append(custom);
  const width=field(custom,'Page width (mm)',297),height=field(custom,'Page height (mm)',420);
  for(const input of [width,height]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
+ const lockRow=el('label','','check-option'),paperLock=el('input');paperLock.type='checkbox';paperLock.setAttribute('aria-label','Lock physical page size');lockRow.append(paperLock,document.createTextNode('Lock physical page size'));body.append(lockRow);
  const preview=el('p','','page-size-preview');body.append(preview);
  const visible=setup.visible,fitMode=field(body,'Content fit mode',visible.fitMode||'optimize',[['optimize','Auto-fit and optimize content'],['preserve','Preserve existing layout']]);
- body.append(el('p','Auto-fit uses the available page area, and network and wireless diagrams may choose better arrangements. Manually positioned devices and labels retain their saved positions. Preserve layout changes the page boundary without resizing or repacking content.','hint'));
+ body.append(el('p','Auto-fit uses the available page area, and network and wireless diagrams may choose better arrangements. Manually positioned devices and labels retain their saved positions. Preserve layout changes the page boundary without resizing or repacking content. A locked physical page never grows: Auto-fit fits content once, then keeps its scale and positions during edits; overflowing edits are rejected. Preserve rejects content that does not fit. Unlock to allow a growing canvas.','hint'));
  let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';
  const lookup=()=>selectedScope==='all'?visible.default:selectedScope==='group'?visible.groups[selectedGroup]:visible.pages[selectedPage];
  function store(){
-  const inherit=preset.value==='inherit',value=cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
+  const inherit=preset.value==='inherit',value=cleanPaper({preset:preset.value,locked:paperLock.checked,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
   if(selectedScope==='all')visible.default=value;
   else if(selectedScope==='group'){if(inherit)delete visible.groups[selectedGroup];else visible.groups[selectedGroup]=value;}
   else if(selectedPage){if(inherit)delete visible.pages[selectedPage];else visible.pages[selectedPage]=value;}
  }
  function update(){
   const inherited=preset.value==='inherit';
-  custom.hidden=preset.value!=='custom';orientation.disabled=inherited||preset.value==='dynamic';
-  const paper=inherited?(selectedScope==='page'?visible.groups[familyOf(pages[Number(page.value)])]||visible.default:visible.default):cleanPaper({preset:preset.value,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
+  paperLock.disabled=inherited||preset.value==='dynamic';custom.hidden=preset.value!=='custom';orientation.disabled=inherited||preset.value==='dynamic';
+  const paper=inherited?(selectedScope==='page'?visible.groups[familyOf(pages[Number(page.value)])]||visible.default:visible.default):cleanPaper({preset:preset.value,locked:paperLock.checked,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
   const shape=paperDimensions(paper);
-  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm proportions ('+paper.orientation+'). Auto-fit may continue dense wireless content onto additional sheets; Preserve existing layout keeps the current arrangement.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
+  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm '+(paperLock.checked?'locked size':'proportions')+' ('+paper.orientation+'). Auto-fit may continue dense wireless content onto additional sheets; Preserve existing layout keeps the current arrangement.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
  }
  function load(){
   groupRow.hidden=selectedScope!=='group';pageRow.hidden=selectedScope!=='page';
   const paper=lookup(),inherit=!paper&&selectedScope!=='all';
-  preset.value=inherit?'inherit':(paper?.preset||'dynamic');orientation.value=paper?.orientation||'landscape';width.value=paper?.widthMm||297;height.value=paper?.heightMm||420;
+  paperLock.checked=paper?.locked===true;preset.value=inherit?'inherit':(paper?.preset||'dynamic');orientation.value=paper?.orientation||'landscape';width.value=paper?.widthMm||297;height.value=paper?.heightMm||420;
   if(selectedScope==='all')preset.querySelector('option[value="inherit"]').disabled=true;
   else preset.querySelector('option[value="inherit"]').disabled=false;
   update();
@@ -694,7 +714,8 @@ function pageOptions(){
  target.onchange=()=>{store();selectedScope=target.value;load();};
  group.onchange=()=>{store();selectedGroup=group.value;load();};
  page.onchange=()=>{store();selectedPage=pages[Number(page.value)]?.name||'';load();};
- for(const input of [preset,orientation,width,height])input.oninput=update;
+ for(const input of [orientation,width,height,paperLock])input.oninput=update;
+ preset.oninput=()=>{paperLock.checked=!['dynamic','inherit'].includes(preset.value);update();};
  load();
  const printing=el('details');printing.append(el('summary','Printing'));body.append(printing);
  const printSize=field(printing,'Print paper',setup.printPaper?.preset||'drawing',[['drawing','Match visible drawing page'],...paperSizes.filter(([id])=>id!=='original')]);
@@ -717,10 +738,11 @@ function pageOptions(){
   if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
   if(first.value===''||!Number.isInteger(+first.value)||+first.value<0||+first.value>9999)throw Error('Use a first page number from 0 to 9999.');
   if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');
-  store();visible.fitMode=fitMode.value;
+  store();visible.fitMode=fitMode.value;visible.lockFrames={};
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
   let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
+  for(const page of prepared)if(page.pageLockFrame)project.layout.pageSetup.visible.lockFrames[page.name]=page.pageLockFrame;
   perform('page-options',prepared);close();viewport.fit();say('Visible page proportions, print settings and page numbering saved. Visible page layout updated.');
  },'primary');
 }
@@ -950,7 +972,8 @@ function devicePortFields(parent,device){
  const section=el('details'),list=el('div'),rows=[];
  section.append(el('summary','Edit ports'),el('p','Add an interface by name, or expand a port to edit its details. Use commas to separate tagged VLAN IDs.','hint'),list);
  parent.append(section);
- const normalize=name=>String(name??'').trim().toLowerCase();
+ const normalize=name=>String(name??'').trim().toLowerCase(),vlanOptions=existingVlanOptions(project,device);
+ const suggest=(input,values)=>{const list=el('datalist');list.id=input.id+'-choices';for(const option of values){const row=el('option');row.value=String(option.id??option);if(option.label)row.label=option.label;list.append(row);}input.after(list);input.setAttribute('list',list.id);};
  const connected=new Set(project.links.flatMap(link=>[
   ...(link.a===device.id?[normalize(link.ap)]:[]),
   ...(link.b===device.id?[normalize(link.bp)]:[])
@@ -966,7 +989,14 @@ function devicePortFields(parent,device){
    const value=key==='mac'?deviceMacs(port).join(', '):Array.isArray(port[key])?port[key].join(', '):port[key]??'';
    const input=field(cell,label,value);
    fields[key]={input,initial:input.value};
+   if(key==='role')suggest(input,portRoleOptions);if(key==='speed')suggest(input,portSpeedOptions);if(key==='native')suggest(input,vlanOptions);
   }
+  const vlanPicker=el('details','','port-vlan-picker');vlanPicker.append(el('summary','Select tagged VLANs'));const vlanError=el('p','','error');vlanError.hidden=true;vlanError.setAttribute('role','alert');vlanPicker.append(vlanError);
+  if(vlanOptions.length){const options=el('div','','port-vlan-options');vlanPicker.append(options);const checks=[];
+   for(const vlan of vlanOptions){const label=el('label','','check-option'),check=el('input');check.type='checkbox';check.value=String(vlan.id);check.setAttribute('aria-label','Tagged VLAN '+vlan.label);label.append(check,document.createTextNode(vlan.label));options.append(label);checks.push(check);check.onchange=()=>{try{vlanError.hidden=true;const current=new Set(portVlanIds(fields.tagged.input.value));if(check.checked)current.add(vlan.id);else current.delete(vlan.id);fields.tagged.input.value=[...current].sort((a,b)=>a-b).join(', ');fields.tagged.input.dispatchEvent(new Event('input',{bubbles:true}));}catch(error){check.checked=!check.checked;vlanError.textContent=error.message;vlanError.hidden=false;fields.tagged.input.focus();}};}
+   const sync=()=>{let ids;try{ids=new Set(portVlanIds(fields.tagged.input.value));}catch{return;}for(const check of checks)check.checked=ids.has(Number(check.value));};fields.tagged.input.addEventListener('input',sync);sync();
+  }else vlanPicker.append(el('p','No VLANs are defined yet. Enter a native or tagged VLAN ID manually.','hint'));
+  box.append(vlanPicker,el('p','Choose a role or speed from the dropdown, or type a custom value. Native VLAN accepts one ID; tagged VLANs accept comma-separated IDs or the selections above.','hint'));
   const name=fields.name.input;
   name.readOnly=linked;
   const refresh=()=>title.textContent=(name.value.trim()||'New port')+(fields.description.input.value.trim()?' | '+fields.description.input.value.trim():'');
@@ -989,9 +1019,8 @@ function devicePortFields(parent,device){
      if(key==='mac'){next.mac=inputMacAddresses(value);for(const alias of ['macs','macAddress','macAddresses','mac_address','mac_address(es)'])delete next[alias];continue;}
      if(!value){delete next[key];continue;}
      if(key==='native'||key==='tagged'){
-      const ids=value.split(',').map(id=>id.trim());
-      if((key==='native'&&ids.length!==1)||ids.some(id=>!/^\d+$/.test(id)||Number(id)<1||Number(id)>4094))throw Error('Enter VLAN IDs from 1 to 4094.');
-      next[key]=key==='native'?Number(ids[0]):[...new Set(ids.map(Number))];
+      const ids=portVlanIds(value,{single:key==='native'});
+      next[key]=key==='native'?ids[0]:ids;
      }else next[key]=value;
     }
     const name=normalize(next.name);
@@ -1002,6 +1031,9 @@ function devicePortFields(parent,device){
    }catch(error){box.open=true;throw error;}
   });
  };
+}
+function configureDeviceStack(device){
+ editDeviceStack(project,device,{el,field,button,actions,modal,close,save:layout=>{const before=project.layout;try{project.layout=layout;const prepared=validateDrawing();perform('devices',prepared);say('Device stack saved. Select Undo to restore.');}catch(error){project.layout=before;throw error;}}});
 }
 function editDevice(current,afterSave){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
@@ -1016,6 +1048,7 @@ function editDevice(current,afterSave){
  const options=[['','Schematic front'],...Object.values(project.stencils).filter(a=>a.view!=='rear').map(s=>[s.id,s.name])];
  const shape=field(body,'Front-panel stencil',d.stencilId||'',options);
  const scale=field(body,'Device scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=10;scale.max=400;scale.step=5;
+ if(current)button(actions(body),'Configure device stack',()=>configureDeviceStack(d));
  const hardware=el('details');hardware.append(el('summary','Stack members and installed modules'));body.append(hardware);
  hardware.append(el('p','Confirm each member model and installed card. For 2920 rear bays A/B use J9731A (SFP+) or J9732A (copper). For Cisco network modules use slot NM. For 3560-E X2-1/X2-2 slots use CVR-X2-SFP or the installed X2 transceiver model. Leave unknown cards unassigned.','hint'));
  const memberRows=[],moduleRows=[],memberList=el('div'),moduleList=el('div');hardware.append(memberList);

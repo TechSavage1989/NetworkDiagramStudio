@@ -1,3 +1,4 @@
+import {devicePoint,deviceBounds} from './device-geometry.mjs';
 import {informationPanel} from './information-panel.mjs';
 import {columnLayouts} from '../compact-layout.mjs';
 import {equipmentGapPlan,equipmentPadding} from './equipment-layout.mjs';
@@ -127,7 +128,7 @@ function measurement(project,d,edges,positions,handoffs=[],width=WIDTH,padding=1
  // This space is allocated before packing, so cable tracks cannot enter the next row.
  const {pitch,topClearance,bottomClearance}=spacing(padding,weight,wide);
  const top=d.kind==='handoff'?23:Math.max(40+6*padding,counts.top?topClearance+14*padding+pitch*(counts.top-1):0,handoffs.length?handoffRows(handoffs,g.w).height+72+40*padding:0),bottom=d.kind==='handoff'?20:counts.bottom?bottomClearance+26*padding+pitch*(counts.bottom-1):Math.max(24,28*padding);
- const detailHeight=Math.max(18,wrapPortText(deviceDetails(d),g.w,12).length*14.4);
+ const detailHeight=Math.max(18,wrapPortText(deviceDetails(d,project),g.w,12).length*14.4);
  return {body:g.h,width:g.w,top,equipment,height:d.kind==='handoff'&&d.owner?0:g.h+top+Math.max(bottom,detailHeight+10)+10*padding};
 }
 // Measured core arrangements for any equipment mix. Compact runs the saved
@@ -167,7 +168,7 @@ function arrangeCore(boxes,links,{mode='compact',weight=4,extraTracks=0,reserve=
 const routeMemo=new Map();
 function memoRoutes(internal,external,endData,banks,nodes,options){
  let key;
- try{key=JSON.stringify([internal.map(e=>[e.idx,e.a,e.ap,e.b,e.bp,e.weight]),external.map(e=>[e.idx,e.a,e.ap,e.b,e.bp,e.weight]),[...endData.entries()].map(([k,v])=>[k,v.id,v.which,v.node.key,v.anchor,v.info?.plug?1:0]),[...nodes.values()].map(n=>[n.key,n.kind,n.sourceId,n.x,n.y,n.w,n.h,!!n.moduleChannel,n.panelRegions]),{...options,obstacles:options.obstacles.map(o=>[o.x,o.y,o.w,o.h,o.angle||0])}]);}
+ try{key=JSON.stringify([internal.map(e=>[e.idx,e.a,e.ap,e.b,e.bp,e.weight]),external.map(e=>[e.idx,e.a,e.ap,e.b,e.bp,e.weight]),[...endData.entries()].map(([k,v])=>[k,v.id,v.which,v.node.key,v.anchor,v.info?.plug?1:0]),[...nodes.values()].map(n=>[n.key,n.kind,n.sourceId,n.x,n.y,n.w,n.h,n.angle||0,!!n.moduleChannel,n.panelRegions]),{...options,obstacles:options.obstacles.map(o=>[o.x,o.y,o.w,o.h,o.angle||0])}]);}
  catch{return coreRoutes(internal,external,endData,banks,nodes,options);}
  const edges=new Map([...internal,...external].map(e=>[e.idx,e])),byKey=new Map([...nodes.values()].map(n=>[n.key,n])),cached=routeMemo.get(key);
  if(cached){routeMemo.delete(key);routeMemo.set(key,cached);}
@@ -186,7 +187,7 @@ function memoRoutes(internal,external,endData,banks,nodes,options){
 function moduleLegend(page,project){
  const panelSettings=presentation(project,page).panel;
  if(!panelSettings.visible||!panelSettings.sections.includes('modules')||panelSettings.sectionContent.modules?.trim())return [];
- const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
+ const modules=new Map();for(const plug of page.items.filter(i=>i.kind==='plug')){const key=plug.asset?.id||plug.moduleLegendKey||plug.masterKey;if(!modules.has(key))modules.set(key,{plug,ports:[]});const item=modules.get(key),host=page.items.find(i=>i.key===plug.host?.device);if(host)item.ports.push((host.name||host.sourceId)+' '+plug.host.port);}
  if(!modules.size)return [];
  // Older drawings shared one SFP legend across reaches. Keep its saved edits
  // on the original category, or the first remaining category when it is absent.
@@ -318,7 +319,7 @@ export function corePages(project,inventory){
    if(d.kind!=='handoff'){
     const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleY=node.y-titleHeight-6;
     label(items,node.x,titleY,titleWidth,titleHeight,titleValue,titleSize,titlePatch.bold??true);Object.assign(items.at(-1),{full:true,titleOwner:id,editKey:titleKey});
-    const detail=deviceDetails(d);
+    const detail=deviceDetails(d,project);
     const detailKey=page.name+'|detail|'+id,detailPatch=pageProject.layout?.drawingEdits?.[detailKey]||{},detailValue=detailPatch.value??detail,detailSize=detailPatch.size||12,detailWidth=detailPatch.w||Math.min(node.w,textWidth(detailValue,detailSize,detailPatch.bold)),detailHeight=Math.max(detailPatch.h||18,wrapPortText(detailValue,detailWidth,detailSize,detailPatch.bold).length*detailSize*1.2);
     label(items,node.x,node.y+node.h+5,detailWidth,detailHeight,detailValue,detailSize,detailPatch.bold??false,C.muted);Object.assign(items.at(-1),{full:true,titleOwner:id,titleSlot:'detail',editKey:detailKey});
    }
@@ -334,6 +335,7 @@ export function corePages(project,inventory){
     label(items,node.x+12*scale,node.y+(card.titleHeight+6)*scale,Math.max(1,(node.w-24*scale)/1.12),card.detailHeight*scale,card.detail,12*scale,false,C.muted);items.at(-1).deviceTextOwner=id;
    });
   }
+  for(const text of items.filter(i=>i.type==='text'&&i.deviceTextOwner)){const body=nodes.get(text.deviceTextOwner);if(!body?.angle)continue;const [cx,cy]=devicePoint(body,(text.x+text.w/2-body.x)/body.w,(text.y+text.h/2-body.y)/body.h);text.x=cx-text.w/2;text.y=cy-text.h/2;text.angle=(text.angle||0)+body.angle;}
   applyDrawingEdits(page,pageProject);
   const endData=new Map(),banks=new Map();
   for(const e of used)for(const [id,port,other,which] of [[e.a,e.ap,e.b,'a'],[e.b,e.bp,e.a,'b']]){
@@ -341,9 +343,9 @@ export function corePages(project,inventory){
    const node=nodes.get(id),info=mediaInfo(e.media,db.devices.get(e.a).kind==='ap'||db.devices.get(e.b).kind==='ap');
    const peer=nodes.get(other),preferred=peer?(peer.y+peer.h/2<node.y+node.h/2?'top':'bottom'):positions.get(other)<positions.get(id)?'top':'bottom';
    const peerPort=which==='a'?e.bp:e.ap,peerPoint=peer&&Object.entries(peer.ports).find(([name])=>name.toLowerCase()===String(peerPort).toLowerCase())?.[1];
-   const weight=cableStrokeWeight(pageProject,page,db,e),anchorOptions={weight,...(peer?{peer:{x:peer.x+(peerPoint?.[0]??.5)*peer.w,y:peer.y+(peerPoint?.[1]??.5)*peer.h}}:{})};
+   const weight=cableStrokeWeight(pageProject,page,db,e),anchorOptions={weight,...(peer?{peer:Object.fromEntries(['x','y'].map((axis,index)=>[axis,devicePoint(peer,peerPoint?.[0]??.5,peerPoint?.[1]??.5)[index]]))}:{})};
    let anchor=getAnchor(node,port,preferred,e.idx*2+(which==='b'?1:0),anchorOptions);
-   if(node.kind==='ap'){
+   if(node.kind==='ap'&&!Object.keys(node.ports).some(name=>name.toLowerCase()===String(port).toLowerCase())){
     const k='uplink.core.'+which+e.idx,side=preferred;node.ports[k]=[.5,side==='top'?0:1];anchor=getAnchor(node,k,side,0,anchorOptions);
    }
    if(node.kind!=='handoff'&&node.kind!=='ap'&&info.plug&&!anchor.port.startsWith('uplink.'))anchor=optic(page,pageProject,db.devices.get(id),node,anchor,info);
@@ -351,8 +353,8 @@ export function corePages(project,inventory){
    if(!banks.has(key))banks.set(key,[]);banks.get(key).push(data);endData.set(e.idx+'/'+which,data);
   }
   const pinnedTitles=new Set(items.filter(i=>i.titleOwner&&(Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.x)||Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.y))).map(i=>i.titleOwner));
-  const obstacles=[...items.filter(i=>i.type==='text'&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>b.x<b.owner.x||b.y<b.owner.y||b.x+b.w>b.owner.x+b.owner.w||b.y+b.h>b.owner.y+b.owner.h)];
-  const stack=[...nodes.values()].filter(n=>n.kind!=='handoff');
+  const obstacles=[...items.filter(i=>i.type==='text'&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>{const owner=deviceBounds(b.owner);return b.x<owner.x||b.y<owner.y||b.x+b.w>owner.x+owner.w||b.y+b.h>owner.y+owner.h;})];
+  const stack=[...nodes.values()].filter(n=>n.kind!=='handoff').map(n=>({...n,...deviceBounds(n)}));
   const routingBounds=stack.length?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
   let planned;
   try{planned=memoRoutes(internal,external,endData,banks,nodes,{referenceLabel,...routingBounds,minX:sidebar.contentLeft,maxX:W-38,...spacing(fit.padding,weight,railPitch>12),railPitch,scale,obstacles,uniform:lineSpacing(aliasProject,sheet.name)});}

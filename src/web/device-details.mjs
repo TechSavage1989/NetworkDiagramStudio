@@ -1,3 +1,4 @@
+import {stackCaption} from './device-stacks.mjs';
 // Display only supplied hardware identities and addresses. Interface MACs are
 // kept with their interface; learned/forwarding-table peers are not identities.
 const text=value=>typeof value==='string'?value.trim():'';
@@ -34,7 +35,7 @@ export function macCaption(device,port,{full=false,counts=true}={}){
 }
 // Device captions carry model, platform and address. MAC addresses stay in the
 // device editor and the full-list information panel, not under every device.
-export function deviceDetails(device){
+export function deviceDetails(device,project){
  const platform=text(device?.technology),model=deviceModel(device);
- return [model,platform&&platform.toLowerCase()!==text(device?.model).toLowerCase()?platform:'',text(device?.ip)].filter(Boolean).join('  |  ');
+ return [project?stackCaption(project,device.id):'',model,platform&&platform.toLowerCase()!==text(device?.model).toLowerCase()?platform:'',text(device?.ip)].filter(Boolean).join('  |  ');
 }

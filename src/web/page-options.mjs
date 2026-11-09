@@ -7,7 +7,7 @@ export function footerAllowance(project){const p=cleanPageNumbers(project?.layou
 // Scene units are 96 per inch in SVG, printing and native Visio.
 export const paperSizes=[['original','Original drawing',317.5,257.96875],['letter','Letter',215.9,279.4],['legal','Legal',215.9,355.6],['tabloid','Tabloid / Ledger',279.4,431.8],['a5','A5',148,210],['a4','A4',210,297],['a3','A3',297,420],['a2','A2',420,594],['a1','A1',594,841],['custom','Custom',297,420]];
 export const pageFamilies=[['core','Core network'],['ports','Port maps'],['wireless','Wireless connections'],['logical','VLANs and routing'],['trunk','Trunk VLANs'],['switchports','Switchport reports']];
-export function cleanPaper(raw){const p=raw&&typeof raw==='object'?raw:{},preset=p.preset==='dynamic'||paperSizes.some(v=>v[0]===p.preset)?p.preset:'dynamic';return {preset,orientation:p.orientation==='portrait'?'portrait':'landscape',widthMm:Number.isFinite(+p.widthMm)&&+p.widthMm>=148&&+p.widthMm<=1500?+p.widthMm:297,heightMm:Number.isFinite(+p.heightMm)&&+p.heightMm>=148&&+p.heightMm<=1500?+p.heightMm:420};}
+export function cleanPaper(raw){const p=raw&&typeof raw==='object'?raw:{},preset=p.preset==='dynamic'||paperSizes.some(v=>v[0]===p.preset)?p.preset:'dynamic';return {preset,locked:p.locked===true,orientation:p.orientation==='portrait'?'portrait':'landscape',widthMm:Number.isFinite(+p.widthMm)&&+p.widthMm>=148&&+p.widthMm<=1500?+p.widthMm:297,heightMm:Number.isFinite(+p.heightMm)&&+p.heightMm>=148&&+p.heightMm<=1500?+p.heightMm:420};}
 export function cleanPageSetup(raw){
  const p=raw&&typeof raw==='object'?raw:{},visible=p.visible&&typeof p.visible==='object'?p.visible:{},groups=visible.groups&&typeof visible.groups==='object'?visible.groups:{},individual=visible.pages&&typeof visible.pages==='object'?visible.pages:{};
  const safe=name=>typeof name==='string'&&name.length>0&&name.length<=300&&!['__proto__','prototype','constructor'].includes(name);
@@ -15,7 +15,7 @@ export function cleanPageSetup(raw){
   default:cleanPaper(p.default),
   overrides:Object.fromEntries(pageFamilies.filter(([key])=>p.overrides?.[key]).map(([key])=>[key,cleanPaper(p.overrides[key])])),
   printPaper:p.printPaper&&p.printPaper.preset!=='dynamic'?cleanPaper(p.printPaper):null,
-  visible:{fitMode:visible.fitMode==='preserve'?'preserve':'optimize',default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
+  visible:{lockFrames:Object.fromEntries(Object.entries(visible.lockFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]]))])),fitMode:visible.fitMode==='preserve'?'preserve':'optimize',default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
  };
 }
 export function pageFamily(name){return /^Switchport reports/i.test(name)?'switchports':/^(?:MDF Port Map|Port Inventory)/i.test(name)?'ports':/^Wireless Connections/i.test(name)?'wireless':/^VLANs and Routing/i.test(name)?'logical':/^Trunk VLAN/i.test(name)?'trunk':'core';}
@@ -66,24 +66,30 @@ export function fitVisiblePage(page,project){
  // An adaptive port map was already planned inside this exact paper ratio,
  // including margins, title, complete key and footer. Do not shrink its
  // full page a second time or introduce another border of empty space.
- if(page.adaptivePortMap&&visibleFitMode(project)==='optimize'&&Math.abs(page.width/page.height-dimensions.ratio)<1e-7){
+ if(!paper.locked&&page.adaptivePortMap&&visibleFitMode(project)==='optimize'&&Math.abs(page.width/page.height-dimensions.ratio)<1e-7){
   page.visiblePaper=paper;page.visibleFitMode='optimize';
   page.printPaper=cleanPageSetup(project?.layout?.pageSetup).printPaper||paper;
   return page;
  }
  const sourceW=page.width,sourceH=page.height,originX=page.originX||0,originY=page.originY||0,ratio=dimensions.ratio;
- const preserve=visibleFitMode(project)==='preserve',width=Math.max(sourceW,sourceH*ratio),height=Math.max(sourceH,sourceW/ratio);
+ const preserve=visibleFitMode(project)==='preserve',locked=paper.locked===true,physicalW=dimensions.widthMm*96/25.4,physicalH=dimensions.heightMm*96/25.4,width=locked?physicalW:Math.max(sourceW,sourceH*ratio),height=locked?physicalH:Math.max(sourceH,sourceW/ratio);
+ if(locked&&preserve&&(sourceW>width+1e-6||sourceH>height+1e-6))throw Error('The drawing exceeds the locked page size. Choose Auto-fit, a larger paper size, or unlock the page in Page options.');
+ const frozen=locked?cleanPageSetup(project?.layout?.pageSetup).visible.lockFrames[page.name]:null;
  let factor=1,dx=(width-sourceW)/2,dy=(height-sourceH)/2;
- if(!preserve){
+ if(!preserve||frozen){
   // Calculate a size-independent page frame. Scaling to fill it gives an
   // effective fit on either portrait or landscape paper; device proportions,
   // socket glue and exact manual relative positions remain unchanged.
   const area=Math.max(1,sourceW*sourceH);
-  const targetW=Math.sqrt(area*ratio),targetH=targetW/ratio;
+  const targetW=locked?physicalW:Math.sqrt(area*ratio),targetH=locked?physicalH:targetW/ratio;
   const margin=24,fit=Math.min((targetW-2*margin)/sourceW,(targetH-2*margin)/sourceH);
+  if(locked&&fit<.05)throw Error('The drawing is too large for the locked page. Choose a larger paper size or unlock the page in Page options.');
   factor=Math.max(.05,Math.min(4,fit));
   dx=originX+margin+(targetW-2*margin-sourceW*factor)/2-originX*factor;
   dy=originY+margin+(targetH-2*margin-sourceH*factor)/2-originY*factor;
+  if(frozen){factor=frozen.scale;dx=frozen.x;dy=frozen.y;
+   if(originX*factor+dx<frozen.originX-1e-6||originY*factor+dy<frozen.originY-1e-6||(originX+sourceW)*factor+dx>frozen.originX+frozen.width+1e-6||(originY+sourceH)*factor+dy>frozen.originY+frozen.height+1e-6)throw Error('This change exceeds the locked page. Move or resize items, choose a larger paper, or unlock the page in Page options.');
+  }
   for(const item of page.items){
    const prev=item.presentation||{scale:1,x:0,y:0,fontScale:1};
    item.presentation={...prev,scale:(prev.scale||1)*factor,x:(prev.x||0)*factor+dx,y:(prev.y||0)*factor+dy,fontScale:(prev.fontScale||1)*factor};
@@ -102,12 +108,13 @@ export function fitVisiblePage(page,project){
    }
   }
   if(page.sidebar)page.sidebar={...page.sidebar,...Object.fromEntries(['divider','contentLeft','titleLeft','bodyLeft'].filter(k=>Number.isFinite(page.sidebar[k])).map(k=>[k,page.sidebar[k]*factor+dx])),...(Number.isFinite(page.sidebar.width)?{width:page.sidebar.width*factor}:{})};
-  page.originX=originX;page.originY=originY;
+  page.originX=frozen?.originX??originX;page.originY=frozen?.originY??originY;
   page.width=targetW;page.height=targetH;
  }else{
   page.originX=originX-(width-sourceW)/2;page.originY=originY-(height-sourceH)/2;
   page.width=width;page.height=height;
  }
+ if(locked)page.pageLockFrame={scale:factor,x:preserve&&!frozen?0:dx,y:preserve&&!frozen?0:dy,originX:page.originX,originY:page.originY,width:page.width,height:page.height};
  page.widthMm=page.width*25.4/96;page.heightMm=page.height*25.4/96;
  page.visiblePaper=paper;page.visibleFitMode=preserve?'preserve':'optimize';
  page.printPaper=cleanPageSetup(project?.layout?.pageSetup).printPaper||paper;

@@ -81,7 +81,7 @@ export function adaptivePortMap(item,palette,request,identity){
    const at=width=>arrange(P.devicePlan(item,style,width,true),columns);
    const fits=plan=>plan&&plan.width<=roomWidth+.001&&plan.height<=roomHeight+.001;
    if(!fits(at(base.portWidth)))continue;
-   let low=base.portWidth,high=Math.max(low,56);
+   let low=base.portWidth,high=Math.max(low,item.standardPortWidth??56);
    for(let step=0;step<15;step++){const mid=(low+high)/2;if(fits(at(mid)))low=mid;else high=mid;}
    const plan=at(low),radius=P.fillRadius(inv,plan);
    if(radius==null)continue;

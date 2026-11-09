@@ -47,8 +47,10 @@ test('placement pins every other device and generated handoff at each drawing sc
 test('quick scaling respects page transforms and native child selection, preserving cable glue after reopen',()=>{
  const project=sampleSite();project.layout={presentation:{defaults:{drawingScale:1.5}}};const page=buildPages(project)[0],device=page.items.find(i=>i.sourceId==='sw-1'&&i.type==='device');
  project.layout.drawingEdits=scaleDrawingItems(page,{},[device.editKey,device.children[0].editKey],.75);
- assert.equal(Object.keys(project.layout.drawingEdits).length,1);
+ assert.ok(Object.keys(project.layout.drawingEdits).length>1,'model sizing pins visible core positions');
+ assert.equal(project.layout.drawingEdits[device.children[0].editKey],undefined,'selected child is not resized twice');
  const rebuilt=buildPages(JSON.parse(JSON.stringify(project)))[0],actual=rebuilt.items.find(i=>i.editKey===device.editKey);assert.equal(actual.w,device.w*.75);assert.equal(actual.h,device.h*.75);
+ for(const before of page.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&!i.panelGroup)){const after=rebuilt.items.find(i=>i.editKey===before.editKey);assert.equal(after.x,before.x);assert.equal(after.y,before.y);}
  const cables=rebuilt.items.filter(i=>i.type==='path');
  for(const cable of cables)for(const [end,point] of [[cable.from,cable.points[0]],[cable.to,cable.points.at(-1)]]){
   assert.deepEqual(point,[end.x,end.y]);const owner=rebuilt.items.find(item=>item.key===end.device),port=owner.ports[end.port];
@@ -135,4 +137,13 @@ test('a cable with saved bends moves whole when both of its devices move togethe
  const built=rebuild(project);project.layout.drawingEdits=moveDrawingItems(built,project.layout.drawingEdits,new Map([[owner.editKey,[120,-60]]]));
  assert.deepEqual(project.layout.drawingEdits[cable.editKey].points,bent.map(([x,y])=>[x+120,y-60]));
  const next=rebuild(project),path=at(next,cable.editKey);assert.deepEqual(path.points,bent.map(([x,y])=>[x+120,y-60]));
+});
+test('right information panel follows resized models and final captions after page scaling and reopen',()=>{
+ const project=sampleSite();project.layout={presentation:{defaults:{drawingScale:1.5,panel:{position:'right',sections:['connections','models']}}}};
+ const page=buildPages(project)[0],device=page.items.find(i=>i.type==='device'&&i.sourceId==='sw-1');
+ project.layout.drawingEdits=scaleDrawingItems(page,{},[device.editKey],.9);
+ const rebuilt=buildPages(JSON.parse(JSON.stringify(project)))[0],panel=rebuilt.items.filter(i=>i.panelGroup),content=rebuilt.items.filter(i=>!i.panelGroup&&!i.pageFrame&&!i.pageTitle&&!i.pageHeading&&(i.type==='device'||i.type==='path'||i.y>=145*1.5));
+ const left=Math.min(...panel.map(i=>i.x)),right=Math.max(...content.flatMap(i=>i.points?i.points.map(p=>p[0]):[i.x+(i.w||0)]));
+ assert.ok(panel.length);assert.ok(left>=right+26*1.5-1e-6,'panel follows final content, including scaled labels');
+ assert.match(rebuilt.svg,/CONNECTION TYPES/);
 });

@@ -1,3 +1,4 @@
+import {reconcileConfiguredRoutes} from './imports/routing-records.mjs';
 import {reportPaperChoices} from './reports/paper.mjs';
 import {parseConfig,mergeModels,findDeviceIdentity} from './imports/index.mjs';
 import {importReportSupplementary,supplementaryPromptHostname} from './reports/supplementary.mjs';
@@ -89,12 +90,11 @@ export async function enrichSwitchportSources(files,sources,existingDevices=[]){
    const result=await nativeImport(files[i]);
    for(const item of result?.items||[]){const incoming=nativeDevice(item,{independent:false}),matches=source.model.devices.filter(d=>d.name.toLowerCase()===incoming.name.toLowerCase());
     if(matches.length===1){const d=matches[0];hydrateNativeConfiguration(d,incoming,source.model.warnings);d.switchportInventory=item.inventory;d.reportDetails=lowerRows(item.details||d.reportDetails);d.reportSupplementary=item.supplementary||[];
-     if(!d.routes?.length&&incoming.routes?.length)d.routes=structuredClone(incoming.routes);
-     else if(d.routes?.length&&incoming.routes?.length){
-      const nativeRoutes=new Set(incoming.routes.map(route=>JSON.stringify(route))),same=d.routes.length===incoming.routes.length&&d.routes.every(route=>nativeRoutes.has(JSON.stringify(route)));
-      if(!same){const notice='Browser topology routes are retained; equivalence to the native configured route text is unconfirmed. Review both route inventories before use.';
+     if(incoming.routes?.length){
+      const reconciled=reconcileConfiguredRoutes(d.routes||[],incoming.routes);d.routes=reconciled.routes;
+      if(reconciled.unresolved){const notice='Some configured route syntax or qualifiers could not be compared safely. All distinct route records are retained; review the unresolved references before use.';
        source.model.warnings.push(d.name+': '+notice);
-       const field=Object.hasOwn(item.inventory,'Assumptions')?'Assumptions':'assumptions';(item.inventory[field]||=[]).push(notice);
+       if(item.inventory){const field=Object.hasOwn(item.inventory,'Assumptions')?'Assumptions':'assumptions';(item.inventory[field]||=[]).push(notice);}
       }
      }
      // The report parser can recover a supported configuration for which the

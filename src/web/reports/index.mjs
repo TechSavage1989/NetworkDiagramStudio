@@ -1,6 +1,6 @@
 import {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReportInventory,validateInventory,inventoryCsv,technicianSummary,reportFolder,reportText} from './model.mjs';
 import {sharedReportPalette} from './palette.mjs';
-import {reportDiagram,workspaceDiagrams,inventoryPages,blockedReport,validateReportScene,ReportCapacityError,numberReportPages} from './scene.mjs';
+import {reportDiagram,workspaceDiagrams,inventoryPages,blockedReport,validateReportScene,ReportCapacityError,numberReportPages,standardPortMapWidth} from './scene.mjs';
 import {reportPageLabel,reportFileStem} from './paper.mjs';
 import {cleanPageNumbers,targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions} from '../page-options.mjs';
 import {adaptivePortMap} from './adaptive-port-map.mjs';
@@ -67,7 +67,15 @@ export function buildReportPackage(project,selectedIds){
 export function portMapSheets(project,devices,paper,artwork=new Map()){
  const ids=devices.map(device=>device.id),sheets=new Map();if(!ids.length)return sheets;
  let prepared;try{prepared=prepare({...project,layout:{...project.layout,switchport:{...(project.layout?.switchport||{}),enabled:true,deviceIds:ids}}},ids);}catch{return sheets;}
- const {items,palette}=prepared,request={...prepared.request,pageFooter:cleanPageNumbers(project.layout?.pageNumbers),paper,fill:!!paper?.fill,dynamicCanvas:true,targetAspect:targetPageAspect(project,{name:'MDF Port Map',family:'ports'})};
+ const {items,palette}=prepared;
+ // All port maps start with the same stack-reference socket size. Increase
+ // the shared size only when complete VLAN markers require it, never merely
+ // because a small chassis has spare page space. Adaptive paper fitting may
+ // uniformly reduce a whole sheet, preserving these media proportions.
+ const standardWidths=[];for(const item of items.filter(item=>item.validation.ok))try{standardWidths.push(standardPortMapWidth(item.inventory));}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;item.validation.ok=false;item.validation.errors.push(error.message);}
+ const standardWidth=Math.max(30,...standardWidths);
+ for(const item of items)item.standardPortWidth=standardWidth;
+ const request={...prepared.request,pageFooter:cleanPageNumbers(project.layout?.pageNumbers),paper,fill:!!paper?.fill,dynamicCanvas:true,targetAspect:targetPageAspect(project,{name:'MDF Port Map',family:'ports'})};
  for(const item of items){
   if(!item.validation.ok)continue;
   // Port maps paint the builder sheet in the device's core-diagram colors.

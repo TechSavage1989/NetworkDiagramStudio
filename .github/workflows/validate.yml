@@ -68,8 +68,14 @@ jobs:
             @{ name = 'page-navigation'; script = 'tests/browser-page-navigation.mjs' },
             @{ name = 'connection-labels'; script = 'tests/browser-connection-labels.mjs' },
             @{ name = 'adaptive-port-map'; script = 'tests/browser-adaptive-port-map.mjs' },
+            @{ name = 'standard-port-map'; script = 'tests/browser-standard-port-map.mjs' },
             @{ name = 'page-layout-defaults'; script = 'tests/browser-page-layout-defaults.mjs' },
-            @{ name = 'direct-transforms'; script = 'tests/browser-direct-transforms.mjs' }
+            @{ name = 'direct-transforms'; script = 'tests/browser-direct-transforms.mjs' },
+            @{ name = 'device-rotation'; script = 'tests/browser-device-rotation.mjs' },
+            @{ name = 'panel-content'; script = 'tests/browser-panel-content.mjs' },
+            @{ name = 'interactive-html'; script = 'tests/browser-interactive-html.mjs' },
+            @{ name = 'device-stacks'; script = 'tests/browser-device-stacks.mjs' },
+            @{ name = 'port-sizing-controls'; script = 'tests/browser-port-sizing-controls.mjs' }
           )
           $results = @()
           foreach ($check in $checks) {

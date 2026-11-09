@@ -144,10 +144,10 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 .pagebar .tabs{flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:#87a5ad transparent;overscroll-behavior-x:contain}
 .pagebar .tabs button{flex:0 0 auto}
 /* Persistent sidebar page groups: never overlay the drawing or inventory. */
-aside .page-navigation{display:block;padding:12px 0;flex:none}
-aside .page-navigation[hidden]{display:none}
+.pages-sidebar.page-navigation{display:flex;flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:0;padding:16px 12px;min-width:0;min-height:0;overflow:hidden;border-bottom:0}
+.pages-sidebar.page-navigation[hidden]{display:none}
 .page-navigation h2{margin-bottom:8px}
-#page-families{display:block;max-height:clamp(130px,28vh,300px);overflow:auto;overscroll-behavior:contain;padding:3px}
+#page-families{display:block;flex:1;min-height:0;max-height:none;overflow:auto;overscroll-behavior:contain;padding:3px}
 #page-families .page-group{margin:3px 0}
 #page-families .page-group summary{cursor:pointer;user-select:none;font-size:12px;font-weight:600;padding:7px 6px;background:#f5f8f9;border:1px solid transparent;border-radius:4px;overflow-wrap:anywhere}
 #page-families .page-group summary.active{background:#e0eff1;border-color:#9abcc4;color:#095d6c}
@@ -212,3 +212,33 @@ aside .page-navigation[hidden]{display:none}
 
 /* Do not inherit full-width form fields inside the compact text toolbar. */
 .drawing-tools .quick-text-tools{min-width:0;max-width:100%;flex:0 1 auto}.quick-text-tools select{width:auto;min-width:80px;padding:4px 7px;font-size:11px}.quick-text-tools label{margin:0;white-space:nowrap;font-size:11px}.quick-text-tools input[type=number]{height:28px;padding:4px 7px}.quick-text-tools input[type=checkbox]{margin:0 2px}
+
+/* Drawing pages have an independent rail beside the project workspace.
+   When three columns would pinch the canvas, bound both navigation panels
+   above it instead. Hidden navigation reclaims its column on a new project. */
+main{grid-template-columns:250px 210px minmax(0,1fr)}
+main:not(:has(>.pages-sidebar:not([hidden]))){grid-template-columns:250px minmax(0,1fr)}
+.project-sidebar{min-width:0;padding-left:14px;padding-right:14px}
+.project-sidebar .scope-actions{flex-wrap:wrap;gap:0 5px}
+.appbar{flex-wrap:wrap;flex-shrink:0}.appbar .toolbar{flex-wrap:wrap}
+@media(min-width:1000px) and (max-width:1100px){
+ main{grid-template-columns:220px 190px minmax(0,1fr)}
+ main:not(:has(>.pages-sidebar:not([hidden]))){grid-template-columns:220px minmax(0,1fr)}
+ .project-sidebar{padding-left:10px;padding-right:10px}
+}
+@media screen and (min-width:621px) and (max-width:999px){
+ body{height:auto;min-height:100vh}
+ body>main,main:not(:has(>.pages-sidebar:not([hidden]))){flex:none;height:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:260px minmax(520px,calc(100vh - 340px))}
+ .project-sidebar{grid-column:1;grid-row:1;border-bottom:1px solid var(--rule)}
+ .pages-sidebar.page-navigation{grid-column:2;grid-row:1;border-bottom:1px solid var(--rule)}
+ main:not(:has(>.pages-sidebar:not([hidden])))>.project-sidebar{grid-column:1 / -1}
+ main>.stage{grid-column:1 / -1;grid-row:2}
+}
+@media screen and (max-width:620px){
+ .pages-sidebar.page-navigation{height:230px;max-height:35vh;flex:none;border-bottom:1px solid var(--rule)}
+ .project-sidebar{max-height:35vh;flex:none}
+ main>.stage{min-height:520px}
+ .scope-actions{flex-wrap:wrap}
+}
+
+.port-vlan-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px;max-height:180px;overflow:auto;padding:6px}.port-vlan-options label{margin:0;font-weight:400}.port-vlan-picker summary{cursor:pointer;font-weight:600}

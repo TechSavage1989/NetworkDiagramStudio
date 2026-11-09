@@ -6,8 +6,8 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.1.0-preview.42</Version>
-    <FileVersion>0.1.0.42</FileVersion>
+    <Version>0.1.0-preview.43</Version>
+    <FileVersion>0.1.0.43</FileVersion>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <Product>NetworkDiagramStudio</Product>
     <Company>TechSavage1989</Company>

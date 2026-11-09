@@ -1,10 +1,12 @@
+import {devicePoint,deviceBounds} from './device-geometry.mjs';
 // Deterministic placement against actual text boxes and every cable segment.
 export function textWidth(value,size=12,bold=false){
  let w=0;for(const c of String(value)){w+=/[MW@%#]/.test(c)?.94:/[ilI1.,:;!|' ]/.test(c)?.29:/[A-Z]/.test(c)?.72:/[0-9]/.test(c)?.57:.56;}return Math.ceil(w*size*(bold?1.06:1)+6);
 }
 export function textFootprint(box){
- if(Math.abs(Math.abs(box.angle||0)-Math.PI/2)>1e-6)return box;
- return {...box,x:box.x+(box.w-box.h)/2,y:box.y+(box.h-box.w)/2,w:box.h,h:box.w,angle:0};
+ if(!box.angle)return box;
+ const c=Math.abs(Math.cos(box.angle)),s=Math.abs(Math.sin(box.angle)),w=box.w*c+box.h*s,h=box.w*s+box.h*c;
+ return {...box,x:box.x+(box.w-w)/2,y:box.y+(box.h-h)/2,w,h,angle:0};
 }
 export const intersects=(first,second,pad=0)=>{
  const a=textFootprint(first),b=textFootprint(second);
@@ -18,8 +20,9 @@ export function crossesText(points,box,pad=2){
 export const pathCrossesText=(path,box,pad=2)=>crossesText(path.points,box,pad)||(path.hops||[]).some(hop=>intersects(hop,box,pad));
 export function embeddedTextBoxes(page){
  const result=[];for(const g of page.items.filter(i=>i.type==='device')){
-  for(const c of g.children.filter(c=>c.type==='text'))result.push({x:g.x+c.x*g.w,y:g.y+c.y*g.h,w:Math.max(c.w*g.w,textWidth(c.value,c.size,c.bold)),h:c.h*g.h,owner:g});
-  for(const t of g.asset?.native?.texts||[]){const width=t.w*g.w,w=Math.max(width,textWidth(t.text,t.size*g.w,t.bold)),x=g.x+t.x*g.w-width/2;result.push({x:t.align==='left'?x:t.align==='right'?x+width-w:g.x+t.x*g.w-w/2,y:g.y+t.y*g.h-t.size*g.w*.7,w,h:t.size*g.w*1.4,owner:g});}
+  const push=(box,angle=0)=>{const [cx,cy]=devicePoint(g,(box.x+box.w/2-g.x)/g.w,(box.y+box.h/2-g.y)/g.h);result.push({...textFootprint({...box,x:cx-box.w/2,y:cy-box.h/2,angle:angle+(g.angle||0)}),owner:g});};
+  for(const c of g.children.filter(c=>c.type==='text'))push({x:g.x+c.x*g.w,y:g.y+c.y*g.h,w:Math.max(c.w*g.w,textWidth(c.value,c.size,c.bold)),h:c.h*g.h},c.angle||0);
+  for(const t of g.asset?.native?.texts||[]){const width=t.w*g.w,w=Math.max(width,textWidth(t.text,t.size*g.w,t.bold)),x=g.x+t.x*g.w-width/2;push({x:t.align==='left'?x:t.align==='right'?x+width-w:g.x+t.x*g.w-w/2,y:g.y+t.y*g.h-t.size*g.w*.7,w,h:t.size*g.w*1.4},t.angle||0);}
  }return result;
 }
 // Only enumerate offsets which can produce an on-page label. Keep the original
@@ -33,7 +36,7 @@ function visibleOffsets(origin,direction,step,limit,lo,hi){
 }
 export function placeDeviceTitles(page,project,nodes){
  const minX=page.dynamic?(page.originX||0)+36:page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38,minY=page.dynamic?(page.originY||0)+36:151,maxX=(page.originX||0)+(page.width||1200)-38,maxY=(page.originY||0)+(page.height||975)-69;
- const edits=project.layout?.drawingEdits||{},titles=page.items.filter(i=>i.titleOwner),paths=page.items.filter(i=>i.type==='path'),bodies=[...nodes.values()],occupied=[...page.items.filter(i=>i.type==='text'&&!i.titleOwner).map(i=>({...i})),...embeddedTextBoxes(page)];
+ const edits=project.layout?.drawingEdits||{},titles=page.items.filter(i=>i.titleOwner),paths=page.items.filter(i=>i.type==='path'),bodies=[...nodes.values()].map(g=>({...g,...deviceBounds(g),angle:0})),occupied=[...page.items.filter(i=>i.type==='text'&&!i.titleOwner).map(i=>({...i})),...embeddedTextBoxes(page)];
  for(const node of bodies)for(const slot of ['title','detail']){
   const group=titles.filter(i=>i.titleOwner===node.sourceId&&(i.titleSlot||'title')===slot);if(!group.length)continue;
   const fixed=group.some(i=>Number.isFinite(edits[i.editKey]?.x)||Number.isFinite(edits[i.editKey]?.y));if(fixed){occupied.push(...group);continue;}
@@ -93,7 +96,7 @@ import {positionOnCable,labelPositionRelativeToCable} from '../connection-select
 
 export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const minY=page.dynamic?(page.originY||0)+36:158,maxY=(page.originY||0)+(page.height||975)-69,maxX=(page.originX||0)+(page.width||1200)-38;
- const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug'),paths=page.items.filter(i=>i.type==='path');
+ const occupied=[...page.items.filter(i=>i.type==='text').map(i=>({...i})),...embeddedTextBoxes(page)],bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug').map(g=>({...g,...deviceBounds(g),angle:0})),paths=page.items.filter(i=>i.type==='path');
  const result=[],sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38;
  const measure=req=>{
   const source=Array.isArray(req.value)?req.value:[req.value],patches=source.map((_,i)=>edits[req.editKey+'|'+i]||{}),size=Math.max(req.minSize??12,req.size||12,...patches.map(p=>p.size||0)),maxWidth=sidebar?(req.role==='media'&&page.dynamic?180:96):req.side==='right'?Math.max(96,1154-Math.max(req.outer+8,984)):Math.max(100,Math.min(req.outer-46,250));

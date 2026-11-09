@@ -1,3 +1,4 @@
+import {devicePoint,rotatedDeviceAnchor} from './device-geometry.mjs';
 import {labelBackingItems} from './label-backings.mjs';
 import {logicalPort} from '../physical-links.mjs';
 import {pageGeometry,pageFamily} from '../page-options.mjs';
@@ -287,6 +288,7 @@ export function getAnchor(g,raw,sideHint,unique,options={}){
     g.ports[id]=[frac,y];
   }
   const [nx,ny]=g.ports[id];
+  if(g.angle)return rotatedDeviceAnchor(g,id,nx,ny,sideHint,options.weight||cableWeight);
   const regions=g.panelRegions||[],region=regions.find(r=>nx>=(r.x??0)-1e-8&&nx<=(r.x??0)+(r.w??1)+1e-8&&ny>=r.y-1e-8&&ny<=r.y+r.h+1e-8);
   const socket=g.children.find(c=>c.anchorOrigin&&Math.abs(c.x+c.w/2-nx)<1e-7&&Math.abs(c.y+c.h/2-ny)<1e-7);
   if(g.moduleChannel&&region)return modularAnchor(g,id,nx,ny,region,sideHint,socket,options);
@@ -308,7 +310,7 @@ export function getAnchor(g,raw,sideHint,unique,options={}){
 export function optic(page,project,device,body,anchor,info){
   if(!info.plug)return anchor;
   const existing=page.items.find(i=>i.kind==='plug'&&i.host?.device===anchor.device&&i.host?.port===anchor.port);
-  if(existing)return {...anchor,device:existing.key,port:'cable',x:existing.x+existing.w*existing.ports.cable[0],y:existing.y+existing.h*existing.ports.cable[1]};
+  if(existing){const [x,y]=devicePoint(existing,...existing.ports.cable);return {...anchor,device:existing.key,port:'cable',x,y,...(anchor.rotatedDeparture?{departure:[[x,anchor.y],[anchor.x,anchor.y],...anchor.departure]}:{})};}
   const optics=project.optics||{}, forti=/forti/i.test([device.vendor,device.model].join(' '));
   const selection=info.slot==='sr' && forti ? optics.fg_sr||optics.sr : optics[info.slot];
   const asset=actualAsset(project,typeof selection==='object'&&selection?{stencil:selection}:{stencilId:selection});
@@ -328,8 +330,13 @@ export function optic(page,project,device,body,anchor,info){
     if(info.plug==='DAC'){rect(g.children,.2,.4375,.6,.125,'#9AA9C0');g.children.at(-1).name='Cable insert';}
     else for(const [i,x] of [.14,.59].entries()){rect(g.children,x,.25,.27,.5,'#2D3748');g.children.at(-1).name='Optical receptacle '+(i+1);}
   }
-  g.host={device:anchor.device,port:anchor.port};
-  const master=g.masterKey;editDeviceShape(page,project,g);if(!asset)g.legacyMasterKey+=g.masterKey.slice(master.length);page.items.push(g);return {...anchor,device:g.key,port:'cable',x:g.x+g.w*port[0],y:g.y+g.h*port[1]};
+  g.host={device:anchor.device,port:anchor.port};g.angle=body.angle||0;
+  const master=g.masterKey;editDeviceShape(page,project,g);
+  // Placement and size edits do not create a new physical module category.
+  // Retain separate artwork variants when a native detail was edited.
+  const detailEdited=Object.keys(project.layout?.drawingEdits||{}).some(key=>key.startsWith(g.editKey+'|')||key.startsWith(g.legacyEditKey+'|'));
+  g.moduleLegendKey=detailEdited?g.masterKey:master;
+  if(!asset)g.legacyMasterKey+=g.masterKey.slice(master.length);page.items.push(g);const [x,y]=devicePoint(g,...port);return {...anchor,device:g.key,port:'cable',x,y,...(anchor.rotatedDeparture?{departure:[[x,anchor.y],[anchor.x,anchor.y],...anchor.departure]}:{})};
 }
 export function route(page,from,to,points,color,name,linkType='Link',sourceLink=null,generatedDevice=null){
   const pts=simplifyRoute(points);
@@ -428,17 +435,18 @@ export function svgPage(p){
   const W=p.width||1200,H=p.height||975;
   const geometries=new Map(p.items.filter(i=>i.type==='path').map(i=>[i,svgCableGeometry(i)])),{defs,masks}=svgCableMasks(p,geometries);
   const draw=(i)=>{
-    if(i.type==='rect')return '<rect'+(i.legendEntry?' class="diagram-legend-line" data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.anchorName?' data-port-name="'+xml(i.anchorName)+'"':'')+' x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></rect>':'/>');
-    if(i.type==='ellipse')return '<ellipse'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.anchorName?' data-port-name="'+xml(i.anchorName)+'"':'')+' cx="'+round(i.x+i.w/2)+'" cy="'+round(i.y+i.h/2)+'" rx="'+round(i.w/2)+'" ry="'+round(i.h/2)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></ellipse>':'/>');
+    const rotation=i.angle?' transform="rotate('+round(-i.angle*180/Math.PI)+' '+round(i.x+i.w/2)+' '+round(i.y+i.h/2)+')"':'';
+    if(i.type==='rect')return '<rect'+rotation+(i.legendEntry?' class="diagram-legend-line" data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.anchorName?' data-port-name="'+xml(i.anchorName)+'"':'')+' x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></rect>':'/>');
+    if(i.type==='ellipse')return '<ellipse'+rotation+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.anchorName?' data-port-name="'+xml(i.anchorName)+'"':'')+' cx="'+round(i.x+i.w/2)+'" cy="'+round(i.y+i.h/2)+'" rx="'+round(i.w/2)+'" ry="'+round(i.h/2)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></ellipse>':'/>');
     if(i.type==='vector')return '<path'+(i.captionBacking?' pointer-events="none"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+i.commands.map(([op,x,y])=>op==='Z'?'Z':op+' '+round(x)+' '+round(y)).join(' ')+'" fill="'+(i.fill||'none')+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+(i.stroke||'none')+'" stroke-width="'+(i.weight||1)+'"'+(i.name?'><title>'+xml(i.name)+'</title></path>':'/>');
     if(i.type==='text')return svgText(i);
     if(i.type==='device'){
       const a=i.asset,child=i.children.map(c=>draw({...c,x:i.x+c.x*i.w,y:i.y+c.y*i.h,w:c.w*i.w,h:c.h*i.h})).join('');
       const artwork=a?.native?a.native.paths.filter(p=>!p.hidden).map((p,n)=>'<path data-drawing-key="'+xml(i.editKey+'|vector|'+n)+'" d="'+p.commands.map(([op,x,y])=>op==='Z'?'Z':op+' '+round(i.x+x*i.w)+' '+round(i.y+y*i.h)).join(' ')+'" fill="'+xml(p.fill)+'" stroke="'+xml(p.stroke)+'" stroke-width="'+round(p.weight*i.w)+'"/>').join('')+a.native.texts.filter(t=>!t.hidden).map((t,n)=>svgText({x:i.x+t.x*i.w-t.w*i.w/2,y:i.y+t.y*i.h-t.size*i.w*.7,w:t.w*i.w,h:t.size*i.w*1.4,size:t.size*i.w,value:t.text,color:t.color,bold:t.bold||false,align:t.align||'center',angle:t.angle,full:true,editKey:i.editKey+'|arttext|'+n})).join(''):a?'<image x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" href="'+a.dataUrl+'"/>':child;
-      return '<g'+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.sourceId?' data-device-id="'+xml(i.sourceId)+'" tabindex="0" role="button" aria-label="Find stencil for '+xml(i.name)+'"':'')+'><title>'+xml(i.name+(i.fallback&&i.kind!=='plug'?' (schematic)':''))+'</title>'+artwork+'</g>';
+      return '<g'+(i.angle?' transform="rotate('+round(-i.angle*180/Math.PI)+' '+round(i.x+i.w/2)+' '+round(i.y+i.h/2)+')"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.sourceId?' data-device-id="'+xml(i.sourceId)+'" tabindex="0" role="button" aria-label="Find stencil for '+xml(i.name)+'"':'')+'><title>'+xml(i.name+(i.fallback&&i.kind!=='plug'?' (schematic)':''))+'</title>'+artwork+'</g>';
     }
     const {path,weight}=geometries.get(i)||svgCableGeometry(i),mask=masks.get(i);
     return '<path class="diagram-cable"'+(i.linkType?' data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+path+'" fill="none" stroke="'+i.color+'" stroke-opacity="'+(i.opacity??1)+'" stroke-width="'+weight+'" stroke-linejoin="round"'+(mask?' mask="url(#'+mask+')"':'')+'><title>'+xml(i.name)+'</title></path>';
   };
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title>'+defs+'<rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+labelBackingItems(p.items).map(draw).join('')+'</svg>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+(p.originX||0)+' '+(p.originY||0)+' '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="'+xml(p.title)+'" style="font-family:Calibri,Carlito,Arial,sans-serif"><title>'+xml(p.title)+'</title>'+defs+'<rect x="'+(p.originX||0)+'" y="'+(p.originY||0)+'" width="100%" height="100%" fill="#fff"/>'+labelBackingItems(p.items,p.labelBacking).map(draw).join('')+'</svg>';
 }

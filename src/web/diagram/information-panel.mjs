@@ -1,3 +1,4 @@
+import {drawingBounds} from '../drawing-edits.mjs';
 import {presentation} from '../presentation.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {automaticPanelContent,panelRows} from './panel-content.mjs';
@@ -24,11 +25,11 @@ export function informationPanel(page,project){
    label(panel,38,y,options.width,height,text,size,false,C.ink);panel.at(-1).editKey=scope+'|info-panel|'+key+'|'+index;panel.at(-1)._textFactor=config.textScale;y+=height+8*options.textScale;
   });y+=18*options.textScale;
  };
- const auto=automaticPanelContent(project,devices),labels=new Map(panelFields),custom=new Map(options.customSections.map(item=>[item.id,item.title]));
+ const auto=automaticPanelContent(project,devices,options),labels=new Map(panelFields),custom=new Map(options.customSections.map(item=>[item.id,item.title]));
  // Preserve established printed headings while allowing fully editable display titles.
  for(const [id,title] of [['addresses','Device addresses'],['models','Device details'],['ports','Port details']])labels.set(id,title);
  for(const id of options.sections){
-  if((id==='connections'||id==='modules')&&!options.sectionContent[id]?.trim())continue;
+  if((id==='connections'||id==='modules')&&!options.sectionContent[id]?.trim()&&panel.some(item=>id==='modules'?/\|(?:module-legend)\||\|device\|module-legend-/.test(item.editKey||''):/\|legend\|/.test(item.editKey||'')))continue;
   const heading=options.sectionTitles[id]||custom.get(id)||labels.get(id)||id;
   section(id,heading.toUpperCase(),panelRows(id,auto,options));
  }
@@ -63,4 +64,24 @@ export function informationPanel(page,project){
   if(item.type==='device'){for(const child of item.children)if(child.type==='text')child.size*=factor;item.masterKey+=':panel-scale:'+factor;}
  }
  if(options.position!=='left')page.items=page.items.filter(i=>i.pageFrame!=='sidebar');
+}
+
+// Dock after labels and text scaling have their final geometry. Use rotated
+// bounds and cable points, not only the unrotated device rectangles.
+export function dockInformationPanel(page,project){
+ const options=presentation(project,page).panel;
+ if(!options.visible||options.position==='free')return;
+ const panel=page.items.filter(i=>i.panelGroup),content=page.items.filter(i=>!i.panelGroup&&!i.pageFrame&&!i.pageHeading&&!i.pageTitle&&(i.type==='device'||i.type==='path'||i.y>=145));
+ const boxes=items=>items.map(drawingBounds).filter(b=>b&&[b.x,b.y,b.w,b.h].every(Number.isFinite));
+ // Cross-page tags use the reserved sidebar rail on fixed-paper core sheets;
+ // their placement is owned by the core pagination planner.
+ const p=boxes(panel),c=boxes(options.position==='left'?content.filter(i=>!i.offPage):content);if(!p.length||!c.length)return;
+ const left=Math.min(...p.map(b=>b.x)),right=Math.max(...p.map(b=>b.x+b.w)),bottom=Math.max(...p.map(b=>b.y+b.h));
+ let dx=0,dy=0;
+ if(options.position==='right')dx=Math.max(...c.map(b=>b.x+b.w))+26-left;
+ if(options.position==='left'){const top=Math.min(...p.map(b=>b.y)),near=c.filter(b=>b.y<bottom&&b.y+b.h>top);if(near.length)dx=Math.min(0,Math.min(...near.map(b=>b.x))-26-right);}
+ if(options.position==='top')dy=Math.min(...c.map(b=>b.y))-26-bottom;
+ if(Math.abs(dx)<1e-8)dx=0;if(Math.abs(dy)<1e-8)dy=0;
+ for(const item of panel){item.x+=dx;item.y+=dy;if(item.points)item.points=item.points.map(([x,y])=>[x+dx,y+dy]);if(item._panelTransform){item._panelTransform.x+=dx;item._panelTransform.y+=dy;}}
+ if(dx||dy)page.items=page.items.filter(i=>i.pageFrame!=='sidebar');
 }

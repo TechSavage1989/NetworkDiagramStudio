@@ -15,11 +15,11 @@ test('corner resizing is proportional, bounded and anchored opposite the handle'
  assert.equal(transformGeometry(item,'se',-1e6,-1e6).factor,.1);
  assert.equal(transformGeometry(item,'se',1e6,1e6).factor,4);
 });
-test('manual rotation is persistent, supports 15 degree snapping and excludes hardware',()=>{
+test('manual rotation is persistent, supports 15 degree snapping and excludes cables',()=>{
  const g=transformGeometry(item,'rotate',22,5,{shiftKey:true});assert.equal(g.angle/(Math.PI/12),Math.round(g.angle/(Math.PI/12)));
  const patch=transformEdits({items:[item]}, {},item,g).text;
  assert.equal(patch.rotationMode,'fixed');assert.deepEqual(cleanDrawingEdits(JSON.parse(JSON.stringify({text:patch}))).text,patch);
- assert.equal(rotatable({type:'device'}),false);assert.throws(()=>transformEdits({items:[]},{},{type:'device',editKey:'d'},{angle:1}),/text/);
+ assert.equal(rotatable({type:'device'}),true);assert.equal(rotatable({type:'path'}),false);assert.throws(()=>transformEdits({items:[]},{},{type:'path',editKey:'p'},{angle:1}),/device or text/);
 });
 test('resizing keeps device presentation coordinates and pins neighboring layout',()=>{
  const d={type:'device',editKey:'d',sourceId:'d',kind:'switch',x:200,y:80,w:120,h:40,children:[],presentation:{scale:2,x:0,y:0}},other={...d,editKey:'e',sourceId:'e',x:400};
@@ -39,3 +39,11 @@ test('native text resize keeps its opposite corner anchored despite baseline coo
  const patch=transformEdits({items:[parent]},{},text,{factor:2,dx:0,dy:0})[text.editKey];
  assert.equal(patch.w,.4);assert.equal(patch.size,.1);assert.ok(Math.abs(patch.x-.6)<1e-8);assert.ok(Math.abs(patch.y-.57)<1e-8);
 });
+
+test('device rotation pins existing positions and preserves the physical dimensions',()=>{
+ const d={type:'device',editKey:'d',sourceId:'d',x:100,y:150,w:200,h:50,children:[]},e={...d,editKey:'e',sourceId:'e',y:500};
+ const edits=transformEdits({items:[d,e],coreDeviceIds:['d','e']},{},d,{angle:Math.PI/4});
+ assert.equal(edits.d.angle,Math.PI/4);assert.equal(edits.d.x,100);assert.equal(edits.d.y,150);assert.equal(edits.d.w,undefined);assert.equal(edits.e.y,500);
+});
+
+test('repeated rotation handles keep the numeric angle in its editable range',()=>{const g=transformGeometry({...item,angle:Math.PI*1.5},'rotate',0,0);assert.ok(Math.abs(g.angle+Math.PI/2)<1e-9);});

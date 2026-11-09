@@ -37,14 +37,14 @@ test('FortiOS VLAN parent, routed interface, named virtual-wire pairs, static ro
 });
 test('Cisco IOS and ArubaOS-S distinguish trunk, access and LAG membership',()=>{
   const [c]=parseConfig('version 17\nhostname TEST-C\ninterface GigabitEthernet1/0/1\n switchport mode trunk\n switchport trunk native vlan 2\n switchport trunk allowed vlan 2,4-6\n channel-group 3 mode active\n!\ninterface Vlan2\n ip address 192.0.2.4 255.255.255.0\n!').devices;
-  assert.equal(c.ports[0].name,'Gi1/0/1');assert.equal(c.ports[0].lag,'3');assert.deepEqual(c.ports[0].tagged,[4,5,6]);
+  assert.equal(c.ports[0].name,'Gi1/0/1');assert.equal(c.ports[0].lag,'Po3');assert.deepEqual(c.ports[0].tagged,[4,5,6]);
   const [a]=parseConfig('hostname TEST-A\nvlan 7\n name Users\n untagged 1-3\n tagged 4\n exit').devices;
   assert.equal(a.ports[2].native,7);assert.deepEqual(a.ports[3].tagged,[7]);
 });
 test('Junos set and RouterOS text exports retain L3 and bridge membership',()=>{
   const [j]=parseConfig('set system host-name TEST-J\nset interfaces irb unit 9 family inet address 192.0.2.8/24\nset interfaces ge-0/0/0 unit 0 family ethernet-switching interface-mode access\nset interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members users\nset vlans users vlan-id 9\nset vlans users l3-interface irb.9').devices;
   assert.equal(j.vlans[0].ip,'192.0.2.8/24');assert.equal(j.ports.find(p=>p.name==='ge-0/0/0').native,9);
-  const [m]=parseConfig('/system identity\nset name=TEST-M\n/interface bridge\nadd name=br1\n/interface bridge port\nadd bridge=br1 interface=ether2 pvid=9\n/interface bridge vlan\nadd bridge=br1 tagged=ether3 untagged=ether2 vlan-ids=9').devices;
+  const [m]=parseConfig('/system identity\nset name=TEST-M\n/interface bridge\nadd name=br1 vlan-filtering=yes\n/interface bridge port\nadd bridge=br1 interface=ether2 pvid=9\n/interface bridge vlan\nadd bridge=br1 tagged=ether3 untagged=ether2 vlan-ids=9').devices;
   assert.deepEqual(m.bridges[0].members,['ether2']);assert.deepEqual(m.ports.find(p=>p.name==='ether3').tagged,[9]);assert.equal(m.fromConfig,true);
 });
 test('unsupported and damaged files produce actionable warnings, other files still import',async()=>{

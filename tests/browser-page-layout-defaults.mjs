@@ -52,6 +52,20 @@ try{
  assert.deepEqual(await order(),names);
  controls=await options();await controls.numbers.uncheck();await apply(controls.dialog);saved=await save('footer-only.nds.json');assert.equal(saved.doc.project.layout.pageNumbers.footer,true);assert.equal(saved.doc.project.layout.pageNumbers.show,false);
  controls=await options();await controls.footer.uncheck();await apply(controls.dialog);saved=await save('both-disabled.nds.json');await open(saved.path);controls=await options();assert.equal(await controls.footer.isChecked(),false);assert.equal(await controls.numbers.isChecked(),false);await close(controls.dialog);
- assert.deepEqual(await order(),names);assert.deepEqual(errors,[]);
- await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages'],names},null,2));
+ assert.deepEqual(await order(),names);
+ // Backing controls apply to the actual editor, remain undoable and reopen.
+ await page.locator('#sample').click();await page.waitForSelector('#canvas svg');
+ const backingCount=()=>page.locator('#canvas path').filter({has:page.locator('title').filter({hasText:'Caption backing'})}).count();
+ const backingOptions=async()=>{await page.locator('#page-layout').click();const d=page.locator('#dialog');await d.getByLabel('Edit page',{exact:true}).selectOption('*');return {dialog:d,mode:d.getByLabel('Port/link label backing',{exact:true}),padding:d.getByLabel('Port/link label padding (px)',{exact:true})};};
+ const applyBacking=async d=>{await d.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
+ let backing=await backingOptions();assert.equal(await backing.mode.inputValue(),'white');assert.equal(await backing.padding.inputValue(),'0.5');await close(backing.dialog);assert.ok(await backingCount()>0);
+ backing=await backingOptions();await backing.padding.fill('4');await applyBacking(backing.dialog);saved=await save('label-padding.nds.json');assert.deepEqual(saved.doc.project.layout.labelBacking,{padding:4,mode:'white'});
+ await page.keyboard.press('Control+z');backing=await backingOptions();assert.equal(await backing.padding.inputValue(),'0.5');await close(backing.dialog);
+ await page.keyboard.press('Control+Shift+z');backing=await backingOptions();assert.equal(await backing.padding.inputValue(),'4');await backing.mode.selectOption('transparent');assert.equal(await backing.padding.isDisabled(),true);await applyBacking(backing.dialog);assert.equal(await backingCount(),0);
+ saved=await save('transparent-labels.nds.json');await open(saved.path);backing=await backingOptions();assert.equal(await backing.mode.inputValue(),'transparent');assert.equal(await backing.padding.inputValue(),'4');await close(backing.dialog);assert.equal(await backingCount(),0);
+ backing=await backingOptions();await backing.mode.selectOption('white');await backing.padding.fill('0');await applyBacking(backing.dialog);assert.ok(await backingCount()>0);
+ backing=await backingOptions();await backing.padding.fill('20');await backing.dialog.getByRole('button',{name:'Cancel',exact:true}).click();backing=await backingOptions();assert.equal(await backing.padding.inputValue(),'0');
+ await page.screenshot({path:resolve(output,'label-backing-options.png')});await close(backing.dialog);
+ assert.deepEqual(errors,[]);
+ await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel'],names},null,2));
 }finally{await browser.close();}

@@ -1,3 +1,4 @@
+import {exportInteractiveHtml} from './interactive-html.mjs';
 import {cleanSwitchportSettings,reportRequest,buildReportPackage,inventoryForDevice,sharedReportPalette} from './reports/index.mjs';
 import {exportPdf,exportPng} from './report-export.mjs';
 import {zip} from './diagram/zip.mjs';
@@ -84,6 +85,8 @@ export function reportTools({getProject,getPages,getActive,modal,el,field,button
   button(visual,'Vector PDF',async()=>{const chosen=selected();download(await exportPdf(chosen,{title:project.name}),filename(project.name)+(chosen.length===1?'-'+filename(chosen[0].displayName||chosen[0].name):'')+'.pdf','application/pdf');say('Vector PDF downloaded.');});
   button(visual,'PNG images - 300 dpi',async()=>{const chosen=selected();if(chosen.length===1)download(await exportPng(chosen[0]),filename(project.name)+'-'+filename(chosen[0].name)+'.png','image/png');else{const parts={};for(const [n,page] of chosen.entries()){say('Rendering image '+(n+1)+' of '+chosen.length+'...');parts[String(n+1).padStart(2,'0')+'-'+filename(page.name)+'.png']=await exportPng(page);await yieldFrame();}download(zip(parts,'application/zip'),filename(project.name)+'-images.zip','application/zip');}say('PNG export downloaded.');});
   button(visual,'SVG pages',()=>{const chosen=selected();if(chosen.length===1)download(chosen[0].svg||svgPage(chosen[0]),filename(project.name)+'-'+filename(chosen[0].name)+'.svg','image/svg+xml');else download(zip(Object.fromEntries(chosen.map((page,n)=>[String(n+1).padStart(2,'0')+'-'+filename(page.name)+'.svg',page.svg||svgPage(page)])),'application/zip'),filename(project.name)+'-svg.zip','application/zip');say('SVG export downloaded.');});
+  button(visual,'Interactive HTML',()=>{download(exportInteractiveHtml(selected(),{title:project.name}),filename(project.name)+'-viewer.html','text/html');say('Offline interactive HTML viewer downloaded.');});
+  body.append(el('p','Interactive HTML is a self-contained, read-only viewer with page navigation, search and zoom. It includes the selected drawings, not the editable project or source configurations.','hint'));
   body.append(el('h3','Switchport report package'),el('p','For each device: wall chart, paper-sized PNG, one-page PDF, booklet PDF, port CSV, inventory JSON, technician summary and validation report. Shared sheets use one VLAN and symbol key.','hint'));
   body.append(el('p','Report paper: '+reportPageLabel(project.layout?.switchport?.paper)+'. Change size and orientation under Report options.','hint'));
   const reports=actions(body);button(reports,'Export switchport package',exportPackage,'primary');button(reports,'Report options',options);button(reports,'Copy report summary',()=>copyText(readable(buildReportPackage(project).summary)));

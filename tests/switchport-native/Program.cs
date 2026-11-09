@@ -45,6 +45,61 @@ static class Program
         catch (Exception error) { Console.Error.WriteLine(error); return 1; }
         finally { if (args.Length == 0) Directory.Delete(output, true); }
     }
+    static JsonObject ProjectedInventory(JsonObject device)
+    {
+        var request = new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "projection", ["device"] = device.DeepClone() }), ["combined"] = false };
+        var preview = Object(SwitchportReportService.PreviewJson(request.ToJsonString()));
+        Check(preview["items"]![0]!["success"]!.GetValue<bool>(), "Lossless projection fixture renders: " + preview["items"]![0]!["error"]);
+        return preview["items"]![0]!["inventory"]!.AsObject();
+    }
+    static void CheckLosslessProjection(JsonObject retained)
+    {
+        retained["management"] = new JsonArray("Old management"); retained["mirrors"] = new JsonArray("Old mirror");
+        var annotations = new JsonObject { ["name"] = "LAB-PROJECTION", ["switchportInventory"] = retained.DeepClone(), ["management"] = new JsonArray("Address: 192.0.2.5/24", "Gateway: 192.0.2.1"), ["mirrors"] = new JsonArray("Mirror source 1 destination 2") };
+        var projected = ProjectedInventory(annotations);
+        Check(projected["management"]!.AsArray().Count == 2 && projected["mirrors"]![0]!.GetValue<string>() == "Mirror source 1 destination 2", "Explicit management and mirrors replace retained annotations.");
+        annotations["management"] = new JsonArray(); annotations["mirrors"] = new JsonArray();
+        projected = ProjectedInventory(annotations);
+        Check(projected["management"]!.AsArray().Count == 0 && projected["mirrors"]!.AsArray().Count == 0, "Empty management and mirror arrays explicitly clear retained annotations.");
+        annotations.Remove("management"); annotations.Remove("mirrors"); projected = ProjectedInventory(annotations);
+        Check(projected["management"]![0]!.GetValue<string>() == "Old management" && projected["mirrors"]![0]!.GetValue<string>() == "Old mirror", "Omitted annotation fields preserve retained source evidence.");
+
+        var route = Object("""
+            {"future":{"flag":true},"options":["global","permanent"],"enabled":false,"description":"Fictional route","track":"7","name":"LAB","tag":"42","protocol":"static","status":"disabled","type":"static","context":"LAB-TABLE","vdom":"LAB-VDOM","vrf":"LAB-VRF","metric":8,"distance":5,"interface":"Vlan20","nextHop":"2001:db8::1","destination":"::/0"}
+            """);
+        annotations["routes"] = new JsonArray(route);
+        projected = ProjectedInventory(annotations); string routeText = projected["routes"]![0]!.GetValue<string>();
+        Check(routeText.StartsWith("destination: ::/0 | nextHop: 2001:db8::1 | interface: Vlan20 | distance: 5 | metric: 8 | vrf: LAB-VRF", StringComparison.Ordinal), "Qualified route fields use stable semantic order.");
+        Check(routeText.Contains("vdom: LAB-VDOM | context: LAB-TABLE | type: static | status: disabled | protocol: static | tag: 42 | name: LAB | track: 7 | description: Fictional route", StringComparison.Ordinal), "Native projection retains all route context and selection qualifiers.");
+        Check(routeText.Contains("options: [\"global\",\"permanent\"]", StringComparison.Ordinal) && routeText.Contains("enabled: false", StringComparison.Ordinal) && routeText.Contains("future: {\"flag\":true}", StringComparison.Ordinal), "Route arrays, booleans and future structured qualifiers are not silently dropped.");
+        annotations["routes"] = new JsonArray(); projected = ProjectedInventory(annotations);
+        Check(projected["routes"]!.AsArray().Count == 0, "Explicit empty routes clear retained route references.");
+
+        var sviRetained = retained.DeepClone().AsObject();
+        foreach (string key in sviRetained.Select(pair => pair.Key).Where(key => key.Equals("svis", StringComparison.OrdinalIgnoreCase)).ToArray()) sviRetained.Remove(key);
+        sviRetained["svis"] = new JsonArray(Object("""{"interface":"Vlan10","address":"192.0.2.99/24"}"""), Object("""{"interface":"vlan 10","address":"2001:db8:ffff::1/64"}"""), Object("""{"interface":"Vlan-interface20","address":"198.51.100.99/24"}"""));
+        var sviDevice = new JsonObject { ["name"] = "LAB-SVI", ["switchportInventory"] = sviRetained, ["vlans"] = new JsonArray(Object("""{"id":10,"ip":"203.0.113.99/24","addresses":["192.0.2.1/24 secondary","2001:db8::1/64 eui-64"]}"""), Object("""{"id":20,"addresses":[]}""")) };
+        projected = ProjectedInventory(sviDevice);
+        var svis = projected.Single(pair => pair.Key.Equals("svis", StringComparison.OrdinalIgnoreCase)).Value!.AsArray();
+        Check(svis.Count == 2 && svis.Any(row => row!["address"]!.GetValue<string>() == "192.0.2.1/24 secondary") && svis.Any(row => row!["address"]!.GetValue<string>() == "2001:db8::1/64 eui-64"), "Authoritative SVI arrays replace stale IPv4/IPv6 values, retain qualifiers and clear empty Comware VLAN interfaces.");
+
+        var portRetained = retained.DeepClone().AsObject();
+        var oldPort = portRetained["ports"]!.AsArray().Single(row => row!["id"]!.GetValue<string>() == "1")!;
+        oldPort["untaggedVlan"] = 90; oldPort["untaggedState"] = "Known"; oldPort["voiceVlan"] = 91; oldPort["taggedVlans"] = new JsonArray(92); oldPort["taggedVlanPolicy"] = "All";
+        var portDevice = new JsonObject { ["name"] = "LAB-RESOLVED", ["switchportInventory"] = portRetained, ["ports"] = new JsonArray(
+            Object("""{"name":"UPLINK","relatedInterfaces":["1"],"configurationResolved":true,"role":"dynamic auto","lag":"trk1"}"""),
+            Object("""{"name":"2","native":null,"nativeState":"unknown","tagged":[],"voice":null,"lag":"trk1"}"""),
+            Object("""{"name":"trk1","native":10,"tagged":[20],"voice":30}""")) };
+        projected = ProjectedInventory(portDevice); var ports = projected["ports"]!.AsArray();
+        var renamed = ports.Single(row => row!["id"]!.GetValue<string>() == "UPLINK")!;
+        Check(ports.Count == retained["ports"]!.AsArray().Count && renamed["relatedInterfaces"]!.AsArray().Any(alias => alias!.GetValue<string>() == "1"), "Renamed input maps to its exact default physical socket, preserving aliases and socket count.");
+        Check(renamed["untaggedVlan"] == null && renamed["untaggedState"]!.GetValue<string>() == "Unknown" && renamed["voiceVlan"] == null && renamed["taggedVlans"]!.AsArray().Count == 0 && renamed["taggedVlanPolicy"] == null, "Resolved dynamic auto clears retained VLAN 90, voice 91 and stale tagged policy without aggregate fallback.");
+        var inherited = ports.Single(row => row!["id"]!.GetValue<string>() == "2")!;
+        Check(inherited["untaggedVlan"]!.GetValue<int>() == 10 && inherited["voiceVlan"]!.GetValue<int>() == 30 && inherited["taggedVlans"]!.AsArray().Any(id => id!.GetValue<int>() == 20), "Unresolved legacy aggregate members still inherit their aggregate settings.");
+
+        var lanes = ProjectedInventory(new JsonObject { ["name"] = "LAB-LANES", ["model"] = "CRS326-24S+2Q+RM", ["ports"] = new JsonArray(Object("""{"name":"LANE-A","relatedInterfaces":["qsfpplus1-1"],"configurationResolved":true}""")) });
+        Check(lanes["ports"]!.AsArray().Any(row => row!["id"]!.GetValue<string>() == "qsfpplus1") && !lanes["ports"]!.AsArray().Any(row => row!["id"]!.GetValue<string>() == "LANE-A"), "A renamed QSFP logical lane never renames its shared physical cage.");
+    }
     static void Run(string output)
     {
         var catalog = Object(SwitchportReportService.CatalogJson());
@@ -154,6 +209,7 @@ static class Program
         Check(semanticPorts[0]!["disabled"]!.GetValue<bool>() && semanticPorts[1]!["disabled"] == null, "Configured admin state remains independent of observed link state.");
         Check(semanticPorts[2]!["disabled"]!.GetValue<bool>() && !semanticPorts[3]!["disabled"]!.GetValue<bool>(), "FortiOS enable/disable administrative spellings remain explicit configured states.");
         Check(semanticPorts[0]!["notes"]!.AsArray().Any(note => note!.GetValue<string>() == "Configured ingress PVID: 10"), "Configured ingress PVID is retained for complete CSV export.");
+        CheckLosslessProjection(first["inventory"]!.DeepClone().AsObject());
         var voiceItem = imported["items"]![0]!.DeepClone().AsObject();
         voiceItem["device"]!["vlans"]![1]!.AsObject().Remove("voice");
         var voiceRequest = new JsonObject { ["items"] = new JsonArray(voiceItem), ["combined"] = false };

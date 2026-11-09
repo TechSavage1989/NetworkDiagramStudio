@@ -25,6 +25,7 @@ export function migrateIdentityReferences(project,before,identities){
  const list=values=>[...new Set(values.map(token))];
  for(const key of ['order','coreExclude','suppressedHandoffs'])if(Array.isArray(layout[key]))layout[key]=list(layout[key]);
  for(const group of [...(layout.corePages||[]),...(layout.reportPages||[])])if(Array.isArray(group.devices))group.devices=list(group.devices);
+ for(const stack of layout.deviceStacks||[])for(const member of stack.members||[])member.deviceId=resolve(member.deviceId);
  if(Array.isArray(layout.switchport?.deviceIds))layout.switchport.deviceIds=list(layout.switchport.deviceIds);
  const replacing=new Set(changes.filter(([old,next])=>previous.has(old)&&!previous.has(next)).map(([old])=>old));
  const linkKeys=new Map(),pathKeys=new Map(),pathOverwrite=new Set(),oldNames=new Map(before.devices.map(d=>[d.id,d.name||d.id])),names=new Map(project.devices.map(d=>[d.id,d.name||d.id]));

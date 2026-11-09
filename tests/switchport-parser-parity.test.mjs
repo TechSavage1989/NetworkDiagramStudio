@@ -40,32 +40,36 @@ hostname LAB-IOS
 vlan 10,20,30,40
 !
 interface Gi1/0/1
+ switchport mode trunk
  switchport trunk allowed vlan except 10,20
  switchport trunk allowed vlan remove 30
  switchport trunk allowed vlan add 20
 !
 interface Gi1/0/2
+ switchport mode trunk
  switchport trunk allowed vlan remove 10
  switchport trunk allowed vlan remove 20
  switchport trunk allowed vlan add 10
 !
 interface Gi1/0/3
+ switchport mode trunk
  switchport trunk allowed vlan except 10
  switchport trunk allowed vlan 20,30
  switchport trunk allowed vlan remove 30
  switchport trunk allowed vlan add 40
 !
 interface Gi1/0/4
+ switchport mode trunk
  switchport trunk allowed vlan add 10
 !
 `);
- assert.deepEqual(port(d,'Gi1/0/1').allowedExcept,[10,30]);
- assert.deepEqual(port(d,'Gi1/0/2').allowedExcept,[20]);
+ assert.match(port(d,'Gi1/0/1').taggedVlanPolicy,/All except 10,30/);
+ assert.match(port(d,'Gi1/0/2').taggedVlanPolicy,/All except 20/);
  assert.deepEqual(port(d,'Gi1/0/3').tagged,[20,40]);
  assert.equal(port(d,'Gi1/0/3').allowedExcept,undefined);
- assert.deepEqual(port(d,'Gi1/0/4').tagged,['all']);
+ assert.deepEqual(port(d,'Gi1/0/4').tagged,[10,20,30,40]);
  const inv=inventoryForDevice(d);
- assert.equal(inv.logicalInterfaces.find(p=>p.id==='Gi1/0/1').taggedVlanPolicy,'All except 10, 30');
+ assert.match(inv.logicalInterfaces.find(p=>p.id==='Gi1/0/1').taggedVlanPolicy,/All except 10,30/);
  assert.deepEqual(inv.logicalInterfaces.find(p=>p.id==='Gi1/0/1').taggedVlans,[20,40]);
 });
 
@@ -157,7 +161,7 @@ interface Port-channel1
  assert.equal(sources[0].model.devices[0].ports[0].native,30);
 });
 
-test('native route fallback fills empty source routes but qualifies unmatched structured routes',async()=>{
+test('native routes normalize while distinct explicit interfaces remain separate',async()=>{
  const {enrichSwitchportSources}=await import('../src/web/switchport-import.mjs');
  const priorReader=globalThis.FileReader,priorDesktop=globalThis.NDSDesktop;
  try{
@@ -169,9 +173,9 @@ test('native route fallback fills empty source routes but qualifies unmatched st
    if(populated)d.routes=[structured];
    const source={kind:'Configuration',model:{devices:[d],links:[],warnings:[]}};
    await enrichSwitchportSources([new File(['hostname LAB-ROUTES'],'fictional-route.cfg')],[source]);
-   assert.deepEqual(d.routes,populated?[structured]:nativeRoutes);
-   assert.equal(source.model.warnings.some(note=>note.includes('equivalence')),populated);
-   if(populated)assert.match(technicianSummary(inventoryForDevice(d)),/equivalence to the native configured route text is unconfirmed/);
+   const normalized={type:'static',nextHop:'192.0.2.254',interface:'',destination:'0.0.0.0/0'};
+   assert.deepEqual(d.routes,populated?[structured,normalized]:[normalized]);
+   assert.deepEqual(source.model.warnings,[]);
   }
  }finally{if(priorReader===undefined)delete globalThis.FileReader;else globalThis.FileReader=priorReader;if(priorDesktop===undefined)delete globalThis.NDSDesktop;else globalThis.NDSDesktop=priorDesktop;}
 });
