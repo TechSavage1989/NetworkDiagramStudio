@@ -54,7 +54,7 @@ test('every one-through-eight-member VSF map keeps the full stack and one key on
  }
 });
 
-test('landscape pages arrange eight stack members in balanced columns without splitting or repeating the key',()=>{
+test('landscape pages maximize member size without forcing columns, splitting, or repeating the key',()=>{
  const settings={visible:{fitMode:'optimize',groups:{ports:{preset:'a3',orientation:'landscape'}}}};
  const shape=targetPageAspect(project(settings,8),{name:'MDF Port Map',family:'ports'});
  assert.ok(Math.abs(shape-420/297)<1e-8,'selected landscape paper is delivered to port map layout');
@@ -62,7 +62,9 @@ test('landscape pages arrange eight stack members in balanced columns without sp
  assert.equal(pages.length,1);
  const page=pages[0],bodies=page.items.filter(item=>item.reportPanel&&item.reportGroup);
  assert.equal(bodies.length,8);
- assert.ok(new Set(bodies.map(body=>Math.round(body.x))).size>=2,'member blocks should fill landscape page in columns: '+JSON.stringify(bodies.map(body=>[body.reportGroup,Math.round(body.x),Math.round(body.y)]))+' role='+page.role+' standalone='+String(!!page.standaloneConfiguration));
+ assert.equal(new Set(bodies.map(body=>Math.round(body.x))).size,1,'the measured single-column layout keeps larger readable members on this paper');
+ assert.ok(page.adaptivePortMap,'page must be reflowed, not only uniformly shrunk');
+ assert.ok(page.items.filter(item=>item.reportPortRole==='number').every(item=>item.size>=8));
  assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
  assert.ok(page.items.some(item=>item.reportPort?.startsWith('8/')));
  const same=map(project(settings,8))[0];

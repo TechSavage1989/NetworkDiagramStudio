@@ -2,7 +2,8 @@ import {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReport
 import {sharedReportPalette} from './palette.mjs';
 import {reportDiagram,workspaceDiagrams,inventoryPages,blockedReport,validateReportScene,ReportCapacityError,numberReportPages} from './scene.mjs';
 import {reportPageLabel,reportFileStem} from './paper.mjs';
-import {targetPageAspect} from '../page-options.mjs';
+import {targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions} from '../page-options.mjs';
+import {adaptivePortMap} from './adaptive-port-map.mjs';
 export {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReportInventory,validateInventory,inventoryCsv,technicianSummary,reportFolder,reportModelChoice} from './model.mjs';
 export {sharedReportPalette,aggregateKey,validateVlanColor,nativeFill,markerVlans,vlanIds,colorDifference} from './palette.mjs';
 export {ReportCapacityError,validateReportScene} from './scene.mjs';
@@ -77,6 +78,27 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
   let pages=null;if(memberCount>2){try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
   else try{pages=assertScenes([reportDiagram(item,palette,request)]);}catch{try{pages=assertScenes(workspaceDiagrams([item],palette,{...request,title:item.inventory.hostname}));}catch{pages=null;}}
   if(pages?.length){for(const page of pages){page.printPaper=project.layout?.pageSetup?.printPaper||null;page.family='ports';}sheets.set(item.id,pages);}
+ }
+ // Resolve the same final page names as buildPages, including repeated
+ // workspace names, so individual overrides work as well as group/defaults.
+ const totals=new Map(),seen=new Map();
+ for(const pages of sheets.values())for(const page of pages)totals.set(page.name,(totals.get(page.name)||0)+1);
+ for(const item of items){
+  const pages=sheets.get(item.id);if(!pages)continue;
+  for(const [index,page] of pages.entries()){
+   const count=(seen.get(page.name)||0)+1;seen.set(page.name,count);
+   const finalName=page.name+(totals.get(page.name)>1?' '+count:'');
+   const visible=visiblePagePaper(project,{name:finalName,family:'ports'}),dimensions=paperDimensions(visible);
+   if(pages.length!==1||!dimensions||visibleFitMode(project)!=='optimize')continue;
+   // Generate the same measured base on every rebuild, then the ordinary
+   // applyDrawingEdits pass restores explicit patches by stable keys. Never
+   // revert to the legacy arrangement merely because the first object moved.
+   const selected={...visible,...dimensions,width:dimensions.widthMm*96/25.4,height:dimensions.heightMm*96/25.4};
+   try{
+    const adapted=adaptivePortMap(item,palette,{...request,paper:selected},page);
+    adapted.family='ports';adapted.printPaper=page.printPaper;pages[index]=adapted;
+   }catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;}
+  }
  }
  return sheets;
 }

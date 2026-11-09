@@ -60,6 +60,14 @@ export function paperDimensions(paper){
 export function fitVisiblePage(page,project){
  const paper=visiblePagePaper(project,page),dimensions=paperDimensions(paper);
  if(!dimensions)return page;
+ // An adaptive port map was already planned inside this exact paper ratio,
+ // including margins, title, complete key and footer. Do not shrink its
+ // full page a second time or introduce another border of empty space.
+ if(page.adaptivePortMap&&visibleFitMode(project)==='optimize'&&Math.abs(page.width/page.height-dimensions.ratio)<1e-7){
+  page.visiblePaper=paper;page.visibleFitMode='optimize';
+  page.printPaper=cleanPageSetup(project?.layout?.pageSetup).printPaper||paper;
+  return page;
+ }
  const sourceW=page.width,sourceH=page.height,originX=page.originX||0,originY=page.originY||0,ratio=dimensions.ratio;
  const preserve=visibleFitMode(project)==='preserve',width=Math.max(sourceW,sourceH*ratio),height=Math.max(sourceH,sourceW/ratio);
  let factor=1,dx=(width-sourceW)/2,dy=(height-sourceH)/2;

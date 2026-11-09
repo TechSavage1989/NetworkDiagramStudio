@@ -13,7 +13,7 @@ Network engineers can use the Windows application or the offline browser edition
 - Open existing Switchport Diagram Builder workspaces and supported unencrypted RouterOS backups. Keep supplementary observations independently selectable and separate from configuration intent.
 - Navigate large drawing sets using scrollable page tabs and group dropdowns that dismiss on outside clicks or Escape. Moving equipment keeps the sidebar clear and reroutes affected cables with measured clearance.
 - Use **Organize connections** in Edit drawing to compare compact layouts, or tick **Even line spacing** to give every parallel cable on the page one consistent spacing. Review connection length, bends, crossings and footprint, switch between Current and Proposed, then apply the result as one undoable action. Keep manual cable bends by default or allow them to be rerouted.
-- Keep up to eight switch-stack members on one Port Map sheet with one VLAN/LAG key. On landscape pages, arrange member faceplates in balanced columns when practical. **Page options** offers **Auto-fit and optimize content** or **Preserve existing layout** for the selected page proportions, with independent print paper.
+- Keep up to eight switch-stack members on one Port Map sheet with one VLAN/LAG key. On A4, Letter and other selected paper sizes, compare ordered member layouts and side/below legends to maximize readable hardware instead of forcing two columns. **Page options** offers **Auto-fit and optimize content** or **Preserve existing layout** for the selected page proportions, with independent print paper.
 - Port Inventory tables use compact readable type, smaller row spacing, and more of each printable page to reduce continuation pages. Interface identities, descriptions, tagged/native/voice VLANs, LAGs, link status and connected-device details remain intact and editable.
 - In Edit drawing, use right-click menus and **Snap label to line** for labels above, centered on or below their own cable. Specify the endpoint device/port, choose automatic alignment or manual rotation, and retain that placement when routing changes. Double-click page tabs to rename them and their printed titles.
 - Configure the diagram details sidebar: reorder and rename sections, show or hide VLANs, LAGs, AP/VSF/uplink information, summarize or expand port-module assignments, and add custom sections while preserving complete address/MAC information.
@@ -50,7 +50,7 @@ Network engineers can use the Windows application or the offline browser edition
 <p align="center"><img src="docs/images/legend-connections.png" width="900" alt="Connection-key properties with integrated cable settings, live line preview and clear buttons"></p>
 
 **Document each switch with VLAN-marked faceplates, trunks and a port inventory.**
-<p align="center"><img src="docs/images/port-map.png" width="900" alt="Fictional Harbor Workshop port map with native VLAN fills, tagged VLAN dots, LAG outlines and the VLAN key"></p>
+<p align="center"><img src="docs/images/port-map.png" width="900" alt="Actual generated A4 port map of a fictional eight-member stack, with readable ports and a side VLAN/LAG key"></p>
 
 **Review connection improvements before applying one undoable layout change.**
 <p align="center"><img src="docs/images/organize-connections.png" width="1000" alt="Organization preview with current and proposed cable length, bends, crossings and drawing footprint"></p>
