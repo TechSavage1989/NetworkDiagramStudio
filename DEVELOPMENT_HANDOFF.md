@@ -19,8 +19,9 @@ cherry-pick hashes; verify tree identity and the exact remote head's CI.
 
 Local interactive Chromium is blocked by IPC restrictions even after escalation.
 Actual synthetic SVG/PDF renders were inspected. Hosted run 42674168964 supplied real current editor captures for the hero,
-port map, wireless sheet, connection legend and organization preview. Direct
-transform captures await the toolbar regression correction. No customer data or supplied
+port map, wireless sheet, connection legend and organization preview. Run 42675679821 passed all hosted Edge browser suites, including strict direct
+transform hit-testing and saved-width checks. Its direct transform capture is
+now included in docs/images/direct-transforms.png. No customer data or supplied
 customer screenshots are included in this repository.
 # Unreleased: inline port defaults and cable-safe caption backings
 

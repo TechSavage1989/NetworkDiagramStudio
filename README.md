@@ -62,6 +62,8 @@ Network engineers can use the Windows application or the offline browser edition
 <p align="center"><img src="docs/images/wireless-paper.png" width="900" alt="Actual generated Letter wireless continuation sheet with fictional switch members, AP details and physical port links"></p>
 
 
+[Direct text editing](docs/images/direct-transforms.png) offers visible resize/rotation handles and a compact text toolbar.
+
 Cable labels and port numbers use centered text by default; explicit text-style edits remain available.
 
 Auto-fit plans wireless pages for the selected paper before drawing, so dense stacks continue across sheets instead of shrinking AP details to tiny text. Dynamic pages and Preserve existing layout remain available.

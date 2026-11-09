@@ -135,10 +135,10 @@ static class Program
         {
             var nativeParsed = Parser.Parse("; JL256A Configuration Editor\nhostname LAB-NATIVE-TAGGING\ninterface 1\n vlan trunk native 10 tag\n" + (allowed == null ? "" : " vlan trunk allowed " + allowed + "\n") + " exit\n");
             var nativePort = nativeParsed.Ports.Single(port => port.Id == "1");
-            var expected = allowed == null ? new[] {10} : allowed == "10,20" ? new[] {10,20} : new[] {20};
-            Check(nativePort.UntaggedVlan == null && nativePort.UntaggedState == "None" && nativePort.TaggedVlans.SequenceEqual(expected), "Upstream parser distinguishes implicit, included and excluded tagged-native membership.");
+            var expectedMembership = allowed == null ? new[] {10} : allowed == "10,20" ? new[] {10,20} : new[] {20};
+            Check(nativePort.UntaggedVlan == null && nativePort.UntaggedState == "None" && nativePort.TaggedVlans.SequenceEqual(expectedMembership), "Upstream parser distinguishes implicit, included and excluded tagged-native membership.");
             var normalizedPort = new JsonObject { ["name"] = "1", ["native"] = 10, ["nativeTagged"] = true };
-            if(allowed != null)normalizedPort["tagged"] = new JsonArray(expected.Select(id => (JsonNode)JsonValue.Create(id)!).ToArray());
+            if(allowed != null)normalizedPort["tagged"] = new JsonArray(expectedMembership.Select(id => (JsonNode)JsonValue.Create(id)!).ToArray());
             var normalized = Object(SwitchportReportService.PreviewJson(new JsonObject { ["items"] = new JsonArray(new JsonObject { ["id"] = "membership", ["device"] = new JsonObject { ["name"] = "LAB-NORMALIZED-TAGGING", ["model"] = "JL256A", ["ports"] = new JsonArray(normalizedPort) } }), ["combined"] = false }.ToJsonString()));
             Check(normalized["items"]![0]!["success"]!.GetValue<bool>(), "Native membership comparison renders.");
             var rendered = normalized["items"]![0]!["inventory"]!["ports"]!.AsArray().Single(port => port!["id"]!.GetValue<string>() == "1")!;
