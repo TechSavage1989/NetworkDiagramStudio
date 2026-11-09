@@ -44,7 +44,7 @@ Imported projects reopen through the evidence composer. Unambiguous accepted dev
 
 Manual cable controls operate on orthogonal point arrays and preserve both port endpoints. Reconnection edits normalized inventory endpoints, resolves an available physical socket, rebuilds the route and migrates style without keeping obsolete bends. Per-sheet legends are derived after cable style patches and contain only the styles in use.
 
-SVG hops have a local white clearance stroke. Core label placement includes hop envelopes. Native Visio exports the underlying orthogonal geometry with LineJumpCode=4 and LineJumpStyle=1 at page level; connectors inherit the page jump rule. This avoids a stale baked ArcTo after a connector is edited. Native Visio rendering remains a separate Windows validation step.
+SVG hops use local masks on crossed cable strokes, so clearance reveals the actual background and native or imported artwork. Each mask is bounded to the affected cable and keeps the full interactive path intact. Core label placement includes hop envelopes. Native Visio connectors retain the planner's EllipticalArcTo jumps on first open and the page's native jump settings for subsequent rerouting. Direct Microsoft Visio rendering remains a separate validation step.
 
 Port table filtering, grouping and numeric order are independent of the hardware faceplate. Mapper box selection, dragging and arrow nudges use normalized coordinates; zoom changes only the viewport. At an edge the selected group clamps as one unit.
 

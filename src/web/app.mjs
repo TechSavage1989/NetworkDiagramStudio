@@ -1,4 +1,5 @@
 import {physicalLink} from './physical-links.mjs';
+import {installFormControls} from './form-controls.mjs';
 import {connectionLayoutEditor} from './connection-layout-ui.mjs';
 import {automaticDeviceGap} from './compact-layout.mjs';
 import {importSwitchportWorkspace,enrichSwitchportSources} from './switchport-import.mjs';
@@ -42,6 +43,7 @@ import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layo
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reopenEvidence} from './evidence.mjs';
 
 // Keep browser navigation/debug actions out of the drawing workspace.
+installFormControls();
 document.addEventListener('contextmenu',event=>event.preventDefault());
 const $=id=>document.getElementById(id);
 const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{if(editDrawing){if(besidePick){pickBesideReference(key);return true;}if(cableControlClick(key,e,target))return true;selectDrawingItem(key,e.shiftKey||e.ctrlKey||e.metaKey);return true;}return false;},onBeforeInteraction:commitInlineEdit,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!besidePick&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!besidePick&&!target.closest('.cable-controls'))editOnDoubleClick(key);}});
@@ -124,12 +126,12 @@ function setDrawingEdits(next){
  perform('drawing',prepared);
 }
 function setLinkStyle(type,change,extraEdits={}){
- project.layout||={};const before=project.layout,next=changeLinkStyle(project,pages,type,change);project.layout={...before,...next,drawingEdits:cleanDrawingEdits({...next.drawingEdits,...extraEdits})};
- try{validateDrawing();}catch(error){project.layout=before;throw error;}perform('link-style');
+ project.layout||={};const before=project.layout,source={...project,layout:{...before,drawingEdits:cleanDrawingEdits({...before.drawingEdits,...extraEdits})}},stylePages=buildDrawing(scoped(),{includeHidden:true}),next=changeLinkStyle(source,stylePages,type,change);project.layout={...before,...next};
+ let prepared;try{prepared=validateDrawing();}catch(error){project.layout=before;throw error;}perform('link-style',prepared);
 }
 function setLegendStyle(type,details,style,extraEdits={}){
- const before=project,next=changeLegendConnections(project,pages,type,details,style,extraEdits,source=>buildPages(scoped(source)));
- project=next;try{validateDrawing();}catch(error){project=before;throw error;}perform('link-style');
+ const before=project,stylePages=buildDrawing(scoped(),{includeHidden:true}),next=changeLegendConnections(project,stylePages,type,details,style,extraEdits,source=>buildPages(scoped(source),{includeHidden:true}));
+ project=next;let prepared;try{prepared=validateDrawing();}catch(error){project=before;throw error;}perform('link-style',prepared);
 }
 function legendFields(body,type){
  const records=legendConnections(project,pages,type);if(!records.length)return null;
@@ -144,8 +146,8 @@ function saveTextEdit(item,value,color){
 }
 function editOnDoubleClick(key){
  const item=pages[active]&&drawingObjects(pages[active]).find(i=>i.editKey===key);if(!item)return;
+ if(!commitInlineEdit())return;viewport.preserve();editDrawing=true;$('edit-drawing').setAttribute('aria-pressed','true');$('canvas').classList.add('editing');selectDrawingItem(key);
  if(['text','arttext'].includes(item.type)){
-  if(!commitInlineEdit())return;editDrawing=true;$('edit-drawing').setAttribute('aria-pressed','true');$('canvas').classList.add('editing');selectDrawingItem(key);
   const box=drawingBounds(item),svg=$('canvas').querySelector('svg'),size=item.type==='arttext'&&item.normalized?item.size*item.parent.w:item.size;
   inlineSession=inlineTextEditor(svg,{box,value:editableText(item),size,bold:item.bold,color:item.color,align:item.align,onMore:()=>task(()=>editDrawingObject(key)),onSave(value,color){const text=item.type==='arttext'?value:value.replace(/[\r\n]+/g,' ');if(text===editableText(item)&&color===item.color)return;saveTextEdit(item,text,color);say('Diagram text saved.');},onClose(){inlineSession=null;inlineCancel=null;$('canvas').focus({preventScroll:true});}});inlineCancel=()=>inlineSession?.cancel();
  }else task(()=>editDrawingObject(key));
@@ -370,18 +372,25 @@ function portMapOptions(){
  button(actions(body),'Apply port map options',()=>{project.layout.portMap={...(style.value==='faceplate'?{mapStyle:'faceplate'}:{}),presentation:format.value,density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
 }
 $('port-map-options').onclick=()=>task(portMapOptions);
+function linkCaptionFields(body,type,{collapsible=false}={}){
+ let defaults={},currentType=type;
+ const current=project.layout?.linkStyles?.[type]||{},section=el(collapsible?'details':'div','','link-caption-fields');body.append(section);
+ if(collapsible){section.append(el('summary','Titles and descriptions'));section.open=!!(current.description||current.lineDescription||current.title&&current.title!==type||current.lineTitle&&current.lineTitle!==type);}
+ const grid=el('div','','compact-fields');section.append(grid);const inputs={};
+ for(const [key,name] of [['title','Legend title'],['lineTitle','Line title'],['description','Legend description'],['lineDescription','Line description']]){const cell=el('div','','compact-field');grid.append(cell);defaults[key]=current[key]??(key==='title'||key==='lineTitle'?type:'');inputs[key]=field(cell,name,defaults[key]);inputs[key].maxLength=key==='title'||key==='lineTitle'?160:240;}
+ return {get value(){return Object.fromEntries(Object.entries(inputs).map(([key,input])=>[key,input.value]));},retarget(type){if(type===currentType)return;const next=project.layout?.linkStyles?.[type]||{};for(const [key,input] of Object.entries(inputs)){const value=next[key]??(key==='title'||key==='lineTitle'?type:'');if(input.value===defaults[key])input.value=value;defaults[key]=value;}currentType=type;}};
+}
+function lineWidthValue(input){const value=Number(input.value);if(input.value.trim()===''||!Number.isFinite(value)||value<=0||value>12000)throw Error('Line width must be greater than 0 and no more than 12000.');return value;}
 function linkStyleOptions(selected){
  const used=new Map();for(const p of pages)for(const line of p.items.filter(i=>i.type==='path'))if(!used.has(line.linkType))used.set(line.linkType,line);
  const types=[...new Set([...used.keys(),...linkDefaults.map(([type])=>type)])],type=types.includes(selected)?selected:types[0],line=used.get(type),current=project.layout?.linkStyles?.[type]||{},body=modal('Link styles','compact-color-dialog');
  const choice=field(body,'Link type',type,types.map(t=>[t,t+(used.has(t)?'':' (unused)')]));choice.onchange=()=>linkStyleOptions(choice.value);
  const details=legendFields(body,type);
- const captions=el('div','','compact-fields');body.append(captions);const caption=(name,value)=>{const cell=el('div','','compact-field');captions.append(cell);return field(cell,name,value);};
- const title=caption('Legend title',current.title??type),lineTitle=caption('Line title',current.lineTitle??type),description=caption('Legend description',current.description||''),lineDescription=caption('Line description',current.lineDescription||'');
-  for(const input of [title,lineTitle])input.maxLength=160;for(const input of [description,lineDescription])input.maxLength=240;
+ const captions=linkCaptionFields(body,type),widths=[...new Set(pages.flatMap(page=>page.items.filter(item=>item.type==='path'&&item.linkType===type).map(item=>unpresentPatch(item,{weight:item.weight}).weight)))],initialWidth=widths.length>1?'':String(widths[0]??current.weight??4),width=field(body,'Line width',initialWidth);width.type='number';width.step=.1;width.min=.1;width.max=12000;if(widths.length>1)width.placeholder='Mixed - keep existing';
  body.append(el('p','Applies to matching lines and legends throughout the drawing.','hint'));
- const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});
- const bar=actions(body);button(bar,'Save link style',()=>{setLegendStyle(type,details?.value||{},{title:title.value,description:description.value,lineTitle:lineTitle.value,lineDescription:lineDescription.value,color:picker.value,opacity:picker.opacity});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
- button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1});close();});button(bar,'Cancel',close);
+ const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,width:widths[0]??current.weight??4,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});picker.bindWidth(width);
+ const bar=actions(body);button(bar,'Save link style',()=>{const weight=width.value!==initialWidth?{weight:lineWidthValue(width)}:{};setLegendStyle(type,details?.value||{},{...captions.value,color:picker.value,opacity:picker.opacity,...weight});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
+ button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1,weight:4});close();});button(bar,'Cancel',close);
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
 function layoutOptions(selected=pages[active]?.name){
@@ -724,7 +733,7 @@ function saveConnection(index,link,{drawing=null,patch=null,style=null}={}){
   const rebuilt=buildPages(scoped());let selectedType=null;
   for(const page of rebuilt)for(const path of page.items.filter(item=>item.type==='path'&&sameConnection(item.sourceLink,link))){const previous=oldPaths.find(old=>old.page===page.title)||oldPaths[0],next={...(previous?.patch||{})};if(!sameEnds)delete next.points;if(path.linkType!==oldType){delete next.color;delete next.opacity;}if(previous?.selected&&patch)Object.assign(next,patch);if(Object.keys(next).length)edits[path.editKey]=next;if(previous?.selected)selectedType=path.linkType;}
   if(style){const type=selectedType||connectionType(link).name;project.layout={...project.layout,...changeLinkStyle(project,rebuilt,type,style)};}
-  validateDrawing();perform('connection');
+  const prepared=validateDrawing();perform('connection',prepared);
  }catch(error){Object.assign(project,before);throw error;}
 }
 function editLink(i=-1,drawing=null){
@@ -853,34 +862,38 @@ function editCablePoints(item){
 }
 function editDrawingObject(key){
  const page=pages[active];if(!page)return;const objects=drawingObjects(page),item=objects.find(i=>i.editKey===key)||objects[0];if(!item)return;
- const hasPicker=['path','text','arttext'].includes(item.type)||item.legendEntry&&item.type==='rect',body=modal('Edit drawing object',hasPicker?'compact-color-dialog':''),options=objects.map((i,n)=>[i.editKey,(i.parent?'Panel detail: ':'')+(i.value||i.name||i.type+' '+(n+1)).slice(0,100)]);
+ const linkedSwatch=item.legendEntry&&item.type==='rect',hasPicker=['path','text','arttext'].includes(item.type)||linkedSwatch,body=modal('Edit drawing object',hasPicker?'compact-color-dialog':''),options=objects.map((i,n)=>[i.editKey,(i.parent?'Panel detail: ':'')+(i.value||i.name||i.type+' '+(n+1)).slice(0,100)]);
  const select=field(body,'Drawing object',item.editKey,options);select.onchange=()=>editDrawingObject(select.value);
- const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields'+(item.legendEntry&&item.type==='rect'?' compact-swatch-properties':''):'form-grid');body.append(grid);const inputs={};
+ const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);const inputs={};
  const property=(where,name,value,opts)=>{if(!hasPicker)return field(where,name,value,opts);const cell=el('div','','compact-field');where.append(cell);return field(cell,name,value,opts);};
- for(const k of ['path','vector'].includes(item.type)?[]:item.type==='arttext'?['x','y','w']:['x','y','w','h']){inputs[k]=property(grid,({x:'Left',y:'Top',w:'Width',h:'Height'})[k]+(normalized?' (%)':' (page units)'),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
+ for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
  if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
- let picker=null,currentType=item.linkType;
- const connection=item.type==='path'&&item.sourceLink?drawingConnection(item):null,details=connection?connectionFields(body,connection,{onMediaChange(media){const info=connectionType({...connection,media});if(info.name===currentType)return;currentType=info.name;if(picker){const style=project.layout?.linkStyles?.[info.name],existing=pages.flatMap(page=>page.items).find(path=>path.type==='path'&&path.linkType===info.name);picker.value=style?.color||existing?.color||info.color;picker.opacity=style?.opacity??existing?.opacity??1;}}}):null;
- const linkedSwatch=item.legendEntry&&item.type==='rect',legendDetails=linkedSwatch?legendFields(body,item.linkType):null;
- for(const k of ['rect','vector'].includes(item.type)?linkedSwatch?['stroke']:['fill','stroke']:[]){inputs[k]=property(hasPicker?grid:body,k[0].toUpperCase()+k.slice(1),item[k]||'#17364A');}
- picker=['path','text','arttext'].includes(item.type)||linkedSwatch?colorPicker(body,{kind:item.type==='path'||linkedSwatch?'line':'text',color:linkedSwatch?item.fill:item.color,opacity:item.opacity??1,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
- if(item.type==='path'||linkedSwatch){body.append(el('p','Color and opacity apply to every cable of this link type and its legend entries.','hint'));button(actions(body),'Configure link type, speed and captions',()=>linkStyleOptions(item.linkType));}
- if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',item.weight||1);inputs.weight.type='number';inputs.weight.step=.1;}
+ const initialWeight=linkedSwatch?item.sampleWeight??item.h:item.weight||1;
+ if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',initialWeight);inputs.weight.type='number';inputs.weight.step=.1;inputs.weight.min=.1;inputs.weight.max=12000;}
+ let picker=null,captions=null,currentType=item.linkType;
+ const connection=item.type==='path'&&item.sourceLink?drawingConnection(item):null,details=connection?connectionFields(body,connection,{onMediaChange(media){const info=connectionType({...connection,media});if(info.name===currentType)return;currentType=info.name;captions?.retarget(info.name);if(picker){const style=project.layout?.linkStyles?.[info.name],existing=pages.flatMap(page=>page.items).find(path=>path.type==='path'&&path.linkType===info.name);picker.value=style?.color||existing?.color||info.color;picker.opacity=style?.opacity??existing?.opacity??1;}}}):null;
+ const legendDetails=linkedSwatch?legendFields(body,item.linkType):null;
+ if(item.type==='path'||linkedSwatch)captions=linkCaptionFields(body,item.linkType,{collapsible:true});
+ for(const k of ['rect','vector'].includes(item.type)&&!linkedSwatch?['fill','stroke']:[]){inputs[k]=property(hasPicker?grid:body,k[0].toUpperCase()+k.slice(1),item[k]||'#17364A');}
+ picker=hasPicker?colorPicker(body,{kind:item.type==='path'||linkedSwatch?'line':'text',color:linkedSwatch?item.fill:item.color,opacity:item.opacity??1,width:initialWeight,used:page.items.flatMap(i=>[i.color,i.fill,i.stroke])}):null;
+ if(picker&&inputs.weight)picker.bindWidth(inputs.weight);
+ if(item.type==='path')body.append(el('p','Cable type, speed and width apply to this connection. Color, opacity and titles are shared with its link type.','hint'));
  if(item.type==='vector')inputs.commands=field(body,'Vector commands (JSON, normalized coordinates)',JSON.stringify(item.commands),'multiline');
  if(item.type==='path'){const bar=actions(body);button(bar,'Edit bend points',()=>editCablePoints(item));if(item.sourceLink)button(bar,'Connect endpoints',()=>connectSelectedCable(item));}
- const scaleObject=item.type!=='path'?field(body,'Scale this object (%)',100):null;if(scaleObject){scaleObject.type='number';scaleObject.min=10;scaleObject.max=400;}
+ const scaleObject=item.type!=='path'&&!linkedSwatch?field(body,'Scale this object (%)',100):null;if(scaleObject){scaleObject.type='number';scaleObject.min=10;scaleObject.max=400;}
  const bar=actions(body);button(bar,'Save object',()=>{
-  const change={};for(const [k,input] of Object.entries(inputs)){if(['x','y','w','h','size','weight'].includes(k)){const n=Number(input.value)/(normalized&&(['x','y','w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||['w','h','size','weight'].includes(k)&&n<=0)throw Error('Use a valid positive size and finite position.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
+  const change={};for(const [k,input] of Object.entries(inputs)){if(['w','h','size','weight'].includes(k)){const n=(k==='weight'?lineWidthValue(input):Number(input.value))/(normalized&&(['w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||n<=0)throw Error('Use a valid positive size.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
   if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
   if(scaleObject){const factor=Number(scaleObject.value)/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Use an object scale from 10 to 400 percent.');for(const k of ['w','h','size'])if(Number.isFinite(change[k]))change[k]*=factor;if(item.type==='vector'&&Array.isArray(change.commands)){const bounds=drawingBounds(item),x=(bounds.x-item.parent.x)/item.parent.w,y=(bounds.y-item.parent.y)/item.parent.h;change.commands=change.commands.map(c=>c.length===3?[c[0],x+(c[1]-x)*factor,y+(c[2]-y)*factor]:c);}}
   Object.assign(change,unpresentPatch(item,change));
   const clean=cleanDrawingEdits({[item.editKey]:change})[item.editKey];if(!clean||Object.keys(clean).length!==Object.keys(change).length)throw Error('Use hex colors, valid text settings, and finite dimensions.');
-  if(item.type==='path'||linkedSwatch){const style={color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];const selected=details?.value,changed=selected&&(selected.media!==String(connection.media||'unknown').trim()||selected.speed!==String(connection.speed||'').trim());if(linkedSwatch)setLegendStyle(item.linkType,legendDetails?.value||{},style,{[item.editKey]:patch});else if(changed)saveConnection(project.links.findIndex(link=>sameConnection(link,item.sourceLink)),{...connection,...selected},{drawing:item,patch,style});else setLinkStyle(item.linkType,style,{[item.editKey]:patch});}
+  if(item.type==='path'||linkedSwatch){const style={...captions.value,color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];if(linkedSwatch){if(inputs.name.value===item.name&&item.name===item.linkType+' color key')delete patch.name;if(Number(inputs.weight.value)!==initialWeight)style.weight=lineWidthValue(inputs.weight)/(presentation(project,page).drawingScale||1);delete patch.weight;delete patch.h;delete patch.stroke;setLegendStyle(item.linkType,legendDetails?.value||{},style,{[item.editKey]:patch});}else{const selected=details?.value,changed=selected&&(selected.media!==String(connection.media||'unknown').trim()||selected.speed!==String(connection.speed||'').trim());if(changed)saveConnection(project.links.findIndex(link=>sameConnection(link,item.sourceLink)),{...connection,...selected},{drawing:item,patch,style});else setLinkStyle(item.linkType,style,{[item.editKey]:patch});}}
   else if(item.legendEntry&&item.linkType&&clean.value!==editableText(item)){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:clean.value},{[item.editKey]:patch});}
   else if(item.legendEntry&&item.linkType){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};if(project.layout?.drawingEdits?.[item.editKey]?.value==null)delete patch.value;setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});}
   else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}});picker?.remember();close();say('Drawing object saved.');
  },'primary');
+ button(bar,'Cancel',close);
  button(bar,'Reset object',()=>{const next={...project.layout?.drawingEdits};delete next[item.editKey];if(item.legacyEditKey)delete next[item.legacyEditKey];setDrawingEdits(next);close();});
  if(item.type!=='device'&&item.type!=='path')button(bar,'Hide object',()=>{setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:item.type==='vector'?{commands:[]}:item.type==='arttext'?{value:''}:{hidden:true}});close();});
  if(item.type==='device'){const device=project.devices.find(d=>d.id===item.sourceId);if(device){button(bar,'Device details',()=>editDevice(device));button(bar,'Find stencil',()=>deviceStencil(device));if(item.asset)button(bar,'Map ports',()=>editAnchors(project.stencils[device.stencilId]));}if(item.asset)body.append(el('p',item.asset.native?'Vector details remain independently editable in the Visio export.':'This stencil contains a picture. Its image can be replaced and resized; map its ports under Map ports.','hint'));}

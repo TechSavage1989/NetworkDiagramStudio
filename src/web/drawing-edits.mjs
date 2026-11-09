@@ -43,7 +43,7 @@ export function applyDrawingEdits(page,project){
  });
  page.items=page.items.filter(i=>!edits[i.editKey]?.hidden);
  for(const i of page.items)if(i.type==='device')i.children=i.children.filter(c=>!edits[c.editKey]?.hidden);
- applyLinkStyles(page,project.layout?.linkStyles);
+ applyLinkStyles(page,project.layout?.linkStyles,edits);
 }
 export function drawingObjects(page){const out=[];for(const item of page.items){out.push(item);if(item.type!=='device')continue;if(!item.asset)for(const child of item.children)out.push({...child,parent:item,normalized:true});else if(item.asset.native){item.asset.native.paths.forEach((p,i)=>out.push({...p,type:'vector',name:p.name||'Vector path '+(i+1),editKey:item.editKey+'|vector|'+i,parent:item,normalized:true}));item.asset.native.texts.forEach((t,i)=>out.push({...t,type:'arttext',value:t.text,editKey:item.editKey+'|arttext|'+i,parent:item,normalized:true}));}}return out;}
 export function drawingBounds(item){

@@ -1,6 +1,7 @@
 // Cable interaction uses the painted route and a screen-pixel allowance. It
 // never adds a wider hit stroke to the drawing or changes its physical width.
 export const cablePickRadius=12;
+const lineSelector='path.diagram-cable,rect.diagram-legend-line';
 const tau=Math.PI*2,number=/[MLA]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi;
 const bound=points=>({x:Math.min(...points.map(p=>p[0])),y:Math.min(...points.map(p=>p[1])),right:Math.max(...points.map(p=>p[0])),bottom:Math.max(...points.map(p=>p[1]))});
 const segmentDistance=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);};
@@ -79,10 +80,10 @@ export function cableProximity(canvas,{enabled=()=>false,highlight=enabled}={}){
   if(path===hover)return;clear();if(!path||!svg||!highlight())return;
   hover=path;path.classList.add('cable-hover');canvas.classList.add('near-cable');
   halo=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','g');halo.setAttribute('class','cable-proximity-halo');halo.setAttribute('data-editor-only','cable-hover');halo.setAttribute('aria-hidden','true');halo.setAttribute('pointer-events','none');
-  const matrix=svg.getScreenCTM(),scale=Math.hypot(matrix.a,matrix.b),paintedWidth=Number(path.getAttribute('stroke-width'))||0;
+  const matrix=svg.getScreenCTM(),scale=Math.hypot(matrix.a,matrix.b),candidate=candidates.find(item=>item.element===path),paintedWidth=candidate?.weight??(Number(path.getAttribute('stroke-width'))||0);
   // CSS transforms on the root SVG also scale non-scaling-stroke in Chromium.
   // Compensate the glow padding explicitly, keeping its screen width steady.
-  for(const padding of [12,6]){const line=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path');for(const [key,value] of Object.entries({d:path.getAttribute('d'),fill:'none',stroke:'#16839a','stroke-width':paintedWidth+padding/scale,'stroke-opacity':padding===12?.16:.3,'stroke-linejoin':'round','stroke-linecap':'round','pointer-events':'none'}))line.setAttribute(key,String(value));halo.append(line);}
+  for(const padding of [12,6]){const line=svg.ownerDocument.createElementNS('http://www.w3.org/2000/svg','path');for(const [key,value] of Object.entries({d:candidate?.path||path.getAttribute('d'),fill:'none',stroke:'#16839a','stroke-width':paintedWidth+padding/scale,'stroke-opacity':padding===12?.16:.3,'stroke-linejoin':'round','stroke-linecap':'round','pointer-events':'none'}))line.setAttribute(key,String(value));if(path.hasAttribute('mask'))line.setAttribute('mask',path.getAttribute('mask'));halo.append(line);}
   path.before(halo);
  }
  function resolve(event,forHover=false){
@@ -91,20 +92,20 @@ export function cableProximity(canvas,{enabled=()=>false,highlight=enabled}={}){
   // Existing artwork and edit controls always take priority. A background
   // click may find a nearby cable, but may never reach through another object.
   if(target.closest('[data-inline-editor],.cable-controls,[data-device-id],text,foreignObject,a,button,input,select,textarea'))return null;
-  const keyed=target.closest('[data-drawing-key]');if(keyed&&!keyed.matches('path.diagram-cable'))return null;
+  const keyed=target.closest('[data-drawing-key]');if(keyed&&!keyed.matches(lineSelector))return null;
   return closestCable(candidates,{x:event.clientX,y:event.clientY},svg.getScreenCTM())?.element||null;
  }
  function sync(){
   const next=!!svg&&!!enabled();if(next===active)return;if(!next)clear();active=next;
-  for(const {element} of candidates){if(next){element.setAttribute('tabindex','0');element.setAttribute('role','button');element.setAttribute('aria-label','Select connection: '+(element.querySelector('title')?.textContent||'Cable'));}else for(const name of ['tabindex','role','aria-label'])element.removeAttribute(name);}
+  for(const {element} of candidates){if(next){element.setAttribute('tabindex','0');element.setAttribute('role','button');element.setAttribute('aria-label',(element.matches('rect')?'Select connection key: ':'Select connection: ')+(element.querySelector('title')?.textContent||'Cable'));}else for(const name of ['tabindex','role','aria-label'])element.removeAttribute(name);}
  }
  return {
-  show(element){clear();svg=element;candidates=[...(svg?.querySelectorAll?.('path.diagram-cable[data-drawing-key]')||[])].filter(element=>Number(element.getAttribute('stroke-opacity')??1)>0).map(element=>({element,key:element.getAttribute('data-drawing-key'),weight:Number(element.getAttribute('stroke-width')),geometry:cableGeometry(element.getAttribute('d'))}));active=false;sync();},
+  show(element){clear();svg=element;candidates=[...(svg?.querySelectorAll?.('path.diagram-cable[data-drawing-key],rect.diagram-legend-line[data-drawing-key]')||[])].filter(element=>Number(element.getAttribute(element.matches('rect')?'fill-opacity':'stroke-opacity')??1)>0).map(element=>{const legend=element.matches('rect'),x=Number(element.getAttribute('x')),y=Number(element.getAttribute('y'))+Number(element.getAttribute('height'))/2,path=legend?'M '+x+' '+y+' L '+(x+Number(element.getAttribute('width')))+' '+y:element.getAttribute('d');return {element,key:element.getAttribute('data-drawing-key'),path,weight:Number(element.getAttribute(legend?'height':'stroke-width')),geometry:cableGeometry(path)};});active=false;sync();},
   clear,
   sync,
   resolve,
   hover(event){if(!svg||!highlight()){clear();return;}pending=event;if(frame!=null)return;const win=windowFor();if(!win)return;frame=win.requestAnimationFrame(()=>{frame=null;const next=pending;pending=null;setHover(next?resolve(next,true):null);});},
-  focus(target){sync();setHover(active&&target?.matches?.('path.diagram-cable')?target:null);},
+  focus(target){sync();setHover(active&&target?.matches?.(lineSelector)?target:null);},
   reset(){clear();svg=null;candidates=[];active=false;}
  };
 }

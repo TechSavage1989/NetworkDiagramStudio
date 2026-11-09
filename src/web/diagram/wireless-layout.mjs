@@ -1,7 +1,7 @@
 import {deviceScale,presentation} from '../presentation.mjs';
 import {pageGeometry} from '../page-options.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
-import {applyLinkStyles} from '../link-styles.mjs';
+import {applyLinkStyles,linkWeight} from '../link-styles.mjs';
 import {deviceModel,macCaption} from '../device-details.mjs';
 import {wrapPortText} from '../port-table.mjs';
 import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,equipmentGapPlan,canContinueEquipment} from './equipment-layout.mjs';
@@ -24,7 +24,7 @@ function pathKey(project,e){
  // is unique in this family, so retain that saved key when sheets consolidate.
  return Object.keys(edits).find(k=>k.endsWith(suffix)&&(k.startsWith(prefix+'|')||k.startsWith(prefix+' ')&&/^ \d+\|/.test(k.slice(prefix.length))))||key;
 }
-const pathWeight=(project,e)=>project.layout?.drawingEdits?.[pathKey(project,e)]?.weight||cableWeight;
+const pathWeight=(project,e)=>linkWeight(project,mediaInfo(e.media,true).name,project.layout?.drawingEdits?.[pathKey(project,e)]?.weight);
 function identityKey(project,e,role){
  let hash=14695981039346656037n;for(const c of JSON.stringify([e.apId,e.sw,e.sp,e.apPort]))hash=BigInt.asUintN(64,(hash^BigInt(c.codePointAt(0)))*1099511628211n);
  return (project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections|'+role+'|'+hash.toString(36);
@@ -80,7 +80,7 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
   const metrics=Object.fromEntries(Object.entries(rows).map(([side,rows])=>[side,{width:Math.max(0,...rows.map(row=>row.width)),height:rows.reduce((n,row)=>n+row.height+row.apHeight+row.lanes+(side==='top'?6:10),0)}]));
   const W=geometry.dynamic?Math.max(geometry.width,panel.w+margin*2,metrics.top.width+92,metrics.bottom.width+92):geometry.width;
   if(panel.w+margin*2>W+.01||Math.max(metrics.top.width,metrics.bottom.width)>W-92)continue;
-  if(!legendCache.has(W)){const preview={width:W,height:geometry.height,items:edges.map(e=>({type:'path',color:mediaInfo(e.media,true).color,weight:pathWeight(project,e),linkType:mediaInfo(e.media,true).name,sourceLink:e}))};applyLinkStyles(preview,project.layout?.linkStyles);linkLegend(preview);legendCache.set(W,Math.max(204,(preview.legendBottom||189)+14));}
+  if(!legendCache.has(W)){const preview={width:W,height:geometry.height,items:edges.map(e=>({type:'path',editKey:pathKey(project,e),color:mediaInfo(e.media,true).color,weight:pathWeight(project,e),linkType:mediaInfo(e.media,true).name,sourceLink:e}))};applyLinkStyles(preview,project.layout?.linkStyles,project.layout?.drawingEdits);linkLegend(preview);legendCache.set(W,Math.max(204,(preview.legendBottom||189)+14));}
   const start=legendCache.get(W),switchY=start+metrics.top.height,H=switchY+panel.h+metrics.bottom.height+64;
   if(!geometry.dynamic&&H>geometry.height)continue;
   const travel=ends.reduce((sum,v)=>sum+(topIds.has(v.e.idx)?v.anchor.y:panel.h-v.anchor.y),0);

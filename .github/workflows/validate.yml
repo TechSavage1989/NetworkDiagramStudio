@@ -9,6 +9,83 @@ concurrency:
   group: validate-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 jobs:
+  browser-validation:
+    name: Editor browser validation
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Prepare Playwright and installed Microsoft Edge
+        shell: pwsh
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $qaRoot = Join-Path $env:RUNNER_TEMP 'nds-editor-browser-checks'
+          New-Item -ItemType Directory -Path $qaRoot -Force | Out-Null
+          $browserTools = Join-Path $env:RUNNER_TEMP 'nds-browser-tools'
+          npm install --prefix $browserTools --no-audit --no-fund --ignore-scripts playwright@1.62.1 2>&1 | Tee-Object -FilePath (Join-Path $qaRoot 'setup.log')
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $modulePath = Join-Path $browserTools 'node_modules/playwright'
+          $packageVersion = (Get-Content (Join-Path $modulePath 'package.json') -Raw | ConvertFrom-Json).version
+          if ($packageVersion -ne '1.62.1') { throw "Unexpected Playwright version: $packageVersion" }
+          $edgeCandidates = @(
+            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+          )
+          $edgePath = $edgeCandidates | Where-Object { Test-Path $_ -PathType Leaf } | Select-Object -First 1
+          if (-not $edgePath) { throw 'The Windows runner does not have Microsoft Edge installed.' }
+          $edgeVersion = (Get-Item $edgePath).VersionInfo.ProductVersion
+          Add-Content -Path $env:GITHUB_ENV -Value "PLAYWRIGHT_MODULE_PATH=$modulePath"
+          Add-Content -Path $env:GITHUB_ENV -Value "BROWSER_EXECUTABLE_PATH=$edgePath"
+          Add-Content -Path $env:GITHUB_ENV -Value "NDS_BROWSER_QA_ROOT=$qaRoot"
+          @{ playwright = $packageVersion; edge = $edgeVersion; executable = $edgePath } | ConvertTo-Json | Set-Content (Join-Path $qaRoot 'toolchain.json')
+          Write-Host "Using Playwright $packageVersion with Microsoft Edge $edgeVersion."
+      - name: Build offline browser application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node scripts/build-web.mjs
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Verify editor controls, previews, cable targeting and exports
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          $checks = @(
+            @{ name = 'color-picker'; script = 'tests/browser-color-picker.mjs' },
+            @{ name = 'form-controls'; script = 'tests/browser-form-controls.mjs' },
+            @{ name = 'transparent-hops'; script = 'tests/browser-transparent-hops.mjs' },
+            @{ name = 'cable-proximity'; script = 'tests/browser-cable-proximity.mjs' },
+            @{ name = 'editor-properties'; script = 'tests/browser-editor-properties.mjs' },
+            @{ name = 'documentation'; script = 'tests/browser-documentation.mjs' }
+          )
+          $results = @()
+          foreach ($check in $checks) {
+            $env:NDS_QA_OUTPUT = Join-Path $env:NDS_BROWSER_QA_ROOT $check.name
+            New-Item -ItemType Directory -Path $env:NDS_QA_OUTPUT -Force | Out-Null
+            Write-Host "Running $($check.script)"
+            & node $check.script 2>&1 | Tee-Object -FilePath (Join-Path $env:NDS_QA_OUTPUT 'run.log')
+            $code = $LASTEXITCODE
+            $results += @{ name = $check.name; exitCode = $code }
+          }
+          $results | ConvertTo-Json | Set-Content (Join-Path $env:NDS_BROWSER_QA_ROOT 'checks.json')
+          $failures = @($results | Where-Object { $_.exitCode -ne 0 })
+          if ($failures.Count) { throw ('Browser validation failed: ' + (($failures | ForEach-Object { $_.name }) -join ', ')) }
+      - name: Upload editor browser checks
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: editor-browser-checks
+          path: ${{ runner.temp }}/nds-editor-browser-checks
+          if-no-files-found: warn
+          retention-days: 14
   portable:
     name: Windows and browser validation
     runs-on: windows-2022
