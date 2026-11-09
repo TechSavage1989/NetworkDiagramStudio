@@ -294,6 +294,7 @@ export function corePages(project,inventory){
   const panelOptions=presentation(pageProject,sheet.name).panel;
   if(panelOptions.width!==244||panelOptions.scale!==1||!panelOptions.visible||panelOptions.position!=='left'){const reserve=panelOptions.visible&&panelOptions.position==='left'?panelOptions.width*panelOptions.scale:0;sidebar.width=panelOptions.width;sidebar.contentLeft=reserve?62+reserve:38;sidebar.divider=reserve?56+reserve:38;sidebar.bodyLeft=sidebar.contentLeft+124;}
   sidebar.textScale=panelOptions.textScale*presentation(pageProject,sheet.name).textScale;
+  sidebar.connectionHeading=panelOptions.sectionTitles.connections||'Connection types';
   // Label retries can expand the canvas, but must not move every unedited
   // device sideways while the user is moving one selected device.
   if(dynamic)sidebar.bodyLeft+=leftReserve;
