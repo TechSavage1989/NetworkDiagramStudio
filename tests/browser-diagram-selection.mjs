@@ -24,7 +24,10 @@ export async function checkDiagramSelection(page,output,open){
  await page.locator('#drawing-clear').click();await selectAll('Meta');assert.equal(await page.locator('#drawing-selection').textContent(),expected.length+' selected');
  assert.equal(await page.locator('[data-transform]').count(),5);
  await page.locator('#drawing-group').click();const grouped=await save('selection-grouped');
- assert.deepEqual(grouped.layout.drawingGroups.at(-1).keys.sort(),expected,'Group must contain only this page’s whole diagram objects');
+ // Membership comparison must not reorder the baseline used by exact history checks.
+ const originalGroups=structuredClone(grouped.layout.drawingGroups);
+ assert.deepEqual([...grouped.layout.drawingGroups.at(-1).keys].sort(),expected,'Group must contain only this page’s whole diagram objects');
+ assert.deepEqual(grouped.layout.drawingGroups,originalGroups,'Membership assertion preserves saved group order');
  const cycle=async(name,action)=>{
   const before=await save(name+'-before');await action();const after=await save(name+'-after');assert.notDeepEqual(state(after),state(before),name+' must change saved geometry');
   await page.locator('#drawing-undo').click();assert.deepEqual(state(await save(name+'-undo')),state(before),name+' Undo');
