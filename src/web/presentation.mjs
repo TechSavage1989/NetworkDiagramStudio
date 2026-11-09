@@ -1,8 +1,17 @@
 const safe=k=>typeof k==='string'&&k.length<=300&&!['__proto__','constructor','prototype'].includes(k);
 const object=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{};
 const number=(n,min,max,fallback)=>Number.isFinite(n)&&n>=min&&n<=max?n:fallback;
-export const panelFields=[['connections','Connection types'],['modules','Port modules / GBICs'],['vlans','VLANs'],['addresses','Device addresses (full list)'],['models','Device models'],['routes','Routes'],['ports','Port and VLAN details'],['notes','Custom notes']];
-export function cleanPanel(raw={}){raw=object(raw);return {visible:raw.visible!==false,position:['left','right','top','free'].includes(raw.position)?raw.position:'left',width:number(raw.width,120,1000,244),scale:number(raw.scale,.1,4,1),textScale:number(raw.textScale,.1,4,1),x:number(raw.x,-1e6,1e6,38),y:number(raw.y,-1e6,1e6,147),sections:panelFields.map(([k])=>k).filter(k=>(Array.isArray(raw.sections)?raw.sections:['connections','modules']).includes(k)),notes:String(raw.notes||'').slice(0,10000)};}
+export const panelFields=[['connections','Connection types'],['modules','Port modules / GBICs'],['vlans','VLANs'],['lags','LAGs / LACP / port groups'],['apPorts','Wireless AP uplinks'],['vsfPorts','VSF / stacking ports'],['uplinks','Uplinks and trunk links'],['optics','Transceivers / optics'],['status','Link status summary'],['addresses','Device addresses (full list)'],['models','Device models'],['routes','Routes'],['ports','Port and VLAN details'],['notes','Custom notes']];
+function sectionId(id){return typeof id==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,47}$/.test(id)&&!['__proto__','constructor','prototype'].includes(id);}
+export function cleanPanel(raw={}){
+ raw=object(raw);
+ const customSections=(Array.isArray(raw.customSections)?raw.customSections:[]).filter(item=>item&&sectionId(item.id)&&item.id.startsWith('custom-')).slice(0,24).map(item=>({id:item.id,title:String(item.title||'Custom section').trim().slice(0,80)}));
+ const ids=new Set([...panelFields.map(([id])=>id),...customSections.map(section=>section.id)]),selections=Array.isArray(raw.sections)?raw.sections:['connections','modules'];
+ const sections=[...new Set(selections)].filter(id=>ids.has(id));
+ const titles=Object.fromEntries(Object.entries(object(raw.sectionTitles)).filter(([id,value])=>ids.has(id)&&typeof value==='string').slice(0,80).map(([id,value])=>[id,value.trim().slice(0,80)]));
+ const content=Object.fromEntries(Object.entries(object(raw.sectionContent)).filter(([id,value])=>ids.has(id)&&typeof value==='string').slice(0,80).map(([id,value])=>[id,value.slice(0,16000)]));
+ return {visible:raw.visible!==false,position:['left','right','top','free'].includes(raw.position)?raw.position:'left',width:number(raw.width,120,1000,244),scale:number(raw.scale,.1,4,1),textScale:number(raw.textScale,.1,4,1),x:number(raw.x,-1e6,1e6,38),y:number(raw.y,-1e6,1e6,147),sections,notes:String(raw.notes||'').slice(0,10000),customSections,sectionTitles:titles,sectionContent:content,modulesMode:raw.modulesMode==='full'?'full':'summary'};
+}
 function settings(raw={},defaults=false){raw=object(raw);const out={};for(const k of ['drawingScale','textScale','deviceScale'])if(defaults||Number.isFinite(raw[k]))out[k]=number(raw[k],.1,4,1);if(defaults||raw.panel)out.panel=cleanPanel(raw.panel);if(typeof raw.name==='string')out.name=raw.name.trim().slice(0,80);if(raw.hidden===true)out.hidden=true;return out;}
 export function cleanPresentation(raw={}){raw=object(raw);return {defaults:settings(raw.defaults,true),pages:Object.fromEntries(Object.entries(object(raw.pages)).filter(([k])=>safe(k)).slice(0,500).map(([k,v])=>[k,settings(v)]))};}
 export function presentation(project,page){const p=cleanPresentation(project?.layout?.presentation),key=page?.name||page;return {...p.defaults,...p.pages[String(key).split('|')[0]],...p.pages[key]};}
