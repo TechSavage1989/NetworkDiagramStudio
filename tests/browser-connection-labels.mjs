@@ -27,7 +27,9 @@ try{
  assert.equal(await page.locator('#dialog-title').textContent(),'Align label to connection');
  assert.ok(await page.locator('#dialog').getByLabel('Position on line',{exact:true}).count());
  await page.locator('#close').click();
- await page.locator('#canvas svg path.diagram-cable.linked-association').first().click({force:true});
+ const linkedStroke=page.locator('#canvas svg path.diagram-cable.linked-association').first();
+ const linkPoint=await linkedStroke.evaluate(node=>{const point=node.getPointAtLength(node.getTotalLength()*.45),screen=point.matrixTransform(node.getScreenCTM());return {x:screen.x,y:screen.y};});
+ await page.mouse.click(linkPoint.x,linkPoint.y);
  assert.ok(await page.locator('#canvas svg text.linked-association').count()>0,'selecting a cable highlights its labels');
  const link=await page.evaluate(async()=>{const {sampleSite}=await import('nds/sample.mjs');return sampleSite().links.find(l=>l.b==='sw-1')||sampleSite().links[0];});
  const endpoint=page.locator('#canvas svg g[data-device-id="'+link.b+'"] [data-port-name="'+link.bp+'"]').first();
