@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPages,printDocument} from '../src/web/diagram/index.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
-import {cleanPageSetup,visiblePagePaper,paperDimensions} from '../src/web/page-options.mjs';
+import {cleanPageSetup,visiblePagePaper,paperDimensions,pageFamily} from '../src/web/page-options.mjs';
 import {cleanLayout} from '../src/web/layout.mjs';
 
 const site=visible=>{const project=sampleSite();project.layout={...project.layout,pageSetup:{visible}};return project;};
@@ -33,11 +33,11 @@ test('visible page setting changes boundaries while retaining every drawing item
 });
 
 test('individual page overrides its group and default; dynamic override cancels inherited paper',()=>{
- const original=build({}),core=original[0],group=core.family;
+ const original=build({}),core=original[0],group=core.family||pageFamily(core.name);
  const configured={default:{preset:'letter',orientation:'portrait'},groups:{[group]:{preset:'a3',orientation:'landscape'}},pages:{[core.name]:{preset:'a4',orientation:'portrait'}}};
  const modified=build(configured),selected=modified.find(p=>p.name===core.name);
  close(shape(selected),210/297);
- const peers=modified.filter(p=>p.family===group&&p.name!==core.name);
+ const peers=modified.filter(p=>(p.family||pageFamily(p.name))===group&&p.name!==core.name);
  if(peers.length)close(shape(peers[0]),420/297);
  const dynamic=build({...configured,pages:{[core.name]:{preset:'dynamic'}}}).find(p=>p.name===core.name);
  close(shape(dynamic),shape(core));
