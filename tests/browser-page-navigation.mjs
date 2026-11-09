@@ -41,6 +41,22 @@ try{
  await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  assert.equal(await page.locator('#canvas svg').getAttribute('viewBox'),before,'printing paper must not change drawing dimensions');
  await page.screenshot({path:resolve(output,'print-paper-options.png')});
+ // A genuine validation rejection must retain its editor and error even
+ // though a dynamic drawing can legitimately accept long titles.
+ const rejection=await page.evaluate(async()=>{
+  const {inlineTextEditor}=await import('nds/inline-text.mjs');
+  const svg=document.querySelector('#canvas svg');
+  const editor=inlineTextEditor(svg,{box:{x:80,y:110,w:220,h:26},value:'Synthetic label',onSave(){throw Error('Synthetic validation rejection');}});
+  const input=document.querySelector('[data-inline-editor] textarea');
+  input.value='Invalid synthetic value';
+  input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+  const error=document.querySelector('[data-inline-editor] .inline-text-error');
+  const result={attached:input.isConnected,visible:!!error?.textContent.includes('Synthetic validation rejection')&&error.getClientRects().length>0};
+  editor.cancel();
+  return result;
+ });
+ assert.equal(rejection.attached,true,'rejected editor remains attached');
+ assert.equal(rejection.visible,true,'validation failure remains visible');
  assert.deepEqual(errors,[]);
  await writeFile(resolve(output,'results.json'),JSON.stringify({groups:await groups.count(),tabScrolledPixels:scrolled,printCanvasUnchanged:true,errors},null,2));
  console.log('PASS page-group dropdowns, horizontal wheel scrolling and unchanged canvas on paper selection.');
