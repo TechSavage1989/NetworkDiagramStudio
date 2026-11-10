@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {buildPages} from '../src/web/diagram/index.mjs';
+import {pathCrossesText} from '../src/web/diagram/labels.mjs';
+
+// Fictional eight-member stack, with 32 APs on member seven. The original
+// planner left 34 crossings: 23 on the left, 11 in the right return bundle.
+export function wirelessReturnLab(){
+ const ports=Array.from({length:32},(_,i)=>({name:'7/'+(i+1)}));
+ const sw={id:'sw',name:'LAB-STACK',kind:'switch',model:'JL558A',stackMembers:Array.from({length:8},(_,i)=>({id:String(i+1),model:'JL558A'})),ports};
+ const aps=ports.map((_,i)=>({id:'ap'+i,name:'LAB-AP-'+(i+1),kind:'ap',model:'AP-515',ip:'192.0.2.'+(i+1),ports:[{name:'eth0'}]}));
+ return {name:'Right-side order lab',devices:[sw,...aps],links:ports.map((p,i)=>({a:'sw',ap:p.name,b:'ap'+i,bp:'eth0',media:'copper',speed:'1 Gbps'})),layout:{pageSetup:{overrides:{wireless:{preset:'dynamic'}}}}};
+}
+function countCrossings(page){
+ const lines=page.items.filter(i=>i.type==='path').flatMap((path,owner)=>path.points.slice(1).map((b,i)=>({owner,a:path.points[i],b}))),crossings=[];
+ for(const h of lines.filter(s=>s.a[1]===s.b[1]))for(const v of lines.filter(s=>s.a[0]===s.b[0])){
+  if(h.owner===v.owner)continue;const x=v.a[0],y=h.a[1];
+  if(x>Math.min(h.a[0],h.b[0])+.5&&x<Math.max(h.a[0],h.b[0])-.5&&y>Math.min(v.a[1],v.b[1])+.5&&y<Math.max(v.a[1],v.b[1])-.5)crossings.push(x);
+ }
+ return {left:crossings.filter(x=>x<page.width/2).length,right:crossings.filter(x=>x>page.width/2).length};
+}
+test('right AP return lanes untangle without disturbing paired switch departure rows',()=>{
+ const site=wirelessReturnLab(),saved=JSON.stringify(site),pages=buildPages(site).filter(p=>p.wirelessLayout);assert.equal(pages.length,1);const page=pages[0],paths=page.items.filter(i=>i.type==='path');
+ assert.equal(paths.length,32);assert.deepEqual(page.wirelessLayout.routingCost.slice(0,2),[0,0]);
+ const crossings=countCrossings(page);assert.ok(crossings.right<=7,'right return bundle removes at least four of its original eleven crossings');assert.ok(crossings.left<=23,'left bundle cannot regress');
+ // The changed bottom returns keep their original switch-side rows exactly.
+ for(const [port,y] of [['7/20',1527.948350282486],['7/22',1521.9483502824858]]){
+  const path=paths.find(p=>p.sourceLink.ap===port),run=path.points.slice(1).map((b,i)=>[path.points[i],b]).find(([a,b])=>a[1]===b[1]&&Math.abs(a[0]-b[0])>100);
+  assert.ok(Math.abs(run[0][1]-y)<1e-6,'shared switch departure remains unchanged');
+ }
+ for(const path of paths){
+  for(const [anchor,point] of [[path.from,path.points[0]],[path.to,path.points.at(-1)]]){assert.equal(point[0],anchor.x);assert.equal(point[1],anchor.y);}
+  for(let i=1;i<path.points.length;i++)assert.ok(path.points[i][0]===path.points[i-1][0]||path.points[i][1]===path.points[i-1][1]);
+  for(const text of page.items.filter(i=>i.wirelessCaption||i.portNumberRole==='text'))assert.ok(!pathCrossesText(path,text,1));
+ }
+ assert.equal(JSON.stringify(site),saved);assert.equal(buildPages(JSON.parse(saved)).find(p=>p.wirelessLayout).svg,page.svg);
+});

@@ -53,6 +53,28 @@ try{
  controls=await options();await controls.numbers.uncheck();await apply(controls.dialog);saved=await save('footer-only.nds.json');assert.equal(saved.doc.project.layout.pageNumbers.footer,true);assert.equal(saved.doc.project.layout.pageNumbers.show,false);
  controls=await options();await controls.footer.uncheck();await apply(controls.dialog);saved=await save('both-disabled.nds.json');await open(saved.path);controls=await options();assert.equal(await controls.footer.isChecked(),false);assert.equal(await controls.numbers.isChecked(),false);await close(controls.dialog);
  assert.deepEqual(await order(),names);
+ // Paper selection preserves one complete wireless drawing by default. The
+ // separate readability choice remains explicit, undoable and persistent.
+ const densePorts=Array.from({length:32},(_,i)=>({name:'7/'+(i+1)}));
+ const dense={name:'Fictional wireless paper validation',devices:[{id:'sw',name:'LAB-STACK',kind:'switch',model:'JL558A',stackMembers:Array.from({length:8},(_,i)=>({id:String(i+1),model:'JL558A'})),ports:densePorts},...Array.from({length:16},(_,i)=>({id:'ap'+i,name:'LAB-AP-FLOOR-'+(i+1),kind:'ap',vendor:'HPE Aruba',model:'AP-515',ip:'192.0.2.'+(i+1),ports:[{name:'eth0'},{name:'eth1'}]}))],links:densePorts.map((p,i)=>({a:'sw',ap:p.name,b:'ap'+Math.floor(i/2),bp:'eth'+i%2,media:'copper',speed:'1 Gbps'}))};
+ await open({name:'wireless-paper.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:dense}))});
+ const wirelessNames=async()=>(await page.locator('#page-select option').allTextContents()).filter(name=>/Wireless Connections/.test(name));
+ assert.equal((await wirelessNames()).length,1);
+ controls=await options();assert.equal(await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).inputValue(),'layout');
+ await controls.dialog.getByLabel('Apply visible page proportions to',{exact:true}).selectOption('group');
+ await controls.dialog.getByLabel('Page group',{exact:true}).selectOption('wireless');
+ await controls.dialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');
+ await apply(controls.dialog);assert.equal((await wirelessNames()).length,1);
+ saved=await save('wireless-proportional.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'layout');assert.equal(saved.doc.project.layout.pageSetup.visible.groups.wireless.preset,'letter');
+ await open(saved.path);assert.equal((await wirelessNames()).length,1);
+ const wirelessIndex=(await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name));await page.locator('#page-select').selectOption(String(wirelessIndex));
+ await page.screenshot({path:resolve(output,'wireless-letter-proportional.png')});
+ controls=await options();await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('readable');await apply(controls.dialog);
+ const continued=(await wirelessNames()).length;assert.ok(continued>1&&continued<=4);
+ saved=await save('wireless-readable.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'readable');
+ await page.keyboard.press('Control+z');assert.equal((await wirelessNames()).length,1);
+ await page.keyboard.press('Control+Shift+z');assert.equal((await wirelessNames()).length,continued);
+ await open(saved.path);assert.equal((await wirelessNames()).length,continued);controls=await options();assert.equal(await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).inputValue(),'readable');await close(controls.dialog);
  // Backing controls apply to the actual editor, remain undoable and reopen.
  // The sample action exists only on the welcome screen, not an open project.
  await page.locator('#new').click();await page.locator('#welcome').waitFor();
@@ -69,5 +91,5 @@ try{
  backing=await backingOptions();await backing.padding.fill('20');await backing.dialog.getByRole('button',{name:'Cancel',exact:true}).click();backing=await backingOptions();assert.equal(await backing.padding.inputValue(),'0');
  await page.screenshot({path:resolve(output,'label-backing-options.png')});await close(backing.dialog);
  assert.deepEqual(errors,[]);
- await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel'],names},null,2));
+ await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','explicit readable continuation','wireless fit Undo/redo and save/reopen'],names},null,2));
 }catch(error){await page.screenshot({path:resolve(output,'failure.png')});console.error('Browser errors:',errors);throw error;}finally{await browser.close();}

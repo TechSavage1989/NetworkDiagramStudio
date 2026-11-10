@@ -7,7 +7,7 @@ import {textLayout} from '../src/web/diagram/scene.mjs';
 function lab(preset='letter',orientation='landscape',fitMode='optimize'){
  const members=8,count=32,ports=Array.from({length:count},(_,i)=>({name:(i%members+1)+'/'+(Math.floor(i/members)*2+1)})),sw={id:'sw',name:'LAB-STACK',kind:'switch',model:'JL558A',stackMembers:Array.from({length:members},(_,i)=>({id:String(i+1),model:'JL558A'})),ports};
  const aps=ports.map((_,i)=>({id:'ap'+i,name:'LAB-AP-'+(i+1),kind:'ap',model:'AP-515',ip:'192.0.2.'+(i+1),ports:[{name:'eth0'}]}));
- return {name:'Readability lab',devices:[sw,...aps],links:ports.map((p,i)=>({a:'sw',ap:p.name,b:'ap'+i,bp:'eth0',media:'copper',speed:'1 Gbps'})),layout:{pageSetup:{visible:{default:{preset,orientation},fitMode}}}};
+ return {name:'Readability lab',devices:[sw,...aps],links:ports.map((p,i)=>({a:'sw',ap:p.name,b:'ap'+i,bp:'eth0',media:'copper',speed:'1 Gbps'})),layout:{pageSetup:{visible:{wirelessFit:'readable',default:{preset,orientation},fitMode}}}};
 }
 const pages=site=>buildPages(site).filter(p=>p.wirelessLayout);
 const minimumPoints=page=>{const paper=printGeometry(page),scale=.75*Math.min(paper.width/page.width,paper.height/page.height);return Math.min(...page.items.filter(i=>i.wirelessCaption).map(i=>textLayout(i).size*scale));};

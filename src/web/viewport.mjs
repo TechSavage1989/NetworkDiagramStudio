@@ -5,7 +5,7 @@ export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,
  const views=new Map();let current=null,svg=null,drag=null,space=false,clickTimer=null,clickTarget=null,lastBox=null;
  const cables=cableProximity(canvas,{enabled:()=>!space&&!drag&&!!canSelectCable?.(),highlight:()=>!space&&!drag&&!!canHighlightCable?.(),onHover:onCableHover});
  const rulers=typeof document==='undefined'?{show(){},sync(){},clear(){}}:createPageRulers(canvas);
- const clamp=v=>Math.max(.0001,Math.min(6,v)),textInput=target=>target.closest('[data-inline-editor]');
+ const clamp=v=>Math.max(.0001,Math.min(6,v)),textInput=target=>target.isContentEditable||target.closest('[data-inline-editor]')||target.matches?.('input,textarea,select');
  const itemKey=(target,event)=>(target.closest('text[data-drawing-key]')||(!event.altKey&&target.closest('[data-device-id]'))||target.closest('[data-drawing-key]'))?.getAttribute('data-drawing-key');
  const point=e=>{const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(svg.getScreenCTM().inverse());return [p.x,p.y];};
  function apply(){cables.clear();if(!svg||!current)return;lastBox=canvas.getBoundingClientRect();svg.style.transform='translate('+current.x+'px,'+current.y+'px) scale('+current.scale+')';if(percent)percent.textContent=(current.scale<.01?(current.scale*100).toFixed(2):Math.round(current.scale*100))+'%';rulers.sync(current,svg);}
@@ -28,7 +28,8 @@ export function diagramViewport(canvas,{out,inside,fit,percent,onDevice,onShape,
   // A toolbar resize may still be queued when an edit begins. Freeze the
   // visible view now so its observer cannot refit or rebase the gesture.
   if(drag.move){current.userSized=true;lastBox=canvas.getBoundingClientRect();}
-  canvas.setPointerCapture(e.pointerId);if(e.button===1||space||box||drag.move)e.preventDefault();});
+  // Canvas gestures must never start a native text selection across editor chrome.
+  canvas.setPointerCapture(e.pointerId);e.preventDefault();});
  canvas.addEventListener('pointermove',e=>{if(!drag){cables.hover(e);return;}if(e.pointerId!==drag.id)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>4)drag.moved=true;if(drag.moved){clearTimeout(clickTimer);if(drag.box)drag.box.preview(point(e),e);else if(drag.move){current.userSized=true;drag.move.preview(dx/current.scale,dy/current.scale,e);canvas.classList.add('moving');}else{current.userSized=true;current.x=drag.viewX+dx;current.y=drag.viewY+dy;canvas.classList.add('panning');apply();}}});
  canvas.addEventListener('pointerup',e=>{if(!drag||e.pointerId!==drag.id)return;const saved=drag,target=drag.target;drag=null;canvas.classList.remove('panning','moving');if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);
   if(saved.moved){if(saved.box)saved.box.commit(point(e),e);else saved.move?.commit((e.clientX-saved.x)/current.scale,(e.clientY-saved.y)/current.scale,e);return;}saved.box?.cancel();

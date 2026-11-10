@@ -73,11 +73,17 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
  const ends=edges.map(e=>({e,anchor:getAnchor(panel,e.sp,panel.moduleChannel?'auto':'top',e.idx,{weight:pathWeight(project,e)}),apGeometry:addDevice({items:[]},project,db.devices.get(e.apId),[0,0,apSize,apSize],'measure-ap')}));
  const byHeight=ends.slice().sort((a,b)=>a.anchor.y-b.anchor.y||a.anchor.x-b.anchor.x||a.e.idx-b.e.idx),natural=new Set(ends.filter(v=>v.anchor.y<panel.h/2).map(v=>v.e.idx)),balanced=new Set(byHeight.slice(0,Math.ceil(ends.length/2)).map(v=>v.e.idx)),splits=[natural];
  if([...balanced].some(id=>!natural.has(id))||balanced.size!==natural.size)splits.push(balanced);
- const targetAspect=targetPageAspect(project,{name:'Wireless Connections',family:'wireless'}),choices=[],captionCache=new Map(),legendCache=new Map(),maxWeight=Math.max(cableWeight,...ends.map(v=>v.anchor.weight)),pitch=Math.max(7,maxWeight+3),margin=Math.max(46,22+Math.ceil(edges.length/2)*pitch);
- for(const topIds of splits)for(const rowCount of geometry.dynamic&&edges.length>12?[1,2,3]:[1])for(const col of geometry.dynamic?[132,180,245,360,680]:[132,180,245,360,680].filter(w=>w<=geometry.width-100)){
+ const compactPaper=!geometry.dynamic&&!project._wirelessLegacyPaper&&visibleFitMode(project)==='optimize';
+ const targetAspect=cleanPageSetup(project.layout?.pageSetup).visible.wirelessFit==='readable'?targetPageAspect(project,{name:'Wireless Connections',family:'wireless'}):null,choices=[],captionCache=new Map(),legendCache=new Map(),maxWeight=Math.max(cableWeight,...ends.map(v=>v.anchor.weight)),pitch=Math.max(7,maxWeight+3),margin=Math.max(46,22+Math.ceil(edges.length/2)*pitch);
+ // Paper can use narrower, fully measured captions and additional banks.
+ // Try that space before splitting; never shrink the source caption fonts.
+ for(const topIds of splits)for(const rowCount of (geometry.dynamic||compactPaper)&&edges.length>12?[1,2,3]:[1])for(const col of (compactPaper?[104,116,132,180,245,360,680]:[132,180,245,360,680]).filter(w=>geometry.dynamic||w<=geometry.width-100)){
   const banks={top:[],bottom:[]};for(const v of ends){const key=v.e.idx+'/'+col;if(!captionCache.has(key))captionCache.set(key,captions(project,db,v.e,col));banks[topIds.has(v.e.idx)?'top':'bottom'].push({...v,caption:captionCache.get(key)});}
   for(const bank of Object.values(banks))bank.sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx);
-  const rows=Object.fromEntries(Object.entries(banks).map(([side,bank])=>{const capacity=Math.max(1,Math.ceil(bank.length/rowCount)),rows=[];for(let i=0;i<bank.length;i+=capacity){const items=bank.slice(i,i+capacity);rows.push({items,width:items.reduce((n,v)=>n+Math.max(v.apGeometry.w,v.caption.width)+16,0),height:Math.max(...items.map(v=>v.caption.height)),apHeight:Math.max(...items.map(v=>v.apGeometry.h)),lanes:28+2*pitch*items.length});}return [side,rows];}));
+  // One pitch per lead provides distinct painted lanes on paper. The route
+  // validator still rejects collisions and falls back to smaller batches.
+  // Keep the established roomier dynamic layout (and its saved coordinates).
+  const rows=Object.fromEntries(Object.entries(banks).map(([side,bank])=>{const capacity=Math.max(1,Math.ceil(bank.length/rowCount)),rows=[];for(let i=0;i<bank.length;i+=capacity){const items=bank.slice(i,i+capacity);rows.push({items,width:items.reduce((n,v)=>n+Math.max(v.apGeometry.w,v.caption.width)+16,0),height:Math.max(...items.map(v=>v.caption.height)),apHeight:Math.max(...items.map(v=>v.apGeometry.h)),lanes:28+(compactPaper?1:2)*pitch*items.length});}return [side,rows];}));
   const metrics=Object.fromEntries(Object.entries(rows).map(([side,rows])=>[side,{width:Math.max(0,...rows.map(row=>row.width)),height:rows.reduce((n,row)=>n+row.height+row.apHeight+row.lanes+(side==='top'?6:10),0)}]));
   const W=geometry.dynamic?Math.max(geometry.width,panel.w+margin*2,metrics.top.width+92,metrics.bottom.width+92):geometry.width;
   if(panel.w+margin*2>W+.01||Math.max(metrics.top.width,metrics.bottom.width)>W-92)continue;
@@ -138,29 +144,32 @@ function pageBatches(project,db,device,edges,width,geometry){
 }
 
 export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
- // Auto-fit paper is a readability constraint, not just an aspect ratio.
- // Otherwise a large dynamic stack can be shrunk to a Letter sheet with
- // 3-point AP details. Reuse measured member continuation and AP batching
- // at the paper's physical size. Replay edits on that same plan after every
- // rebuild; Preserve layout remains the explicit unchanged-geometry mode.
+ // Paper normally frames the complete drawing with one proportional transform.
+ // Readable continuation is opt-in: it plans at the physical paper size so
+ // dense diagrams retain readable captions rather than shrinking to fit.
+ // Frozen frames remain authoritative; a changed plan cannot silently
+ // refit an existing physical lock.
  const visible=cleanPageSetup(project.layout?.pageSetup).visible,base=visiblePagePaper(project,{name:'Wireless Connections',family:'wireless'}),numbered=Object.entries(visible.pages).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,paper])=>paper);
  // Numbered overrides retain their final paper, but the shared continuation
  // plan must fit the smallest applicable width AND height. This avoids tiny
  // text on one overridden sheet and keeps the plan stable after editing.
  const dimensions=[base,...numbered].map(paperDimensions).filter(Boolean),widthMm=Math.min(...dimensions.map(d=>d.widthMm)),heightMm=Math.min(...dimensions.map(d=>d.heightMm));
  const paper=dimensions.length?{preset:'custom',widthMm,heightMm,orientation:widthMm<heightMm?'portrait':'landscape'}:base;
- if(paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
-  const planned={...project,layout:{...project.layout,pageSetup:{...project.layout?.pageSetup,overrides:{...project.layout?.pageSetup?.overrides,wireless:paper}}}};
-  try{return wirelessPages(planned,db,{portNumbers,tablePages,empty});}
+ const frames=Object.entries(visible.lockFrames).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame),explicit=['layout','readable'].includes(project.layout?.pageSetup?.visible?.wirelessFit);
+ const legacy=project._wirelessLegacyPaper===true||!explicit&&frames.some(frame=>!frame.wirelessFit||frame.wirelessFit==='readable-legacy')&&!frames.some(frame=>frame.wirelessFit==='layout');
+ const render=planned=>wirelessPages(planned,db,{portNumbers,tablePages,empty}).map(page=>{if(page.wirelessLayout)page.wirelessLayout.paperFit=visible.wirelessFit==='readable'?(legacy?'readable-legacy':'readable'):'layout';return page;});
+ if(visible.wirelessFit==='readable'&&paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
+  const planned={...project,_wirelessLegacyPaper:legacy,layout:{...project.layout,pageSetup:{...project.layout?.pageSetup,overrides:{...project.layout?.pageSetup?.overrides,wireless:paper}}}};
+  try{return render(planned);}
   catch(error){
    if(error.code!=='WIRELESS_LAYOUT_CAPACITY')throw error;
    // A narrow sheet can fit a multi-member box but not its outside cable
    // departures. Retry smaller measured member groups before failing.
-   try{return wirelessPages({...planned,_wirelessMaxMembers:2},db,{portNumbers,tablePages,empty});}
-   catch(retry){if(retry.code!=='WIRELESS_LAYOUT_CAPACITY')throw retry;return wirelessPages({...planned,_wirelessMaxMembers:1},db,{portNumbers,tablePages,empty});}
+   try{return render({...planned,_wirelessMaxMembers:2});}
+   catch(retry){if(retry.code!=='WIRELESS_LAYOUT_CAPACITY')throw retry;return render({...planned,_wirelessMaxMembers:1});}
   }
  }
- return wirelessPages(project,db,{portNumbers,tablePages,empty});
+ return render(project);
 }
 function wirelessPages(project,db,{portNumbers,tablePages,empty}){
  let geometry=pageGeometry(project,'wireless'),width=geometry.width-202;

@@ -29,7 +29,7 @@ try{
  assert.equal(await page.locator('#quick-text-tools').isVisible(),true);assert.equal(await page.locator('[data-transform]').count(),5);
  const key=await text.getAttribute('data-drawing-key');await page.locator('#quick-text-angle').fill('15');await page.locator('#quick-text-angle').press('Tab');
  await page.waitForFunction(key=>[...document.querySelectorAll('#canvas text')].find(n=>n.dataset.drawingKey===key)?.getAttribute('transform')?.includes('rotate(-15'),key);
- await page.locator('#quick-text-edit').click();await page.locator('[data-inline-editor] textarea').fill('Fictional direct editing');await page.keyboard.press('Enter');
+ await page.locator('#quick-text-edit').click();await page.locator('[data-inline-editor] textarea').press('Control+a');assert.deepEqual(await page.locator('[data-inline-editor] textarea').evaluate(n=>[n.selectionStart,n.selectionEnd]),[0,await page.locator('[data-inline-editor] textarea').inputValue().then(v=>v.length)]);await page.locator('[data-inline-editor] textarea').fill('Fictional direct editing');await page.keyboard.press('Enter');
  await page.waitForSelector('[data-inline-editor]',{state:'detached'});
  const handle=page.locator('[data-transform="se"]');
  const handlePoint=async()=>{await page.waitForFunction(()=>{const n=document.querySelector('[data-transform="se"]');if(!n)return false;const b=n.getBoundingClientRect();return document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)===n;});const b=await handle.boundingBox();assert.ok(b);return {x:b.x+b.width/2,y:b.y+b.height/2};};
