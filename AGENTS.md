@@ -245,3 +245,12 @@ viewBox. Never fit a clipped sheet while claiming 1:1. Manual zoom and Fit leave
 the mode; measurable display changes invalidate it. Unobservable monitor changes
 still require a physical ruler/paper check. Keep tests/browser-actual-size.mjs in
 the hosted browser gate and use only synthetic captures.
+
+Bulk equipment/group scaling must retain planner ownership of generated link captions. Do not persist generated x/y or angle merely because a caption participates in the selection: rerouting may invalidate that position. Preserve pre-existing explicit position, cable attachments and fixed-angle choices. Keep caption styles/content, endpoint glue and atomic history. Cover large shrinks/growth, not only ten-percent changes, in multi-resize-labels.test.mjs and the real browser selection gate.
+HTML viewer interaction metadata must stay limited to accepted scene endpoints. Keep delegated interactions and indexed associations; coalesce pan/zoom writes per animation frame. Verify keyboard pin/clear, empty pages and the large-scene burst assertion in the hosted interactive-HTML suite.
+Docked information panels in contentFit paper scenes have an independent physical transform and reserve their rail before model fitting. Keep panel symbol/row geometry and inverse presentation edits together. Do not shrink dense panels below their readable floor; expose overflow. Free/manual panels and legacy frozen frames retain existing geometry semantics. Cover Letter/A4/A3, locks, sides and reopen in paper-panel.test.mjs.
+Wireless upper stack-gap departures may exchange existing same-side tracks only
+within the same physical member gap. Require fewer crossings without new blocked
+geometry, merged strokes or socket-lead conflicts; keep anchors, AP positions and
+saved bends fixed. Opposite-direction row sharing still runs afterward. Cover
+both the five-member/member-three fan and eight-member/member-seven return case.

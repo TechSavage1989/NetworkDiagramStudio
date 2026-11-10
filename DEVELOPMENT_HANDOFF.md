@@ -1,3 +1,41 @@
+# Preview.45: multi-selection resize caption regression
+
+Bulk resizing previously wrote absolute positions for every selected generated
+link caption, then rerouted connected cables. The caption planner interpreted
+those incidental positions as hard pins, and the final collision validator
+rejected the transform with “This change overlaps a link label.”
+
+Generated captions now retain automatic placement/orientation during model and
+group resizing with equipment. Explicit user positions and cable attachments,
+caption values/styles, physical socket glue and selection history remain intact.
+Synthetic Letter tests reproduce the old 50%/140% group and 200% model failures;
+the real browser gate adds large resizing, Undo/redo and save/reopen checks.
+No customer screenshot or project data is included in the repository.
+Existing genuine manual caption positions remain constraints; this does not
+weaken collision validation or promise arbitrary impossible model overlaps.
+All 613 Node tests pass, as do the offline build, repository/whitespace checks
+and nine standard independent Visio packages plus a 50%-scaled full-selection
+package. Local Chromium remains blocked by socket restrictions. Final-head
+hosted browser/native gates remain required before publication.
+# Interactive HTML inspection follow-up (unreleased)
+
+Exported SVG cables carry normalized endpoint device/port identifiers, not source
+records. The offline viewer lazily sanitizes pages, indexes device/port associations,
+and uses delegated hover/focus and pinned click/Enter inspection with Escape clear.
+Related devices, cables and automatic port labels highlight together. Empty pages
+remain valid. Transform writes are coalesced once per animation frame rather than
+once per pointer/wheel event; repeated hover on the same object performs no work.
+Hosted browser coverage adds endpoint inspection, keyboard pin/clear, empty and
+repeated page navigation and a 600-device fixture asserting that 100 synchronous
+wheel events yield one transform write. Runtime timing and screenshot review must
+come from hosted Edge: local Chromium launch fails at socket() (Operation not
+permitted). Do not claim measured latency gains or Windows UI validation locally.
+# Preview.45 follow-up: readable paper information panels
+
+Wireless Link colors also use paper-sized text and packed measured entries rather than shrinking with AP banks. Docked panels now use independent paper sizing rather than the model fit, reserving a side rail before fitting the diagram. Default text targets its source paper size (typically 9pt body), with an 8pt floor when fitting dense content. Excess content remains readable with the existing clipping warning instead of silent compression. Left/right/top dock, explicit panel scale, frozen diagram frames and export scene transforms share the same geometry. Free panels, manually positioned/resized panel objects and Preserve mode keep existing behavior. New fitting frames carry panelFit:1. Legacy locked/editing frames retain their exact transform and show an explicit Page options / Save page options refit prompt rather than silently moving saved diagrams. This does not paginate overflowing panel sections; use a larger paper or fewer sections.
+
+All six focused paper-panel tests, offline build, repository guard and whitespace checks pass. The concurrent full suite was stopped to avoid resource contention; the final integrated head still requires a complete pass. Genuine synthetic Letter core and wireless SVG rasters were inspected locally with Inkscape; browser/native/print UI gates remain required on the final integrated head. No physical Windows print or Visio UI test is claimed locally.
+
 # Preview.45: calibrated actual-size screen view (unreleased)
 
 Release intent and desktop version are 0.1.0-preview.45. This follows preview.44
@@ -1077,3 +1115,14 @@ SVG and native Visio. tests/browser-panel-content.mjs covers actual dialog
 failure/retry, history and save/reopen; run it in hosted browser validation.
 Local Chromium launch is blocked by socket/IPC permissions, so no interactive
 browser pass or browser screenshot is claimed here.
+
+## Preview.45 upper wireless fan regression
+
+The five-member stack with 28 APs on member three now exchanges compatible upper
+departure rows within the existing member gap. The synthetic case improves from
+42 to 16 crossings (upper 32 to 10, lower 10 to 6), without increasing route length
+or changing hardware positions. Some crossings remain. The stricter candidate
+retains merged-stroke and socket-lead guards rather than the more aggressive
+prototype. Existing manual bends and opposite-direction row sharing remain
+covered by the wireless suites. Actual generated SVG output was visually checked;
+this is not native Windows or browser UI verification.

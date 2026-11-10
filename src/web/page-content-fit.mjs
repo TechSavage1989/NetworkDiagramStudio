@@ -56,7 +56,7 @@ export function paperFurniture(page,project,width,height,unit,margin){
 export function placePaperFurniture(furniture,factor,dx,dy,bounds){
  for(const item of furniture.automatic){
   let box=furniture.placements.get(item);
-  if(item.pageFrame==='sidebar')box={x:item.x*factor+dx,y:bounds.y*factor+dy,w:item.w*factor,h:bounds.h*factor,scale:factor};
+  if(item.pageFrame==='sidebar'&&!box)box={x:item.x*factor+dx,y:bounds.y*factor+dy,w:item.w*factor,h:bounds.h*factor,scale:factor};
   if(!box)continue;
   const prev=item.presentation||{scale:1,x:0,y:0,fontScale:1},s=box.scale;
   item.presentation={...prev,scale:(prev.scale||1)*s,x:(prev.x||0)*s+box.x-item.x*s,y:(prev.y||0)*s+box.y-item.y*s,fontScale:(prev.fontScale||1)*s};

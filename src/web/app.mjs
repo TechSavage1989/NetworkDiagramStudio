@@ -924,7 +924,7 @@ function pageNavigation(){
  picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};
  $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
  let overflow=$('page-overflow-notice');if(!overflow){overflow=el('button','','warning');overflow.id='page-overflow-notice';overflow.onclick=()=>task(pageOptions);$('feedback').after(overflow);}
- overflow.hidden=!pages[active]?.pageOverflow;overflow.textContent='Content extends beyond the page. Print/PDF and page-sized exports may clip it. Open Page options to change the sheet.';
+ overflow.hidden=!pages[active]?.pageOverflow&&!pages[active]?.panelFitLegacy;overflow.textContent=pages[active]?.panelFitLegacy?'This saved page keeps its earlier layout. For readable information panels and link keys, open Page options and Save page options to recalculate the fit. Your saved object edits are retained.':'Content extends beyond the page. Print/PDF and page-sized exports may clip it. Open Page options to change the sheet.';
 }
 function draw(prepared){
  cancelBesidePick();

@@ -35,3 +35,33 @@ test('right AP return lanes untangle without disturbing paired switch departure 
  }
  assert.equal(JSON.stringify(site),saved);assert.equal(buildPages(JSON.parse(saved)).find(p=>p.wirelessLayout).svg,page.svg);
 });
+
+test('upper middle-member AP fan nests in its gap instead of crossing the return bundle',()=>{
+ const site=wirelessReturnLab();
+ site.devices[0].stackMembers=site.devices[0].stackMembers.slice(0,5);
+ site.devices[0].ports=site.devices[0].ports.slice(0,28).map((p,i)=>({...p,name:'3/'+(i+1)}));
+ site.devices=site.devices.slice(0,29);
+ site.links=site.links.slice(0,28).map((link,i)=>({...link,ap:'3/'+(i+1)}));
+ const saved=JSON.stringify(site),page=buildPages(site).find(p=>p.wirelessLayout),paths=page.items.filter(i=>i.type==='path');
+ assert.equal(paths.length,28);assert.equal(page.items.filter(i=>i.kind==='ap').length,28);
+ assert.deepEqual(page.wirelessLayout.routingCost.slice(0,2),[0,0]);
+ // The released planner scored 42 crossings and 34625.0464 units of wire.
+ // Reorder only existing rows: never buy fewer crossings with long detours.
+ assert.ok(page.wirelessLayout.routingCost[3]<=16);
+ assert.ok(page.wirelessLayout.routingCost[5]<=34625.047);
+ const regions={upper:0,lower:0},segments=paths.flatMap((path,owner)=>path.points.slice(1).map((b,i)=>({owner,a:path.points[i],b})));
+ for(const h of segments.filter(s=>s.a[1]===s.b[1]))for(const v of segments.filter(s=>s.a[0]===s.b[0])){
+  if(h.owner===v.owner)continue;
+  const x=v.a[0],y=h.a[1];
+  if(x>Math.min(h.a[0],h.b[0])+.5&&x<Math.max(h.a[0],h.b[0])-.5&&y>Math.min(v.a[1],v.b[1])+.5&&y<Math.max(v.a[1],v.b[1])-.5)regions[y<page.height/2?'upper':'lower']++;
+ }
+ assert.ok(regions.upper<=10,'upper fan improves from 32 crossings');
+ assert.ok(regions.lower<=10,'cleaner lower fan must not regress');
+ for(const path of paths){
+  for(const [anchor,point] of [[path.from,path.points[0]],[path.to,path.points.at(-1)]])assert.deepEqual(point,[anchor.x,anchor.y]);
+  for(let i=1;i<path.points.length;i++)assert.ok(path.points[i][0]===path.points[i-1][0]||path.points[i][1]===path.points[i-1][1]);
+  for(const text of page.items.filter(i=>i.wirelessCaption||i.portNumberRole==='text'))assert.ok(!pathCrossesText(path,text,1));
+ }
+ assert.equal(JSON.stringify(site),saved);
+ assert.equal(buildPages(JSON.parse(saved)).find(p=>p.wirelessLayout).svg,page.svg);
+});
