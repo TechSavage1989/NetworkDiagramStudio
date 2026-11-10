@@ -5,12 +5,14 @@ import {applyDrawingEdits} from '../drawing-edits.mjs';
 import {applyLinkStyles,linkWeight} from '../link-styles.mjs';
 import {deviceModel,macCaption} from '../device-details.mjs';
 import {wrapPortText} from '../port-table.mjs';
-import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,equipmentGapPlan,canContinueEquipment} from './equipment-layout.mjs';
+import {equipmentPadding,equipmentSize,equipmentViews,equipmentScope,equipmentGapPlan,canContinueEquipment,memberSubsetView,portStackMember} from './equipment-layout.mjs';
+import {paperFurniture} from '../page-content-fit.mjs';
+import {paperLinkKey} from '../paper-panel.mjs';
 import {coreRoutes} from './routing.mjs';
-import {lineSpacing} from '../layout.mjs';
+import {lineSpacing,hopStyle} from '../layout.mjs';
 import {wirelessNumberLeads} from './wireless-number-leads.mjs';
-import {crossesText,intersects} from './labels.mjs';
-import {C,addDevice,cableWeight,fresh,getAnchor,label,linkLegend,mediaInfo,physicalPorts,rate,route} from './scene.mjs';
+import {crossesText,intersects,textWidth,pathCrossesText} from './labels.mjs';
+import {C,addDevice,bridge,cableWeight,fresh,getAnchor,label,linkLegend,mediaInfo,physicalPorts,rate,route} from './scene.mjs';
 
 const cmp=(a,b)=>String(a).localeCompare(String(b),'en',{numeric:true,sensitivity:'base'});
 const nameOf=d=>String(d?.name||d?.id||'Unnamed');
@@ -23,6 +25,9 @@ function wirelessNumberMinimum(project){
  if(Object.entries(project.layout?.drawingEdits||{}).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','size','angle','points'].some(k=>value[k]!=null)))return 1;
  // Plan readable number geometry before cables. Do not enlarge a complete
  // switch merely because the old 10px number default is 7.5pt instead of 8pt.
+ // Paper plans size switch port numbers for at most 8pt: they are faceplate
+ // labels, and a larger AP-text preference must not make the stack unroutable.
+ if(project._wirelessPaperPlan&&visibleFitMode(project)==='optimize')return Math.max(1,Math.min(8,config.minimumTextPt||0)/7.5);
  return paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'&&!project._wirelessLegacyPaper?Math.max(1,(config.minimumTextPt||0)/7.5):1;
 }
 const wirelessNumberScale=project=>wirelessSettings(project).textScale*wirelessNumberMinimum(project);
@@ -49,14 +54,23 @@ function captionTitleKey(project,db,e){
  return matches.length===1?matches[0]:key;
 }
 function captionFor(project,e){const name=mediaInfo(e.media,true).name,s=project.layout?.linkStyles?.[name]||{};return [s.lineTitle&&s.lineTitle!==name?s.lineTitle:'',s.lineDescription].filter(Boolean).join(' | ');}
+// Generated paper captions break between words ("MAC" / address) rather
+// than inside an address when a whole word fits the card. Saved text is kept.
+function wordBreaks(text,width,size,bold){
+ const value=String(text??''),lines=wrapPortText(value,width,size,bold);if(lines.length<2||lines.join(' ')===value.replace(/\s+/g,' ').trim())return value;
+ const words=value.split(/\s+/).filter(Boolean);if(words.some(word=>textWidth(word,size,bold)>width))return value;
+ const out=[];for(const word of words){const line=out.length?out.at(-1)+' '+word:word;if(out.length&&textWidth(line,size,bold)<=width)out[out.length-1]=line;else out.push(word);}return out.join('\n');
+}
 function measured(project,e,role,value,width,defaults={}){
- const key=defaults.key||identityKey(project,e,role),patch=project.layout?.drawingEdits?.[key]||{},size=patch.size||defaults.size||12,w=patch.w||width,bold=patch.bold??defaults.bold??false,text=patch.value??value;
- return {key,value:text,size,w,bold,height:patch.hidden||!text?0:Math.max(patch.h||(project._wirelessAdaptive?size*1.25:defaults.height)||18,wrapPortText(text,w,size,bold).length*size*1.25)};
+ const key=defaults.key||identityKey(project,e,role),patch=project.layout?.drawingEdits?.[key]||{},size=patch.size||defaults.size||12,w=patch.w||width,bold=patch.bold??defaults.bold??false,paper=!!project._wirelessPaperPlan,text=patch.value??(paper&&value?wordBreaks(value,w+6,size,bold):value);
+ // Paper plans measure lines exactly as the renderer wraps them (box + 6).
+ const lines=patch.hidden||!text?0:wrapPortText(text,w+(paper?6:0),size,bold).length;
+ return {key,value:text,size,w,bold,lines,height:patch.hidden||!text?0:Math.max(patch.h||(project._wirelessAdaptive?size*1.25:defaults.height)||18,lines*size*1.25)};
 }
 function captions(project,db,e,width){
  const scale=apScale(project),ap=db.devices.get(e.apId),register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · '),detail=[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · ');
  const title=measured(project,e,'title',nameOf(ap),width,{key:captionTitleKey(project,db,e),size:18*scale,bold:true,height:26*scale}),registerText=measured(project,e,'register',register,width,{size:13*scale,bold:true,height:21*scale}),detailText=measured(project,e,'detail',detail,width,{size:12*scale,height:18*scale}),model=measured(project,e,'model',deviceModel(ap),width,{size:12*scale,height:18*scale}),mac=measured(project,e,'mac',macCaption(ap,e.apPort,{counts:false}),width,{size:12*scale,height:18*scale}),notes=captionFor(project,e)?wrapPortText(captionFor(project,e),width,12*scale):[];
- return {scale,title,register:registerText,detail:detailText,model,mac,notes,width:Math.max(width,title.w,registerText.w,detailText.w,model.w,mac.w),height:title.height+2+model.height+registerText.height+1+detailText.height+mac.height+2+notes.length*14*scale};
+ return {scale,title,register:registerText,detail:detailText,model,mac,notes,wraps:[title,registerText,detailText,model,mac].reduce((n,part)=>n+Math.max(0,part.lines-1)*(part===title?3:1),0),width:Math.max(width,title.w,registerText.w,detailText.w,model.w,mac.w),height:title.height+2+model.height+registerText.height+1+detailText.height+mac.height+2+notes.length*14*scale};
 }
 function captionItems(page,project,db,e,center,y,width,caption){
  const items=page.items,ap=db.devices.get(e.apId);
@@ -78,6 +92,20 @@ function stackSpacing(project,device,edges,width){
  return equipmentGapPlan(project,device,edges,width,{weight:e=>pathWeight(project,e)});
 }
 
+// The printable diagram body of one wireless sheet, in physical paper pixels:
+// the planning paper less its margin, generated heading and connection key,
+// measured with the same furniture and key placement as the final paper fit.
+const bodyCache=new WeakMap();
+function paperBody(project,device,edges){
+ const plan=project._wirelessPaperPlan,dims=paperDimensions(plan.paper);if(!dims)return null;
+ const types=[...new Set(edges.map(e=>mediaInfo(e.media,true).name))].sort().join('|'),key=nameOf(device)+'\n'+types;
+ if(!bodyCache.has(plan))bodyCache.set(plan,new Map());const cache=bodyCache.get(plan);if(cache.has(key))return cache.get(key);
+ const W=dims.widthMm*96/25.4,H=dims.heightMm*96/25.4,local={...project,_pageGeometry:{...project._pageGeometry,wireless:{width:W,height:H}}},probe=fresh('Wireless Connections','Wireless Connections',nameOf(device)+'  ·  access-point uplinks and physical switch ports',local);
+ probe.items.push(...edges.map(e=>({type:'path',editKey:pathKey(project,e),color:mediaInfo(e.media,true).color,weight:pathWeight(project,e),linkType:mediaInfo(e.media,true).name,sourceLink:e,points:[[0,0],[1,0]]})));
+ applyLinkStyles(probe,project.layout?.linkStyles,project.layout?.drawingEdits);linkLegend(probe);
+ const furniture=paperFurniture(probe,project,W,H,1,plan.paper.locked?24:12),keyed=paperLinkKey(probe,project,furniture.body,1),body=keyed?.body||furniture.body;
+ cache.set(key,body);return body;
+}
 // AP banks are measured from their real captions and real socket positions.
 // Candidate bank splits balance page area against travel distance, without a
 // device-height or name-length rule that creates one page for each AP.
@@ -86,17 +114,17 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
  const ends=edges.map(e=>({e,anchor:getAnchor(panel,e.sp,panel.moduleChannel?'auto':'top',e.idx,{weight:pathWeight(project,e)}),apGeometry:addDevice({items:[]},project,db.devices.get(e.apId),[0,0,apSize,apSize],'measure-ap')}));
  const byHeight=ends.slice().sort((a,b)=>a.anchor.y-b.anchor.y||a.anchor.x-b.anchor.x||a.e.idx-b.e.idx),natural=new Set(ends.filter(v=>v.anchor.y<panel.h/2).map(v=>v.e.idx)),balanced=new Set(byHeight.slice(0,Math.ceil(ends.length/2)).map(v=>v.e.idx)),splits=[natural];
  if([...balanced].some(id=>!natural.has(id))||balanced.size!==natural.size)splits.push(balanced);
- const compactPaper=!geometry.dynamic&&!project._wirelessLegacyPaper&&visibleFitMode(project)==='optimize';
+ const paperPlan=project._wirelessPaperPlan,cellGap=paperPlan?10:16,compactPaper=!!paperPlan||!geometry.dynamic&&!project._wirelessLegacyPaper&&visibleFitMode(project)==='optimize',body=paperPlan?paperBody(project,device,edges):null;
  const targetAspect=cleanPageSetup(project.layout?.pageSetup).visible.wirelessFit==='readable'?targetPageAspect(project,{name:'Wireless Connections',family:'wireless'}):null,choices=[],captionCache=new Map(),legendCache=new Map(),maxWeight=Math.max(cableWeight,...ends.map(v=>v.anchor.weight)),pitch=Math.max(7,maxWeight+3),margin=Math.max(46,22+Math.ceil(edges.length/2)*pitch);
  // Paper can use narrower, fully measured captions and additional banks.
  // Try that space before splitting; never shrink the source caption fonts.
- for(const topIds of splits)for(const rowCount of (geometry.dynamic||compactPaper)&&edges.length>12?[1,2,3]:[1])for(const col of (compactPaper?[104,116,132,180,245,360,680]:[132,180,245,360,680]).map(w=>w*apScale(project)).filter(w=>geometry.dynamic||w<=geometry.width-100)){
+ for(const topIds of splits)for(const rowCount of paperPlan?(edges.length>4?[1,2,3]:[1]):(geometry.dynamic||compactPaper)&&edges.length>12?[1,2,3]:[1])for(const col of (compactPaper?[104,116,132,180,245,360,680]:[132,180,245,360,680]).map(w=>w*apScale(project)).filter(w=>geometry.dynamic||w<=geometry.width-100)){
   const banks={top:[],bottom:[]};for(const v of ends){const key=v.e.idx+'/'+col;if(!captionCache.has(key))captionCache.set(key,captions(project,db,v.e,col));banks[topIds.has(v.e.idx)?'top':'bottom'].push({...v,caption:captionCache.get(key)});}
   for(const bank of Object.values(banks))bank.sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx);
   // One pitch per lead provides distinct painted lanes on paper. The route
   // validator still rejects collisions and falls back to smaller batches.
   // Keep the established roomier dynamic layout (and its saved coordinates).
-  const rows=Object.fromEntries(Object.entries(banks).map(([side,bank])=>{const capacity=Math.max(1,Math.ceil(bank.length/rowCount)),rows=[];for(let i=0;i<bank.length;i+=capacity){const items=bank.slice(i,i+capacity);rows.push({items,width:items.reduce((n,v)=>n+Math.max(v.apGeometry.w,v.caption.width)+16,0),height:Math.max(...items.map(v=>v.caption.height)),apHeight:Math.max(...items.map(v=>v.apGeometry.h)),lanes:28+(compactPaper?1:2)*pitch*items.length});}return [side,rows];}));
+  const rows=Object.fromEntries(Object.entries(banks).map(([side,bank])=>{const capacity=Math.max(1,Math.ceil(bank.length/rowCount)),rows=[];for(let i=0;i<bank.length;i+=capacity){const items=bank.slice(i,i+capacity);rows.push({items,width:items.reduce((n,v)=>n+Math.max(v.apGeometry.w,v.caption.width)+cellGap,0),height:Math.max(...items.map(v=>v.caption.height)),apHeight:Math.max(...items.map(v=>v.apGeometry.h)),lanes:28+(compactPaper?1:2)*pitch*items.length});}return [side,rows];}));
   const metrics=Object.fromEntries(Object.entries(rows).map(([side,rows])=>[side,{width:Math.max(0,...rows.map(row=>row.width)),height:rows.reduce((n,row)=>n+row.height+row.apHeight+row.lanes+(side==='top'?6:10),0)}]));
   const W=geometry.dynamic?Math.max(geometry.width,panel.w+margin*2,metrics.top.width+92,metrics.bottom.width+92):geometry.width;
   if(panel.w+margin*2>W+.01||Math.max(metrics.top.width,metrics.bottom.width)>W-92)continue;
@@ -105,11 +133,16 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
   if(!geometry.dynamic&&H>geometry.height)continue;
   const travel=ends.reduce((sum,v)=>sum+(topIds.has(v.e.idx)?v.anchor.y:panel.h-v.anchor.y),0);
   const score=(Math.max(W,H)**2+.15*W*H+travel*60)*(targetAspect?1+.75*Math.abs(Math.log((W/H)/targetAspect)):1);
-  choices.push({W,H,start,switchY,width,...spacing,apSize,pitch,banks,rows,metrics,col,score,panel,rowCount});
+  // On paper, rank by the printed scale this content will receive in the
+  // sheet's real diagram body; captions are planned at their source size.
+  const fit=body?Math.min(4,body.w/Math.max(panel.w+48,metrics.top.width,metrics.bottom.width),body.h/(metrics.top.height+panel.h+metrics.bottom.height)):null;
+  choices.push({W,H,start,switchY,width,...spacing,apSize,pitch,banks,rows,metrics,col,score,panel,rowCount,cellGap,...(body?{fit,wraps:Object.values(banks).flat().reduce((n,v)=>n+v.caption.wraps,0),planKey:'paper-rows:'+rowCount+':'+Math.round(col/apScale(project))+':'+(topIds===natural?'n':'b'),kind:'rows'}:{})});
  }
- choices.push(...sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,ends,apSize,pitch));
+ choices.push(...sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,ends,apSize,pitch).map(choice=>body?{...choice,fit:Math.min(4,body.w/Math.max(1,choice.W-72),body.h/Math.max(1,choice.H-choice.start-36)),planKey:'paper-'+choice.planKey}:choice));
  const retained=wirelessFrame(project)?.wirelessPlan;
- return (retained?choices.filter(choice=>choice.planKey===retained):choices).sort((a,b)=>a.score-b.score||a.col-b.col);
+ // An explicit "Use side space" choice keeps paper plans beside the stack.
+ const sideOnly=body&&wirelessSettings(project).wirelessApPlacement==='sides'&&choices.some(choice=>choice.placements)?choices.filter(choice=>choice.placements):choices;
+ return (retained?sideOnly.filter(choice=>choice.planKey===retained):sideOnly).sort((a,b)=>body?b.fit-a.fit||a.score-b.score:a.score-b.score||a.col-b.col);
 }
 
 // Side columns use the open space beside a stack instead of forcing every AP
@@ -121,7 +154,8 @@ function wirelessFrame(project){
 }
 function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,ends,apSize,pitch){
  const edits=project.layout?.drawingEdits||{},frozen=wirelessFrame(project),retained=!!frozen?.wirelessPlan;
- if((wirelessSettings(project).wirelessApPlacement!=='sides'&&!project._wirelessAdaptive&&!retained)||!geometry.dynamic||project._wirelessLegacyPaper||edges.length<8||(frozen&&!retained)||(!retained&&Object.entries(edits).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>value[k]!=null))))return [];
+ if(project._wirelessPaperPlan){if(edges.length<4||frozen&&!retained)return [];}
+ else if((wirelessSettings(project).wirelessApPlacement!=='sides'&&!project._wirelessAdaptive&&!retained)||!geometry.dynamic||project._wirelessLegacyPaper||edges.length<8||(frozen&&!retained)||(!retained&&Object.entries(edits).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>value[k]!=null))))return [];
  const result=[],ordered=ends.slice().sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx),left=new Set(ordered.slice(0,Math.ceil(ends.length/2)).map(v=>v.e.idx));
  for(const col of (project._wirelessAdaptive?[116,120,132,180,245]:[132,180,245]).map(w=>w*apScale(project)))for(const fraction of [1,.5])for(const columns of project._wirelessAdaptive&&fraction===1&&edges.length>=16?[1,2]:[1]){
   const sides={left:[],right:[]};
@@ -160,7 +194,7 @@ function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,
   // Match the existing area/long-axis objective; physical source text is never
   // reduced to win this candidate. Routing still validates every placement.
   const score=Math.max(W,H)**2+.15*W*H;
-  result.push({planKey:(columns===2?'columns':fraction===1?'sides':'surround')+':'+Math.round(col/apScale(project)),kind:columns===2?'columns':fraction===1?'sides':'surround',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:columns===2?'columns':fraction===1?'sides':'surround',placements});
+  result.push({wraps:placements.reduce((n,v)=>n+v.caption.wraps,0),planKey:(columns===2?'columns':fraction===1?'sides':'surround')+':'+Math.round(col/apScale(project)),kind:columns===2?'columns':fraction===1?'sides':'surround',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:columns===2?'columns':fraction===1?'sides':'surround',placements});
  }
  return result;
 }
@@ -175,7 +209,7 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
   const top=side==='top';let rowY=top?layout.start:layout.switchY+layout.panel.h,index=0;
   for(const [rowIndex,row] of layout.rows[side].entries()){
    let cursor=(layout.W-row.width)/2;
-   for(const v of row.items){const {caption,apGeometry}=v,y=top?rowY+row.height+6+row.apHeight-apGeometry.h:rowY+row.lanes,textY=top?rowY:y+apGeometry.h+10,cell=Math.max(apGeometry.w,caption.width)+16,center=cursor+cell/2;cursor+=cell;
+   for(const v of row.items){const {caption,apGeometry}=v,y=top?rowY+row.height+6+row.apHeight-apGeometry.h:rowY+row.lanes,textY=top?rowY:y+apGeometry.h+10,cell=Math.max(apGeometry.w,caption.width)+(layout.cellGap??16),center=cursor+cell/2;cursor+=cell;
     placements.push({...v,side,rowIndex,index:index++,x:center-apGeometry.w/2,y,captionX:center,captionY:textY});
    }
    rowY+=row.height+row.apHeight+row.lanes+(top?6:10);
@@ -217,6 +251,119 @@ function pageBatches(project,db,device,edges,width,geometry){
  return batches;
 }
 
+// Automatic wireless paper: plan every sheet at the size it will print.
+// Show only the stack members that carry these AP links, keep port numbers
+// readable at the narrowest stack width, then use the fewest balanced sheets
+// whose best arrangement (rows, side columns or both around the switch)
+// prints AP details at the target size. Never split a sheet unless that is
+// what reaches the target or makes the text larger.
+function readableWidth(project,device,portNumbers,fallback){
+ for(const width of [560,600,640,680,720,760,820,900,998]){const probe=addDevice({items:[]},project,device,[0,0,width,1],'inspect',{fitWidth:true,padding:equipmentPadding});try{portNumbers([],probe,physicalPorts(device),{fontScale:wirelessNumberScale(project)});return width;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;}}
+ return fallback;
+}
+// Equal sheets in port order; a cut moves to a nearby stack-member boundary
+// (within a fifth of a sheet) so a member's APs stay together where possible.
+function balancedBatches(edges,count){
+ const size=edges.length/count,tolerance=Math.floor(size/5),member=i=>portStackMember(edges[i]?.sp),cuts=[0];
+ // Never separate one AP's uplinks; prefer a stack-member boundary nearby.
+ const apBoundary=j=>edges[j-1]?.apId!==edges[j]?.apId,memberBoundary=j=>apBoundary(j)&&member(j-1)!==member(j);
+ for(let i=1;i<count;i++){
+  const ideal=Math.round(i*size),near=test=>{for(let d=0;d<=Math.max(tolerance,1);d++){const options=[ideal-d,ideal+d].filter(j=>j>cuts.at(-1)&&j<edges.length&&test(j));if(options.length)return options[0];}return null;};
+  const cut=(tolerance?near(memberBoundary):null)??near(apBoundary)??ideal;
+  if(cut>cuts.at(-1)&&cut<edges.length)cuts.push(cut);
+ }
+ cuts.push(edges.length);return cuts.slice(1).map((end,i)=>edges.slice(cuts[i],end)).filter(batch=>batch.length);
+}
+function paperPlanPages(project,db,source,sorted,{portNumbers,first,fallbackWidth}){
+ // Compare the complete stack (tall: room for AP columns beside it) with only
+ // the members that carry these links (flat: room for long AP rows). Keep
+ // whichever needs fewer sheets, then prints larger, then crosses less.
+ // Each sheet shows the members its own AP links use (balanced batches follow
+ // port order, so a sheet usually covers one or two neighbouring members).
+ const known=new Set((source.stackMembers||[]).map(m=>String(m.id))),views=new Map();
+ const subsetFor=batch=>{const members=new Set(batch.map(e=>portStackMember(e.sp)).filter(Boolean));if(!members.size||![...members].every(id=>known.has(id)))return source;const key=[...members].sort().join(',');if(!views.has(key))views.set(key,memberSubsetView(project,source,members));return views.get(key);};
+ const reduced=sorted.some(e=>subsetFor([e])!==source);
+ const primary=planPaperView(project,db,reduced?subsetFor:()=>source,sorted,{portNumbers,first,fallbackWidth});
+ // The complete stack only wins with no more sheets, so never explore beyond.
+ const alternative=!reduced||!primary?null:planPaperView(project,db,()=>source,sorted,{portNumbers,first,fallbackWidth,counts:[primary.pages.length-1,primary.pages.length].filter(n=>n>=1),beat:primary.fit,optional:true});
+ const plans=[primary,alternative].filter(Boolean);
+ if(!plans.length)throw capacityError('This wireless page needs more room for its connections.');
+ const target=project._wirelessPaperPlan.minimumFit,crossings=plan=>plan.pages.reduce((n,page)=>n+page.wirelessLayout.routingCost[3],0);
+ plans.sort((a,b)=>a.pages.length-b.pages.length||(b.fit>=target)-(a.fit>=target)||(Math.abs(a.fit-b.fit)>.05*Math.max(a.fit,b.fit)?b.fit-a.fit:0)||crossings(a)-crossings(b)||b.complete-a.complete);
+ return plans[0].pages;
+}
+function planPaperView(project,db,viewFor,sorted,{portNumbers,first,fallbackWidth,counts=null,beat=0,optional=false}){
+ const geometry={...pageGeometry(project,'wireless'),dynamic:true},narrow=new Map(),narrowestFor=view=>{const key=equipmentScope(view);if(!narrow.has(key))narrow.set(key,readableWidth(project,view,portNumbers,fallbackWidth));return narrow.get(key);};
+ // Wider stacks give adjacent leads room beside their port numbers but shrink
+ // the printed scale, so start narrow and widen only when routing needs it.
+ const widthsFor=view=>[...new Set(Array.from({length:11},(_,i)=>Math.min(998,Math.round(narrowestFor(view)*(1+.06*i)))))];
+ // The final paper fit may use outside whitespace, so a plan predicted within
+ // 3% of the target prints at it; the post-build check verifies real points.
+ const target=project._wirelessPaperPlan.minimumFit*.97,limit=Math.max(1,project._wirelessBatchLimit||sorted.length);
+ const pageProjectFor=index=>{const numberedName=(project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections '+(first+index+1);return {...project,_wirelessFrameName:numberedName,_wirelessAdaptiveFactor:1,...(project.layout?.presentation?.pages?.[numberedName]?{_wirelessPresentationName:numberedName}:{})};};
+ // A clean sheet has no obstructed or merged route and no cable through any
+ // AP caption (outer-row cables must pass between inner-row cards).
+ const clean=page=>{const v=page.wirelessLayout;if(v.routingCost[0]||v.routingCost[1])return false;if(v.captionClear==null){const captions=page.items.filter(i=>i.wirelessCaption);const copy={...page,items:page.items.map(item=>item.type==='path'?{...item,hops:undefined}:item)};bridge(copy,{style:hopStyle(project)});v.captionClear=!copy.items.some(path=>path.type==='path'&&captions.some(text=>pathCrossesText(path,text,0)));}return v.captionClear;};
+ const better=(page,current)=>{if(!current)return true;const a=page.wirelessLayout,b=current.wirelessLayout;if(clean(page)!==clean(current))return clean(page);if(a.meetsTarget!==b.meetsTarget)return a.meetsTarget;if(a.meetsTarget&&a.captionWraps!==b.captionWraps)return a.captionWraps<b.captionWraps;if(Math.abs(a.predictedFit-b.predictedFit)>.05*Math.max(a.predictedFit,b.predictedFit))return a.predictedFit>b.predictedFit;return a.routingCost[3]*55+a.routingCost[4]*8+a.routingCost[2]<b.routingCost[3]*55+b.routingCost[4]*8+b.routingCost[2];};
+ // The best clean sheet for one batch: largest printed scale first, fewer
+ // crossings on near ties; a wider stack only when narrower ones cannot route.
+ const sheet=(batch,index)=>{
+  const pageProject=pageProjectFor(index),view=viewFor(batch);let selected=null,error=null,extra=0;
+  for(const width of widthsFor(view)){
+   const choices=bankLayout(pageProject,db,view,batch,width,stackSpacing(pageProject,view,batch,width),geometry),top=choices[0]?.fit||0;
+   if(selected&&clean(selected)&&top<selected.wirelessLayout.predictedFit*.98)break;
+   // Among arrangements that print at the target size, keep names and details
+   // on whole lines; otherwise take the largest printed scale available.
+   const meeting=choices.filter(choice=>choice.fit>=target).sort((a,b)=>a.wraps-b.wraps||b.fit-a.fit),ranked=meeting.length?meeting:choices.filter(choice=>choice.fit>=top*.9);
+   for(const choice of ranked.slice(0,4)){
+    try{const page=renderBankPage(pageProject,db,view,batch,choice,index,portNumbers);Object.assign(page.wirelessLayout,{paperPlan:true,predictedFit:choice.fit,captionWraps:choice.wraps,meetsTarget:choice.fit>=target,memberSubset:!!view.stackContinuation});if(better(page,selected))selected=page;}
+    catch(e){if(e.code!=='CORE_LAYOUT_CAPACITY')throw e;error=e;}
+    if(selected&&clean(selected)&&!selected.wirelessLayout.routingCost[3])break;
+   }
+   // One wider stack may untangle crossings at nearly the same printed size.
+   if(selected&&clean(selected)&&(!selected.wirelessLayout.routingCost[3]||++extra>1))break;
+  }
+  return {page:selected&&clean(selected)?selected:null,error};
+ };
+ const upper=batch=>{const view=viewFor(batch),narrowest=narrowestFor(view),choices=bankLayout(project,db,view,batch,narrowest,stackSpacing(project,view,batch,narrowest),geometry);return choices.length?choices[0].fit:0;};
+ // Fewest balanced sheets whose printed AP details reach the target. The
+ // narrowest-stack estimate is an upper bound, so it skips hopeless counts
+ // without rendering them; rendered sheets decide the rest.
+ let best=null,stale=0;
+ const tries=counts?counts.filter(n=>n>=Math.ceil(sorted.length/limit)):Array.from({length:sorted.length-Math.ceil(sorted.length/limit)+1},(_,i)=>Math.ceil(sorted.length/limit)+i);
+ // When no count can reach the target (a very large minimum text size, or a
+ // stack wider than the sheet), aim for the best size more sheets can buy and
+ // stop there, rather than one AP per sheet. One representative batch per
+ // count keeps this estimate cheap.
+ const estimate=new Map(),estimateFor=count=>{if(!estimate.has(count))estimate.set(count,upper(balancedBatches(sorted,count)[0]));return estimate.get(count);};
+ // A one-AP sheet drops a whole bank and would inflate the best case.
+ const bestEstimate=counts?target:Math.max(...tries.filter(n=>n<=Math.max(1,Math.ceil(sorted.length/2))).map(estimateFor)),goal=counts?target:bestEstimate>=target?target:.85*bestEstimate;
+ for(const count of tries){
+  const batches=balancedBatches(sorted,count),bound=Math.min(...batches.map(upper));
+  if(counts?bound<Math.max(target,beat*(count===tries.at(-1)?1.1:1)):bound<goal&&count<sorted.length)continue;
+  const pages=batches.map((batch,index)=>sheet(batch,index));
+  if(pages.some(v=>!v.page)){if(++stale>=3)break;continue;}
+  const fit=Math.min(...pages.map(v=>v.page.wirelessLayout.predictedFit)),tangled=pages.some(v=>v.page.wirelessLayout.routingCost[3]>Math.max(4,v.page.wirelessLayout.links.length));
+  // A readable count is taken unless its cables tangle (more crossings than
+  // APs); then one more sheet is tried and kept only if it is untangled.
+  if(best?.met){if(fit>=goal&&!tangled)best={pages:pages.map(v=>v.page),fit,met:true};break;}
+  // Short of the target, another sheet must buy at least 10% more size.
+  if(!best||fit>=goal||fit>best.fit*(best.fit>=goal?1.02:1.1)){best={pages:pages.map(v=>v.page),fit,met:fit>=goal};stale=0;}else break;
+  if(fit>=goal&&!tangled)break;
+ }
+ if(best)return {...best,complete:best.pages.every(page=>!page.wirelessLayout.memberSubset)};
+ if(optional)return null;
+ // No balanced split routes cleanly: keep halving only the sheets that fail.
+ const batches=[sorted.slice()],out=[];
+ for(let index=0;index<batches.length;index++){
+  const batch=batches[index],{page,error}=sheet(batch,out.length);
+  if(page){out.push(page);continue;}
+  if(batch.length>1){const middle=Math.ceil(batch.length/2);batches.splice(index,1,batch.slice(0,middle),batch.slice(middle));index--;continue;}
+  if(error)return null;throw capacityError('This wireless page needs more room for its connections.');
+ }
+ return {pages:out,fit:Math.min(...out.map(page=>page.wirelessLayout.predictedFit)),complete:out.every(page=>!page.wirelessLayout.memberSubset)};
+}
+
 export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
  // Paper normally frames the complete drawing with one proportional transform.
  // Readable continuation is opt-in: it plans at the physical paper size so
@@ -228,12 +375,25 @@ export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
  // plan must fit the smallest applicable width AND height. This avoids tiny
  // text on one overridden sheet and keeps the plan stable after editing.
  const dimensions=[base,...numbered].map(paperDimensions).filter(Boolean),widthMm=Math.min(...dimensions.map(d=>d.widthMm)),heightMm=Math.min(...dimensions.map(d=>d.heightMm));
- const paper=dimensions.length?{preset:'custom',widthMm,heightMm,orientation:widthMm<heightMm?'portrait':'landscape'}:base;
+ // One chosen preset (e.g. Letter on one page) stays that preset on every
+ // continuation sheet; mixed papers plan on their smallest common size.
+ const fixed=[base,...numbered].filter(p=>paperDimensions(p)),same=fixed.length&&fixed.every(p=>p.preset===fixed[0].preset&&p.preset!=='custom'&&(p.orientation||'landscape')===(fixed[0].orientation||'landscape'));
+ const paper=same?{...fixed[0],locked:false}:dimensions.length?{preset:'custom',widthMm,heightMm,orientation:widthMm<heightMm?'portrait':'landscape'}:base;
  const frames=Object.entries(visible.lockFrames).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame),explicit=['layout','readable','adaptive'].includes(project.layout?.pageSetup?.visible?.wirelessFit);
  const legacy=project._wirelessLegacyPaper===true||!explicit&&frames.some(frame=>!frame.wirelessFit||frame.wirelessFit==='readable-legacy')&&!frames.some(frame=>frame.wirelessFit==='layout');
  const render=planned=>wirelessPages(planned,db,{portNumbers,tablePages,empty}).map(page=>{if(planned._wirelessAdaptive&&paper.preset!=='dynamic')page.wirelessContinuationPaper={...paper,locked:[base,...numbered].some(p=>p.locked)};if(page.wirelessLayout)page.wirelessLayout.paperFit=visible.wirelessFit==='adaptive'?'adaptive':visible.wirelessFit==='readable'?(legacy?'readable-legacy':'readable'):'layout';return page;});
  if(visible.wirelessFit==='adaptive'&&paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
-  const savedLimits=Object.values({...visible.lockFrames,...visible.editFrames}).map(f=>f.wirelessBatchLimit).filter(Number.isFinite),limit=project._wirelessBatchLimit||Math.min(...savedLimits);
+  const frames=Object.entries({...visible.lockFrames,...visible.editFrames}).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame);
+  // Frames from the earlier enlarge-then-shrink planner remain authoritative
+  // only where authored geometry still depends on them (see the defaults
+  // migration); otherwise plan at the paper's real printed size.
+  if(!frames.some(frame=>frame.wirelessFit==='adaptive'&&!frame.wirelessPaperPlan)){
+   const config=presentation(project,{name:'Wireless Connections',family:'wireless'}),minimumPt=Math.max(8,config.minimumTextPt||8),captionPx=12*(config.wirelessApScale||1)*(config.textScale||1);
+   // A saved sheet split (from the readability check) reopens identically.
+   const savedLimit=Math.min(...frames.filter(frame=>frame.wirelessPaperPlan).map(frame=>frame.wirelessBatchLimit).filter(Number.isFinite)),limit=project._wirelessBatchLimit||(Number.isFinite(savedLimit)?savedLimit:null);
+   return render({...project,_wirelessAdaptive:true,_wirelessPaperPlan:{paper:{...paper,locked:[base,...numbered].some(p=>p.locked)},minimumFit:minimumPt/(.75*captionPx)},...(limit?{_wirelessBatchLimit:limit}:{})});
+  }
+  const savedLimits=frames.map(f=>f.wirelessBatchLimit).filter(Number.isFinite),limit=project._wirelessBatchLimit||Math.min(...savedLimits);
   return render({...project,_wirelessAdaptive:true,...(Number.isFinite(limit)?{_wirelessBatchLimit:limit}:{})});
  }
  if(visible.wirelessFit==='readable'&&paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
@@ -263,6 +423,7 @@ function wirelessPages(project,db,{portNumbers,tablePages,empty}){
  if(!geometry.dynamic&&width>geometry.width-92)throw capacityError('This wireless sheet needs a wider page for readable ports and cables.');
  const out=[];
  for(const [sw,records] of groups){
+  if(project._wirelessPaperPlan){const source=db.devices.get(sw),sorted=records.slice().sort((a,b)=>cmp(a.sp,b.sp)||cmp(a.apId,b.apId));out.push(...paperPlanPages(project,db,source,sorted,{portNumbers,first:out.length,fallbackWidth:width}));continue;}
   const source=db.devices.get(sw),sorted=records.slice().sort((a,b)=>cmp(a.sp,b.sp)||cmp(a.apId,b.apId)),whole=geometry.dynamic?[]:bankLayout(project,db,source,sorted,width,stackSpacing(project,source,sorted,width),geometry);
   // Keep complete dynamic stacks. Fixed paper tries the whole stack before a
   // physical member continuation, and never slices an imported faceplate.
