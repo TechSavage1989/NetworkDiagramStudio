@@ -60,7 +60,7 @@ export async function checkDiagramSelection(page,output,open){
  assert.deepEqual(await page.locator('#site').evaluate(n=>[n.selectionStart,n.selectionEnd]),[0,await page.locator('#site').inputValue().then(v=>v.length)]);
  assert.equal(await page.locator('#drawing-selection').textContent(),'0 selected');
  await page.locator('#paste').click();const input=page.locator('#dialog textarea').first();await input.fill('Fictional editable text');await input.press('Control+a');
- assert.deepEqual(await input.evaluate(n=>[n.selectionStart,n.selectionEnd]),[0,22]);await page.locator('#close').click();
+ assert.deepEqual(await input.evaluate(n=>[n.selectionStart,n.selectionEnd]),[0,(await input.inputValue()).length]);await page.locator('#close').click();
  await page.evaluate(()=>getSelection().removeAllRanges());const canvas=await page.locator('#canvas').boundingBox(),toolbar=await page.locator('.stagebar').boundingBox();
  await page.mouse.move(canvas.x+canvas.width-12,canvas.y+canvas.height-12);await page.mouse.down();await page.mouse.move(toolbar.x+100,toolbar.y+10,{steps:8});await page.mouse.up();
  assert.equal(await page.evaluate(()=>getSelection().toString()),'');
