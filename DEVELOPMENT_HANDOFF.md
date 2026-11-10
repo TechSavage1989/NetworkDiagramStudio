@@ -7,6 +7,16 @@ Baseline is published preview.47 main/tag 797f580f4ee9a177df6f34bb7a1b57ccad7bf0
 Settings live preview now retains its user choice, adapting debounce after slow rebuilds instead of automatically unchecking itself. Controls width uses one bounded slider and persists across layout scope rerenders. Transform-based pan supports fitted pages, left/middle dragging and pointer-centred wheel zoom; navigation is separate from draft settings. Preview Actual size/Calibrate screen share the main drawing calibration and actualSizePaper classification. Physical scale remains fixed through pane resize; zoom/Fit leaves 1:1 mode. Calibration listeners dispose when settings dialogs close/rebuild, and same-window calibration changes propagate to the main drawing.
 
 Focused queue/scale/calibration/guide tests pass. Local Chromium still cannot start because socket() is denied, including the permitted escalated attempt; hosted settings/actual-size and native verification plus genuine updated screenshots remain required. No release or version change is included in this handoff.
+# Hosted continuation fixture isolation
+
+Run220 passed actual side-space placement and save/reopen, then the existing
+four-sheet continuation assertion failed because the preceding new interaction
+left AP size at150%. Exact local reproduction yields four readable sheets at
+100% and seven at150%, with clear routes and all32 links retained. The browser
+test now reopens its original saved100% proportional fixture before testing
+readable continuation, Undo/redo and reopen. The <=4 assertion is unchanged.
+No production layout code changes; hosted rerun remains required.
+
 # Wireless side-space follow-up (preview.48 candidate)
 
 Explicit AP size/side-placement changes in Pages & layout now refit automatic

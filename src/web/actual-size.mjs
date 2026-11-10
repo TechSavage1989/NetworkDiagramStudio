@@ -46,7 +46,7 @@ export function createActualSizeView({button,calibrate,status,getPage,setScale,i
   status.textContent=calibration&&!valid?'Screen scale changed. Recalibrate before using Actual size.':isActive()?'Actual size 1:1 · Pan to inspect. Verify with paper on this screen.' :'';
   if(sessionOnly)status.textContent+=' Calibration is for this session only; browser storage is unavailable.';
  }
- function activate({preserve=false}={}){if(actualSizeScale(getPage(),1)===null)return;if(!calibrationMatches(calibration,signature())){open();return;}setScale(actualSizeScale(getPage(),calibration.pxPerMm),preserve);refresh();}
+ function activate({preserve=false,prompt=true}={}){if(disposed||actualSizeScale(getPage(),1)===null)return;if(!calibrationMatches(calibration,signature())){if(prompt)open();return;}setScale(actualSizeScale(getPage(),calibration.pxPerMm),preserve);refresh();}
  function open(){
   if(disposed||document.getElementById('screen-calibration'))return;
   const dialog=document.createElement('dialog');dialog.id='screen-calibration';dialog.setAttribute('aria-labelledby','screen-calibration-title');

@@ -93,6 +93,10 @@ try{
  await page.screenshot({path:resolve(output,'wireless-letter-side-space.png')});
  saved=await save('wireless-side-space.nds.json');await open(saved.path);await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));assert.deepEqual(await apGeometry(),sideGeometry,'saved side-space geometry reopens without reverting to rows');
 
+ // Restore the original100% AP fixture before checking its four-sheet
+ // readable-continuation budget. The side-space test intentionally enlarged
+ // APs to150%, which correctly needs more sheets and is a different case.
+ await open(resolve(output,'wireless-proportional.nds.json'));
  controls=await options();await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('readable');await apply(controls.dialog);
  const continued=(await wirelessNames()).length;assert.ok(continued>1&&continued<=4);
  saved=await save('wireless-readable.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'readable');

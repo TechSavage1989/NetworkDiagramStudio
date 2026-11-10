@@ -85,6 +85,17 @@ test('preview calibration listeners are disposable and shared changes reach the 
  assert.equal(listeners.get('resize').size,2);
  for(const fn of listeners.get('nds-screen-calibration-changed'))fn({detail:{calibration:{version:1,pxPerMm:5,signature},sessionOnly:false}});
  a.activate();b.activate();assert.equal(mainScale,previewScale);assert.equal(mainScale,279.4*5/1056);
- b.dispose();b.dispose();assert.equal(listeners.get('resize').size,1);assert.equal(listeners.get('nds-screen-calibration-changed').size,1);assert.equal(preview.onclick,null);
+ b.dispose();b.dispose();const beforeDisposed=previewScale;b.activate();assert.equal(previewScale,beforeDisposed,'disposed controls cannot reactivate');assert.equal(listeners.get('resize').size,1);assert.equal(listeners.get('nds-screen-calibration-changed').size,1);assert.equal(preview.onclick,null);
  a.dispose();assert.equal(listeners.get('resize').size,0);
+});
+
+test('nonprompting actual-size restoration never opens calibration or claims Dynamic paper',t=>{
+ const prior={window:globalThis.window,localStorage:globalThis.localStorage};
+ t.after(()=>{for(const [k,v] of Object.entries(prior)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}});
+ globalThis.window={devicePixelRatio:1,screen:{width:1920,height:1080,colorDepth:24},visualViewport:{scale:1,addEventListener(){}},addEventListener(){},matchMedia:()=>({addEventListener(){}})};
+ globalThis.localStorage={getItem:()=>null};
+ let page={width:1000,visiblePaper:{preset:'letter',orientation:'landscape'}},count=0;
+ const view=createActualSizeView({button:{setAttribute(){}},calibrate:{},status:{},getPage:()=>page,setScale:()=>count++,isActive:()=>false,leave(){}});
+ view.activate({preserve:true,prompt:false});assert.equal(count,0,'no saved calibration means no claim or dialog');
+ page={...page,visiblePaper:{preset:'dynamic'}};view.activate({preserve:true,prompt:false});assert.equal(count,0);view.dispose();
 });
