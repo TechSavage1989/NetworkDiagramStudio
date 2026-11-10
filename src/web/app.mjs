@@ -639,7 +639,8 @@ $('link-styles').onclick=()=>task(()=>linkStyleOptions());
 
 function attachSettingsPreview(body,read,configure,{validate=false,selectedName=pages[active]?.name,viewState={}}={}){
  const source=structuredClone(project);
- settingsPreviewSession=settingsPreview(body,{read,initialPages:pages,selectedName,viewState,build:data=>isolatedPreview(source,draft=>configure(draft,structuredClone(data)),draft=>({pages:validate?validateDrawing(scoped(draft)):buildDrawing(scoped(draft)),selectedName:data?.selectedName}))});
+ const previewPages=(draft,items)=>items.map(page=>({...page,actualSizePaper:actualSizePaper(draft,page)}));
+ settingsPreviewSession=settingsPreview(body,{read,initialPages:previewPages(source,pages),selectedName,viewState,build:data=>isolatedPreview(source,draft=>configure(draft,structuredClone(data)),draft=>({pages:previewPages(draft,validate?validateDrawing(scoped(draft)):buildDrawing(scoped(draft))),selectedName:data?.selectedName}))});
  return settingsPreviewSession;
 }
 function globalTextStyleOptions(){

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {actualSizeScale,actualSizePaper,screenSignature,validCalibration,calibrationMatches} from '../src/web/actual-size.mjs';
+import {actualSizeScale,actualSizePaper,screenSignature,validCalibration,calibrationMatches,createActualSizeView} from '../src/web/actual-size.mjs';
 const signature=screenSignature({devicePixelRatio:1.25,screen:{width:1920,height:1080,colorDepth:24},visualViewport:{scale:1}});
 test('calibrated physical paper preserves exact size regardless of drawing units',()=>{
  for(const [preset,orientation,width,height] of [['letter','portrait',215.9,279.4],['a4','landscape',297,210],['a3','portrait',297,420],['custom','portrait',200,400]]){
@@ -70,4 +70,32 @@ test('real grown Dynamic builder pages cannot masquerade as physical custom pape
  assert.ok(report);assert.ok(Math.abs(actualSizeScale({...report,actualSizePaper:actualSizePaper(sample,report)},4)*report.width-297*4)<1e-7,'independent A4 reports retain physical paper');
  const fixed=adaptiveProject('a4'),a4=buildPages(fixed).find(p=>p.portMap?.switchportSheet);
  assert.ok(Math.abs(actualSizeScale({...a4,actualSizePaper:actualSizePaper(fixed,a4)},4)*a4.width-297*4)<1e-7);
+});
+
+test('preview calibration listeners are disposable and shared changes reach the main view',t=>{
+ const prior={window:globalThis.window,localStorage:globalThis.localStorage};
+ t.after(()=>{for(const [k,v] of Object.entries(prior)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}});
+ const listeners=new Map(),add=(kind,fn)=>{if(!listeners.has(kind))listeners.set(kind,new Set());listeners.get(kind).add(fn);},remove=(kind,fn)=>listeners.get(kind)?.delete(fn);
+ globalThis.window={...signature,devicePixelRatio:1.25,screen:{width:1920,height:1080,colorDepth:24},visualViewport:{scale:1,addEventListener(){},removeEventListener(){}},addEventListener:add,removeEventListener:remove,matchMedia:()=>({addEventListener(){},removeEventListener(){}})};
+ globalThis.localStorage={getItem:()=>JSON.stringify({version:1,pxPerMm:4,signature})};
+ const button=()=>({setAttribute(k,v){this[k]=v;}}),main=button(),preview=button();let mainScale=0,previewScale=0;
+ const page={width:1056,paper:{preset:'letter',orientation:'landscape'}};
+ const a=createActualSizeView({button:main,calibrate:button(),status:{},getPage:()=>page,setScale:s=>mainScale=s,isActive:()=>false,leave(){}});
+ const b=createActualSizeView({button:preview,calibrate:button(),status:{},getPage:()=>page,setScale:s=>previewScale=s,isActive:()=>false,leave(){}});
+ assert.equal(listeners.get('resize').size,2);
+ for(const fn of listeners.get('nds-screen-calibration-changed'))fn({detail:{calibration:{version:1,pxPerMm:5,signature},sessionOnly:false}});
+ a.activate();b.activate();assert.equal(mainScale,previewScale);assert.equal(mainScale,279.4*5/1056);
+ b.dispose();b.dispose();const beforeDisposed=previewScale;b.activate();assert.equal(previewScale,beforeDisposed,'disposed controls cannot reactivate');assert.equal(listeners.get('resize').size,1);assert.equal(listeners.get('nds-screen-calibration-changed').size,1);assert.equal(preview.onclick,null);
+ a.dispose();assert.equal(listeners.get('resize').size,0);
+});
+
+test('nonprompting actual-size restoration never opens calibration or claims Dynamic paper',t=>{
+ const prior={window:globalThis.window,localStorage:globalThis.localStorage};
+ t.after(()=>{for(const [k,v] of Object.entries(prior)){if(v===undefined)delete globalThis[k];else globalThis[k]=v;}});
+ globalThis.window={devicePixelRatio:1,screen:{width:1920,height:1080,colorDepth:24},visualViewport:{scale:1,addEventListener(){}},addEventListener(){},matchMedia:()=>({addEventListener(){}})};
+ globalThis.localStorage={getItem:()=>null};
+ let page={width:1000,visiblePaper:{preset:'letter',orientation:'landscape'}},count=0;
+ const view=createActualSizeView({button:{setAttribute(){}},calibrate:{},status:{},getPage:()=>page,setScale:()=>count++,isActive:()=>false,leave(){}});
+ view.activate({preserve:true,prompt:false});assert.equal(count,0,'no saved calibration means no claim or dialog');
+ page={...page,visiblePaper:{preset:'dynamic'}};view.activate({preserve:true,prompt:false});assert.equal(count,0);view.dispose();
 });

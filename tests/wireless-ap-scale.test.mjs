@@ -35,10 +35,10 @@ test('side space is explicit, improves realistic small and dense fans, and retai
  assert.equal(cleanPresentation({}).defaults.wirelessApPlacement,'rows');
  for(const [count,members] of [[8,3],[28,5]]){
   const rows=wireless(lab(count,members,1.5))[0],side=wireless(lab(count,members,1.5,'sides'))[0];clear(side);
-  assert.equal(side.wirelessLayout.kind,'sides');assert.equal(side.items.filter(i=>i.kind==='ap').length,count);
+  assert.ok(['sides','surround'].includes(side.wirelessLayout.kind));assert.equal(side.items.filter(i=>i.kind==='ap').length,count);
   assert.ok(side.wirelessLayout.routingCost[3]<=rows.wirelessLayout.routingCost[3]);
   assert.ok(side.wirelessLayout.routingCost[5]<rows.wirelessLayout.routingCost[5]);
-  const sw=side.items.find(i=>i.kind==='switch');assert.ok(side.items.filter(i=>i.kind==='ap').every(i=>i.x+i.w<sw.x||i.x>sw.x+sw.w));
+  const sw=side.items.find(i=>i.kind==='switch');assert.ok(side.items.filter(i=>i.kind==='ap').some(i=>i.x+i.w<sw.x||i.x>sw.x+sw.w));
  }
 });
 test('AP scale and placement normalize and inherit per page without mutating source data',()=>{

@@ -79,6 +79,24 @@ try{
  });
  assert.deepEqual(outside,[],'choosing Letter keeps every wireless device, caption and cable within the physical sheet');
  await page.screenshot({path:resolve(output,'wireless-letter-proportional.png')});
+ // Explicit side-space application refits the old automatic paper frame.
+ // It must visibly populate the space beside the stack, not retain only rows.
+ const apGeometry=()=>page.locator('#canvas svg').evaluate(svg=>({viewBox:svg.getAttribute('viewBox'),devices:[...svg.querySelectorAll('[data-device-id]')].map(node=>({id:node.getAttribute('data-device-id'),box:node.getBBox().toJSON?.()||{x:node.getBBox().x,y:node.getBBox().y,width:node.getBBox().width,height:node.getBBox().height}}))}));
+ const rowGeometry=await apGeometry();
+ await page.locator('#page-layout').click();let apDialog=page.locator('#dialog');await apDialog.getByLabel('Edit page',{exact:true}).selectOption('*');
+ await apDialog.getByLabel('Wireless APs and details (%)',{exact:true}).fill('150');
+ await apDialog.getByLabel('Wireless AP placement',{exact:true}).selectOption('sides');
+ await apDialog.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ const sideGeometry=await apGeometry();assert.notDeepEqual(sideGeometry,rowGeometry);
+ const sideBoxes=await page.locator('#canvas svg').evaluate(svg=>{const sw=svg.querySelector('[data-device-id="sw"]').getBoundingClientRect();return [...svg.querySelectorAll('[data-device-id^="ap"]')].filter(node=>{const b=node.getBoundingClientRect();return b.right<sw.left||b.left>sw.right;}).length;});
+ assert.ok(sideBoxes>=8,'APs visibly fill side space on Letter');
+ await page.screenshot({path:resolve(output,'wireless-letter-side-space.png')});
+ saved=await save('wireless-side-space.nds.json');await open(saved.path);await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));assert.deepEqual(await apGeometry(),sideGeometry,'saved side-space geometry reopens without reverting to rows');
+
+ // Restore the original100% AP fixture before checking its four-sheet
+ // readable-continuation budget. The side-space test intentionally enlarged
+ // APs to150%, which correctly needs more sheets and is a different case.
+ await open(resolve(output,'wireless-proportional.nds.json'));
  controls=await options();await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('readable');await apply(controls.dialog);
  const continued=(await wirelessNames()).length;assert.ok(continued>1&&continued<=4);
  saved=await save('wireless-readable.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'readable');
@@ -101,5 +119,5 @@ try{
  backing=await backingOptions();await backing.padding.fill('20');await backing.dialog.getByRole('button',{name:'Cancel',exact:true}).click();backing=await backingOptions();assert.equal(await backing.padding.inputValue(),'0');
  await page.screenshot({path:resolve(output,'label-backing-options.png')});await close(backing.dialog);
  assert.deepEqual(errors,[]);
- await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','explicit readable continuation','wireless fit Undo/redo and save/reopen'],names},null,2));
+ await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','side-space AP placement and save/reopen','explicit readable continuation','wireless fit Undo/redo and save/reopen'],names},null,2));
 }catch(error){await page.screenshot({path:resolve(output,'failure.png')});console.error('Browser errors:',errors);throw error;}finally{await browser.close();}
