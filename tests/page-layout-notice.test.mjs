@@ -19,3 +19,9 @@ test('resolved layout removes notice while independent overflow stays actionable
  assert.match(pageLayoutNotice({panelFitLegacy:true}),/earlier layout/);
  assert.doesNotMatch(pageLayoutNotice({paperReadability:{minimumPt:8,actualPt:7,overflow:false}}),/earlier layout/);
 });
+
+test('automatic fitted small text explains the tradeoff without recommending a useless refit',()=>{
+ const notice=pageLayoutNotice({paperReadability:{minimumPt:8,actualPt:4,preserved:false,overflow:false}});
+ assert.match(notice,/complete diagram fits/);assert.match(notice,/4.0 pt/);assert.match(notice,/below the 8 pt target/);
+ assert.doesNotMatch(notice,/Save page options|clip off-page/);
+});

@@ -79,6 +79,21 @@ try{
  const moved=await deviceBoxes();for(const id of ['sw-1','sw-2']){assert.ok(moved[id].x-before[id].x>50,id+' moves with the selection');assert.ok(Math.abs(moved[id].y-before[id].y)<.5,id+' keeps the locked vertical coordinate');assert.ok(Math.abs(moved[id].w-before[id].w)<.1,id+' moves rather than resizing');}
  assert.equal(await page.locator('#drawing-selection').textContent(),'2 selected');assert.deepEqual(errors,[]);
 
+ // Empty space below a short information panel is available for placement.
+ // The preview and committed move must agree, rather than snapping back to
+ // the full-height divider when the mouse is released.
+ await page.close();page=await freshPage();await page.locator('#sample').click();await page.waitForSelector('#canvas svg');
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();
+ await page.locator('#zoom-fit').click();await settled();
+ const placementStart=await bodyPoint('sw-1'),placementScale=await page.locator('#canvas svg').evaluate(svg=>svg.getScreenCTM().a),placementBefore=await deviceBoxes();
+ await page.mouse.move(placementStart.x,placementStart.y);await page.mouse.down();await page.mouse.move(placementStart.x-392*placementScale,placementStart.y+30*placementScale,{steps:8});
+ const previewBoxes=await deviceBoxes();await page.mouse.up();await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent.includes('Drawing items moved.'));
+ const placementAfter=await deviceBoxes();assert.ok(Math.abs(placementAfter['sw-1'].x-previewBoxes['sw-1'].x)<1,'Committed position must match the visible drag preview');
+ assert.ok(Math.abs(placementAfter['sw-1'].x-placementBefore['sw-1'].x+392*placementScale)<1,'Device can enter empty space below panel');
+ const placementDownload=page.waitForEvent('download');await page.locator('#save').click();const placementFile=await placementDownload,placementPath=resolve(output,'placement.nds');await placementFile.saveAs(placementPath);
+ const placementSaved=JSON.parse(await readFile(placementPath,'utf8'));assert.ok(Math.abs(placementSaved.project.layout.drawingEdits['Core Network|device|sw-1|body'].x-38)<1);
+ await page.locator('#drawing-undo').click();await page.locator('#drawing-redo').click();assert.deepEqual(errors,[]);await page.screenshot({path:resolve(output,'empty-panel-space-placement.png')});
+
  // Repeated title edits must still be accessible after the accepted SVG is
  // replaced. Keep revision, Escape and detached-session recovery strict.
  await page.close();page=await freshPage();await page.setViewportSize({width:1024,height:720});await page.locator('#sample').click();await page.locator('#canvas svg').waitFor();

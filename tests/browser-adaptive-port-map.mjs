@@ -36,6 +36,16 @@ try{
   // Native browser undo restores the accepted paper, and redo reapplies it.
   await page.keyboard.press('Control+z');await page.waitForFunction(()=>{const b=document.querySelector('#canvas svg').viewBox.baseVal;return Math.abs(b.width/b.height-297/210)<1e-6;});
   await page.keyboard.press('Control+Shift+z');await page.waitForFunction(()=>{const b=document.querySelector('#canvas svg').viewBox.baseVal;return Math.abs(b.width/b.height-11/8.5)<1e-6;});
+  // Locking fixes the sheet, not a second blank border around a measured map.
+  await page.locator('#page-options').click();
+  await dialog.getByLabel('Lock physical page size',{exact:true}).check();
+  await dialog.getByRole('button',{name:'Save page options'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+  const edgeHeader=await page.locator('#canvas svg').evaluate(svg=>{
+   const b=svg.viewBox.baseVal;
+   return [...svg.querySelectorAll('rect')].some(r=>Math.abs(+r.getAttribute('x')-b.x)<.01&&Math.abs(+r.getAttribute('y')-b.y)<.01&&Math.abs(+r.getAttribute('width')-b.width)<.01&&r.getAttribute('fill')==='#203746');
+  });
+  assert.ok(edgeHeader,'locked Auto-fit header should reach both paper edges');
+  await page.screenshot({path:resolve(output,'adaptive-'+members+'-letter-locked.png')});
  }
- assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['five/eight-member and chassis A4','slim gutters and enlarged banks','Letter reflow','one-column order','Undo/redo','built offline app']},null,2));
+ assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['five/eight-member and chassis A4','slim gutters and enlarged banks','Letter reflow','locked full-width header','one-column order','Undo/redo','built offline app']},null,2));
 }finally{await browser.close();}

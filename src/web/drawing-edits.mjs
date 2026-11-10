@@ -94,18 +94,36 @@ export function movementOffsets(page,edits,offsets,{exclude=[]}={}){
  }
  return result;
 }
-// Keep manually dragged core equipment clear of the information sidebar.
-// The scene may expand to the right, but the reserved content area is solid.
+// Only painted information-panel content is an obstacle. The divider and the
+// empty column below it are not a full-height exclusion zone.
+export function informationPanelBounds(page,excluded=new Set()){
+ return (page.items||[]).filter(i=>i.panelGroup&&!excluded.has(i.editKey)).map(drawingBounds).filter(b=>b&&[b.x,b.y,b.w,b.h].every(Number.isFinite));
+}
 export function safeCoreMoveOffsets(page,offsets){
- if(page?.legendLayout!=='sidebar'||!Number.isFinite(page.sidebar?.divider))return new Map(offsets);
- const boundary=page.sidebar.divider+20,out=new Map(offsets),shared=new Map();
- // A shared translation is one rigid move. Clamp the entire selection by
- // its leftmost constrained body, never individual members independently.
+ const out=new Map(offsets),obstacles=informationPanelBounds(page,new Set(offsets.keys()));
+ if(!obstacles.length)return out;
+ const groups=new Map(),clearance=6*(page.presentationFrame?.scale||1);
  for(const [key,[dx,dy]] of out){
   const item=page.items.find(i=>i.editKey===key),token=dx+','+dy;
-  if(item?.type==='device'&&item.kind!=='plug'&&item.kind!=='handoff'&&!item.moduleLegend&&item.sourceId!=='module-legend')shared.set(token,Math.max(shared.get(token)??dx,boundary-drawingBounds(item).x));
+  if(item?.type==='device'&&item.kind!=='plug'&&!item.panelGroup){
+   if(!groups.has(token))groups.set(token,[]);
+   groups.get(token).push(drawingBounds(item));
+  }
  }
- for(const [key,[dx,dy]] of out)out.set(key,[shared.get(dx+','+dy)??dx,dy]);
+ for(const [token,boxes] of groups){
+  const [dx,dy]=token.split(',').map(Number),intervals=[];
+  // Forbidden horizontal translations only exist where the proposed vertical
+  // footprints meet real panel content. Moving through empty space is valid.
+  for(const box of boxes)for(const obstacle of obstacles)if(box.y+dy<obstacle.y+obstacle.h+clearance&&box.y+dy+box.h>obstacle.y-clearance)
+   intervals.push([obstacle.x-box.x-box.w-clearance,obstacle.x+obstacle.w-box.x+clearance]);
+  const blocked=x=>intervals.some(([left,right])=>x>left+1e-7&&x<right-1e-7);
+  if(!blocked(dx))continue;
+  const candidates=intervals.flat().filter(x=>!blocked(x)).sort((a,b)=>Math.abs(a-dx)-Math.abs(b-dx));
+  const accepted=candidates[0]??dx;
+  // Every selected item sharing the translation stays rigid, including its
+  // labels/cables and generated handoff cards.
+  for(const [key,value] of offsets)if(value[0]===dx&&value[1]===dy)out.set(key,[accepted,dy]);
+ }
  return out;
 }
 export function moveDrawingItems(page,edits,offsets,{preventSidebarOverlap=false}={}){
@@ -143,12 +161,8 @@ export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='a
  const scale=reference.presentation?.scale||1,padding=typeof spacing==='number'?spacing:spacing==='auto'?automaticDeviceGap(page,[...chosen,reference],side):({compact:56,normal:96,wide:160}[spacing]??96)*scale;
  if(!Number.isFinite(padding))throw Error('Choose a valid placement spacing.');
  const others=devices.filter(i=>!selected.has(i.editKey)),obstacles=others.filter(i=>i!==reference).map(drawingBounds);
- // The information sidebar is a reserved, solid region. Place beside must
- // search for a clear location or report a capacity issue, never overlap it.
- if(page.legendLayout==='sidebar'&&Number.isFinite(page.sidebar?.divider)){
-  const x=page.originX||0,y=page.originY||0,right=page.sidebar.divider+20;
-  obstacles.push({key:'reserved-sidebar',x,y,w:Math.max(0,right-x),h:page.height});
- }
+ // Place beside uses the same occupied panel geometry as direct dragging.
+ obstacles.push(...informationPanelBounds(page,selected));
  const offsets=placeBeside(chosen.map(drawingBounds),drawingBounds(reference),side,obstacles,padding,{clearance:20*scale,maxAdjustment:Math.max(160*scale,padding*2)});
  // Pin every visible reference, including generated WAN cards, before core
  // routing retries can choose a new automatic arrangement. This is one edit.

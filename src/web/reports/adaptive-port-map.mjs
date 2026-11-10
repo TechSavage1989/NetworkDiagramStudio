@@ -64,15 +64,17 @@ function preserveLegacyKeys(page,previous){
 }
 export function adaptivePortMap(item,palette,request,identity){
  const sheet=request.paper,inv=item.inventory;
- // Locked sheets retain their established base for saved presentation frames.
- const margin=sheet?.locked?24:12;
+ // Page lock fixes the paper boundary, not the printable artwork size.
+ // Leave only enough room for the chassis frame stroke; saved frames are
+ // preserved by the presentation layer rather than shrinking new layouts.
+ const legacy=sheet?.legacyAdaptive===true,margin=legacy?(sheet?.locked?24:12):4;
  if(!sheet||!(sheet.width>0&&sheet.height>0))throw new ReportCapacityError('Adaptive port maps require measured paper dimensions.');
  const make=()=>{
   const p=P.page(request,item.id+'|adaptive',P.displayName(inv),[P.modelLabel(inv),inv.ports.length+' interfaces'].filter(Boolean).join(' | '),identity.role,[item.id],sheet.width,sheet.height,true);
-  p.name=identity.name;return p;
+  p.name=identity.name;p.reportMargin=legacy?24:margin;if(!legacy)p.contentTop-=4;return p;
  };
  const sample=make(),top=sample.contentTop,contentWidth=sheet.width-2*margin;
- const footerSpace=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?margin:65,guideHeight=P.symbolKeyHeight(inv,sheet.width-48),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
+ const footerSpace=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?margin:65,guideHeight=P.symbolKeyHeight(inv,legacy?sheet.width-48:contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
  const keys=[{side:false,key:keyPlan(inv,palette,contentWidth)},...[160,190,220,260].filter(width=>width<contentWidth*.4).map(width=>({side:true,key:keyPlan(inv,palette,width)}))];
  const candidates=[];
  for(const style of styles){
@@ -85,7 +87,7 @@ export function adaptivePortMap(item,palette,request,identity){
    if(!fits(at(base.portWidth)))continue;
    // A reference socket size is a starting point, not an Auto-fit ceiling.
    // The measured paper, complete key and physical bank proportions bound growth.
-   let low=base.portWidth,high=Math.max(low,sheet.locked?(item.standardPortWidth??56):roomWidth);
+   let low=base.portWidth,high=Math.max(low,legacy&&sheet.locked?(item.standardPortWidth??56):roomWidth);
    for(let step=0;step<15;step++){const mid=(low+high)/2;if(fits(at(mid)))low=mid;else high=mid;}
    const plan=at(low),radius=P.fillRadius(inv,plan);
    if(radius==null)continue;

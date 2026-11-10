@@ -28,7 +28,7 @@ import {actualSizePaper} from './actual-size.mjs';
 import {diagramViewport} from './viewport.mjs';
 import {arrangeAnchors,arrangeBoxes,arrangeBoxesAtGap} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
-import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits,inverseDeviceDelta} from './drawing-edits.mjs';
+import {safeCoreMoveOffsets,drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits,inverseDeviceDelta} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
@@ -412,7 +412,7 @@ function startDrawingMove(key,event){
   moving=new Set(movementOffsets(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[1,1]]))).keys()),
   boxes=drawingObjects(page).filter(o=>moving.has(o.editKey)&&!moving.has(o.parent?.editKey)&&!(o.type==='path'&&!keys.has(o.editKey))).map(drawingBounds).filter(Boolean),targets=snapTargets(page,moving),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&moving.has(n.getAttribute('data-drawing-key'))&&!moving.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
  const restore=()=>{for(const [n,s] of original){if(s.transform==null)n.removeAttribute('transform');else n.setAttribute('transform',s.transform);if(s.d)n.setAttribute('d',s.d);}showSnapGuides();};
- const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey);return snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis);};
+ const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey),next=snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis),safe=safeCoreMoveOffsets(page,new Map([...keys].map(k=>[k,next.delta]))),delta=safe.get([...keys][0])||next.delta;return {...next,delta,guides:delta[0]===next.delta[0]?next.guides:[]};};
  return {preview(dx,dy,e){const next=geometry(dx,dy,e),[x,y]=next.delta;if(!started){drawingSelection.clear();for(const k of keys)drawingSelection.add(k);syncDrawingSelection();started=true;}
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
   for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else{const object=drawingObjects(page).find(o=>o.editKey===n.getAttribute('data-drawing-key')),[px,py]=object?.normalized?inverseDeviceDelta(object.parent,x,y):[x,y];n.setAttribute('transform','translate('+px+' '+py+') '+(s.transform||''));}}
