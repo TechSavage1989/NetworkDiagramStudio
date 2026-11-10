@@ -27,8 +27,9 @@ try{
  const before=await scale();
  const width=await page.locator('#canvas svg').evaluate(e=>e.viewBox.baseVal.width*new DOMMatrix(getComputedStyle(e).transform).a);
  assert.ok(Math.abs(width-279.4*4)<.1,'Letter landscape is 279.4mm wide at calibrated density');
- await page.setViewportSize({width:1024,height:720});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));assert.equal(await scale(),before,'resize never fits a 1:1 sheet');
- await page.screenshot({path:resolve(output,'actual-size.png')});
+ // Playwright setViewportSize also changes screen dimensions, even with an explicit screen option.
+ const cdp=await page.context().newCDPSession(page);await cdp.send('Emulation.setDeviceMetricsOverride',{width:1024,height:720,deviceScaleFactor:1,mobile:false,screenWidth:1920,screenHeight:1080});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));assert.equal(await scale(),before,'resize never fits a 1:1 sheet');
+ await page.screenshot({path:resolve(output,'actual-size.png'),clip:{x:0,y:0,width:1024,height:720}});
  const canvas=await page.locator('#canvas').boundingBox();await page.locator('#canvas').focus();const panBefore=await page.locator('#canvas svg').evaluate(e=>getComputedStyle(e).transform);await page.mouse.move(canvas.x+canvas.width/2,canvas.y+canvas.height/2);await page.keyboard.down('Space');await page.mouse.down();await page.mouse.move(canvas.x+canvas.width/2-50,canvas.y+canvas.height/2-30);await page.mouse.up();await page.keyboard.up('Space');assert.equal(await scale(),before,'panning preserves physical scale');assert.notEqual(await page.locator('#canvas svg').evaluate(e=>getComputedStyle(e).transform),panBefore,'Space drag actually pans the sheet');
  await page.locator('#zoom-in').click();assert.equal(await page.locator('#zoom-actual').getAttribute('aria-pressed'),'false');
  await page.locator('#zoom-actual').click();assert.equal(await scale(),before);
