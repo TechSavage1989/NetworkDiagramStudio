@@ -1,5 +1,6 @@
 // Real browser interactions against the built offline app, using fictional data.
 import assert from 'node:assert/strict';
+import {sampleSite} from '../src/web/sample.mjs';
 import {createRequire} from 'node:module';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -162,6 +163,25 @@ try{
  await page.getByRole('button',{name:'Open sample site',exact:true}).click();
  await page.waitForSelector('#page-families .page-group summary');
  assert.equal(await page.locator('.pages-sidebar').isVisible(),true,'loading another drawing restores its separate rail');
+ // Real normal Paper workflow must size device captions in physical points,
+ // not merely certify a scene-model helper or a source-space font size.
+ const dense=sampleSite();dense.name='Fictional device paper captions';
+ for(const [id,count] of [['sw-1',5],['sw-2',8]]){const d=dense.devices.find(d=>d.id===id);d.model='JL558A';d.stackMembers=Array.from({length:count},(_,i)=>({id:String(i+1),model:'JL558A'}));}
+ const previousSvg=await page.$('#canvas svg');
+ await page.locator('#project-file').setInputFiles({name:'fictional-captions.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:dense}))});
+ await page.waitForFunction(node=>!node.isConnected,previousSvg);await previousSvg.dispose();
+ await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent==='Project opened.');
+ await page.locator('#page-select').selectOption({label:'Core Network'});
+ for(const [paper,widthPt] of [['letter',792],['a4',297*72/25.4]]){
+  await quickPaper.selectOption(paper);await quickOrientation.selectOption('landscape');
+  const fonts=await page.locator('#canvas svg').evaluate((svg,points)=>{
+   const labels=[...svg.querySelectorAll('text[data-drawing-key]')].filter(t=>/^Core Network\|(title|detail)\|/.test(t.dataset.drawingKey));
+   return labels.map(t=>({key:t.dataset.drawingKey,pt:parseFloat(getComputedStyle(t).fontSize)*points/svg.viewBox.baseVal.width}));
+  },widthPt);
+  assert.equal(fonts.length,6,'all three devices retain their name and detail captions');
+  assert.ok(fonts.every(t=>t.pt>=7.95),JSON.stringify(fonts));
+  await page.locator('#zoom-fit').click();await page.screenshot({path:resolve(output,'device-captions-'+paper+'.png')});
+ }
  assert.deepEqual(errors,[]);
  await writeFile(resolve(output,'results.json'),JSON.stringify({groups:await groups.count(),sidebarScrolledPixels:scrolled,printCanvasUnchanged:true,errors},null,2));
  console.log('PASS sidebar page lists, keyboard navigation, rename, responsive scrolling and independent paper selection.');

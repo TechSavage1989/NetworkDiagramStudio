@@ -11,7 +11,7 @@ const wireless=p=>buildPages(p).filter(page=>page.wirelessLayout);
 function dense(scale,placement,preset='letter'){
  const p=wirelessApLab(32,8,scale,placement);
  p.devices[0].ports.forEach((v,i)=>v.name='7/'+(i+1));p.links.forEach((v,i)=>v.ap='7/'+(i+1));
- p.layout.pageSetup.visible.default={preset,orientation:'landscape',locked:true};return p;
+ p.layout.pageSetup.visible.default={preset,orientation:'landscape',locked:true};Object.assign(p.layout.pageSetup.visible,{wirelessFit:'layout',wirelessFitExplicit:true});return p;
 }
 const captionPt=page=>Math.min(...page.items.filter(i=>i.wirelessCaption).map(i=>textLayout(i).size))*.75*printGeometry(page).width/page.width;
 function clear(page){

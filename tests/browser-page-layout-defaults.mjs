@@ -75,7 +75,7 @@ try{
  await open({name:'wireless-paper.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:dense}))});
  const wirelessNames=async()=>(await page.locator('#page-select option').allTextContents()).filter(name=>/Wireless Connections/.test(name));
  assert.equal((await wirelessNames()).length,1);
- controls=await options();assert.equal(await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).inputValue(),'layout');
+ controls=await options();assert.equal(await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).inputValue(),'adaptive');await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('layout');
  await controls.dialog.getByLabel('Apply visible page proportions to',{exact:true}).selectOption('group');
  await controls.dialog.getByLabel('Page group',{exact:true}).selectOption('wireless');
  await controls.dialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');
@@ -118,9 +118,8 @@ try{
  const adaptive=wirelessApLab(32,8);adaptive.name='Fictional adaptive wireless paper';
  adaptive.devices[0].ports.forEach((port,i)=>port.name='7/'+(i+1));adaptive.links.forEach((link,i)=>link.ap='7/'+(i+1));
  await open({name:'wireless-adaptive.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:adaptive}))});
- controls=await options();await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('adaptive');
- await controls.dialog.getByLabel('Apply visible page proportions to',{exact:true}).selectOption('group');await controls.dialog.getByLabel('Page group',{exact:true}).selectOption('wireless');
- await controls.dialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');await apply(controls.dialog);
+ await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));
+ await page.locator('#active-page-paper').selectOption('letter');await page.waitForFunction(()=>document.querySelector('#page-overflow-notice')?.textContent.includes('AP details are'));
  assert.equal((await wirelessNames()).length,1,'short32-AP cards fit one readable sheet');
  await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));
  assert.match(await page.locator('#page-overflow-notice').textContent(),/AP details are 8\.3 pt/);

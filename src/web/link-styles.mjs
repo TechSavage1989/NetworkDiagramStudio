@@ -66,3 +66,17 @@ export function changeLinkStyle(project,pages,type,change,{applyWeight=Object.ha
 }
 export function hasLineCaption(project,type){const style=project.layout?.linkStyles?.[type];return !!(style&&(style.lineTitle?.trim()&&style.lineTitle!==type||style.lineDescription?.trim()));}
 export function linkCaption(project,type,speed){const style=project.layout?.linkStyles?.[type]||{};return [style.lineTitle||type,style.lineDescription,speed].filter(Boolean);}
+
+// Paper rails and diagram bodies may use different transforms. A key sample
+// represents the painted cable, not the rail's independent readability scale.
+export function matchLegendStrokeWidths(page){
+ const paths=page.items.filter(i=>i.type==='path'&&i.linkType);
+ for(const sample of page.items.filter(i=>i.legendEntry&&i.type==='rect')){
+  const source=sample.legendSourceWeight;
+  const path=paths.find(p=>p.linkType===sample.linkType&&p.color?.toUpperCase()===sample.legendSourceColor&&(p.opacity??1)===sample.legendSourceOpacity&&Math.abs(rawWeight(p)-source)<1e-7*Math.max(1,source));
+  if(!path)continue;
+  const center=sample.y+sample.h/2;
+  sample.h=path.weight;sample.y=center-sample.h/2;sample.sampleWeight=path.weight;
+ }
+ return page;
+}
