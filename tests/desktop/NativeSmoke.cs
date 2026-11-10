@@ -370,6 +370,46 @@ internal sealed partial class Studio
                 await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x,y,button="left",buttons=type=="mousePressed"?1:0,clickCount=click,modifiers}));
         }
     }
+    // A different, unselected title may be off-screen after the selected title
+    // was revealed. Navigate through real middle-button input, never by changing
+    // SVG geometry, bypassing hit tests or fitting away the user's current zoom.
+    async Task PanEditorTargetIntoView(string selector)
+    {
+        var query=JsonSerializer.Serialize(selector);
+        var scale=await browser.CoreWebView2.ExecuteScriptAsync("new DOMMatrix(getComputedStyle(document.querySelector('#canvas svg')).transform).a");
+        for(int attempt=0;attempt<8;attempt++)
+        {
+            var raw=await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new{
+                expression=$$"""
+                (async () => {
+                    await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));
+                    const n=document.querySelector({{query}}),canvas=document.querySelector('#canvas');
+                    if(!n||!canvas)return {error:'Navigation target missing'};
+                    const b=n.getBoundingClientRect(),c=canvas.getBoundingClientRect(),left=Math.max(0,c.left)+30,right=Math.min(innerWidth,c.right)-30,top=Math.max(0,c.top)+30,bottom=Math.min(innerHeight,c.bottom)-30;
+                    if(right<=left||bottom<=top)return {error:'Canvas has no pointer navigation area'};
+                    if(b.left>=left&&b.right<=right&&b.top>=top&&b.bottom<=bottom)return {visible:true};
+                    const x=(left+right)/2,y=(top+bottom)/2,dx=Math.max(-(right-left)/2,Math.min((right-left)/2,x-(b.left+b.right)/2)),dy=Math.max(-(bottom-top)/2,Math.min((bottom-top)/2,y-(b.top+b.bottom)/2));
+                    return {x,y,dx,dy};
+                })()
+                """,
+                awaitPromise=true,returnByValue=true}));
+            using var doc=JsonDocument.Parse(raw);
+            var result=doc.RootElement.GetProperty("result");
+            if(!result.TryGetProperty("value",out var step)||step.ValueKind!=JsonValueKind.Object||step.TryGetProperty("error",out _))throw new Exception("Native pan target unavailable: "+selector+" "+raw);
+            if(step.TryGetProperty("visible",out _))
+            {
+                var after=await browser.CoreWebView2.ExecuteScriptAsync("new DOMMatrix(getComputedStyle(document.querySelector('#canvas svg')).transform).a");
+                if(after!=scale)throw new Exception("Native title navigation changed zoom: "+scale+" -> "+after);
+                return;
+            }
+            var x=step.GetProperty("x").GetDouble();var y=step.GetProperty("y").GetDouble();
+            var endX=x+step.GetProperty("dx").GetDouble();var endY=y+step.GetProperty("dy").GetDouble();
+            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type="mousePressed",x,y,button="middle",buttons=4,clickCount=1}));
+            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type="mouseMoved",x=endX,y=endY,button="middle",buttons=4}));
+            await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type="mouseReleased",x=endX,y=endY,button="middle",buttons=0,clickCount=1}));
+        }
+        throw new Exception("Native title navigation exceeded eight gestures: "+selector);
+    }
     async Task EditorKey(string key,int code)
     {
         foreach(var type in new[]{"keyDown","keyUp"})await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent",JsonSerializer.Serialize(new{type,key,windowsVirtualKeyCode=code,nativeVirtualKeyCode=code}));
@@ -390,10 +430,12 @@ internal sealed partial class Studio
         await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Edited title cannot be reopened: '+JSON.stringify({selection:document.getElementById('drawing-selection')?.textContent,feedback:document.getElementById('feedback')?.textContent,dialog:document.getElementById('dialog')?.open,active:document.activeElement?.id,viewport:document.querySelector('#canvas svg')?.style.transform}));t.value='Native repaired title'","revise saved title");
         await EditorKey("Enter",13);
         await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Corrected editor did not close'); const t=document.querySelector('text[data-drawing-key=\"Core Network|title|edge\"]'); if(!t?.textContent.includes('Native repaired title')) throw Error('Corrected title was not saved')","save corrected title");
+        await PanEditorTargetIntoView(sw);
         await ClickEditorTarget(sw,2);
         await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea'); if(t?.value!=='SW-1') throw Error('Another item could not be selected and edited'); t.value='Do not keep this'","select another item");
         await EditorKey("Escape",27);
         await RequireEditor("if(document.querySelector('[data-inline-editor]')) throw Error('Cancel did not close the editor'); const t=document.querySelector('text[data-drawing-key=\"Core Network|title|sw-1\"]'); if(!t?.textContent.includes('SW-1')) throw Error('Cancel replaced the original title')","cancel draft");
+        await PanEditorTargetIntoView(sw);
         await ClickEditorTarget(sw,2);
         await RequireEditor("const t=document.querySelector('[data-inline-editor] textarea');if(!t?.isConnected)throw Error('Second editor did not attach');t.value='Temporary draft to cancel'","start another draft");
         await EditorKey("Escape",27);
@@ -401,6 +443,7 @@ internal sealed partial class Studio
         await ClickEditorTarget("#page-options");
         await RequireEditor("if(!document.getElementById('dialog').open||document.getElementById('dialog-title').textContent!=='Page options') throw Error('Page options remained blocked')","page options after Escape");
         await ClickEditorTarget("#close");
+        await PanEditorTargetIntoView(edge);
         await ClickEditorTarget(edge,2);
         await RequireEditor("const f=document.querySelector('[data-inline-editor]'); if(!f) throw Error('Detached-session fixture missing'); f.remove()","detach stale editor");
         await ClickEditorTarget("#page-options");

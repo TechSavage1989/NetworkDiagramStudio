@@ -1,3 +1,7 @@
+# Native navigation between different edited titles
+
+Preview.49 grouped controls leave a shorter native-window canvas. The accepted EDGE title remains revealed, but the subsequent unselected SW-1 title can be off-screen. NativeSmoke now uses bounded real CDP middle-button pan gestures before changing to that other title, matching the existing browser recovery gate. It preserves zoom and the original painted-glyph targeting, repeated same-title edit, Escape and detached-session assertions. No production geometry or reveal behavior changes. Six focused JavaScript harness checks pass; actual native Windows execution remains required.
+
 # Preview.49 combined validation checkpoint
 
 All707 Node tests and nine independent Visio packages pass. Hosted run225 passed19/20 browser suites; the remaining preview Cancel comparison is being separated into strict SVG geometry and current viewport/ruler checks, not ignored. Genuine current synthetic UI screenshots were downloaded, digest verified and visually reviewed. Fixed adaptive display names now preserve descriptive page labels; long readability notices wrap within the workspace. Final exact-head browser/native and publication verification remain required.
