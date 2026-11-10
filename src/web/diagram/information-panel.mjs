@@ -20,9 +20,11 @@ export function informationPanel(page,project){
  let y=Math.max(147,...panel.map(i=>i.y+(i.h||0)))+24;
  const section=(key,title,rows)=>{
   if(!options.sections.includes(key)||!rows.length)return;
+  rows=rows.map((row,index)=>{const rowKey=typeof row==='string'?index:row.key,patch=project.layout?.drawingEdits?.[scope+'|info-panel|'+key+'|'+rowKey];return {key:rowKey,text:typeof patch?.value==='string'?patch.value:typeof row==='string'?row:row.text};}).filter(row=>row.text.trim());
+  if(!rows.length)return;
   label(panel,38,y,options.width,25*options.textScale*config.textScale,title,16*options.textScale*config.textScale,true,C.teal);panel.at(-1).editKey=scope+'|info-panel|'+key+'|heading';panel.at(-1)._textFactor=config.textScale;y+=34*options.textScale*config.textScale;
-  rows.forEach((text,index)=>{const size=12*options.textScale*config.textScale,lines=wrapPortText(text,options.width,size),height=lines.length*size*1.3;
-   label(panel,38,y,options.width,height,text,size,false,C.ink);panel.at(-1).editKey=scope+'|info-panel|'+key+'|'+index;panel.at(-1)._textFactor=config.textScale;y+=height+8*options.textScale;
+  rows.forEach((row,index)=>{const text=typeof row==='string'?row:row.text,rowKey=typeof row==='string'?index:row.key;const size=12*options.textScale*config.textScale,lines=wrapPortText(text,options.width,size),height=lines.length*size*1.3;
+   label(panel,38,y,options.width,height,text,size,false,C.ink);panel.at(-1).editKey=scope+'|info-panel|'+key+'|'+rowKey;panel.at(-1)._textFactor=config.textScale;y+=height+8*options.textScale;
   });y+=18*options.textScale;
  };
  const auto=automaticPanelContent(project,devices,options),labels=new Map(panelFields),custom=new Map(options.customSections.map(item=>[item.id,item.title]));
@@ -31,9 +33,14 @@ export function informationPanel(page,project){
  for(const id of options.sections){
   if((id==='connections'||id==='modules')&&!options.sectionContent[id]?.trim()&&panel.some(item=>id==='modules'?/\|(?:module-legend)\||\|device\|module-legend-/.test(item.editKey||''):/\|legend\|/.test(item.editKey||'')))continue;
   const heading=options.sectionTitles[id]||custom.get(id)||labels.get(id)||id;
-  section(id,heading.toUpperCase(),panelRows(id,auto,options));
+  let rows=panelRows(id,auto,options);
+  // A deliberately edited body remains content even when its source inventory
+  // disappears. A title-only edit does not manufacture an empty section.
+  if(!rows.length){const prefix=scope+'|info-panel|'+id+'|';rows=Object.entries(project.layout?.drawingEdits||{}).filter(([key,patch])=>key.startsWith(prefix)&&/^\d+$/.test(key.slice(prefix.length))&&typeof patch.value==='string'&&patch.value.trim()).map(([key,patch])=>({key:key.slice(prefix.length),text:patch.value})).sort((a,b)=>Number(a.key)-Number(b.key));}
+  section(id,heading.toUpperCase(),rows);
  }
  const added=panel.filter(i=>!page.items.includes(i));page.items.push(...added);
+ if(!panel.length){page.items=page.items.filter(i=>i.pageFrame!=='sidebar');return;}
  // The sidebar is a true ordered set of sections, including the generated
  // Connection types and Port modules. Reposition each section as a whole,
  // retaining its text, colors, icons, and individual drawing-edit keys.

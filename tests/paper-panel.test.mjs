@@ -39,7 +39,8 @@ test('wireless link colors retain physical readability without shrinking with AP
    assert.ok(key.length);for(const text of key.filter(i=>i.type==='text'))assert.ok(text.size/unit>=10.99);
    const legend=contentBounds({items:key}),models=contentBounds({items:page.items.filter(i=>!key.includes(i)&&!i.pageFrame&&!i.pageHeading)});
    assert.ok(legend.y+legend.h<models.y);
-   assert.equal(page.pageOverflow,false);
+   assert.equal(page.pageOverflow,!!page.paperReadability?.overflow);
+   if(page.paperReadability?.overflow)assert.ok(page.paperReadability.actualPt>=page.paperReadability.minimumPt-.01,'dense model retains readable labels and exposes its overflow');
   }
  }
 });

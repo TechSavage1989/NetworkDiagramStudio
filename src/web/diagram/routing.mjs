@@ -675,7 +675,7 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
  }
  for(const r of routes){if(r.a)ends.set(r.e.idx+'/'+r.a.which,r.a);if(r.b)ends.set(r.e.idx+'/'+r.b.which,r.b);if(r.v){ends.set(r.e.idx+'/'+r.which,r.v);r.y=r.v.ay;}}
 }
-export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0,referenceLabel=0,directionNeutralLevels=false}){
+export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pitch=22,railPitch=12,topClearance=50,bottomClearance=18,scale=1,obstacles=[],minX=306,maxX=1162,neat=true,uniform=0,referenceLabel=0,directionNeutralLevels=false,peerFacingGapLanes=false}){
  const originalBodies=[...nodes.values()],hasRotation=originalBodies.some(n=>n.angle);
  if(hasRotation)for(let i=0;i<originalBodies.length;i++)for(let j=i+1;j<originalBodies.length;j++){
   const a=originalBodies[i],b=originalBodies[j];if(!a.angle&&!b.angle)continue;
@@ -697,6 +697,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
     // Wireless leads from the same switch edge use one consistent physical
     // port order. Their levels no longer jump when the destination rail flips
     // from left to right. Other sheet families keep their existing ordering.
+    if(peerFacingGapLanes){const as=sides.get(a.e.idx)||'left',bs=sides.get(b.e.idx)||'left';return as.localeCompare(bs)||a.anchor.y-b.anchor.y||(a.anchor.side==='top'?1:-1)*(as==='left'?-1:1)*(a.anchor.x-b.anchor.x)||a.e.idx-b.e.idx;}
     if(directionNeutralLevels)return a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx;
     const as=sides.get(a.e.idx)||'left',bs=sides.get(b.e.idx)||'left';
     return as.localeCompare(bs)||(as==='left'?a.anchor.x-b.anchor.x:b.anchor.x-a.anchor.x)||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx;
@@ -747,8 +748,8 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
    if(gapHigh-gapLow>=0&&a.node!==b.node){
     const key='gap:'+Math.round(gapLow);let lane=0;
     while(tracks.some(t=>t.side===key&&t.lane===lane&&Math.min(hi,t.hi)>Math.max(lo,t.lo)))lane++;
-    const rail=gapLow+lanePitch*lane,blocked=[...nodes.values()].some(n=>n.y<hi&&n.y+n.h>lo&&rail>n.x-clear+.01&&rail<n.x+n.w+clear-.01);
-    if(rail<=gapHigh+1e-6&&!blocked){tracks.push({side:key,lane,lo,hi,rail});routes.push({e,a,b,side:a.node===west?'right':'left',rail,weight:Math.max(a.anchor.weight||4,b.anchor.weight||4),hosts:[a.node.key,b.node.key],points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});continue;}
+    const fromEast=peerFacingGapLanes&&east.kind==='ap',rail=fromEast?gapHigh-lanePitch*lane:gapLow+lanePitch*lane,blocked=[...nodes.values()].some(n=>n.y<hi&&n.y+n.h>lo&&rail>n.x-clear+.01&&rail<n.x+n.w+clear-.01);
+    if(rail>=gapLow-1e-6&&rail<=gapHigh+1e-6&&!blocked){tracks.push({side:key,lane,lo,hi,rail});routes.push({e,a,b,side:a.node===west?'right':'left',rail,weight:Math.max(a.anchor.weight||4,b.anchor.weight||4),hosts:[a.node.key,b.node.key],points:clean([...lead(a),[rail,a.ay],[rail,b.ay],...lead(b).reverse()])});continue;}
    }
    let lane=0;while(tracks.some(t=>t.side===side&&t.lane===lane&&Math.min(hi,t.hi)>Math.max(lo,t.lo)))lane++;
    let rail=side==='left'?left-clear-lanePitch*lane:right+clear+lanePitch*lane;

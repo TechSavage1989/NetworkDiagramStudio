@@ -1,3 +1,49 @@
+# Preview.46 hosted browser corrections verified
+
+Run 215 at a0bf4c7 passes all 19 browser suites, including guide Escape, real pan navigation between offscreen objects, retained legacy refit guidance, and visible text/panel controls. Genuine synthetic guide (wide/narrow), text sizing and panel-width captures were downloaded, artifact SHA-256 verified and visually inspected before inclusion. Source is unchanged by this documentation commit. The original run 214 native Windows build, report media boxes, package and window/timer/update/rollback checks passed; exact final-head hosted gates and merged-main publication verification still remain required.
+
+# Preview.46 hosted guide Escape correction
+
+Hosted run 214 stopped when Chromium consumed Escape in a populated search input instead of dismissing the guide dialog. The guide search now handles Escape locally through the shared close action. Other key editing, native clear controls and composing-IME cancellation are unchanged; no listener survives on the shared dialog body. The hosted test retains its single-Escape requirement and additionally checks launcher focus and normal search Select All/Backspace. Five guide unit tests, syntax, offline build, repository guard and whitespace checks pass locally. Final hosted validation remains required. No preview.47 changes are included.
+# Hosted narrow-canvas direct-edit navigation correction
+
+Run 214 direct-transforms failed at line 75 selecting SW-1, not while revealing the accepted edge title. Both repeated edge-title save/reveal and unchanged-zoom assertions had passed. The 1024×720 capture showed 245 px of canvas with the selected edge title/handles visible and the unrelated lower SW-1 below the viewport. The test now navigates between distinct objects using bounded real middle-button drag panning; exact glyph hit-testing, genuine double-clicks, selected-title visibility, cancellation and zoom preservation assertions stay intact. No viewport or project geometry behavior is changed. Hosted rerun remains required.
+
+# Preview.46 integrated validation ready for hosted gates
+
+All 649 Node tests pass, zero failures or skips, on the combined empty-section/readability/help/optical/wireless source. Offline build, repository guard and whitespace checks pass. All nine independent synthetic Visio packages validate. Narrow/wrapped final text metrics, large-frame save/reopen, stock Letter inventories/wireless, source glue, side-placement constraints and manual/frozen preservation are covered. Current paper output was visually inspected. No release has been published by this local validation; exact-head hosted browser/native gates and immutable release/feed/asset verification remain required. Live preview for settings dialogs is separate follow-on work, not part of this release.
+
+# Inventory title-band correction
+
+Synthetic PDF inspection found the generated dark booklet title band classified as ordinary diagram content while its white headings were fitted as paper furniture. This left white headings on white paper and a detached empty dark bar in the diagram area. The band is now header-background furniture, shares the paper header geometry, and preserves custom fill and geometric offsets with its stable key. Seventeen focused text/frame tests passed; the corrected Letter inventory PDF was rendered and visually checked.
+
+# Readability fit review corrections
+
+Final-box text metrics now refine the uniform model factor to meet the selected minimum even when fixed padding changes wrapping. Saved lock/edit frames retain valid fit scales above 4x (up to 10000x); tested with minimum 18 pt and Text scale 400%, preserving exact transforms after JSON reopen. Near-fit automatic pages reclaim outside whitespace down to 2 physical-paper pixels while retaining header/panel bands; the two sample Letter inventory pages now fit at 8 pt without clipping. Frozen transforms remain unchanged. Physical printers may require larger non-printable margins; check the printer before 100% printing.
+
+The stock wireless switch body is itself about 1064.5 physical pixels wide at 8 pt versus 1056 px Letter, so reclaiming margins alone cannot honestly make that topology fit. Such remaining cases retain a readable clipping warning and require planner changes/larger paper. Dense 28-AP cases are not claimed to fit Letter.
+
+# Preview.46: hide empty information-panel sections (in development)
+
+Published baseline: preview.45, main/tag commit 4aa704dc1ae94f3b3a0d5d83cb1fb79f5fcfa961. Release workflow 42740894590 passed all hosted browser and native Windows gates; release assets and feed were independently verified. Older pending notes below are historical.
+
+Empty automatic sections now omit both placeholders and headings by default, including Port modules / GBICs. Legacy explain values migrate to hide because older versions wrote them as the default. Users can deliberately select Show an explanation again; the distinct explain-opt-in value survives reopening. Custom section bodies, notes and manual body edits remain content, while title-only edits do not. Blank route records no longer create a fake row. Empty panels omit their separator.
+
+Node coverage checks all categories, legacy migration, manual content, data scope and exports. Hosted panel browser coverage checks the actual drawing and new default; refresh docs/images/panel-content.png from its synthetic capture before publication. Final source-head native/browser checks and merged-main publication remain required.
+# Offline in-app guide (unreleased)
+
+The new always-visible User guide is separate from desktop update Help. It provides searchable task-oriented steps for setup, paper/text sizing, screen calibration, panel contents, page locks, transforms and exports. Settings shortcuts reuse existing dialogs; help is read-only and works before opening a project. Browser coverage checks search/empty results, close/reopen, no mutation, settings cancellation and narrow layout. Hosted synthetic user-guide.png and user-guide-narrow.png require review before publication.
+# Readable physical-paper controls (pending integrated release)
+
+Pages & layout now offers Minimum paper text (pt), default 8 and 0 to disable, in Drawing defaults or individual pages. Text scale also scales that minimum; explicit individual font-size edits remain authoritative. Auto-fit applies the measured minimum as one uniform model transform, preserving relative positions and cable glue rather than enlarging isolated text over neighbouring geometry. If the readable drawing cannot fit, it stays readable and warns about print/export clipping. Saved lock/edit frames and Preserve mode do not silently reflow; they expose small-text notices. Decorative/native faceplate text and standalone native report typography retain original proportions and are not covered by the editable-label floor.
+
+Docked panels now trim unused row width automatically. Panel width (% of paper; 0 = automatic) accepts 0 or 10–60 percent of available paper width; it rewraps complete rows while retaining text size. Existing source-unit width remains available for Dynamic pages. Custom width does not shrink to conceal dense content. Wireless APs and details (%) schema/UI is ready for the parallel wireless planner implementation.
+
+Focused physical-text/panel/page-frame tests and offline build/guard pass locally. Synthetic compact-panel Letter PDF and PNG were generated and visually inspected; model labels measure 9.9 pt and sparse panel uses about one tenth of page. Hosted browser controls/capture and final combined full suite remain required.
+# Optical schematic proportions (unreleased)
+
+Corrected flattened generic SFP face aspect using SFP MSA front dimensions; QSFP aspect is separately sourced. Connector widths/centers and RJ45 stay unchanged. Installed generic optics and their legend now share one aspect; manufacturer artwork retains its own. Four focused geometry/export tests, existing flexible-layout tests including >9000 catalog sockets, build/guard and rendered PDF comparison pass locally. Actual PDF before/after inspected; the after image is docs/images/optical-proportions.png. Full combined suite and hosted/native checks remain required. See docs/OPTICAL_GEOMETRY.md for reference URLs and the schematic limitations.
+
 # Hosted HTML focus and batching follow-up
 
 Run 212 verifies keyboard focus, cable/device details, pin/clear, search and
@@ -1133,8 +1179,10 @@ Information panels default to one row per VLAN ID in the page's device scope,
 retaining distinct recorded names and addresses. Device-grouped VLANs remain
 available. Address type and port-detail filters, text row limits with explicit
 remaining-item notices, and show/hide missing-data explanations are persisted
-in cleanPanel. All enabled empty sections (including generated legends and
-custom notes) explain missing records by default rather than silently vanishing.
+in cleanPanel. Enabled empty automatic sections and their headings are hidden by
+default. Legacy explain values migrate to hide; deliberate explain-opt-in choices
+retain missing-record explanations. Custom bodies, notes and manual body content
+remain visible; an edited heading alone does not create section content.
 No inventory/configuration data is invented or changed by these filters.
 
 Apply layout catches failures beside its footer, keeps the dialog and current
@@ -1156,3 +1204,11 @@ retains merged-stroke and socket-lead guards rather than the more aggressive
 prototype. Existing manual bends and opposite-direction row sharing remain
 covered by the wireless suites. Actual generated SVG output was visually checked;
 this is not native Windows or browser UI verification.
+
+## Preview.46 wireless AP size and side-space controls
+
+Pages & layout has Wireless APs and details (%) (25–400) and Wireless AP placement: Preserve rows (default) / Use side space. Defaults and individual pages are supported. AP artwork and automatic details grow together relative to the switch; fitted paper can still constrain final physical size. Explicit object size/text edits and frozen frames stay authoritative. Side space is a measured request, not a promise: the planner retains rows for authored/frozen layouts or when a side candidate is unsafe or more crossed. Synthetic 3-member/8-AP and 5-member/28-AP cases at 150% select side columns with 0 and 8 crossings respectively, no collisions or merged strokes, and shorter cable travel. Dense whole-topology Letter output can still overflow at the new physical text floor; use larger paper or readable continuation rather than claiming it fits.
+
+The ordinary sample's Letter wireless pages now plan numeric label room before routing: both fit with at least 8.264pt actual text and no page overflow (switch width about 1031 physical px on a 1056px sheet). This removes a default 7.5pt-number-induced whole-switch enlargement, not all dense topology limits. New frame marker wirelessNumberScale preserves that plan across save/reopen; old frames remain compatible. Six focused AP tests and a synthetic side-column Visio package pass; full wireless aggregate and hosted browser validation are required on the combined head.
+
+Preview.46 documentation images were regenerated from the integrated source with synthetic inputs and visually inspected. paper-fit.png uses sampleSite on Letter; page-fill.png uses adaptiveProject('letter','landscape',5). wireless-paper.png now honestly shows the first of four explicit readable Letter continuations of the fictional eight-member/32-uplink fixture, not a tiny whole-topology fit. General text metrics measured 10.25pt on the core and 8.59pt on that wireless continuation; adaptive report typography remains preserved. The render helper is temporary, not a repository source dependency. Final hosted screenshots and full CI remain required.

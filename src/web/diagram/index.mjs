@@ -536,7 +536,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
 }
 function bookletHeader(page){
  const banner=[];
- rect(banner,36,12,page.width-72,82,C.ink);
+ rect(banner,36,12,page.width-72,82,C.ink);banner.at(-1).pageFrame='header-background';
  const [projectName,brand,title]=page.items;
  for(const item of [projectName,brand,title])item.color=C.white;
  projectName.x+=12;projectName.y=Math.max(18,projectName.y);projectName.w-=24;
