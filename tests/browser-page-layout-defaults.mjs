@@ -14,8 +14,13 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.BR
 const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 const open=async input=>{
+ const document=JSON.parse(typeof input==='string'?await readFile(input,'utf8'):input.buffer.toString('utf8')),name=document.project.name;
+ // File.text() yields after the input change handler starts. The previous
+ // 'Project opened' feedback is still present during that read; never use it
+ // alone as evidence that this fixture's drawing has replaced the old one.
+ await page.waitForFunction(()=>!document.querySelector('#open')?.disabled);
  await page.locator('#project-file').setInputFiles(input);
- await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent?.includes('Project opened'));
+ await page.waitForFunction(expected=>document.querySelector('#site')?.value===expected&&document.querySelector('#heading')?.textContent===expected&&!document.querySelector('#open')?.disabled&&!document.querySelector('#export')?.disabled&&!!document.querySelector('#canvas svg')&&document.querySelector('#feedback')?.textContent==='Project opened.',name);
 };
 const save=async name=>{
  const waiting=page.waitForEvent('download');await page.locator('#save').click();

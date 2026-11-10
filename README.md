@@ -77,7 +77,7 @@ Built-in optical sockets and generic installed optics use consistent, reference-
 
 The separate [drawing-pages sidebar](docs/images/pages-sidebar.png) adapts to [compact desktop windows](docs/images/pages-sidebar-compact.png) and [narrow screens](docs/images/pages-sidebar-narrow.png).
 
-See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting. See the [physical text controls](docs/images/paper-readability-controls.png), [paper panel width controls](docs/images/paper-panel-controls.png), and [wireless side-space layout](docs/images/wireless-ap-side-space.png). The offline [User guide](docs/images/user-guide.png) provides searchable steps and adapts to [narrow windows](docs/images/user-guide-narrow.png).
+See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting. See the [physical text controls](docs/images/paper-readability-controls.png), [paper panel width controls](docs/images/paper-panel-controls.png), and [wireless side-space layout](docs/images/wireless-ap-side-space.png). See the [locked port map filling its sheet](docs/images/locked-port-map.png) and [valid device placement below a short information panel](docs/images/empty-panel-space-placement.png). The offline [User guide](docs/images/user-guide.png) provides searchable steps and adapts to [narrow windows](docs/images/user-guide-narrow.png).
 
 Cable labels and port numbers use centered text by default; explicit text-style edits remain available.
 
@@ -223,7 +223,7 @@ calibrated preview, not an absolute guarantee of physical size across monitors.
 Printing must use the same paper at 100% scale for a matching result. Dynamic
 canvases need a physical paper choice before Actual size is available.
 
-Global text styles, Pages & layout and Page options show an isolated live drawing preview beside resizable controls. Pan/zoom the preview while changing settings; pause automatic updates for large drawings. Apply saves one undoable change. Cancel, Close or Escape leaves the original drawing untouched. Other dialogs retain their existing workflow.
+[Global text styles](docs/images/settings-preview-text.png), Pages & layout and [Page options](docs/images/settings-preview-paper.png) show an isolated live drawing preview beside resizable controls, with a [stacked layout on narrow windows](docs/images/settings-preview-narrow.png). Pan/zoom the preview while changing settings; pause automatic updates for large drawings. Apply saves one undoable change. Cancel, Close or Escape leaves the original drawing untouched. Other dialogs retain their existing workflow.
 
 ## Updates and settings
 

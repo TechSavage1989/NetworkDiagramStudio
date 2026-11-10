@@ -23,10 +23,19 @@ try{
  await page.locator('#close').click();
  const legend=page.locator('#canvas svg rect.diagram-legend-line[data-link-type]').first();
  assert.ok(await legend.count(),'connection key line is visible on the network page');
- await legend.hover({force:true});
+ await legend.hover();
  assert.ok(await page.locator('#canvas svg path.diagram-cable.connection-type-active').count(),'hovering a connection type highlights matching cables');
  await page.locator('#edit-drawing').click();
- await legend.click({force:true});
+ // Edit drawing expands the wrapped toolbar and the canvas observer refits
+ // the SVG. A forced click skips Playwright's stable/receives-events checks
+ // and can hit the old legend position after that reflow. Use a real stable
+ // target and record what pointerdown actually reached; never invoke selection
+ // directly or retry until a highlight happens.
+ const legendKey=await legend.getAttribute('data-drawing-key');
+ await page.locator('#canvas').evaluate(canvas=>{canvas.dataset.qaPointerKey='';canvas.addEventListener('pointerdown',event=>{canvas.dataset.qaPointerKey=event.target.closest('[data-drawing-key]')?.getAttribute('data-drawing-key')||'';},{once:true,capture:true});});
+ await legend.click();
+ assert.equal(await page.locator('#canvas').getAttribute('data-qa-pointer-key'),legendKey,'Pointerdown reaches the painted legend after toolbar reflow');
+ assert.equal(await page.locator('#drawing-selection').textContent(),'1 selected','The legend is actually selected, not only hovered');
  assert.ok(await page.locator('#canvas svg path.diagram-cable.connection-type-active').count(),'selecting a connection key highlights matching cables');
  const cableOfType=page.locator('#canvas svg path.diagram-cable[data-link-type]').first();
  await cableOfType.click({force:true});

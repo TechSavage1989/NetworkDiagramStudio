@@ -1,3 +1,23 @@
+# Hosted connection-key click readiness correction
+
+Run218 passed the new empty-panel placement drag suite. Its connection-label
+suite hovered the legend successfully, then force-clicked immediately after
+Edit drawing expanded the toolbar; the capture showed zero selection and no
+browser error. Forced input skipped target stability while ResizeObserver
+refitted the canvas. The test now uses normal stable pointer input and records
+the actual pointerdown drawing key, requiring one selected item as well as the
+existing bidirectional highlight assertions. No selection/collision code is
+changed. Local Chromium remains socket-blocked; the exact-head hosted rerun is
+required before claiming the click has passed.
+
+# Preview.47 combined regression validation
+
+At source2fa05f7, all678 Node tests passed with zero failures or skips, along with all9 independent Visio packages, offline build, repository guard and whitespace checks. This includes complete automatic Letter fit, locked adaptive port-map edge fill and valid placement under a short information panel. Hosted run218 passed18/20 browser suites, including the new live-preview, locked-map and drag-preview/commit regressions; legend pointer selection and project-load timing require final rechecks. Current genuine synthetic split-dialog, paper-control, locked-map and placement captures were downloaded, artifact hash verified and visually inspected. Final exact-head browser/native gates and immutable release verification remain mandatory.
+
+# Hosted paper fixture load synchronization correction
+
+Run218 observed the preceding two-wireless-page fixture immediately after requesting the dense one-page fixture. The test previously accepted stale “Project opened” feedback while File.text() was still pending. Its open helper now waits for matching parsed project name in both project field and heading, idle file controls, a ready drawing/export, and completed feedback. All one-whole-wireless-page, Letter containment, continuation, Undo/redo and save/reopen assertions remain unchanged. Local exact dense fixture produces one Dynamic wireless page and one whole Letter wireless page. Hosted rerun remains required.
+
 # Hosted settings-preview resize assertion
 
 Run217 passed19 of20 browser suites. The new settings suite passed draft isolation, Apply/Undo, invalid settings, pan/zoom and narrow dialog containment, then compared canvas HTML after resizing the browser against its pre-resize screen transform. The final cancellation assertion now ignores only the root SVG screen style; all page attributes and diagram shapes remain exact. Earlier cancellation assertions still compare full canvas HTML. Fresh hosted verification required.
