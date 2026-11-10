@@ -99,7 +99,9 @@ try{
  await apDialog.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  const sideGeometry=await apGeometry();assert.notDeepEqual(sideGeometry,rowGeometry);
  const sideBoxes=await page.locator('#canvas svg').evaluate(svg=>{const sw=svg.querySelector('[data-device-id="sw"]').getBoundingClientRect();return [...svg.querySelectorAll('[data-device-id^="ap"]')].filter(node=>{const b=node.getBoundingClientRect();return b.right<sw.left||b.left>sw.right;}).length;});
- assert.ok(sideBoxes>=8,'APs visibly fill side space on Letter');
+ // Paper plans keep 150% AP cards readable on Letter by continuing to more
+ // sheets; each sheet still visibly uses the space beside the stack.
+ const sheetAps=await page.locator('#canvas svg [data-device-id^="ap"]').count();assert.ok(sideBoxes>=Math.ceil(sheetAps*.4)&&sideBoxes>=4,'APs visibly fill side space on Letter ('+sideBoxes+' of '+sheetAps+')');
  await page.screenshot({path:resolve(output,'wireless-letter-side-space.png')});
  saved=await save('wireless-side-space.nds.json');await open(saved.path);await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));assert.deepEqual(await apGeometry(),sideGeometry,'saved side-space geometry reopens without reverting to rows');
 
@@ -120,9 +122,9 @@ try{
  await open({name:'wireless-adaptive.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:adaptive}))});
  await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));
  await page.locator('#active-page-paper').selectOption('letter');await page.waitForFunction(()=>document.querySelector('#page-overflow-notice')?.textContent.includes('AP details are'));
- assert.equal((await wirelessNames()).length,1,'short32-AP cards fit one readable sheet');
+ assert.ok((await wirelessNames()).length<=2,'short 32-AP cards print readably on at most two Letter sheets');
  await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));
- assert.match(await page.locator('#page-overflow-notice').textContent(),/AP details are 8\.3 pt/);
+ {const notice=await page.locator('#page-overflow-notice').textContent(),pt=Number(notice.match(/AP details are ([\d.]+) pt/)?.[1]);assert.ok(pt>=8,'AP details print at '+pt+' pt');assert.ok(!/AP details are [\d.]+ pt on this paper \(below/.test(notice),'the AP note reports no shortfall');}
  const assertNoticeFits=async()=>{const bounds=await page.locator('#page-overflow-notice').evaluate(node=>{const a=node.getBoundingClientRect(),b=node.parentElement.getBoundingClientRect();return {left:a.left,right:a.right,parentLeft:b.left,parentRight:b.right,scroll:node.scrollWidth,width:node.clientWidth,whiteSpace:getComputedStyle(node).whiteSpace};});assert.ok(bounds.left>=bounds.parentLeft-1&&bounds.right<=bounds.parentRight+1,'full notice remains inside page toolbar');assert.ok(bounds.scroll<=bounds.width+1,'notice wraps rather than clipping content');assert.equal(bounds.whiteSpace,'normal');};
  await assertNoticeFits();const priorViewport=page.viewportSize();await page.setViewportSize({width:620,height:900});await assertNoticeFits();await page.setViewportSize(priorViewport);await assertNoticeFits();
  const adaptiveGeometry=await apGeometry();

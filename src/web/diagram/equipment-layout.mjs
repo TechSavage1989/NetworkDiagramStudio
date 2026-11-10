@@ -35,4 +35,16 @@ export function equipmentViews(project,device,width,height){
   return {...device,name:(device.name||device.id)+' (member'+(stackMembers.length>1?'s':'')+' '+stackMembers.map(m=>m.id).join(', ')+')',stackMembers,ports,stackContinuation:true,equipmentPart:stackMembers.map(m=>m.id).join(',')};
  });
 }
+// One stack-member subset with the same identity, port membership and edit
+// scope as a member continuation. Unknown-member (logical) ports stay with it.
+const stackMemberOf=name=>String(name).match(/^(?:(?:GigabitEthernet|TenGigabitEthernet|Gi|Te|TwentyFiveGigE|HundredGigE|Ethernet|Eth))?(\d+)\//i)?.[1];
+export function memberSubsetView(project,device,memberIds){
+ if(!canContinueEquipment(project,device))return device;
+ const wanted=new Set([...memberIds].map(String)),members=[...device.stackMembers].sort((a,b)=>Number(a.id)-Number(b.id)),stackMembers=members.filter(m=>wanted.has(String(m.id)));
+ if(!stackMembers.length||stackMembers.length===members.length)return device;
+ const known=new Set(members.map(m=>String(m.id))),physical=new Set(physicalPorts(device).map(p=>p.name));
+ const ports=(device.ports||[]).filter(p=>!physical.has(p.name)||wanted.has(stackMemberOf(p.name))||!known.has(stackMemberOf(p.name)));
+ return {...device,name:(device.name||device.id)+' (member'+(stackMembers.length>1?'s':'')+' '+stackMembers.map(m=>m.id).join(', ')+')',stackMembers,ports,stackContinuation:true,equipmentPart:stackMembers.map(m=>m.id).join(',')};
+}
+export function portStackMember(name){return stackMemberOf(name);}
 export function equipmentScope(device){return device.id+(device.equipmentPart?'|members:'+device.equipmentPart:'');}

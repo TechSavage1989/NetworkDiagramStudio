@@ -887,10 +887,21 @@ export function buildPages(project={},options={}){
    const automatic=captions.filter(i=>!Number.isFinite(project.layout?.drawingEdits?.[i.editKey]?.size)),unit=.75*printGeometry(p).width/p.width;
    if(captions.length)p.paperReadability={...p.paperReadability,apAutoActualPt:automatic.length?Math.min(...automatic.map(i=>textLayout(i).size))*unit:null,apActualPt:Math.min(...captions.map(i=>textLayout(i).size))*.75*printGeometry(p).width/p.width,apMinimumPt:Math.max(8,presentation(project,p).minimumTextPt||8)};
   }
+  // Split further only when that measurably enlarges the printed AP text.
+  // Earlier releases halved every sheet until each held one AP, even though
+  // the planner then printed the remaining AP smaller (or no larger).
   const short=visible.filter(p=>p.wirelessLayout?.adaptiveAP&&!p.wirelessLayout.adaptiveFrozen&&p.wirelessLayout.links.length>1&&p.paperReadability.apAutoActualPt!=null&&p.paperReadability.apAutoActualPt<p.paperReadability.apMinimumPt-.05);
-  if(short.length){
+  if(short.length&&(options._wirelessRetry||0)<2){
    const limit=Math.max(1,Math.min(...short.map(p=>Math.floor(p.wirelessLayout.links.length/2))));
-   if(limit<(project._wirelessBatchLimit||Infinity))return buildPages({...project,_wirelessBatchLimit:limit},{...options,cache:undefined});
+   if(limit<(project._wirelessBatchLimit||Infinity)){
+    const adaptive=set=>set.filter(p=>p.wirelessLayout?.adaptiveAP&&p.paperReadability?.apAutoActualPt!=null),worst=set=>Math.min(...adaptive(set).map(p=>p.paperReadability.apAutoActualPt)),target=Math.max(...short.map(p=>p.paperReadability.apMinimumPt));
+    const retry=buildPages({...project,_wirelessBatchLimit:limit},{...options,cache:undefined,includeHidden:false,_wirelessRetry:(options._wirelessRetry||0)+1});
+    // The planner already trades sheets for size. This only corrects a small
+    // prediction shortfall: keep a split that reaches the minimum without
+    // more than doubling the sheets; otherwise the readable warning stands.
+    const bounded=adaptive(retry).length<=2*adaptive(visible).length,reached=worst(retry)>=target-.05;
+    if(bounded&&reached)return options.includeHidden?buildPages({...project,_wirelessBatchLimit:limit},{...options,cache:undefined,_wirelessRetry:(options._wirelessRetry||0)+1}):retry;
+   }
   }
   return options.includeHidden?pages:visible;
 }
