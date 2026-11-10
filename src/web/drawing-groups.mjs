@@ -1,4 +1,4 @@
-import {drawingObjects,drawingBounds,moveDrawingItems,scaleDrawingItems,cleanDrawingEdits} from './drawing-edits.mjs';
+import {drawingObjects,drawingBounds,moveDrawingItems,scaleDrawingItems,cleanDrawingEdits,retainAutomaticCaptions} from './drawing-edits.mjs';
 import {devicePoint} from './diagram/device-geometry.mjs';
 import {unpresentPatch} from './presentation.mjs';
 
@@ -52,5 +52,5 @@ export function transformDrawingGroup(page,edits,keys,{factor=1,angle=0,dx=0,dy=
  }
  const movedDevices=new Set(group.items.filter(i=>i.type==='device').map(i=>i.key));
  for(const path of page.items)if(path.type==='path'&&(movedDevices.has(path.from?.device)||movedDevices.has(path.to?.device))&&result[path.editKey]?.points){result[path.editKey]={...result[path.editKey]};delete result[path.editKey].points;}
- return cleanDrawingEdits(result);
+ return retainAutomaticCaptions(page,edits,keys,cleanDrawingEdits(result));
 }

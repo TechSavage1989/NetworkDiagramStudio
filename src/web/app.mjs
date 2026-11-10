@@ -21,6 +21,7 @@ import {deviceMacs,inputMacAddresses} from './device-details.mjs';
 import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
 import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
+import {actualSizePaper} from './actual-size.mjs';
 import {diagramViewport} from './viewport.mjs';
 import {arrangeAnchors,arrangeBoxes,arrangeBoxesAtGap} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
@@ -56,7 +57,7 @@ installFormControls();
 document.addEventListener('contextmenu',handleEditorContextMenu);
 const $=id=>document.getElementById(id);
 const typeHighlights=connectionTypeHighlights($('canvas'));
-const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onCableHover:element=>typeHighlights.setCableHover(element),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{
+const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),actual:$('zoom-actual'),calibrate:$('screen-calibrate'),actualStatus:$('actual-size-status'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onCableHover:element=>typeHighlights.setCableHover(element),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{
  if(editDrawing){
   if(snapLabelPick){snapSelectedLabelAtClick(key,e);return true;}
   if(besidePick){pickBesideReference(key);return true;}
@@ -923,7 +924,7 @@ function pageNavigation(){
  picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};
  $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
  let overflow=$('page-overflow-notice');if(!overflow){overflow=el('button','','warning');overflow.id='page-overflow-notice';overflow.onclick=()=>task(pageOptions);$('feedback').after(overflow);}
- overflow.hidden=!pages[active]?.pageOverflow;overflow.textContent='Content extends beyond the page. Print/PDF and page-sized exports may clip it. Open Page options to change the sheet.';
+ overflow.hidden=!pages[active]?.pageOverflow&&!pages[active]?.panelFitLegacy;overflow.textContent=pages[active]?.panelFitLegacy?'This saved page keeps its earlier layout. For readable information panels and link keys, open Page options and Save page options to recalculate the fit. Your saved object edits are retained.':'Content extends beyond the page. Print/PDF and page-sized exports may clip it. Open Page options to change the sheet.';
 }
 function draw(prepared){
  cancelBesidePick();
@@ -937,7 +938,7 @@ function draw(prepared){
  active=Math.max(0,Math.min(active,pages.length-1));
  pageNavigation();
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
-  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),pages[active]);}
+  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),{...pages[active],actualSizePaper:actualSizePaper(project,pages[active])});}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
  for(const id of ['export','export-menu','print','svg'])$(id).disabled=!pages.length||working;
  typeHighlights.show(canvas.querySelector('svg'));

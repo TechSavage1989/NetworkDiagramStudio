@@ -237,3 +237,22 @@ Fixed-paper wireless planning may try narrower measured caption columns, extra A
 Ctrl/Meta+A in the focused drawing selects top-level diagram content, excluding panelGroup/pageFrame items without re-expanding a mixed saved group. Preserve native Select All in input, textarea, select and editable text. Canvas gestures and editor chrome must not start browser text selection. Require full-selection scale/rotation/move Undo/redo, reopen, allowed locked overflow and input-selection browser coverage.
 
 Paper content fitting measures painted bounds, including negative positions, rotated details, cable hops and stroke widths, while generated pageHeading/pageFrame furniture uses paper units. Preserve explicit furniture patches via transient original geometry, not rewritten saved edits. New contentFit:1 frames retain this behavior; old unmarked locks stay compatible. Before deliberate drawing edits, capture the active unlocked presentationFrame into validated visible.editFrames so refitting cannot cancel manual scaling. Page options clears those frames. Verify physical object width/page width, not only source-coordinate changes.
+
+Actual-size screen viewing lives in actual-size.mjs and viewport.mjs. Calibration
+is local browser state only, never project data or export geometry. Scale from
+the selected visiblePaper physical width and page.width, not an expanded editor
+viewBox. Never fit a clipped sheet while claiming 1:1. Manual zoom and Fit leave
+the mode; measurable display changes invalidate it. Unobservable monitor changes
+still require a physical ruler/paper check. Keep tests/browser-actual-size.mjs in
+the hosted browser gate and use only synthetic captures.
+
+Bulk equipment/group scaling must retain planner ownership of generated link captions. Do not persist generated x/y or angle merely because a caption participates in the selection: rerouting may invalidate that position. Preserve pre-existing explicit position, cable attachments and fixed-angle choices. Keep caption styles/content, endpoint glue and atomic history. Cover large shrinks/growth, not only ten-percent changes, in multi-resize-labels.test.mjs and the real browser selection gate.
+HTML viewer interaction metadata must stay limited to accepted scene endpoints. Keep delegated interactions and indexed associations; coalesce pan/zoom writes per animation frame. Verify keyboard pin/clear, empty pages and the large-scene burst assertion in the hosted interactive-HTML suite.
+Docked information panels in contentFit paper scenes have an independent physical transform and reserve their rail before model fitting. Keep panel symbol/row geometry and inverse presentation edits together. Do not shrink dense panels below their readable floor; expose overflow. Free/manual panels and legacy frozen frames retain existing geometry semantics. Cover Letter/A4/A3, locks, sides and reopen in paper-panel.test.mjs.
+Wireless upper stack-gap departures may exchange existing same-side tracks only
+within the same physical member gap. Require fewer crossings without new blocked
+geometry, merged strokes or socket-lead conflicts; keep anchors, AP positions and
+saved bends fixed. Opposite-direction row sharing still runs afterward. Cover
+both the five-member/member-three fan and eight-member/member-seven return case.
+
+Use addEventListener('focusin', ...) for delegated HTML-viewer keyboard inspection, not an onfocusin expando. Ignore focus on the empty stage so search-result text persists; verify actual SVG focus and the resulting inspection details in hosted Edge.

@@ -155,6 +155,31 @@ export function placeDrawingDevices(page,edits,keys,referenceKey,side,spacing='a
  for(const item of others)offsets.set(item.editKey,[0,0]);
  return moveDrawingItems(page,edits,offsets);
 }
+// Bulk transforms move equipment and reroute its cables. Merely selecting an
+// automatic caption must not turn it into a fixed-position obstacle on the old
+// route. Retain explicit label placements and styles; generated captions keep
+// their planner-owned position/orientation on the new route.
+export function retainAutomaticCaptions(page,edits,keys,result){
+ if(!page.items.some(i=>i.type==='device'&&keys.has(i.editKey)))return result;
+ for(const item of page.items){
+  if(!item.labelRole||!keys.has(item.editKey)||!result[item.editKey])continue;
+  const original=edits?.[item.editKey]||{};
+  const patch={...result[item.editKey]};
+  if(Number.isFinite(original.cableFraction)){
+   patch.cableFraction=original.cableFraction;
+   delete patch.x;delete patch.y;
+   if(original.cableSide)patch.cableSide=original.cableSide;
+   if(original.rotationMode==='fixed'){patch.rotationMode='fixed';patch.angle=original.angle??item.angle??0;}
+   else{delete patch.angle;delete patch.rotationMode;}
+   result[item.editKey]=patch;continue;
+  }
+  if(Number.isFinite(original.x)||Number.isFinite(original.y))continue;
+  delete patch.x;delete patch.y;
+  if(original.rotationMode!=='fixed'){delete patch.angle;delete patch.rotationMode;}
+  result[item.editKey]=patch;
+ }
+ return cleanDrawingEdits(result);
+}
 export function scaleDrawingItems(page,edits,keys,factor,{mode='models'}={}){
  if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Choose a size from 10 to 400 percent.');
  const selected=new Set(keys),objects=drawingObjects(page),chosen=objects.filter(item=>selected.has(item.editKey)&&!selected.has(item.parent?.editKey)&&item.type!=='path');
@@ -179,5 +204,5 @@ export function scaleDrawingItems(page,edits,keys,factor,{mode='models'}={}){
   if(!clean||Object.keys(clean).length!==Object.keys(patch).length)throw Error('This size exceeds the supported object dimensions.');
   result[item.editKey]={...result[item.editKey],...clean};
  }
- return result;
+ return retainAutomaticCaptions(page,edits,selected,result);
 }

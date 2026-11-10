@@ -598,6 +598,26 @@ function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0
   }
  };
  repair('row');repair('rail');
+ // Upper stack sockets leave toward a gap above the member. Physical port
+ // order alone puts the longest outside AP runs across the inner return fan.
+ // Exchange only existing tracks in that same clear gap, then run the usual
+ // opposite-direction row sharing below. Bottom banks already nest correctly.
+ // Never move APs, socket anchors, rails, or saved bends to improve ordering.
+ if(directionNeutralLevels){
+  const items=rowItems(routes,true).filter(i=>i.ends.length===1&&i.r[i.ends[0]].node.kind!=='ap'&&i.r[i.ends[0]].anchor.escapeRange&&i.r[i.ends[0]].anchor.side==='top'&&[i.r.a,i.r.b].some(v=>v?.node.kind==='ap'));
+  let budget=256;
+  for(let pass=0;pass<3&&budget>0;pass++)for(let i=0;i<items.length&&budget>0;i++)for(const b of items.slice(i+1)){
+   if(budget<=0)break;
+   const a=items[i],x=a.r[a.ends[0]],y=b.r[b.ends[0]];
+   if(x.node.key!==y.node.key||x.anchor.side!==y.anchor.side||JSON.stringify(x.anchor.escapeRange)!==JSON.stringify(y.anchor.escapeRange)||Math.sign(a.r.rail-x.exitX)!==Math.sign(b.r.rail-y.exitX)||Math.abs(a.c-b.c)<.01)continue;
+   const fits=(item,end,c)=>c>=end.anchor.escapeRange[0]+item.w/2+.25&&c<=end.anchor.escapeRange[1]-item.w/2-.25;
+   if(!fits(a,x,b.c)||!fits(b,y,a.c))continue;
+   budget--;const saved=snapshot([a.r,b.r]),before=local([a.r,b.r]),conflicts=leadConflicts(a.r)+leadConflicts(b.r);
+   if(apply([[a,b.c],[b,a.c]],true)){
+    if(local([a.r,b.r])[1]>before[1]||leadConflicts(a.r)+leadConflicts(b.r)>conflicts)restore(saved);else {const t=a.c;a.c=b.c;b.c=t;}
+   }
+  }
+ }
  // Wireless rows going away from one another can reuse a level. Stack-gap
  // departures are deliberately fixed during general channel spacing, but may
  // share a row here when the complete painted paths remain clear. Work from

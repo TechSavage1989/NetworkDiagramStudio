@@ -6,6 +6,8 @@
 
 ## Features
 
+Wireless stack links use bounded track ordering to reduce avoidable upper AP-fan crossings without rearranging devices or replacing saved cable bends.
+
 Switchport workspace imports retain report paper and title settings. Native reports keep port numbers outside each physical row pair and use matching centered PNG/PDF paper placement. Browser configuration reports also preserve management/mirror notes, configured speeds and VLAN interface addresses. See [integration coverage](docs/SWITCHPORT_INTEGRATION.md) for the remaining browser-only parser limits.
 
 Network engineers can use the Windows application or the offline browser edition to turn site records into an editable drawing set.
@@ -72,7 +74,7 @@ Network engineers can use the Windows application or the offline browser edition
 
 The separate [drawing-pages sidebar](docs/images/pages-sidebar.png) adapts to [compact desktop windows](docs/images/pages-sidebar-compact.png) and [narrow screens](docs/images/pages-sidebar-narrow.png).
 
-See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png).
+See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting.
 
 Cable labels and port numbers use centered text by default; explicit text-style edits remain available.
 
@@ -103,12 +105,12 @@ The releases index includes published previews. A pull request or local build ma
 
 ## How to use
 
-In Edit drawing, select objects and choose [**Group**](docs/images/grouped-model-controls.png) to move or transform them together; **Ungroup** retains every position. Selecting a grouped member selects its group. Corner handles scale around a shared pivot, and the rotation handle rotates whole devices and text without flattening their native artwork. Unsupported native-detail rotations are rejected rather than distorted.
+In Edit drawing, select objects and choose [**Group**](docs/images/grouped-model-controls.png) to move or transform them together; **Ungroup** retains every position. Selecting a grouped member selects its group. Automatic link labels follow rerouted cables when selected with equipment, rather than becoming fixed obstacles during resizing. Explicit manual label placements remain fixed. Corner handles scale around a shared pivot, and the rotation handle rotates whole devices and text without flattening their native artwork. Unsupported native-detail rotations are rejected rather than distorted.
 
 
 In Edit drawing, Ctrl+A (Command+A on macOS) selects diagram content without the information panel or page frame. Normal Select All remains available inside text fields. Scale, rotate and move selected content with Undo/redo; selecting or dragging the drawing does not select editor toolbar text.
 
-Auto-fit measures actual diagram content rather than carrying large empty source margins onto the selected paper. Generated site, title and documentation headings retain readable paper sizes. Once you deliberately move or resize objects, their accepted page frame is retained so Auto-fit does not cancel your transform; saving Page options recalculates the fit.
+Auto-fit measures actual diagram content rather than carrying large empty source margins onto the selected paper. Generated site, title and documentation headings retain readable paper sizes. Wireless link-color keys retain readable paper text and pack into rows. Docked information panels use their own readable paper scale rather than shrinking with large diagrams, with space reserved beside the diagram. Very dense panels retain readable text and show an overflow warning; choose a larger sheet or fewer panel sections. Free-positioned and manually resized panel objects retain manual layout behavior. Older saved fitting frames show a prompt to open Page options and Save page options for the new readable fit; they are not silently rearranged. Once you deliberately move or resize objects, their accepted page frame is retained so Auto-fit does not cancel your transform; saving Page options recalculates the fit.
 
 Page options can **Lock physical page size** when you explicitly check it. Selecting Letter or another paper size does not automatically lock it. A lock keeps the sheet dimensions and saved presentation frame, while moves and scaling can extend content off the page. Off-page content remains visible in Edit drawing; a warning explains that print/PDF and page-sized exports may clip it.
 
@@ -121,7 +123,7 @@ Page options can **Lock physical page size** when you explicitly check it. Selec
 - **Physical links.** Review both endpoint ports, speed and media. A port's SFP capability alone does not establish whether an SR, LR or DAC module is installed.
 - **Hardware.** Open **Hardware** and select **Manage** to import supported VSSX/VSDX masters, a front-view image, or a saved hardware pack. Recognized front views can match a model or SKU. Assign a front to a device to reuse it on matching models. **Map ports** shows existing jack markers and allows point placement or numeric coordinates. **Core faceplate scale** in device details adjusts size while retaining proportions. Save a hardware pack to carry artwork, model assignments and optic choices to another project. Use only artwork you are authorized to use and share.
 - **Local stencil search.** Click a diagram device to open its stencil picker. **Search selected vendor files** filters files from folders you already selected by vendor-related filenames. **Search all selected folders** searches the full selected collection. Neither button searches the internet. Empty results explain whether folders or matching files are missing.
-- **Deliverables.** Open **Export** and choose the current page, current page group or all pages, then Visio, vector PDF, 300 dpi PNG, SVG or **Interactive HTML**. The HTML export opens offline in a browser without installing the app: navigate pages, search labels, inspect objects and zoom/pan. It is a read-only snapshot of the selected drawings, including embedded hardware images, not an editable project or source-configuration bundle. The quick **Visio**, **Save page SVG** and **Print / PDF** controls remain available. For a reusable Visio stencil containing the hardware used in the current drawing, select **Hardware**, **Manage**, then **Export Visio stencil**. **Open project** restores a saved project for further changes.
+- **Deliverables.** Open **Export** and choose the current page, current page group or all pages, then Visio, vector PDF, 300 dpi PNG, SVG or **Interactive HTML**. The HTML export opens offline in a browser without installing the app: navigate pages, search labels and zoom/pan. Hover or Tab to an object for details and connected-device/cable highlighting; click or Enter pins the inspection, and Escape clears it. Port labels reveal associated links when the drawing contains endpoint metadata. It is a read-only snapshot of the selected drawings, including embedded hardware images, not an editable project or source-configuration bundle. The quick **Visio**, **Save page SVG** and **Print / PDF** controls remain available. For a reusable Visio stencil containing the hardware used in the current drawing, select **Hardware**, **Manage**, then **Export Visio stencil**. **Open project** restores a saved project for further changes.
 
 The hardware reference lists the supported syntax, report types and layout limits. [Hardware and configuration support](docs/HARDWARE_SUPPORT.md) · [Server, storage and virtualization catalogue with official references](docs/ENDPOINT_HARDWARE.md). Endpoint family recognition does not establish installed NIC/HBA sockets. Map the actual adapters with interface inventory and a verified stencil. The physical catalog has 314 verified bank profiles covering 423 model identifiers, including new UniFi, Netgate and PA-455 layouts and corrected PA-415 combo sockets. Unknown models have editable base drawings for every inventory role, with boundary connections until their actual ports are mapped.
 
@@ -192,6 +194,27 @@ Visio legend samples are editable lines. Each cable follows the matching legend 
 In **Device details**, enter device **MAC address(es)** when known. Multiple addresses can be separated by commas; colon, hyphen and dotted forms are normalized. Expand **Edit ports** to add a port or edit its name, description, MAC address, role, link speed, and VLAN assignments. Device captions prefer the device address; an interface-only address retains its interface name. Wireless captions use the connected interface when no device address is available. Enter tagged VLAN IDs separated by commas. To rename or remove a connected port, edit or remove its connection first.
 
 Select **Stack members and installed modules** in Device details to confirm hardware composition. Use 2920 slots A/B for J9731A or J9732A; supported 3560-E uplinks use X2-1/X2-2 with the installed X2 transceiver or TwinGig adapter. A file without an exact model declaration needs a confirmed Model selection or mapped stencil. [Hardware import coverage and manufacturer references](docs/HARDWARE_SUPPORT.md).
+
+### Check printed readability at actual size
+
+[View the screen calibration dialog](docs/images/screen-calibration.png).
+
+Choose a physical sheet in **Page options**, then click **Actual size**. On first
+use, **Calibrate screen** lets you match a 100 mm ruler, an 85.60 mm standard card,
+or the short edge of A4/Letter paper held against the display. Adjust the reference
+length, then save. The selected sheet is shown at calibrated 1:1 physical size;
+hold the matching paper over the screen to check its edges and label readability.
+A sheet larger than the viewport stays at actual size: hold Space and drag or use
+the middle mouse button to pan. **Fit page** and manual zoom leave actual-size mode.
+
+Calibration is saved locally, separately from drawings and exports. Reset it in
+**Calibrate screen**. Screen resolution alone cannot establish physical size.
+Recheck after changing monitors, browser zoom, OS scaling or resolution; detectable
+changes show a warning, but similar monitors and some display changes cannot be
+detected. The reference must be measured on the screen you will use. This is a
+calibrated preview, not an absolute guarantee of physical size across monitors.
+Printing must use the same paper at 100% scale for a matching result. Dynamic
+canvases need a physical paper choice before Actual size is available.
 
 ## Updates and settings
 

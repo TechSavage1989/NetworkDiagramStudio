@@ -85,4 +85,23 @@ export async function checkDiagramSelection(page,output,open){
  await page.locator('#drawing-undo').click();assert.deepEqual(state(await save('locked-undo')),state(lockedBefore));assert.deepEqual(await pageFrame(),frame);
  await page.locator('#drawing-redo').click();assert.deepEqual(state(await save('locked-redo')),state(oversized));assert.deepEqual(await pageFrame(),frame);
  await open(resolve(output,'locked-redo.nds.json'));assert.deepEqual(state(await save('locked-reopened')),state(oversized));assert.deepEqual(await pageFrame(),frame);await page.locator('#page-overflow-notice').waitFor({state:'visible'});
+ // Regression: selecting captions together with devices must not pin those
+ // generated captions onto obsolete routes. Exercise the ungrouped model-size
+ // command and a much larger group shrink, not just +/-10% happy paths.
+ for(const groupedResize of [false,true]){
+  await open({name:'caption-resize.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:original}))});
+  if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();
+  await selectAll('Control');if(groupedResize)await page.locator('#drawing-group').click();
+  const before=await save('caption-resize-before');
+  await page.locator('#drawing-size').click();await page.getByLabel('Size (% of current size)',{exact:true}).fill(groupedResize?'50':'200');await page.getByRole('button',{name:'Apply size',exact:true}).click();
+  await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+  assert.doesNotMatch(await page.locator('#feedback').textContent(),/overlaps a link label/);
+  const after=await save('caption-resize-after');assert.notDeepEqual(state(after),state(before));
+  for(const caption of scene.items.filter(i=>i.labelRole)){
+   const patch=after.layout.drawingEdits[caption.editKey];assert.equal(patch?.x,undefined,'Bulk resize retains automatic caption placement');assert.equal(patch?.y,undefined);
+  }
+  await page.locator('#drawing-undo').click();assert.deepEqual(state(await save('caption-resize-undo')),state(before));
+  await page.locator('#drawing-redo').click();assert.deepEqual(state(await save('caption-resize-redo')),state(after));
+  await open(resolve(output,'caption-resize-redo.nds.json'));assert.deepEqual(state(await save('caption-resize-reopened')),state(after));
+ }
 }

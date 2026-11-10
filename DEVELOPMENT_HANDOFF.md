@@ -1,3 +1,93 @@
+# Hosted HTML focus and batching follow-up
+
+Run 212 verifies keyboard focus, cable/device details, pin/clear, search and
+ordinary viewer interactions after using the focusin listener. The synthetic
+batching test originally alternated 100 opposite zoom events and returned to
+the starting transform, producing zero DOM mutations in Chromium. It now uses
+101 alternating events, requires a changed final transform, and still requires
+exactly one style mutation. This is a non-zero fixture correction, not a weaker
+batching assertion. All other 17 browser suites passed. Fresh final CI remains
+required; preview.45 has not been published by this change.
+
+# Preview.45 integrated validation
+
+The combined calibration, multi-selection resize, readable paper-panel/key,
+interactive HTML and upper wireless routing source passed all 621 Node tests
+with no failures or skipped cases. Offline build, repository guard, whitespace
+checks and all nine independently validated Visio packages pass. Use
+`node --test --test-concurrency=1 tests/*.test.mjs` when several checkouts share
+the constrained cloud workspace; simultaneous full suites caused resource
+failures, not an accepted substitute for this clean combined pass.
+
+PR #44 source head e508a885 passed 17 of 18 hosted browser suites, including
+large resize, paper panels/key and legacy refit. The HTML keyboard inspection
+check exposed an ineffective onfocusin property assignment; use a delegated
+focusin event listener and ignore stage-only focus so search results persist.
+This correction retains the real keyboard assertion and needs fresh hosted CI.
+The current generated Letter wireless image was re-rendered from this combined
+source with synthetic data. Final-head hosted checks and immutable release
+verification remain required before claiming preview.45 published.
+
+# Preview.45: multi-selection resize caption regression
+
+Bulk resizing previously wrote absolute positions for every selected generated
+link caption, then rerouted connected cables. The caption planner interpreted
+those incidental positions as hard pins, and the final collision validator
+rejected the transform with “This change overlaps a link label.”
+
+Generated captions now retain automatic placement/orientation during model and
+group resizing with equipment. Explicit user positions and cable attachments,
+caption values/styles, physical socket glue and selection history remain intact.
+Synthetic Letter tests reproduce the old 50%/140% group and 200% model failures;
+the real browser gate adds large resizing, Undo/redo and save/reopen checks.
+No customer screenshot or project data is included in the repository.
+Existing genuine manual caption positions remain constraints; this does not
+weaken collision validation or promise arbitrary impossible model overlaps.
+All 613 Node tests pass, as do the offline build, repository/whitespace checks
+and nine standard independent Visio packages plus a 50%-scaled full-selection
+package. Local Chromium remains blocked by socket restrictions. Final-head
+hosted browser/native gates remain required before publication.
+# Interactive HTML inspection follow-up (unreleased)
+
+Exported SVG cables carry normalized endpoint device/port identifiers, not source
+records. The offline viewer lazily sanitizes pages, indexes device/port associations,
+and uses delegated hover/focus and pinned click/Enter inspection with Escape clear.
+Related devices, cables and automatic port labels highlight together. Empty pages
+remain valid. Transform writes are coalesced once per animation frame rather than
+once per pointer/wheel event; repeated hover on the same object performs no work.
+Hosted browser coverage adds endpoint inspection, keyboard pin/clear, empty and
+repeated page navigation and a 600-device fixture asserting that 101 synchronous
+wheel events yield one transform write. Runtime timing and screenshot review must
+come from hosted Edge: local Chromium launch fails at socket() (Operation not
+permitted). Do not claim measured latency gains or Windows UI validation locally.
+# Preview.45 follow-up: readable paper information panels
+
+Wireless Link colors also use paper-sized text and packed measured entries rather than shrinking with AP banks. Docked panels now use independent paper sizing rather than the model fit, reserving a side rail before fitting the diagram. Default text targets its source paper size (typically 9pt body), with an 8pt floor when fitting dense content. Excess content remains readable with the existing clipping warning instead of silent compression. Left/right/top dock, explicit panel scale, frozen diagram frames and export scene transforms share the same geometry. Free panels, manually positioned/resized panel objects and Preserve mode keep existing behavior. New fitting frames carry panelFit:1. Legacy locked/editing frames retain their exact transform and show an explicit Page options / Save page options refit prompt rather than silently moving saved diagrams. This does not paginate overflowing panel sections; use a larger paper or fewer sections.
+
+All six focused paper-panel tests, offline build, repository guard and whitespace checks pass. The concurrent full suite was stopped to avoid resource contention; the final integrated head still requires a complete pass. Genuine synthetic Letter core and wireless SVG rasters were inspected locally with Inkscape; browser/native/print UI gates remain required on the final integrated head. No physical Windows print or Visio UI test is claimed locally.
+
+# Preview.45: calibrated actual-size screen view (unreleased)
+
+Release intent and desktop version are 0.1.0-preview.45. This follows preview.44
+which has now been published. Actual size uses local physical-reference calibration (100 mm ruler,
+85.60 mm standard card, or A4/Letter paper short edge), with persistence/reset and
+measurable display/zoom change invalidation. Dynamic canvases require physical
+paper first. Physical sheets retain scale when the viewport is too small and can
+be panned; Fit/manual zoom leave 1:1 mode. Projects and export dimensions are
+unchanged. Resolution alone cannot establish real size; recheck each monitor.
+
+All 604 Node tests, offline build, repository guard and whitespace checks pass.
+All 18 hosted Edge browser suites passed in run 42729400539, including
+tests/browser-actual-size.mjs. Genuine synthetic screenshots from that run refresh
+the affected documentation views; docs/images/screen-calibration.png shows the
+paper-reference calibration dialog. Local Chromium cannot launch because socket
+creation is blocked, including an approved elevated launch; no local UI capture
+or physical monitor verification is claimed. Final-head native/browser gates
+remain required before merge. Physical matching must be checked on the user's
+own monitor with the selected reference.
+Run node --test tests/*.test.mjs, node scripts/build-web.mjs,
+node scripts/check-repo.mjs, and the hosted native/browser gates before release.
+
 # Preview.44: page fit, selection and off-page transforms
 
 Release intent is 0.1.0-preview.44. New visible wireless paper choices fit the
@@ -1055,3 +1145,14 @@ SVG and native Visio. tests/browser-panel-content.mjs covers actual dialog
 failure/retry, history and save/reopen; run it in hosted browser validation.
 Local Chromium launch is blocked by socket/IPC permissions, so no interactive
 browser pass or browser screenshot is claimed here.
+
+## Preview.45 upper wireless fan regression
+
+The five-member stack with 28 APs on member three now exchanges compatible upper
+departure rows within the existing member gap. The synthetic case improves from
+42 to 16 crossings (upper 32 to 10, lower 10 to 6), without increasing route length
+or changing hardware positions. Some crossings remain. The stricter candidate
+retains merged-stroke and socket-lead guards rather than the more aggressive
+prototype. Existing manual bends and opposite-direction row sharing remain
+covered by the wireless suites. Actual generated SVG output was visually checked;
+this is not native Windows or browser UI verification.

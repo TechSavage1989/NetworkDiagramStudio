@@ -6,7 +6,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.1.0-preview.44</Version>
+    <Version>0.1.0-preview.45</Version>
     <FileVersion>0.1.0.44</FileVersion>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
     <Product>NetworkDiagramStudio</Product>

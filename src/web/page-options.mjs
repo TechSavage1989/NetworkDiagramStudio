@@ -1,3 +1,4 @@
+import {paperPanel,paperLinkKey} from './paper-panel.mjs';
 import {contentBounds,paperFurniture,placePaperFurniture} from './page-content-fit.mjs';
 export function cleanPageNumbers(raw){const p=raw&&typeof raw==='object'?raw:{};return {show:p.show===true,footer:p.footer===true,start:Number.isInteger(p.start)&&p.start>=0&&p.start<=9999?p.start:1,pad:Number.isInteger(p.pad)&&p.pad>=1&&p.pad<=5?p.pad:2,format:typeof p.format==='string'&&p.format.length<=100?p.format:'{page} / {last}'};}
 export function pageNumber(raw,index,count){const p=cleanPageNumbers(raw);if(!p.show)return null;const values={page:p.start+index,last:p.start+count-1,total:count};return p.format.replace(/\{(page|last|total)\}/g,(_,key)=>String(values[key]).padStart(p.pad,'0'));}
@@ -18,7 +19,7 @@ export function cleanPageSetup(raw){
   default:cleanPaper(p.default),
   overrides:Object.fromEntries(pageFamilies.filter(([key])=>p.overrides?.[key]).map(([key])=>[key,cleanPaper(p.overrides[key])])),
   printPaper:p.printPaper&&p.printPaper.preset!=='dynamic'?cleanPaper(p.printPaper):null,
-  visible:{lockFrames:Object.fromEntries(Object.entries(visible.lockFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),editFrames:Object.fromEntries(Object.entries(visible.editFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),fitMode:visible.fitMode==='preserve'?'preserve':'optimize',wirelessFit,default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
+  visible:{lockFrames:Object.fromEntries(Object.entries(visible.lockFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(f.panelFit===1?{panelFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),editFrames:Object.fromEntries(Object.entries(visible.editFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(f.panelFit===1?{panelFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),fitMode:visible.fitMode==='preserve'?'preserve':'optimize',wirelessFit,default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
  };
 }
 export function pageFamily(name){return /^Switchport reports/i.test(name)?'switchports':/^(?:MDF Port Map|Port Inventory)/i.test(name)?'ports':/^Wireless Connections/i.test(name)?'wireless':/^VLANs and Routing/i.test(name)?'logical':/^Trunk VLAN/i.test(name)?'trunk':'core';}
@@ -79,7 +80,7 @@ export function fitVisiblePage(page,project){
  const visible=cleanPageSetup(project?.layout?.pageSetup).visible,editFrame=!locked?visible.editFrames[page.name]:null;
  const frozen=locked?visible.lockFrames[page.name]:editFrame;
  const contentFit=!preserve&&(!frozen||frozen.contentFit===1)&&page.items.some(i=>i.pageHeading);
- let furniture=null,measured=null;
+ let furniture=null,measured=null,panel=null;
  let factor=1,dx=(width-sourceW)/2,dy=(height-sourceH)/2;
  if(!preserve||frozen){
   // Calculate a size-independent page frame. Scaling to fill it gives an
@@ -95,9 +96,16 @@ export function fitVisiblePage(page,project){
   if(contentFit){
    const unit=targetW/physicalW;
    furniture=paperFurniture(frozen?{...page,originX:frozen.originX,originY:frozen.originY}:page,project,targetW,targetH,unit,margin*unit);
-   measured=contentBounds(page,furniture.automatic);
+   const legacyPanelFrame=frozen&&frozen.panelFit!==1;
+   page.panelFitLegacy=!!legacyPanelFrame&&page.items.some(i=>i.panelGroup||page.title==='Wireless Connections'&&i.editKey?.includes('|legend|'));
+   if(!legacyPanelFrame)panel=paperPanel(page,project,furniture.body,unit)||paperLinkKey(page,project,furniture.body,unit);
+   if(panel){
+    const divider=page.items.find(i=>i.pageFrame==='sidebar');
+    if(divider&&panel.divider)furniture.placements.set(divider,{...panel.divider,scale:unit/(divider.presentation?.scale||1)});
+   }
+   measured=contentBounds(page,new Set([...furniture.automatic,...(panel?.items||[])]));
    if(measured){
-    const body=furniture.body;factor=Math.min(4,body.w/measured.w,body.h/measured.h);
+    const body=panel?.body||furniture.body;factor=Math.min(4,body.w/measured.w,body.h/measured.h);
     dx=body.x+(body.w-measured.w*factor)/2-measured.x*factor;
     dy=body.y+(body.h-measured.h*factor)/2-measured.y*factor;
    }
@@ -106,20 +114,22 @@ export function fitVisiblePage(page,project){
   }
   for(const item of page.items){
    if(furniture?.automatic.has(item))continue;
+   const transform=panel?.transforms?.get(item)||(panel?.items.has(item)?panel:null);
+   const itemFactor=transform?transform.scale:factor,itemDx=transform?transform.x:dx,itemDy=transform?transform.y:dy;
    const prev=item.presentation||{scale:1,x:0,y:0,fontScale:1};
-   item.presentation={...prev,scale:(prev.scale||1)*factor,x:(prev.x||0)*factor+dx,y:(prev.y||0)*factor+dy,fontScale:(prev.fontScale||1)*factor};
+   item.presentation={...prev,scale:(prev.scale||1)*itemFactor,x:(prev.x||0)*itemFactor+itemDx,y:(prev.y||0)*itemFactor+itemDy,fontScale:(prev.fontScale||1)*itemFactor};
    for(const key of ['x','y','w','h','weight','sampleWeight']){
     if(!Number.isFinite(item[key]))continue;
-    item[key]=item[key]*factor+(key==='x'?dx:key==='y'?dy:0);
+    item[key]=item[key]*itemFactor+(key==='x'?itemDx:key==='y'?itemDy:0);
    }
-   if(item.points)item.points=item.points.map(([x,y])=>[x*factor+dx,y*factor+dy]);
-   if(item.commands)item.commands=item.commands.map(([op,...values])=>[op,...values.map((v,i)=>v*factor+(i%2?dy:dx))]);
-   if(item.hops)item.hops=item.hops.map(h=>({...h,x:h.x*factor+dx,y:h.y*factor+dy,w:h.w*factor,h:h.h*factor}));
-   for(const key of ['from','to'])if(item[key])item[key]={...item[key],x:item[key].x*factor+dx,y:item[key].y*factor+dy};
-   if(item.type==='text')item.size*=factor;
+   if(item.points)item.points=item.points.map(([x,y])=>[x*itemFactor+itemDx,y*itemFactor+itemDy]);
+   if(item.commands)item.commands=item.commands.map(([op,...values])=>[op,...values.map((v,i)=>v*itemFactor+(i%2?itemDy:itemDx))]);
+   if(item.hops)item.hops=item.hops.map(h=>({...h,x:h.x*itemFactor+itemDx,y:h.y*itemFactor+itemDy,w:h.w*itemFactor,h:h.h*itemFactor}));
+   for(const key of ['from','to'])if(item[key])item[key]={...item[key],x:item[key].x*itemFactor+itemDx,y:item[key].y*itemFactor+itemDy};
+   if(item.type==='text')item.size*=itemFactor;
    if(item.type==='device'){
-    for(const child of item.children||[])if(child.type==='text')child.size*=factor;
-    if(factor!==1)item.masterKey+=':visible-fit:'+factor.toFixed(6);
+    for(const child of item.children||[])if(child.type==='text')child.size*=itemFactor;
+    if(itemFactor!==1)item.masterKey+=':visible-fit:'+itemFactor.toFixed(6);
    }
   }
   if(furniture)placePaperFurniture(furniture,factor,dx,dy,measured||{x:0,y:0,w:0,h:0});
@@ -135,7 +145,8 @@ export function fitVisiblePage(page,project){
  const contentX=originX*factor+(preserve&&!frozen?0:dx),contentY=originY*factor+(preserve&&!frozen?0:dy);
  page.pageOverflow=locked&&(contentX<(page.originX||0)-1e-6||contentY<(page.originY||0)-1e-6||contentX+sourceW*factor>(page.originX||0)+page.width+1e-6||contentY+sourceH*factor>(page.originY||0)+page.height+1e-6);
  {const bounds=contentBounds(page);page.pageOverflow=(!contentFit&&page.pageOverflow)||!!(locked||editFrame)&&!!bounds&&(bounds.x<(page.originX||0)-1e-6||bounds.y<(page.originY||0)-1e-6||bounds.x+bounds.w>(page.originX||0)+page.width+1e-6||bounds.y+bounds.h>(page.originY||0)+page.height+1e-6);}
- page.presentationFrame={scale:factor,x:preserve&&!frozen?0:dx,y:preserve&&!frozen?0:dy,originX:page.originX,originY:page.originY,width:page.width,height:page.height,...(contentFit?{contentFit:1}:{}),...(page.wirelessLayout?{wirelessFit:page.wirelessLayout.paperFit||'layout'}:{})};
+ page.pageOverflow=page.pageOverflow||!!panel?.overflow;
+ page.presentationFrame={scale:factor,x:preserve&&!frozen?0:dx,y:preserve&&!frozen?0:dy,originX:page.originX,originY:page.originY,width:page.width,height:page.height,...(contentFit?{contentFit:1}:{}),...(contentFit&&!page.panelFitLegacy?{panelFit:1}:{}),...(page.wirelessLayout?{wirelessFit:page.wirelessLayout.paperFit||'layout'}:{})};
  if(locked)page.pageLockFrame={...page.presentationFrame};
  page.widthMm=page.width*25.4/96;page.heightMm=page.height*25.4/96;
  page.visiblePaper=paper;page.visibleFitMode=preserve?'preserve':'optimize';

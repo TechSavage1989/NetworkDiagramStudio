@@ -1,3 +1,5 @@
+import {buildPages} from '../src/web/diagram/index.mjs';
+import {sampleSite} from '../src/web/sample.mjs';
 import {checkDiagramSelection} from './browser-diagram-selection.mjs';
 // Synthetic saved-project and actual dialog interactions.
 import assert from 'node:assert/strict';
@@ -28,4 +30,24 @@ try{
  d=await edit();assert.equal(await d.getByLabel('Show VLANs',{exact:true}).isChecked(),true);assert.equal(await d.getByLabel('Sections without data',{exact:true}).inputValue(),'explain');await d.getByRole('button',{name:'Cancel',exact:true}).click();
  await page.screenshot({path:resolve(output,'panel-content.png')});
  await checkDiagramSelection(page,output,open);
+ const paper=sampleSite();paper.layout={presentation:{defaults:{panel:{sections:['connections','modules','vlans']}}},pageSetup:{visible:{default:{preset:'letter',locked:true}}}};
+ await open({name:'fictional-readable-paper.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:paper}))});
+ const fonts=await page.locator('#canvas text[data-drawing-key*="|info-panel|"]').evaluateAll(nodes=>nodes.map(n=>Number(n.getAttribute('font-size'))));
+ assert.ok(fonts.length&&Math.min(...fonts)>=10.66,'locked Letter information panel remains readable in paper units');
+ await page.screenshot({path:resolve(output,'panel-paper-readable.png')});
+ delete paper.layout.presentation;
+ await open({name:'fictional-wireless-paper.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:paper}))});
+ const wireless=await page.locator('#page-select option').evaluateAll(options=>options.find(o=>o.textContent.startsWith('Wireless Connections')).value);
+ await page.locator('#page-select').selectOption(wireless);
+ const keyFonts=await page.locator('#canvas text[data-drawing-key*="|legend|"]').evaluateAll(nodes=>nodes.map(n=>Number(n.getAttribute('font-size'))));
+ assert.ok(keyFonts.length&&Math.min(...keyFonts)>=10.99,'wireless color key retains paper text size');
+ await page.screenshot({path:resolve(output,'wireless-paper-key.png')});
+ const oldFrame={...buildPages(paper)[0].pageLockFrame};delete oldFrame.panelFit;
+ paper.layout.pageSetup.visible.lockFrames={'Core Network':oldFrame};
+ await open({name:'fictional-legacy-paper.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:paper}))});
+ assert.match(await page.locator('#page-overflow-notice').textContent(),/earlier layout/);
+ await page.locator('#page-overflow-notice').click();
+ await page.locator('#dialog').getByRole('button',{name:'Save page options',exact:true}).click();
+ await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ assert.equal(await page.locator('#page-overflow-notice').isVisible(),false);
 }finally{await browser.close();}
