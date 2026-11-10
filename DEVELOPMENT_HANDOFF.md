@@ -1,3 +1,14 @@
+# Hosted HTML focus and batching follow-up
+
+Run 212 verifies keyboard focus, cable/device details, pin/clear, search and
+ordinary viewer interactions after using the focusin listener. The synthetic
+batching test originally alternated 100 opposite zoom events and returned to
+the starting transform, producing zero DOM mutations in Chromium. It now uses
+101 alternating events, requires a changed final transform, and still requires
+exactly one style mutation. This is a non-zero fixture correction, not a weaker
+batching assertion. All other 17 browser suites passed. Fresh final CI remains
+required; preview.45 has not been published by this change.
+
 # Preview.45 integrated validation
 
 The combined calibration, multi-selection resize, readable paper-panel/key,
@@ -45,7 +56,7 @@ Related devices, cables and automatic port labels highlight together. Empty page
 remain valid. Transform writes are coalesced once per animation frame rather than
 once per pointer/wheel event; repeated hover on the same object performs no work.
 Hosted browser coverage adds endpoint inspection, keyboard pin/clear, empty and
-repeated page navigation and a 600-device fixture asserting that 100 synchronous
+repeated page navigation and a 600-device fixture asserting that 101 synchronous
 wheel events yield one transform write. Runtime timing and screenshot review must
 come from hosted Edge: local Chromium launch fails at socket() (Operation not
 permitted). Do not claim measured latency gains or Windows UI validation locally.
