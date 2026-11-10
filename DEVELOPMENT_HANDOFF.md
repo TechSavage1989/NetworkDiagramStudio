@@ -1,7 +1,7 @@
 # Preview.45: calibrated actual-size screen view (unreleased)
 
 Release intent and desktop version are 0.1.0-preview.45. This follows preview.44
-and must not publish before that release completes. Actual size uses local physical-reference calibration (100 mm ruler,
+which has now been published. Actual size uses local physical-reference calibration (100 mm ruler,
 85.60 mm standard card, or A4/Letter paper short edge), with persistence/reset and
 measurable display/zoom change invalidation. Dynamic canvases require physical
 paper first. Physical sheets retain scale when the viewport is too small and can
@@ -9,11 +9,14 @@ be panned; Fit/manual zoom leave 1:1 mode. Projects and export dimensions are
 unchanged. Resolution alone cannot establish real size; recheck each monitor.
 
 All 604 Node tests, offline build, repository guard and whitespace checks pass.
-Hosted Edge integration is added in
-tests/browser-actual-size.mjs. Local Chromium cannot launch because socket creation
-is blocked, including an approved elevated launch; no local UI capture or physical
-monitor verification is claimed. Capture calibration.png and actual-size.png on
-hosted Edge, inspect them, and update docs/images before publishing this UI change.
+All 18 hosted Edge browser suites passed in run 42729400539, including
+tests/browser-actual-size.mjs. Genuine synthetic screenshots from that run refresh
+the affected documentation views; docs/images/screen-calibration.png shows the
+paper-reference calibration dialog. Local Chromium cannot launch because socket
+creation is blocked, including an approved elevated launch; no local UI capture
+or physical monitor verification is claimed. Final-head native/browser gates
+remain required before merge. Physical matching must be checked on the user's
+own monitor with the selected reference.
 Run node --test tests/*.test.mjs, node scripts/build-web.mjs,
 node scripts/check-repo.mjs, and the hosted native/browser gates before release.
 

@@ -195,6 +195,8 @@ Select **Stack members and installed modules** in Device details to confirm hard
 
 ### Check printed readability at actual size
 
+[View the screen calibration dialog](docs/images/screen-calibration.png).
+
 Choose a physical sheet in **Page options**, then click **Actual size**. On first
 use, **Calibrate screen** lets you match a 100 mm ruler, an 85.60 mm standard card,
 or the short edge of A4/Letter paper held against the display. Adjust the reference
