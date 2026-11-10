@@ -1,3 +1,7 @@
+# Preview.48 verification checkpoint
+
+All685 combined Node tests and nine independent Visio packages pass. Hosted run221 passed all20 Edge suites, including shared calibration and side-space save/reopen. Genuine current screenshots were downloaded, artifact digest verified and visually inspected. The narrow-preview capture now requires an actual620x900 viewport, stacked controls and exact PNG dimensions because Playwright capture otherwise restored its remembered wide viewport after CDP resize. Native/final exact-head and publication verification remain required.
+
 # Preview.48 integration
 
 Baseline is published preview.47 main/tag 797f580f4ee9a177df6f34bb7a1b57ccad7bf0b2. Its final 20 browser suites, native validation and release gates passed; downloaded assets, SHA256SUMS and updater feed were verified. Earlier pending .47 entries below are historical. Preview.48 combines calibrated settings navigation and wireless automatic-frame/side-space fixes. Final combined local and hosted verification remains pending; do not describe it as published before release verification.
