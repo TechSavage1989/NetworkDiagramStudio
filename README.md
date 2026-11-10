@@ -77,7 +77,7 @@ Built-in optical sockets and generic installed optics use consistent, reference-
 
 The separate [drawing-pages sidebar](docs/images/pages-sidebar.png) adapts to [compact desktop windows](docs/images/pages-sidebar-compact.png) and [narrow screens](docs/images/pages-sidebar-narrow.png).
 
-See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting.
+See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting. See the [physical text controls](docs/images/paper-readability-controls.png), [paper panel width controls](docs/images/paper-panel-controls.png), and [wireless side-space layout](docs/images/wireless-ap-side-space.png). The offline [User guide](docs/images/user-guide.png) provides searchable steps and adapts to [narrow windows](docs/images/user-guide-narrow.png).
 
 Cable labels and port numbers use centered text by default; explicit text-style edits remain available.
 

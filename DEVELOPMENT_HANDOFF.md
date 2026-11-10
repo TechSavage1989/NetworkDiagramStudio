@@ -1,3 +1,7 @@
+# Preview.46 hosted browser corrections verified
+
+Run 215 at a0bf4c7 passes all 19 browser suites, including guide Escape, real pan navigation between offscreen objects, retained legacy refit guidance, and visible text/panel controls. Genuine synthetic guide (wide/narrow), text sizing and panel-width captures were downloaded, artifact SHA-256 verified and visually inspected before inclusion. Source is unchanged by this documentation commit. The original run 214 native Windows build, report media boxes, package and window/timer/update/rollback checks passed; exact final-head hosted gates and merged-main publication verification still remain required.
+
 # Preview.46 hosted guide Escape correction
 
 Hosted run 214 stopped when Chromium consumed Escape in a populated search input instead of dismissing the guide dialog. The guide search now handles Escape locally through the shared close action. Other key editing, native clear controls and composing-IME cancellation are unchanged; no listener survives on the shared dialog body. The hosted test retains its single-Escape requirement and additionally checks launcher focus and normal search Select All/Backspace. Five guide unit tests, syntax, offline build, repository guard and whitespace checks pass locally. Final hosted validation remains required. No preview.47 changes are included.
