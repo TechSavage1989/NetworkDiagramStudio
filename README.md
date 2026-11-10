@@ -193,6 +193,25 @@ In **Device details**, enter device **MAC address(es)** when known. Multiple add
 
 Select **Stack members and installed modules** in Device details to confirm hardware composition. Use 2920 slots A/B for J9731A or J9732A; supported 3560-E uplinks use X2-1/X2-2 with the installed X2 transceiver or TwinGig adapter. A file without an exact model declaration needs a confirmed Model selection or mapped stencil. [Hardware import coverage and manufacturer references](docs/HARDWARE_SUPPORT.md).
 
+### Check printed readability at actual size
+
+Choose a physical sheet in **Page options**, then click **Actual size**. On first
+use, **Calibrate screen** lets you match a 100 mm ruler, an 85.60 mm standard card,
+or the short edge of A4/Letter paper held against the display. Adjust the reference
+length, then save. The selected sheet is shown at calibrated 1:1 physical size;
+hold the matching paper over the screen to check its edges and label readability.
+A sheet larger than the viewport stays at actual size: hold Space and drag or use
+the middle mouse button to pan. **Fit page** and manual zoom leave actual-size mode.
+
+Calibration is saved locally, separately from drawings and exports. Reset it in
+**Calibrate screen**. Screen resolution alone cannot establish physical size.
+Recheck after changing monitors, browser zoom, OS scaling or resolution; detectable
+changes show a warning, but similar monitors and some display changes cannot be
+detected. The reference must be measured on the screen you will use. This is a
+calibrated preview, not an absolute guarantee of physical size across monitors.
+Printing must use the same paper at 100% scale for a matching result. Dynamic
+canvases need a physical paper choice before Actual size is available.
+
 ## Updates and settings
 
 Help opens a polished update review with compact installed/available version labels, formatted release headings and bullets, download progress, verification status and a fixed action footer. Long notes scroll inside the review while the close and install controls stay visible. The install screen explains recovery and reminds you to save unsaved diagram changes before restarting. A compact notice appears only when a newer release is available. Automatic checks and verified download/rollback behavior are unchanged.

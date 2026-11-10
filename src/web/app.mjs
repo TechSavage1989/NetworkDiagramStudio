@@ -56,7 +56,7 @@ installFormControls();
 document.addEventListener('contextmenu',handleEditorContextMenu);
 const $=id=>document.getElementById(id);
 const typeHighlights=connectionTypeHighlights($('canvas'));
-const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onCableHover:element=>typeHighlights.setCableHover(element),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{
+const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'),fit:$('zoom-fit'),percent:$('zoom-level'),actual:$('zoom-actual'),calibrate:$('screen-calibrate'),actualStatus:$('actual-size-status'),canSelectCable:()=>editDrawing&&drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,canHighlightCable:()=>drawingReady&&!besidePick&&!inlineSession&&!$('dialog').open,onCableHover:element=>typeHighlights.setCableHover(element),onDevice:id=>{const d=project.devices.find(d=>d.id===id);if(d)task(()=>deviceStencil(d));},onShape:(key,id,e,target)=>{
  if(editDrawing){
   if(snapLabelPick){snapSelectedLabelAtClick(key,e);return true;}
   if(besidePick){pickBesideReference(key);return true;}

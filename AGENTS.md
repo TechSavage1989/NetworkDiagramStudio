@@ -237,3 +237,11 @@ Fixed-paper wireless planning may try narrower measured caption columns, extra A
 Ctrl/Meta+A in the focused drawing selects top-level diagram content, excluding panelGroup/pageFrame items without re-expanding a mixed saved group. Preserve native Select All in input, textarea, select and editable text. Canvas gestures and editor chrome must not start browser text selection. Require full-selection scale/rotation/move Undo/redo, reopen, allowed locked overflow and input-selection browser coverage.
 
 Paper content fitting measures painted bounds, including negative positions, rotated details, cable hops and stroke widths, while generated pageHeading/pageFrame furniture uses paper units. Preserve explicit furniture patches via transient original geometry, not rewritten saved edits. New contentFit:1 frames retain this behavior; old unmarked locks stay compatible. Before deliberate drawing edits, capture the active unlocked presentationFrame into validated visible.editFrames so refitting cannot cancel manual scaling. Page options clears those frames. Verify physical object width/page width, not only source-coordinate changes.
+
+Actual-size screen viewing lives in actual-size.mjs and viewport.mjs. Calibration
+is local browser state only, never project data or export geometry. Scale from
+the selected visiblePaper physical width and page.width, not an expanded editor
+viewBox. Never fit a clipped sheet while claiming 1:1. Manual zoom and Fit leave
+the mode; measurable display changes invalidate it. Unobservable monitor changes
+still require a physical ruler/paper check. Keep tests/browser-actual-size.mjs in
+the hosted browser gate and use only synthetic captures.
