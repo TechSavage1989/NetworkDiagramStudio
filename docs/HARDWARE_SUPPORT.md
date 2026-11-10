@@ -82,3 +82,5 @@ UniFi USW-16-POE, USW-24, USW-24-POE, USW-48-POE, USW-Pro-24, USW-Pro-24-POE, US
 Each model uses its manufacturer reference in the layout catalog. These are simplified editable native drawings, not manufacturer artwork. Unknown switches and firewalls now have role-specific base symbols alongside the server, hypervisor, HCI, storage, phone and other inventory symbols. No unverified physical sockets are inferred from a role or a software platform. Declared interface names can connect at the device boundary; an assigned stencil and manual port map supply exact locations. Existing verified panels and assigned stencils take priority.
 
 ![Manufacturer-based panels and a generic storage symbol in the fictional lab](images/hardware-layouts.png)
+
+The 6000/6100 48-port front view retains four twelve-port copper banks from the [manufacturer installation guide, front-panel figures](https://arubanetworking.hpe.com/techdocs/hardware/switches/6100/IGSG/igsg_6000-6100.pdf). Geometry is schematic, not a dimensioned engineering drawing. Family-derived layouts retain unknown SKU identity.

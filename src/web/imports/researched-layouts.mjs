@@ -1,3 +1,4 @@
+import {mikrotikFaceplates} from './mikrotik-faceplates.mjs';
 // Normalized drawing geometry transcribed from the cited manufacturer guides.
 // Family-only records describe common geometry, never an inferred orderable SKU.
 export function refineFaceplates(input){
@@ -11,7 +12,7 @@ export function refineFaceplates(input){
      let x,y=row===0?.34575:.69055;
      if(count===16){x=n<=12?.498+Math.floor((n-1)/2)*.057:n<=14?.307+(n-13)*.111:.092+(n-15)*.107;y=n<=12?(row===0?.37:.65):.70;}
      else if(count===28)x=n<=24?.541+Math.floor((n-1)/2)*.0334+(n>12?.008:0):n<=26?.03386:.08466;
-     else x=n<=48?.138056+Math.floor((n-1)/2)*(.770069/23):n<=50?.03386:.08466;
+     else {const col=Math.floor((n-1)/2);x=n<=48?.138056+col*.0319+Math.floor(col/6)*.012123:n<=50?.03386:.08466;}
      if(count!==16&&n>count-4)y=row===0?.33153:.70476;
      p.socketPoints[n]=[x,y,count===16?.045:.022];
     }
@@ -37,5 +38,5 @@ export function refineFaceplates(input){
   const p=plates.find(p=>p.models.includes(sku));
   family(sku,'Aruba CX 6000/6100 '+count+' family',{sockets:p.sockets.map(s=>[...s.slice(0,3),s[3]==='SFP+'?'SFP cage':s[3],s[4]])});
  }
- return plates;
+ return [...plates.filter(p=>p.vendor!=='MikroTik'),...mikrotikFaceplates];
 }

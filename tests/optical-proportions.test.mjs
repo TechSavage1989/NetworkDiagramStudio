@@ -7,13 +7,14 @@ import {sampleSite} from '../src/web/sample.mjs';
 import {devicePoint} from '../src/web/diagram/device-geometry.mjs';
 import {unzip} from '../src/web/zip.mjs';
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
-test('optical front-face aspects use sourced form-factor proportions without stretching RJ45',()=>{
- for(const form of ['SFP','SFP+','SFP28']){const e=connectorEnvelope(form);near(e.w/e.h,13.7/8.6);assert.ok(e.h>.014);}
- const q=connectorEnvelope('QSFP28');near(q.w/q.h,18.35/8.5);
+test('all schematic optical forms share one size without stretching RJ45 or CX4',()=>{
+ for(const form of ['SFP','SFP+','SFP28','QSFP','QSFP28','X2']){const e=connectorEnvelope(form);near(e.w/e.h,13.7/8.6);assert.ok(e.h>.014);}
+ for(const form of ['QSFP','QSFP28','X2'])assert.deepEqual(connectorEnvelope(form),connectorEnvelope('SFP'));
+ assert.deepEqual(connectorEnvelope('CX4'),{w:.052,h:.029});
  assert.deepEqual(connectorEnvelope('RJ45'),{w:.025,h:.020});
 });
 test('optical modules and stacks retain socket centers and common optical aspect',()=>{
- for(const device of [{model:'JL255A'},{model:'J9850A',modules:[{slot:'A',model:'J9993A'}]},{model:'JL558A',stackMembers:[{id:'1',model:'JL558A'},{id:'2',model:'JL558A'}]}]){
+ for(const device of [{model:'C9500-24Y4C'},{model:'JL255A'},{model:'J9850A',modules:[{slot:'A',model:'J9993A'}]},{model:'JL558A',stackMembers:[{id:'1',model:'JL558A'},{id:'2',model:'JL558A'}]}]){
   const panel=deviceFaceplate(device),faces=panel.children.filter(c=>c.socketPart===0&&/SFP/i.test(c.socketForm));assert.ok(faces.length);
   for(const face of faces){const ratio=connectorEnvelope(face.socketForm);near(face.w/(face.h/panel.ratio),ratio.w/ratio.h);if(face.anchorOrigin){near(face.x+face.w/2,face.anchorOrigin[0]);near(face.y+face.h/2,face.anchorOrigin[1]);}}
  }
@@ -34,4 +35,21 @@ test('PDF preserves generic module face aspect instead of stretching it to its f
   for(const match of text.matchAll(/<<[^>]*\/Length\s+(\d+)[^>]*>>\s*stream\r?\n/g)){const start=match.index+match[0].length,data=bytes.subarray(start,start+Number(match[1]));streams.push((/\/FlateDecode/.test(match[0])?inflateSync(data):data).toString('latin1'));}
   const rectangles=streams.join('\n').matchAll(/([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) re/g);assert.ok([...rectangles].some(m=>Math.abs(Math.abs(Number(m[3])/Number(m[4]))-13.7/8.6)<1e-8));
  }finally{if(previous===undefined)delete globalThis.jspdf;else globalThis.jspdf=previous;}
+});
+
+test('mixed C9500 SFP and QSFP cages share exact dimensions, including chassis and stack normalization',()=>{
+ const examples=[{model:'C9500-24Y4C'},{model:'J9850A',modules:[{slot:'A',model:'J9993A'}]},{model:'JL558A',stackMembers:[{id:'1',model:'JL558A'},{id:'2',model:'JL558A'}]}];
+ for(const device of examples){
+  const panel=deviceFaceplate(device),faces=panel.children.filter(c=>c.socketPart===0&&/SFP|X2/i.test(c.socketForm));assert.ok(faces.length);
+  for(const face of faces){near(face.w,.028);near(face.h/panel.ratio,.028*8.6/13.7);}
+ }
+ const mixed=deviceFaceplate(examples[0]).children.filter(c=>c.socketPart===0);assert.ok(mixed.some(c=>/QSFP/.test(c.socketForm)));assert.ok(mixed.some(c=>/^SFP/.test(c.socketForm)));
+});
+
+test('generic installed modules match the common socket envelope at their host scale',()=>{
+ const page=buildPages(sampleSite()).find(p=>p.coreDeviceIds);
+ for(const plug of page.items.filter(p=>p.kind==='plug'&&p.host&&!p.asset)){
+  const host=page.items.find(p=>p.key===plug.host.device);assert.ok(host);
+  near(plug.w/host.w,.028);near(plug.h/host.w,.028*8.6/13.7);
+ }
 });

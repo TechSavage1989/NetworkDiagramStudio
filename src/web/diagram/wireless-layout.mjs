@@ -15,7 +15,7 @@ import {C,addDevice,cableWeight,fresh,getAnchor,label,linkLegend,mediaInfo,physi
 const cmp=(a,b)=>String(a).localeCompare(String(b),'en',{numeric:true,sensitivity:'base'});
 const nameOf=d=>String(d?.name||d?.id||'Unnamed');
 const wirelessSettings=project=>presentation(project,project._wirelessPresentationName||((project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections'));
-const apScale=project=>wirelessSettings(project).wirelessApScale||1;
+const apScale=project=>(wirelessSettings(project).wirelessApScale||1)*(project._wirelessAdaptiveFactor||1);
 function wirelessNumberMinimum(project){
  const config=wirelessSettings(project),visible=project.layout?.pageSetup?.visible||{},name=project._wirelessPresentationName||((project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections'),paper=visiblePagePaper(project,{name,family:'wireless'}),frames={...visible.lockFrames,...visible.editFrames};
  const frozen=Object.entries(frames).filter(([key])=>key.includes('Wireless Connections'));
@@ -51,7 +51,7 @@ function captionTitleKey(project,db,e){
 function captionFor(project,e){const name=mediaInfo(e.media,true).name,s=project.layout?.linkStyles?.[name]||{};return [s.lineTitle&&s.lineTitle!==name?s.lineTitle:'',s.lineDescription].filter(Boolean).join(' | ');}
 function measured(project,e,role,value,width,defaults={}){
  const key=defaults.key||identityKey(project,e,role),patch=project.layout?.drawingEdits?.[key]||{},size=patch.size||defaults.size||12,w=patch.w||width,bold=patch.bold??defaults.bold??false,text=patch.value??value;
- return {key,value:text,size,w,bold,height:patch.hidden||!text?0:Math.max(patch.h||defaults.height||18,wrapPortText(text,w,size,bold).length*size*1.25)};
+ return {key,value:text,size,w,bold,height:patch.hidden||!text?0:Math.max(patch.h||(project._wirelessAdaptive?size*1.25:defaults.height)||18,wrapPortText(text,w,size,bold).length*size*1.25)};
 }
 function captions(project,db,e,width){
  const scale=apScale(project),ap=db.devices.get(e.apId),register=[e.sp||'Port unknown',rate(e.speed)].filter(Boolean).join(' · '),detail=[ap.ip,e.apPort||'AP port unspecified'].filter(Boolean).join(' · ');
@@ -121,9 +121,9 @@ function wirelessFrame(project){
 }
 function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,ends,apSize,pitch){
  const edits=project.layout?.drawingEdits||{},frozen=wirelessFrame(project),retained=!!frozen?.wirelessPlan;
- if((wirelessSettings(project).wirelessApPlacement!=='sides'&&!retained)||!geometry.dynamic||project._wirelessLegacyPaper||edges.length<8||(frozen&&!retained)||(!retained&&Object.entries(edits).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>value[k]!=null))))return [];
+ if((wirelessSettings(project).wirelessApPlacement!=='sides'&&!project._wirelessAdaptive&&!retained)||!geometry.dynamic||project._wirelessLegacyPaper||edges.length<8||(frozen&&!retained)||(!retained&&Object.entries(edits).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>value[k]!=null))))return [];
  const result=[],ordered=ends.slice().sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx),left=new Set(ordered.slice(0,Math.ceil(ends.length/2)).map(v=>v.e.idx));
- for(const col of [132,180,245].map(w=>w*apScale(project)))for(const fraction of [1,.5]){
+ for(const col of (project._wirelessAdaptive?[116,120,132,180,245]:[132,180,245]).map(w=>w*apScale(project)))for(const fraction of [1,.5])for(const columns of project._wirelessAdaptive&&fraction===1&&edges.length>=16?[1,2]:[1]){
   const sides={left:[],right:[]};
   const horizontal={top:[],bottom:[]};
   const sideIds=fraction===1?new Set(ends.map(v=>v.e.idx)):new Set([...ordered.slice(0,Math.ceil(ends.length/4)),...ordered.slice(-Math.floor(ends.length/4))].map(v=>v.e.idx));
@@ -132,15 +132,21 @@ function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,
   for(const entries of Object.values(horizontal))entries.sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y);
   for(const [side,entries] of Object.entries(sides))entries.sort((a,b)=>a.anchor.y-b.anchor.y||((side==='left'&&a.anchor.side==='top'||side==='right'&&a.anchor.side==='bottom')?-1:1)*(a.anchor.x-b.anchor.x)||a.e.idx-b.e.idx);
   const bankHeight=entries=>entries.reduce((n,v)=>n+Math.max(v.caption.height,v.apGeometry.h)+18,0),bankWidth=entries=>Math.max(0,...entries.map(v=>v.caption.width+v.apGeometry.w+14));
-  const leftWidth=bankWidth(sides.left),rightWidth=bankWidth(sides.right),lanes=48+Math.max(18,pitch)*Math.max(sides.left.length,sides.right.length),start=204;
+  const sideColumns=Object.fromEntries(Object.entries(sides).map(([side,entries])=>[side,Array.from({length:columns},(_,col)=>entries.filter((_,i)=>i%columns===col))]));
+  const columnGap=36+pitch*2,sideWidth=entries=>entries.reduce((n,v)=>n+bankWidth(v),0)+(columns-1)*columnGap,stagger=columns>1?Math.max(...ends.map(v=>Math.max(captions(project,db,v.e,col).height,v.apGeometry.h)+18))/2:0,sideHeight=entries=>Math.max(...entries.map(bankHeight))+stagger;
+  const leftWidth=sideWidth(sideColumns.left),rightWidth=sideWidth(sideColumns.right),lanes=48+Math.max(columns>1?7:18,pitch)*Math.max(sides.left.length,sides.right.length),start=204;
   const rowWidth=entries=>entries.reduce((n,v)=>n+Math.max(v.caption.width,v.apGeometry.w)+18,0),rowHeight=entries=>entries.length?Math.max(...entries.map(v=>v.caption.height+v.apGeometry.h))+48+pitch*entries.length:0;
-  const topHeight=rowHeight(horizontal.top),bottomHeight=rowHeight(horizontal.bottom),middleHeight=Math.max(panel.h,bankHeight(sides.left),bankHeight(sides.right));
+  const topHeight=rowHeight(horizontal.top),bottomHeight=rowHeight(horizontal.bottom),middleHeight=Math.max(panel.h,sideHeight(sideColumns.left),sideHeight(sideColumns.right));
   const W=Math.max(72+leftWidth+lanes+panel.w+lanes+rightWidth,72+rowWidth(horizontal.top),72+rowWidth(horizontal.bottom)),H=start+topHeight+middleHeight+bottomHeight+36,switchX=(W-(72+leftWidth+lanes+panel.w+lanes+rightWidth))/2+36+leftWidth+lanes,switchY=start+topHeight+(middleHeight-panel.h)/2;
   const placements=[];
-  for(const [side,entries] of Object.entries(sides)){
-   let y=start+topHeight+(middleHeight-bankHeight(entries))/2;
-   for(const v of entries){const h=Math.max(v.caption.height,v.apGeometry.h),apX=side==='left'?switchX-lanes-v.apGeometry.w:switchX+panel.w+lanes;
-    placements.push({...v,side,x:apX,y:y+(h-v.apGeometry.h)/2,captionX:side==='left'?apX-14-v.caption.width/2:apX+v.apGeometry.w+14+v.caption.width/2,captionY:y+(h-v.caption.height)/2});y+=h+18;
+  for(const [side,banks] of Object.entries(sideColumns)){
+   let offset=0;
+   for(const [column,entries] of banks.entries()){
+    let y=start+topHeight+(middleHeight-bankHeight(entries))/2+(columns>1?(column?1:-1)*stagger/2:0);
+    for(const v of entries){const h=Math.max(v.caption.height,v.apGeometry.h),apX=side==='left'?switchX-lanes-offset-v.apGeometry.w:switchX+panel.w+lanes+offset;
+     placements.push({...v,side,rowIndex:column,x:apX,y:y+(h-v.apGeometry.h)/2,captionX:side==='left'?apX-14-v.caption.width/2:apX+v.apGeometry.w+14+v.caption.width/2,captionY:y+(h-v.caption.height)/2});y+=h+18;
+    }
+    offset+=bankWidth(entries)+columnGap;
    }
   }
   for(const [side,entries] of Object.entries(horizontal)){
@@ -154,7 +160,7 @@ function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,
   // Match the existing area/long-axis objective; physical source text is never
   // reduced to win this candidate. Routing still validates every placement.
   const score=Math.max(W,H)**2+.15*W*H;
-  result.push({planKey:(fraction===1?'sides':'surround')+':'+Math.round(col/apScale(project)),kind:fraction===1?'sides':'surround',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:fraction===1?'sides':'surround',placements});
+  result.push({planKey:(columns===2?'columns':fraction===1?'sides':'surround')+':'+Math.round(col/apScale(project)),kind:columns===2?'columns':fraction===1?'sides':'surround',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:columns===2?'columns':fraction===1?'sides':'surround',placements});
  }
  return result;
 }
@@ -193,7 +199,7 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
  // Validate every complete lead once, including internal number bands.
  planned.cost[0]+=planned.routes.filter(r=>numberBoxes.numbers.some(box=>crossesText(r.points,box,r.weight/2))).length;
  for(const r of planned.routes){const e=edges.find(e=>e.idx===r.e.idx);route(page,r.a.anchor,r.b.anchor,r.points,r.a.info.color,'AP link '+(e.idx+1),r.a.info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status});Object.assign(page.items.at(-1),{editKey:pathKey(project,e),linkId:e.idx,weight:pathWeight(project,e)});}
- page.wirelessLayout={...(layout.planKey?{planKey:layout.planKey}:{}),numberScale:wirelessNumberMinimum(project),kind:layout.kind||'banks',rows:layout.rowCount,deviceId:device.id,memberIds:(device.stackMembers||[]).map(m=>String(m.id)),padding:layout.padding,memberGaps:layout.memberGaps,links:edges.map(e=>e.idx),routingCost:planned.cost,routingStats:planned.stats};
+ page.wirelessLayout={...(project._wirelessAdaptive?{adaptiveAP:true,adaptiveFactor:project._wirelessAdaptiveFactor||1,adaptiveFrozen:!!wirelessFrame(project),batchLimit:project._wirelessBatchLimit||null}:{}),...(layout.planKey?{planKey:layout.planKey}:{}),numberScale:wirelessNumberMinimum(project),kind:layout.kind||'banks',rows:layout.rowCount,deviceId:device.id,memberIds:(device.stackMembers||[]).map(m=>String(m.id)),padding:layout.padding,memberGaps:layout.memberGaps,links:edges.map(e=>e.idx),routingCost:planned.cost,routingStats:planned.stats};
  return page;
 }
 
@@ -223,9 +229,13 @@ export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
  // text on one overridden sheet and keeps the plan stable after editing.
  const dimensions=[base,...numbered].map(paperDimensions).filter(Boolean),widthMm=Math.min(...dimensions.map(d=>d.widthMm)),heightMm=Math.min(...dimensions.map(d=>d.heightMm));
  const paper=dimensions.length?{preset:'custom',widthMm,heightMm,orientation:widthMm<heightMm?'portrait':'landscape'}:base;
- const frames=Object.entries(visible.lockFrames).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame),explicit=['layout','readable'].includes(project.layout?.pageSetup?.visible?.wirelessFit);
+ const frames=Object.entries(visible.lockFrames).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame),explicit=['layout','readable','adaptive'].includes(project.layout?.pageSetup?.visible?.wirelessFit);
  const legacy=project._wirelessLegacyPaper===true||!explicit&&frames.some(frame=>!frame.wirelessFit||frame.wirelessFit==='readable-legacy')&&!frames.some(frame=>frame.wirelessFit==='layout');
- const render=planned=>wirelessPages(planned,db,{portNumbers,tablePages,empty}).map(page=>{if(page.wirelessLayout)page.wirelessLayout.paperFit=visible.wirelessFit==='readable'?(legacy?'readable-legacy':'readable'):'layout';return page;});
+ const render=planned=>wirelessPages(planned,db,{portNumbers,tablePages,empty}).map(page=>{if(page.wirelessLayout)page.wirelessLayout.paperFit=visible.wirelessFit==='adaptive'?'adaptive':visible.wirelessFit==='readable'?(legacy?'readable-legacy':'readable'):'layout';return page;});
+ if(visible.wirelessFit==='adaptive'&&paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
+  const savedLimits=Object.values({...visible.lockFrames,...visible.editFrames}).map(f=>f.wirelessBatchLimit).filter(Number.isFinite),limit=project._wirelessBatchLimit||Math.min(...savedLimits);
+  return render({...project,_wirelessAdaptive:true,...(Number.isFinite(limit)?{_wirelessBatchLimit:limit}:{})});
+ }
  if(visible.wirelessFit==='readable'&&paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
   const planned={...project,_wirelessLegacyPaper:legacy,layout:{...project.layout,pageSetup:{...project.layout?.pageSetup,overrides:{...project.layout?.pageSetup?.overrides,wireless:paper}}}};
   try{return render(planned);}
@@ -266,18 +276,24 @@ function wirelessPages(project,db,{portNumbers,tablePages,empty}){
   }
   for(const [partIndex,device] of parts.entries()){
    const edges=assigned[partIndex];if(!edges.length)continue;const batches=prepared?.[partIndex]||pageBatches(project,db,device,edges,width,geometry);if(!batches)throw capacityError('This wireless caption needs more space. Choose a larger or dynamic page.');
+   if(project._wirelessAdaptive&&project._wirelessBatchLimit)for(let i=0;i<batches.length;i++){const batch=batches[i];if(batch.length>project._wirelessBatchLimit){batches.splice(i,1,batch.slice(0,project._wirelessBatchLimit),batch.slice(project._wirelessBatchLimit));}}
    for(let batchIndex=0;batchIndex<batches.length;batchIndex++){const batch=batches[batchIndex],candidate=organizing(project,pageScope(project,device,batchIndex));
     const numberedName=(project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections '+(out.length+1),pageProject={...project,_wirelessFrameName:numberedName,...(project.layout?.presentation?.pages?.[numberedName]?{_wirelessPresentationName:numberedName}:{})};
+    if(pageProject._wirelessAdaptive){
+     const frame=wirelessFrame(pageProject),authored=Object.entries(project.layout?.drawingEdits||{}).some(([key,edit])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>edit[k]!=null));
+     if((frame&&!frame.wirelessApFactor)||authored&&!frame?.wirelessApFactor)pageProject._wirelessAdaptive=false;
+     else pageProject._wirelessAdaptiveFactor=frame?.wirelessApFactor||(batch.length>=16?4:2);
+    }
     const spacing=stackSpacing(pageProject,device,batch,width),choices=bankLayout(pageProject,db,device,batch,width,spacing,geometry);if(!choices.length)throw capacityError('This wireless caption needs more space. Choose a larger or dynamic page.');
     let selected,error,attempts=0,candidates=0,clearChecks=0;
-    const alternatives=[...new Map(choices.map(choice=>[choice.rowCount,choice])).keys()].map(rows=>choices.find(choice=>choice.rowCount===rows));alternatives.push(...choices.filter(choice=>!alternatives.includes(choice)).slice(0,3));
+    const alternatives=[...new Set([...(pageProject._wirelessAdaptive?choices.filter(c=>c.kind===(batch.length>=16?'columns':'sides')):[]),...new Map(choices.map(choice=>[choice.rowCount,choice])).keys()].map(c=>typeof c==='object'?c:choices.find(choice=>choice.rowCount===c)))];alternatives.push(...choices.filter(choice=>!alternatives.includes(choice)).slice(0,3));
     // A zero-collision result is necessary, not sufficient: compare several
     // valid arrangements for crossings, bends and footprint instead of always
     // keeping the first layout. Bound this search on large wireless sites.
     // Penalize crossings strongly, but do not veto a substantially shorter
     // clear side plan solely because it has one more legitimate crossing.
     const aesthetic=page=>{const c=page.wirelessLayout.routingCost;return c[2]+c[3]*(wirelessSettings(pageProject).wirelessApPlacement==='sides'?200:55)+c[4]*8+page.width*page.height*.00035;};
-    for(const choice of alternatives.slice(0,candidate?1:Math.min(4,alternatives.length))){
+    for(const choice of alternatives.slice(0,candidate?1:Math.min(pageProject._wirelessAdaptive?7:4,alternatives.length))){
      attempts++;
      try{
       const page=renderBankPage(pageProject,db,device,batch,choice,batchIndex,portNumbers),cost=page.wirelessLayout.routingCost;

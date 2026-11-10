@@ -4,6 +4,7 @@ import {createRequire} from 'node:module';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {wirelessApLab} from './fixtures/wireless-ap-layout.mjs';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
 const output=resolve(process.env.NDS_QA_OUTPUT||'.artifacts/page-layout-defaults');await mkdir(output,{recursive:true});
 const project={name:'Fictional page-layout validation',devices:[1,2].flatMap(i=>[
@@ -41,7 +42,16 @@ const order=async()=>{
 };
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
+ // Creation uses Letter for port maps; loading an old project below must not
+ // apply that creation default to its saved Dynamic paper.
+ await page.locator('#sample').click();await page.waitForFunction(()=>document.querySelector('#heading')?.textContent==='Harbor Workshop');
+ const fresh=await save('new-letter-default.nds.json');
+ assert.equal(fresh.doc.project.layout.pageSetup.visible.groups.ports.preset,'letter');
+ assert.equal(fresh.doc.project.layout.pageSetup.visible.groups.ports.orientation,'landscape');
+ await open(fresh.path);const reopened=await save('reopened-letter-default.nds.json');
+ assert.deepEqual(reopened.doc.project.layout.pageSetup.visible.groups.ports,fresh.doc.project.layout.pageSetup.visible.groups.ports);
  await open({name:'fictional.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project}))});
+ const oldSaved=await save('old-project-paper.nds.json');assert.equal(oldSaved.doc.project.layout.pageSetup.visible.groups.ports,undefined,'old implicit Dynamic remains unchanged');
  const names=await order();
  let controls=await options();assert.equal(await controls.footer.isChecked(),false);assert.equal(await controls.numbers.isChecked(),false);
  await controls.footer.scrollIntoViewIfNeeded();await page.screenshot({path:resolve(output,'footer-defaults.png')});await close(controls.dialog);
@@ -103,6 +113,22 @@ try{
  await page.keyboard.press('Control+z');assert.equal((await wirelessNames()).length,1);
  await page.keyboard.press('Control+Shift+z');assert.equal((await wirelessNames()).length,continued);
  await open(saved.path);assert.equal((await wirelessNames()).length,continued);controls=await options();assert.equal(await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).inputValue(),'readable');await close(controls.dialog);
+ // Independent fixture: optimize means readable side cards, not a tiny
+ // containment-only fit. Keep old preserve/readable cases above unchanged.
+ const adaptive=wirelessApLab(32,8);adaptive.name='Fictional adaptive wireless paper';
+ adaptive.devices[0].ports.forEach((port,i)=>port.name='7/'+(i+1));adaptive.links.forEach((link,i)=>link.ap='7/'+(i+1));
+ await open({name:'wireless-adaptive.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:adaptive}))});
+ controls=await options();await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('adaptive');
+ await controls.dialog.getByLabel('Apply visible page proportions to',{exact:true}).selectOption('group');await controls.dialog.getByLabel('Page group',{exact:true}).selectOption('wireless');
+ await controls.dialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');await apply(controls.dialog);
+ assert.equal((await wirelessNames()).length,1,'short32-AP cards fit one readable sheet');
+ await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));
+ assert.match(await page.locator('#page-overflow-notice').textContent(),/AP details are 8\.3 pt/);
+ const adaptiveGeometry=await apGeometry();
+ await page.screenshot({path:resolve(output,'wireless-adaptive-paper.png')});
+ saved=await save('wireless-adaptive-paper.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'adaptive');
+ await open(saved.path);await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));
+ assert.deepEqual(await apGeometry(),adaptiveGeometry,'adaptive cards and physical fit survive reopen');
  // Backing controls apply to the actual editor, remain undoable and reopen.
  // The sample action exists only on the welcome screen, not an open project.
  await page.locator('#new').click();await page.locator('#welcome').waitFor();
@@ -119,5 +145,5 @@ try{
  backing=await backingOptions();await backing.padding.fill('20');await backing.dialog.getByRole('button',{name:'Cancel',exact:true}).click();backing=await backingOptions();assert.equal(await backing.padding.inputValue(),'0');
  await page.screenshot({path:resolve(output,'label-backing-options.png')});await close(backing.dialog);
  assert.deepEqual(errors,[]);
- await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','side-space AP placement and save/reopen','explicit readable continuation','wireless fit Undo/redo and save/reopen'],names},null,2));
+ await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','side-space AP placement and save/reopen','explicit readable continuation','adaptive side cards at actual8.3pt and reopen','wireless fit Undo/redo and save/reopen'],names},null,2));
 }catch(error){await page.screenshot({path:resolve(output,'failure.png')});console.error('Browser errors:',errors);throw error;}finally{await browser.close();}

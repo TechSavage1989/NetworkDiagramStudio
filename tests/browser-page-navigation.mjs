@@ -12,6 +12,25 @@ page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
  await page.getByRole('button',{name:'Open sample site',exact:true}).click();await page.waitForSelector('#page-families .page-group summary');
+ for(const name of ['View','Styles','Page','Output']) assert.equal(await page.locator('.workspace-action-group').filter({has:page.locator('.workspace-group-label',{hasText:new RegExp('^'+name+'$')})}).count(),1,'workspace commands have visible purpose groups');
+ assert.equal(await page.locator('.workspace-actions #edit-drawing').count(),1,'direct editing stays one click away');
+ // Paper changes are available without opening a dialog and belong only to this page.
+ const quickPaper=page.locator('#active-page-paper'),quickOrientation=page.locator('#active-page-orientation');
+ await quickPaper.selectOption('letter');
+ assert.equal(await page.locator('#dialog').evaluate(d=>d.open),false);
+ assert.equal(await quickPaper.inputValue(),'letter');
+ await quickOrientation.selectOption('portrait');
+ assert.equal(await quickOrientation.inputValue(),'portrait');
+ assert.match(await page.locator('#active-page-paper-status').textContent(),/Unlocked · Auto-fit/);
+ await page.locator('#canvas').click({position:{x:10,y:10}});await page.keyboard.press('Control+z');
+ await page.waitForFunction(()=>document.getElementById('active-page-orientation').value==='landscape');
+ await page.keyboard.press('Control+z');
+ await page.waitForFunction(()=>document.getElementById('active-page-paper').value==='dynamic');
+ await quickPaper.selectOption('custom');
+ assert.equal(await page.locator('#dialog').evaluate(d=>d.open),true);
+ assert.equal(await page.getByLabel('Visible page proportions',{exact:true}).inputValue(),'custom');
+ await page.getByRole('button',{name:'Cancel',exact:true}).click();
+ assert.equal(await quickPaper.inputValue(),'dynamic','cancelling custom paper leaves current page unchanged');
  const groups=page.locator('#page-families .page-group'),portGroup=groups.filter({hasText:'Port maps'});
  assert.ok(await groups.count()>=3,'sample has multiple page groups');
  assert.equal(await portGroup.count(),1);
@@ -48,6 +67,9 @@ try{
   assert.ok(geometry.canvas.width>300&&geometry.canvas.height>150,'responsive canvas stays usable');
   assert.ok(geometry.nav.left>=geometry.aside.left&&geometry.nav.right<=geometry.aside.right,'page lists stay within sidebar');
   assert.equal(geometry.overflow,false,'no horizontal document overflow');
+  const actions=await page.locator('.workspace-actions button:not([hidden])').evaluateAll(buttons=>buttons.map(b=>{const r=b.getBoundingClientRect();return {id:b.id,left:r.left,right:r.right,width:r.width,height:r.height};}));
+  assert.ok(actions.every(b=>b.width>0&&b.height>0&&b.left>=0&&b.right<=width+1), 'all grouped commands remain visible within the viewport');
+
   if(width>=1000){
    assert.ok(geometry.aside.left>=geometry.project.right-1,'pages rail is immediately right of project sidebar');
    assert.ok(geometry.canvas.left>=geometry.aside.right-1,'drawing canvas follows the pages rail');
