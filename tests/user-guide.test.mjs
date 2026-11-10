@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {guideTopics,matchingGuideTopics} from '../src/web/user-guide.mjs';
+import {guideTopics,matchingGuideTopics,guideSearchKeydown} from '../src/web/user-guide.mjs';
 test('offline guide covers common tasks with nonempty stable topics and unique navigation',()=>{
  assert.equal(new Set(guideTopics.map(t=>t.id)).size,guideTopics.length);
  for(const id of ['start','paper','calibration','panel','lock','edit','exports','troubleshooting'])assert.ok(guideTopics.some(t=>t.id===id));
@@ -32,4 +32,13 @@ test('wireless guide describes deliberate side-space placement without promising
  assert.match(body,/keeps rows if a safe side arrangement cannot improve/);
  assert.match(body,/does not remove deliberate manual placements/);
  assert.match(body,/Locked paper keeps its dimensions/);
+});
+
+test('Escape dismisses guide search once without changing normal editing or IME cancellation',()=>{
+ let closed=0,prevented=0,stopped=0;
+ const event=(key,extra={})=>({key,preventDefault(){prevented++;},stopPropagation(){stopped++;},...extra});
+ assert.equal(guideSearchKeydown(event('Escape'),()=>closed++),true);
+ assert.deepEqual([closed,prevented,stopped],[1,1,1]);
+ for(const e of [event('a',{ctrlKey:true}),event('Backspace'),event('Enter'),event('Escape',{isComposing:true}),event('Escape',{defaultPrevented:true})])assert.equal(guideSearchKeydown(e,()=>closed++),false);
+ assert.deepEqual([closed,prevented,stopped],[1,1,1]);
 });

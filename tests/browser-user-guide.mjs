@@ -16,6 +16,10 @@ try{
  assert.equal(await dialog.locator('#guide-panel').getByRole('button',{name:'Open Pages & layout',exact:true}).isDisabled(),true,'help works before a project without enabling drawing actions');
  await dialog.getByLabel('Search the guide',{exact:true}).fill('nothing-matches');assert.match(await dialog.locator('.guide-result-count').textContent(),/No matching topics/);
  await dialog.getByLabel('Search the guide',{exact:true}).fill('calibration');assert.ok(await dialog.locator('#guide-calibration').count());
+ // One Escape must dismiss even with a nonempty search, not merely clear it.
+ await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ assert.equal(await guide.evaluate(e=>e===document.activeElement),true,'guide restores focus to its launcher');
+ await guide.click();const search=dialog.getByLabel('Search the guide',{exact:true});await search.fill('panel');await search.press('Control+a');await search.press('Backspace');assert.equal(await search.inputValue(),'','normal search text editing remains native');
  await page.keyboard.press('Escape');await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  await page.getByRole('button',{name:'Open sample site',exact:true}).click();await page.waitForSelector('#canvas svg');
  const before=await page.locator('#canvas').innerHTML();

@@ -14,9 +14,16 @@ export function matchingGuideTopics(query=''){
  const terms=String(query).toLowerCase().trim().split(/\s+/).filter(Boolean);
  return guideTopics.filter(topic=>terms.every(term=>[topic.title,topic.summary,...topic.steps,topic.tip].join(' ').toLowerCase().includes(term)));
 }
-export function openUserGuide({modal,openAction=()=>{},canAction=()=>true}){
+// Search inputs can consume Escape to clear their value before a dialog sees
+// it. In this read-only guide Escape consistently dismisses; native typing,
+// selection, clear controls and IME cancellation retain their normal behavior.
+export function guideSearchKeydown(event,closeGuide){
+ if(event.key!=='Escape'||event.isComposing||event.defaultPrevented)return false;
+ event.preventDefault();event.stopPropagation();closeGuide();return true;
+}
+export function openUserGuide({modal,closeGuide=()=>{},openAction=()=>{},canAction=()=>true}){
  const body=modal('User guide','user-guide-dialog'),el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
- body.append(el('p','Find a task, follow the steps, then check the result. This guide works offline and never changes your drawing.','hint'));
+ body.append(el('p','Find a task, follow the steps, then check the result. This guide works offline and never changes your drawing. Escape closes the guide.','hint'));
  const label=el('label','Search the guide'),search=el('input');search.type='search';search.placeholder='Try: readable text, calibration, panel, undo';search.setAttribute('aria-label','Search the guide');label.append(search);body.append(label);
  const count=el('p','','hint guide-result-count');count.setAttribute('role','status');body.append(count);
  const nav=el('nav','','guide-topic-links');nav.setAttribute('aria-label','Guide topics');body.append(nav);
@@ -33,5 +40,5 @@ export function openUserGuide({modal,openAction=()=>{},canAction=()=>true}){
    list.append(detail);const link=el('button',topic.title);link.type='button';link.onclick=()=>{detail.open=true;summary.focus();detail.scrollIntoView({block:'nearest'});};nav.append(link);
   }
  };
- search.addEventListener('input',render);render();search.focus();
+ search.addEventListener('input',render);search.addEventListener('keydown',event=>guideSearchKeydown(event,closeGuide));render();search.focus();
 }

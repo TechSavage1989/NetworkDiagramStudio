@@ -1,3 +1,10 @@
+# Preview.46 hosted guide Escape correction
+
+Hosted run 214 stopped when Chromium consumed Escape in a populated search input instead of dismissing the guide dialog. The guide search now handles Escape locally through the shared close action. Other key editing, native clear controls and composing-IME cancellation are unchanged; no listener survives on the shared dialog body. The hosted test retains its single-Escape requirement and additionally checks launcher focus and normal search Select All/Backspace. Five guide unit tests, syntax, offline build, repository guard and whitespace checks pass locally. Final hosted validation remains required. No preview.47 changes are included.
+# Hosted narrow-canvas direct-edit navigation correction
+
+Run 214 direct-transforms failed at line 75 selecting SW-1, not while revealing the accepted edge title. Both repeated edge-title save/reveal and unchanged-zoom assertions had passed. The 1024×720 capture showed 245 px of canvas with the selected edge title/handles visible and the unrelated lower SW-1 below the viewport. The test now navigates between distinct objects using bounded real middle-button drag panning; exact glyph hit-testing, genuine double-clicks, selected-title visibility, cancellation and zoom preservation assertions stay intact. No viewport or project geometry behavior is changed. Hosted rerun remains required.
+
 # Preview.46 integrated validation ready for hosted gates
 
 All 649 Node tests pass, zero failures or skips, on the combined empty-section/readability/help/optical/wireless source. Offline build, repository guard and whitespace checks pass. All nine independent synthetic Visio packages validate. Narrow/wrapped final text metrics, large-frame save/reopen, stock Letter inventories/wireless, source glue, side-placement constraints and manual/frozen preservation are covered. Current paper output was visually inspected. No release has been published by this local validation; exact-head hosted browser/native gates and immutable release/feed/asset verification remain required. Live preview for settings dialogs is separate follow-on work, not part of this release.
@@ -1168,8 +1175,10 @@ Information panels default to one row per VLAN ID in the page's device scope,
 retaining distinct recorded names and addresses. Device-grouped VLANs remain
 available. Address type and port-detail filters, text row limits with explicit
 remaining-item notices, and show/hide missing-data explanations are persisted
-in cleanPanel. All enabled empty sections (including generated legends and
-custom notes) explain missing records by default rather than silently vanishing.
+in cleanPanel. Enabled empty automatic sections and their headings are hidden by
+default. Legacy explain values migrate to hide; deliberate explain-opt-in choices
+retain missing-record explanations. Custom bodies, notes and manual body content
+remain visible; an edited heading alone does not create section content.
 No inventory/configuration data is invented or changed by these filters.
 
 Apply layout catches failures beside its footer, keeps the dialog and current

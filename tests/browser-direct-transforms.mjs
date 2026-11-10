@@ -23,6 +23,25 @@ const doubleClickText=async selector=>{
  }
  await page.locator('[data-inline-editor] textarea').waitFor();
 };
+// Navigating to a different object is a real viewport operation. The selected
+// saved title must already be visible (asserted below); a lower, unselected
+// device can legitimately be outside a short canvas at the unchanged zoom.
+const panToText=async selector=>{
+ const zoom=await page.locator('#zoom-level').textContent();
+ for(let attempt=0;attempt<8;attempt++){
+  const step=await page.evaluate(selector=>{
+   const node=document.querySelector(selector),canvas=document.querySelector('#canvas');if(!node||!canvas)throw Error('Missing navigation target');
+   const b=node.getBoundingClientRect(),c=canvas.getBoundingClientRect(),left=Math.max(0,c.left)+30,right=Math.min(innerWidth,c.right)-30,top=Math.max(0,c.top)+30,bottom=Math.min(innerHeight,c.bottom)-30;
+   if(b.left>=left&&b.right<=right&&b.top>=top&&b.bottom<=bottom)return null;
+   if(right<=left||bottom<=top)throw Error('Canvas has no pointer navigation area');
+   const x=(left+right)/2,y=(top+bottom)/2,dx=Math.max(-(right-left)/2,Math.min((right-left)/2,x-(b.left+b.right)/2)),dy=Math.max(-(bottom-top)/2,Math.min((bottom-top)/2,y-(b.top+b.bottom)/2));
+   return {x,y,dx,dy};
+  },selector);
+  if(!step){assert.equal(await page.locator('#zoom-level').textContent(),zoom,'Navigation preserves the accepted zoom');return;}
+  await page.mouse.move(step.x,step.y);await page.mouse.down({button:'middle'});await page.mouse.move(step.x+step.dx,step.y+step.dy,{steps:4});await page.mouse.up({button:'middle'});await settled();
+ }
+ throw Error('Could not pan to text using the visible canvas: '+selector);
+};
 try{
  await page.locator('#sample').click();await page.waitForSelector('#canvas svg');await page.locator('#edit-drawing').click();
  const text=page.locator('#canvas text[data-drawing-key]').filter({hasText:'Harbor Workshop'}).first();await text.click();
@@ -72,10 +91,10 @@ try{
   const visible=await page.evaluate(selector=>{const n=document.querySelector(selector),b=n.getBoundingClientRect(),canvas=document.querySelector('#canvas').getBoundingClientRect();return b.top>=canvas.top&&b.bottom<=canvas.bottom;},edgeTitle);assert.ok(visible,'The accepted title remains inside the visible canvas after re-layout');
  }
  for(const value of ['Do not keep this','Temporary draft to cancel']){
-  await doubleClickText(switchTitle);const editor=page.locator('[data-inline-editor] textarea');assert.equal(await editor.inputValue(),'SW-1');await editor.fill(value);await editor.press('Escape');await page.locator('[data-inline-editor]').waitFor({state:'detached'});assert.ok((await page.locator(switchTitle).textContent()).includes('SW-1'));
+  await panToText(switchTitle);await doubleClickText(switchTitle);const editor=page.locator('[data-inline-editor] textarea');assert.equal(await editor.inputValue(),'SW-1');await editor.fill(value);await editor.press('Escape');await page.locator('[data-inline-editor]').waitFor({state:'detached'});assert.ok((await page.locator(switchTitle).textContent()).includes('SW-1'));
  }
  await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Page options');await page.locator('#close').click();
- await doubleClickText(edgeTitle);await page.locator('[data-inline-editor]').evaluate(node=>node.remove());await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Page options');await page.locator('#close').click();
+ await panToText(edgeTitle);await doubleClickText(edgeTitle);await page.locator('[data-inline-editor]').evaluate(node=>node.remove());await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Page options');await page.locator('#close').click();
  assert.deepEqual(errors,[]);await page.screenshot({path:resolve(output,'inline-title-recovery.png')});
  console.log('Direct controls, transform geometry, repeated real title double-clicks, Escape, detached-session recovery and persistence passed.');
 }catch(error){await page.screenshot({path:resolve(output,'failure.png')});throw error;}finally{await browser.close();}

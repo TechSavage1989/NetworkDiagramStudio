@@ -1,3 +1,4 @@
+import {pageLayoutNotice} from './page-layout-notice.mjs';
 import {openUserGuide} from './user-guide.mjs';
 import {diagramContentKeys,textEditingTarget} from './drawing-selection.mjs';
 import {portRoleOptions,portSpeedOptions,existingVlanOptions,portVlanIds} from './port-config-options.mjs';
@@ -90,7 +91,7 @@ const reports=reportTools({getProject:()=>scoped(),getPages:()=>pages,getActive:
  showPage(family){const index=pages.findIndex(page=>familyOf(page)===family);if(index>=0){active=index;draw(pages);}},
  async visio(selected=pages){download(await exportVisio(scoped(),selected),slug(project.name)+'.vsdx');say('Editable Visio drawing exported.');}});
 desktopUpdates({help:$('desktop-help'),modal});
-$('user-guide').onclick=()=>task(()=>openUserGuide({modal,canAction:id=>!!pages.length&&!$(id)?.disabled,openAction:id=>{close();$(id)?.click();}}));
+$('user-guide').onclick=()=>task(()=>openUserGuide({modal,closeGuide:close,canAction:id=>!!pages.length&&!$(id)?.disabled,openAction:id=>{close();$(id)?.click();}}));
 function download(content,name,mime='application/json'){
   const url=URL.createObjectURL(content instanceof Blob?content:new Blob([content],{type:mime}));
   const a=el('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);
@@ -926,8 +927,7 @@ function pageNavigation(){
  picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};
  $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
  let overflow=$('page-overflow-notice');if(!overflow){overflow=el('button','','warning');overflow.id='page-overflow-notice';overflow.onclick=()=>task(pageOptions);$('feedback').after(overflow);}
- const readable=pages[active]?.paperReadability,smallText=readable?.minimumPt>0&&readable.actualPt!=null&&readable.actualPt<readable.minimumPt-.01;
- overflow.hidden=!pages[active]?.pageOverflow&&!pages[active]?.panelFitLegacy&&!smallText;overflow.textContent=readable?.overflow?'This diagram needs more space at '+readable.minimumPt+' pt minimum text. Choose larger paper or split the drawing; Print/PDF may clip off-page content. Pages & layout has text and panel sizing controls.':smallText?'This page keeps text as small as '+readable.actualPt.toFixed(1)+' pt. For editable diagrams, open Page options and Save page options to recalculate fitting. Imported artwork and native report sheets retain source typography; choose larger paper. Manual font sizes stay yours.':pages[active]?.panelFitLegacy?'This saved page keeps its earlier layout. For readable information panels and link keys, open Page options and Save page options to recalculate the fit. Your saved object edits are retained.':'Content extends beyond the page. Print/PDF and page-sized exports may clip it. Open Page options to change the sheet.';
+ const notice=pageLayoutNotice(pages[active]);overflow.hidden=!notice;overflow.textContent=notice;
 }
 function draw(prepared){
  cancelBesidePick();

@@ -41,7 +41,13 @@ try{
  assert.match(await page.locator('#canvas').textContent(),/Authored module maintenance note/);
  d=await edit();assert.equal(await d.getByLabel('Minimum paper text (pt)',{exact:true}).inputValue(),'8');
  await d.getByLabel('Minimum paper text (pt)',{exact:true}).fill('9');await d.getByLabel('Panel width (% of paper; 0 = automatic)',{exact:true}).fill('22');await d.getByLabel('Text scale (%)',{exact:true}).fill('110');await apply(d);
- d=await edit();assert.equal(await d.getByLabel('Minimum paper text (pt)',{exact:true}).inputValue(),'9');assert.equal(await d.getByLabel('Panel width (% of paper; 0 = automatic)',{exact:true}).inputValue(),'22');await page.screenshot({path:resolve(output,'paper-readability-controls.png')});await d.getByRole('button',{name:'Cancel',exact:true}).click();
+ d=await edit();assert.equal(await d.getByLabel('Minimum paper text (pt)',{exact:true}).inputValue(),'9');assert.equal(await d.getByLabel('Panel width (% of paper; 0 = automatic)',{exact:true}).inputValue(),'22');const minimumControl=d.getByLabel('Minimum paper text (pt)',{exact:true}),panelWidthControl=d.getByLabel('Panel width (% of paper; 0 = automatic)',{exact:true});
+ await minimumControl.evaluate(node=>node.closest('fieldset').scrollIntoView({block:'start',behavior:'instant'}));await minimumControl.scrollIntoViewIfNeeded();
+ assert.ok(await minimumControl.evaluate(node=>{const r=node.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;}),'minimum text control is on screen for documentation capture');
+ await page.screenshot({path:resolve(output,'paper-readability-controls.png')});
+ await panelWidthControl.evaluate(node=>node.closest('fieldset').scrollIntoView({block:'start',behavior:'instant'}));await panelWidthControl.scrollIntoViewIfNeeded();
+ assert.ok(await panelWidthControl.evaluate(node=>{const r=node.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight;}),'paper panel width control is on screen for documentation capture');
+ await page.screenshot({path:resolve(output,'paper-panel-controls.png')});await d.getByRole('button',{name:'Cancel',exact:true}).click();
  d=await edit();await d.getByLabel('Minimum paper text (pt)',{exact:true}).fill('8');await d.getByLabel('Panel width (% of paper; 0 = automatic)',{exact:true}).fill('0');await d.getByLabel('Text scale (%)',{exact:true}).fill('100');await apply(d);
  await checkDiagramSelection(page,output,open);
  const paper=sampleSite();paper.layout={presentation:{defaults:{panel:{sections:['connections','modules','vlans']}}},pageSetup:{visible:{default:{preset:'letter',locked:true}}}};
