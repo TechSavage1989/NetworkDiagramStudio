@@ -1,3 +1,4 @@
+import {effectiveWirelessPaperProject} from './wireless-paper-defaults.mjs';
 import {cleanPageSetup,cleanPaper,visiblePagePaper,paperSizes} from './page-options.mjs';
 
 // A quick change is intentionally page-local, even when its old value was inherited.
@@ -11,5 +12,5 @@ export function quickPagePaperLayout(layout,page,patch){
  if(paper.preset==='dynamic')paper.locked=false;
  setup.visible.pages[page.name]=paper;
  delete setup.visible.lockFrames[page.name];delete setup.visible.editFrames[page.name];
- return {...layout,pageSetup:setup};
+ return effectiveWirelessPaperProject({layout:{...layout,pageSetup:setup}}).layout;
 }

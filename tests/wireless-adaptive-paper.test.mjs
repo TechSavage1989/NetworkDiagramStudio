@@ -42,3 +42,28 @@ test('saved adaptive side/continuation plans reopen exactly and preserve a subse
  assert.deepEqual(wireless(JSON.parse(JSON.stringify(p))).map(p=>p.svg),pages.map(p=>p.svg));
  const ap=pages[0].items.find(i=>i.kind==='ap');p.layout.drawingEdits={[ap.editKey]:unpresentPatch(ap,{x:ap.x-1})};const moved=wireless(p);assert.equal(moved.length,pages.length);assert.equal(moved[0].wirelessLayout.planKey,pages[0].wirelessLayout.planKey);assert.deepEqual(wireless(JSON.parse(JSON.stringify(p))).map(p=>p.svg),moved.map(p=>p.svg));
 });
+
+test('normal quick Letter selection optimizes APs without finding a separate mode',async()=>{
+ const {quickPagePaperLayout}=await import('../src/web/quick-page-paper.mjs');
+ const p=lab();p.layout.pageSetup.visible={default:{preset:'dynamic'}};
+ const before=wireless(p);p.layout=quickPagePaperLayout(p.layout,before[0],{preset:'letter'});
+ assert.equal(p.layout.pageSetup.visible.wirelessFit,'adaptive');const pages=wireless(p);assert.equal(pages.length,1);check(pages,32);
+});
+test('legacy automatic locked rows migrate, but explicit keep-layout and authored geometry do not',()=>{
+ const p=lab({locked:true});Object.assign(p.layout.pageSetup.visible,{wirelessFit:'layout',wirelessFitExplicit:true});
+ const old=wireless(p);assert.equal(old.length,1);assert.notEqual(old[0].wirelessLayout.kind,'columns');
+ p.layout.pageSetup.visible.lockFrames=Object.fromEntries(old.map(page=>[page.name,page.pageLockFrame]));
+ const explicit=JSON.parse(JSON.stringify(p));assert.equal(wireless(explicit)[0].svg,old[0].svg);
+ delete p.layout.pageSetup.visible.wirelessFitExplicit;
+ const source=JSON.stringify(p),upgraded=wireless(p);check(upgraded,32);assert.equal(upgraded[0].wirelessLayout.kind,'columns');assert.equal(upgraded[0].visiblePaper.locked,true);assert.equal(JSON.stringify(p),source);
+ const migrated=structuredClone(p);migrated.layout.pageSetup.visible.lockFrames=Object.fromEntries(upgraded.map(page=>[page.name,page.pageLockFrame]));const migratedAp=upgraded[0].items.find(i=>i.kind==='ap');migrated.layout.drawingEdits={[migratedAp.editKey]:unpresentPatch(migratedAp,{x:migratedAp.x-1})};const edited=wireless(migrated);assert.equal(edited[0].items.find(i=>i.editKey===migratedAp.editKey).w,migratedAp.w,'manual edit after automatic migration keeps adaptive AP size');assert.equal(edited[0].wirelessLayout.adaptiveFactor,upgraded[0].wirelessLayout.adaptiveFactor);
+ const ap=old[0].items.find(i=>i.kind==='ap');p.layout.drawingEdits={[ap.editKey]:unpresentPatch(ap,{x:ap.x-1})};
+ const authored=wireless(p);assert.equal(authored[0].wirelessLayout.kind,old[0].wirelessLayout.kind);assert.deepEqual(authored[0].pageLockFrame,old[0].pageLockFrame);
+});
+test('quick paper continuation retains physical Letter dimensions on every added sheet',async()=>{
+ const {quickPagePaperLayout}=await import('../src/web/quick-page-paper.mjs');
+ const p=lab({long:true});p.layout.pageSetup.visible={default:{preset:'dynamic'}};
+ p.layout=quickPagePaperLayout(p.layout,wireless(p)[0],{preset:'letter'});
+ const pages=wireless(p);assert.ok(pages.length>1);check(pages,32);
+ for(const page of pages){assert.ok(Math.abs(printGeometry(page).width-1056)<1e-6);assert.ok(Math.abs(printGeometry(page).height-816)<1e-6);}
+});

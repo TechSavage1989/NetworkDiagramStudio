@@ -1,3 +1,4 @@
+import {effectiveWirelessPaperProject} from './wireless-paper-defaults.mjs';
 import {settingsPreview,isolatedPreview} from './settings-preview.mjs';
 import {pageLayoutNotice} from './page-layout-notice.mjs';
 import {openUserGuide} from './user-guide.mjs';
@@ -721,7 +722,7 @@ function changeQuickPagePaper(patch){
 $('active-page-paper').onchange=()=>{const preset=$('active-page-paper').value;task(()=>changeQuickPagePaper({preset}));};
 $('active-page-orientation').onchange=()=>{const orientation=$('active-page-orientation').value;task(()=>changeQuickPagePaper({orientation}));};
 function pageOptions(initialPreset){
- const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
+ const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(effectiveWirelessPaperProject(project).layout?.pageSetup),body=modal('Page options');
  body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. For wireless drawings, choose Optimize APs for paper below to use available side space and prioritize readable AP details, or preserve the complete existing arrangement.','hint'));
  body.append(el('p','The preview shows the visible drawing page, not a separate Print/PDF sheet. Print-paper settings can differ without changing this preview; check Print/PDF before printing. Use Preview page to inspect other affected sheets.','hint'));
  const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
@@ -737,6 +738,7 @@ function pageOptions(initialPreset){
  const preview=el('p','','page-size-preview');body.append(preview);
  const visible=setup.visible,fitMode=field(body,'Content fit mode',visible.fitMode||'optimize',[['optimize','Auto-fit and optimize content'],['preserve','Preserve existing layout']]);
  const wirelessFit=field(body,'Wireless paper layout',visible.wirelessFit,[['adaptive','Optimize APs for paper (readable)'],['layout','Keep complete layout (proportional fit)'],['readable','Continue on sheets (AP details at least 8 pt)']]);
+ wirelessFit.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});
  body.append(el('p','Optimize APs for paper uses side space and larger AP cards, measured at the actual paper size. It keeps the complete drawing on one sheet when AP details reach the readable target (at least 8 pt); otherwise it continues across sheets with the switch repeated. Saved manual geometry is retained. Keep complete layout preserves the existing arrangement and can make text small. Continue on sheets uses the earlier member-continuation layout.','hint'));
  body.append(el('p','Auto-fit uses the available page area, and network diagrams may choose better arrangements. Manually positioned devices and labels retain their saved positions. Preserve layout changes the page boundary without resizing or repacking content. A locked physical page keeps its dimensions and saved presentation scale; you can still move and resize content beyond its edges. Off-page content stays editable, but print/PDF and page-sized exports may clip it. Choosing a paper size does not enable the lock.','hint'));
  let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';

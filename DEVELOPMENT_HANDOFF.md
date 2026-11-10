@@ -1,3 +1,17 @@
+# Preview.50 validation checkpoint
+
+All 723 combined Node tests and nine independent Visio packages pass. Hosted run 229 passes all 20 browser suites, including normal quick-paper AP/device readability checks. Native Windows lifecycle checks remain pending. Detailed screenshot measurement resolved the apparent mixed-side AP-caption concern: adjacent title ink has 36 blank pixel columns and scene boxes retain at least 2 physical points of clearance; no geometry correction was needed. Actual fictional captures were reviewed. Final exact-head hosted and publication verification remain required.
+
+# Preview.50 integration
+
+Baseline preview.49 is published and verified at main/tag d2c02765f3f698d68a80cff74ba1b5e83b037338. Its exact-head browser/native and publication gates passed; downloaded release assets, checksums and updater feed were verified. Earlier pending .49 entries below are historical. This candidate addresses normal-workflow wireless paper readability, independent device-caption typography and actual legend/cable stroke equality. Combined validation and publication are pending. Preserve explicit layout choices and authored geometry.
+
+# Legend physical stroke equality follow-up
+
+Connection samples are reconciled against their represented cable after all panel/model/paper transforms. This retains independently readable panel text while making the painted sample thickness exactly the final cable weight; distinct per-line widths retain distinct samples. Stable raw style metadata avoids matching the panel's scaled thickness or altering saved project edits. Shared scene geometry feeds SVG/PDF and restores matching Visio sample/connector styles.
+
+Dynamic/Letter/A4, panel/drawing scales, customized/per-line widths, locked frames and reopen checks pass. Actual fictional Letter PDF was rendered and inspected; its red sample measures 7.12067 pt versus cable 7.12068 pt (PDF float precision), and Visio connects to the same sample LineWeight. Full combined release validation remains required.
+
 # Native navigation between different edited titles
 
 Preview.49 grouped controls leave a shorter native-window canvas. The accepted EDGE title remains revealed, but the subsequent unselected SW-1 title can be off-screen. NativeSmoke now uses bounded real CDP middle-button pan gestures before changing to that other title, matching the existing browser recovery gate. It preserves zoom and the original painted-glyph targeting, repeated same-title edit, Escape and detached-session assertions. No production geometry or reveal behavior changes. Six focused JavaScript harness checks pass; actual native Windows execution remains required.
@@ -1379,3 +1393,19 @@ The 6000/6100 48-port normalized-coordinate override flattened the four twelve-p
 
 The browser faceplate catalog previously contained only CRS326-24G-2S+IN, while native RouterOS imports recognize seven models and produce MIKROTIK-SHARED signature identities. Added all seven exact and shared-layout records from official product front photos/dimensions, including bank gaps/rows and physical QSFP cage aliases. Unknown identity remains unknown; no console data-port anchors are invented. See docs/MIKROTIK_FACEPLATES.md for the complete supported scope and references. Actual app PDF/SVG outputs were rendered and inspected, with a fictional exported screenshot retained. Forty-one existing hardware/config tests plus the new model/group regressions pass. Final combined release gates remain required.
 Adaptive wireless paper mode (`wirelessFit:adaptive`, Page options → Optimize APs for paper (readable)) is explicit; preserve-layout remains unchanged. Measure real AP caption textLayout after physical paper fitting. Side-column plans enlarge AP cards relative to the complete switch stack; if automatic AP text remains below max(8 pt, configured minimum), continue by link batches while repeating the full stack. Preserve all links, source-port labels, explicit fonts and saved/manual geometry. Persist adaptive factor, batch limit and selected plan with page frames. Small physical socket artwork is not certified as 8 pt: show its separate warning and include full port labels on AP cards. Keep wireless-adaptive-paper.test.mjs and the independent hosted adaptive-paper fixture; inspect actual PDF/print geometry, not only containment.
+
+# Paper-sized device captions
+
+Automatic core device names/model details are now measured in physical points
+independently of chassis fitting. The final paper pass wraps and places those
+captions in clear nearby space at the configured minimum, without changing
+hardware, socket positions, paths or authored label geometry. Existing automatic
+frames replay deterministically; preserve-layout mode and explicit text edits
+remain authoritative. Where no collision-free readable caption fits, retain its
+original geometry and report the unmet target rather than overlap/crop it.
+
+Actual synthetic five/eight-member stack Letter PDF was inspected: all six
+name/model captions are 8 pt. The physical socket artwork, cable labels and
+handoff cards are separate and are not claimed to have become 8 pt. Focused
+Letter/A4/reopen/collision checks pass; combined hosted validation remains needed.
+Wireless automatic paper workflow: `effectiveWirelessPaperProject` upgrades the old implicit proportional default and marked automatic row frames to adaptive fitting without mutating the stored project or unlocking paper. Preserve authored wireless geometry, unknown legacy frames, Preserve mode and new `wirelessFitExplicit` choices. Page Options displays the effective mode; its explicit choice marker must survive normalization/save. Quick paper and Use side space must reach the readable path without a hidden second setting. New continuation pages inherit the selected physical planning sheet, not Dynamic fallback. Keep quick-selector, old locked-frame migration, deliberate opt-out, authored geometry and continuation physical-dimension tests.

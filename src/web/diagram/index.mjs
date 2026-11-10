@@ -1,3 +1,4 @@
+import {effectiveWirelessPaperProject} from '../wireless-paper-defaults.mjs';
 import {cleanLabelBacking} from '../label-backing-settings.mjs';
 import {devicePoint,deviceRegionBounds} from './device-geometry.mjs';
 import {physicalInventory} from '../physical-links.mjs';
@@ -18,7 +19,7 @@ import {corePages} from './core.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
 import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
 import {cleanPageNumbers,footerAllowance,pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage,printGeometry} from '../page-options.mjs';
-import {applyLinkStyles} from '../link-styles.mjs';
+import {applyLinkStyles,matchLegendStrokeWidths} from '../link-styles.mjs';
 import {orderedDevices,hopStyle} from '../layout.mjs';
 import {comparePorts,hasPortDetails,consecutivePorts,wrapPortText,portColumnPrefix,portRanges,portNumberBox} from '../port-table.mjs';
 import {textWidth,intersects} from './labels.mjs';
@@ -851,6 +852,7 @@ function logical(project,db,options={}){
     ...(includeTrunks?(matrix.length?matrix:tablePages(project,'Trunk VLANs','Native and tagged VLAN membership on trunks and aggregates',[['Device',243],['Interface',164],['Native VLAN',145],['Tagged VLANs',235],['LAG',94],['Description',247]],trunks,'No trunk, tagged-port or aggregate records were supplied.')):[])];
 }
 export function buildPages(project={},options={}){
+  project=effectiveWirelessPaperProject(project);
   const db=inventory(project),cached=(family,build)=>cachedDraftPages(options.cache,family,project,build),pages=[...cached('core',()=>corePages(project,physicalInventory(db))),...cached('ports',()=>portMaps(project,db)),...cached('wireless',()=>wireless(project,physicalInventory(db))),...cached('logical',()=>logical(project,db)),...cached('switchports',()=>buildSwitchportReports(project))];
   for(const report of cleanReportPages(project.layout?.reportPages,(project.devices||[]).map(d=>d.id))){
     const selected=new Set(report.devices),copy={...project,devices:(project.devices||[]).filter(d=>selected.has(d.id)),links:(project.links||[]).filter(l=>selected.has(l.a)&&selected.has(l.b)),_reportPrefix:'report:'+report.id},data=inventory(copy);
@@ -870,11 +872,11 @@ export function buildPages(project={},options={}){
     // Switchport sheets already reserve measured headers, keys and footers.
     // Keep their readable number/marker layout intact while allowing ordinary
     // object edits and uniform drawing scale like the other page families.
-    if(p.switchportReport){if(p.family==='ports')for(const item of p.items.filter(i=>i.reportFooterRole==='page')){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(!project.layout?.drawingEdits?.[item.editKey]){item.x=p.width-264;item.w=240;item.h=24;}}scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});return;}
+    if(p.switchportReport){if(p.family==='ports')for(const item of p.items.filter(i=>i.reportFooterRole==='page')){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(!project.layout?.drawingEdits?.[item.editKey]){item.x=p.width-264;item.w=240;item.h=24;}}scalePage(p,project);fitVisiblePage(p,project);matchLegendStrokeWidths(p);p.svg=svgPage({...p,title:p.displayName});return;}
     if(p.title==='Wireless Connections'){linkLegend(p);applyDrawingEdits(p,project);}bridge(p,{style:hopStyle(project)});fitDynamicPage(p,project);
     const bottom=(p.originY||0)+p.height,right=(p.originX||0)+p.width;
     if(cleanPageNumbers(project.layout?.pageNumbers).footer){rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';}const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
-    applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);applyGlobalTextStyles(p,project.layout?.textStyles,project.layout?.drawingEdits);dockInformationPanel(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});
+    applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);applyGlobalTextStyles(p,project.layout?.textStyles,project.layout?.drawingEdits);dockInformationPanel(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);matchLegendStrokeWidths(p);p.svg=svgPage({...p,title:p.displayName});
   });
   // Adaptive wireless paper mode is judged in real printed points, after
   // headers, panels and final paper fitting. Never certify a tiny AP card by

@@ -6,6 +6,8 @@
 
 ## Features
 
+Automatic device names and model captions use readable paper sizing independently of the hardware, where clear space permits; explicit text edits remain unchanged.
+
 Supported RouterOS faceplates include all seven models recognized by the native importer, with model-specific port banks and shared-signature layouts. See the [MikroTik faceplate coverage and limits](docs/MIKROTIK_FACEPLATES.md).
 
 Wireless stack links use bounded track ordering to reduce avoidable upper AP-fan crossings without rearranging devices or replacing saved cable bends.
@@ -25,7 +27,7 @@ Network engineers can use the Windows application or the offline browser edition
 - In Edit drawing, use right-click menus and **Snap label to line** for labels above, centered on or below their own cable. Specify the endpoint device/port, choose automatic alignment or manual rotation, and retain that placement when routing changes. Double-click sidebar pages to rename them and their printed titles.
 - Configure the diagram details sidebar: reorder and rename sections, show or hide VLANs, LAGs, AP/VSF/uplink information, summarize or expand port-module assignments, and add custom sections while preserving complete address/MAC information. Empty sections and their headings are hidden by default, including Port modules / GBICs; authored content remains visible.
 - Use the **Text styles** button at any time to apply project-wide font size, color, weight and alignment by category (device name/details, port labels, cable labels, page headings, connection key, sidebar and tables). Individual object formatting takes precedence.
-- Hover or select a Connection types sample to highlight every matching cable on the current page, or select/hover a cable to highlight its corresponding Connection types sample. The highlight is editor-only.
+- Hover or select a Connection types sample to highlight every matching cable on the current page, or select/hover a cable to highlight its corresponding Connection types sample. The highlight is editor-only. Connection key samples match the actual cable thickness on the page and in exports, even when the information panel is scaled independently.
 - Select already placed objects in Edit drawing and choose **Spacing...** to apply a fixed horizontal/vertical gap or distribute three or more objects evenly. Unselected objects stay in place, existing connections reroute, and Undo restores the previous positions.
 - Keep complete switch stacks and their APs together on dynamic wireless pages. Measured caption banks and cable lanes determine the space required; busy gaps grow independently without stretching physical chassis.
 - Choose **Concise** documentation to share identical VLAN/routing definitions across named devices, avoid repeated physical membership tables, and combine small port maps with their inventory when readable. **Full reference** and custom trunk reports remain available.
@@ -273,3 +275,5 @@ python scripts/package-release.py
 [Contributor guide](AGENTS.md) · [Development handoff](DEVELOPMENT_HANDOFF.md) · [Release notes](docs/releases/0.1.0-preview.27.md) · [Third-party notices](docs/THIRD_PARTY_NOTICES.md)
 
 For readable wireless AP cards on fixed paper, select **Page options → Wireless paper layout → Optimize APs for paper (readable)**. It uses available side space and larger AP cards, measures their actual printed text, and continues across sheets only when needed to reach the 8 pt target (or your larger minimum). Each sheet retains the complete stack and its relevant links. **Keep complete layout (proportional fit)** preserves the existing arrangement instead. Saved/manual placements and text sizes stay yours. Physical switch socket artwork can remain small; full switch-port labels are repeated on the AP cards.
+
+Fixed-paper wireless drawings now automatically use readable AP fitting, including the quick **Paper** selector. Old automatic proportional row frames are recalculated without unlocking the physical page. Intentional object placements, Preserve layout mode and legacy frames of unknown origin remain unchanged. Choosing **Keep complete layout** explicitly in Page options preserves that choice. **Use side space** activates readable AP fitting rather than a separate weaker paper layout. Added continuation sheets retain the selected physical paper size.

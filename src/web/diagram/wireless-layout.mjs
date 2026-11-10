@@ -231,7 +231,7 @@ export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
  const paper=dimensions.length?{preset:'custom',widthMm,heightMm,orientation:widthMm<heightMm?'portrait':'landscape'}:base;
  const frames=Object.entries(visible.lockFrames).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame),explicit=['layout','readable','adaptive'].includes(project.layout?.pageSetup?.visible?.wirelessFit);
  const legacy=project._wirelessLegacyPaper===true||!explicit&&frames.some(frame=>!frame.wirelessFit||frame.wirelessFit==='readable-legacy')&&!frames.some(frame=>frame.wirelessFit==='layout');
- const render=planned=>wirelessPages(planned,db,{portNumbers,tablePages,empty}).map(page=>{if(page.wirelessLayout)page.wirelessLayout.paperFit=visible.wirelessFit==='adaptive'?'adaptive':visible.wirelessFit==='readable'?(legacy?'readable-legacy':'readable'):'layout';return page;});
+ const render=planned=>wirelessPages(planned,db,{portNumbers,tablePages,empty}).map(page=>{if(planned._wirelessAdaptive&&paper.preset!=='dynamic')page.wirelessContinuationPaper={...paper,locked:[base,...numbered].some(p=>p.locked)};if(page.wirelessLayout)page.wirelessLayout.paperFit=visible.wirelessFit==='adaptive'?'adaptive':visible.wirelessFit==='readable'?(legacy?'readable-legacy':'readable'):'layout';return page;});
  if(visible.wirelessFit==='adaptive'&&paper.preset!=='dynamic'&&visibleFitMode(project)==='optimize'){
   const savedLimits=Object.values({...visible.lockFrames,...visible.editFrames}).map(f=>f.wirelessBatchLimit).filter(Number.isFinite),limit=project._wirelessBatchLimit||Math.min(...savedLimits);
   return render({...project,_wirelessAdaptive:true,...(Number.isFinite(limit)?{_wirelessBatchLimit:limit}:{})});
@@ -282,7 +282,7 @@ function wirelessPages(project,db,{portNumbers,tablePages,empty}){
     if(pageProject._wirelessAdaptive){
      const frame=wirelessFrame(pageProject),authored=Object.entries(project.layout?.drawingEdits||{}).some(([key,edit])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>edit[k]!=null));
      if((frame&&!frame.wirelessApFactor)||authored&&!frame?.wirelessApFactor)pageProject._wirelessAdaptive=false;
-     else pageProject._wirelessAdaptiveFactor=frame?.wirelessApFactor||(batch.length>=16?4:2);
+     else pageProject._wirelessAdaptiveFactor=frame?.wirelessApFactor||(batch.length>=16?4:batch.length>=8?2:1);
     }
     const spacing=stackSpacing(pageProject,device,batch,width),choices=bankLayout(pageProject,db,device,batch,width,spacing,geometry);if(!choices.length)throw capacityError('This wireless caption needs more space. Choose a larger or dynamic page.');
     let selected,error,attempts=0,candidates=0,clearChecks=0;

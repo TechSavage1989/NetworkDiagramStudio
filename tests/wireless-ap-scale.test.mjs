@@ -58,7 +58,7 @@ test('authored geometry and caption sizes remain authoritative rather than silen
  assert.equal(result.items.find(i=>i.editKey===title.editKey).value,'Authored title');
 });
 test('frozen paper keeps its frame when AP scale changes and does not silently adopt side columns',()=>{
- const p=lab();p.layout.presentation.defaults.minimumTextPt=0;p.layout.pageSetup.visible.default={preset:'letter',orientation:'landscape',locked:true};
+ const p=lab();Object.assign(p.layout.pageSetup.visible,{wirelessFit:'layout',wirelessFitExplicit:true});p.layout.presentation.defaults.minimumTextPt=0;p.layout.pageSetup.visible.default={preset:'letter',orientation:'landscape',locked:true};
  const before=wireless(p)[0];p.layout.pageSetup.visible.lockFrames={[before.name]:before.pageLockFrame};
  p.layout.presentation.defaults.wirelessApScale=1.5;p.layout.presentation.defaults.wirelessApPlacement='sides';
  const after=wireless(p)[0];assert.equal(after.wirelessLayout.kind,'banks');assert.deepEqual(after.pageLockFrame,before.pageLockFrame);assert.equal(after.width,before.width);assert.equal(after.height,before.height);clear(after);
