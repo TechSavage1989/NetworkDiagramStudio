@@ -174,7 +174,11 @@ internal sealed partial class Studio
             foreach(var (type,dx,dy) in new[]{("mousePressed",0,0),("mouseMoved",30,4),("mouseMoved",60,25),("mouseReleased",60,25)})
                 await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",JsonSerializer.Serialize(new{type,x=x+dx,y=y+dy,button="left",buttons=type=="mouseReleased"?0:1,modifiers=8,clickCount=1}));
         }
-        await Task.Delay(100); // Allow the viewport resize observer to settle after feedback reflow.
+        await Task.Delay(100);
+        // The commit's status text reflows the chrome above the canvas; the
+        // viewport's ResizeObserver restores the screen position in the next
+        // rendering frame. Measure after that frame, not in between.
+        await EditorFrames();
         await RequireEditor("const b=document.querySelector(\""+sw+"\").getBoundingClientRect(),a=window.__gestureBefore;if(Math.abs(b.y-a.y)>.1||b.x<a.x+50)throw Error('Shift did not hold the initial horizontal axis: '+JSON.stringify({before:a,after:{x:b.x,y:b.y,w:b.width},viewport:{width:innerWidth,height:innerHeight,ratio:devicePixelRatio},canvas:{x:document.getElementById('canvas').getBoundingClientRect().x,y:document.getElementById('canvas').getBoundingClientRect().y,scrollLeft:document.getElementById('canvas').scrollLeft,scrollTop:document.getElementById('canvas').scrollTop},viewBox:document.querySelector('#canvas svg').getAttribute('viewBox'),transform:document.querySelector('#canvas svg').style.transform,feedback:document.getElementById('feedback').textContent}))","Shift drag axis");
         await ClickEditorTarget("#drawing-undo");
         await ClickEditorTarget("#drawing-smaller");
@@ -414,6 +418,9 @@ internal sealed partial class Studio
     {
         foreach(var type in new[]{"keyDown","keyUp"})await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent",JsonSerializer.Serialize(new{type,key,windowsVirtualKeyCode=code,nativeVirtualKeyCode=code}));
     }
+    // Two animation frames guarantee one complete rendering update, including
+    // ResizeObserver delivery, even when a busy runner delays frames.
+    async Task EditorFrames()=>await browser.CoreWebView2.CallDevToolsProtocolMethodAsync("Runtime.evaluate",JsonSerializer.Serialize(new{expression="new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>done(true))))",awaitPromise=true,returnByValue=true}));
     async Task RequireEditor(string code,string stage)
     {
         var result=await browser.CoreWebView2.ExecuteScriptAsync("(() => { try { "+code+"; return 'ok'; } catch(e) { return e.message; } })()");
