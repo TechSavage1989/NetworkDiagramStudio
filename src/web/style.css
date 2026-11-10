@@ -248,7 +248,7 @@ main:not(:has(>.pages-sidebar:not([hidden]))){grid-template-columns:250px minmax
 input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-editor]{user-select:text;-webkit-user-select:text}
 /* The editor can show and select off-sheet content; exports keep their page frame. */
 #canvas.diagram-view>svg{overflow:visible}
-#page-overflow-notice{font-size:11px;text-align:left;white-space:normal}
+#page-overflow-notice{flex:1 1 100%;width:100%;min-width:0;max-width:100%;font-size:11px;text-align:left;white-space:normal;overflow-wrap:anywhere}
 
 /* Screen-only physical reference: never part of a diagram or export. */
 #screen-calibration{width:min(1100px,94vw);max-height:90vh;overflow:auto} .calibration-scroll{overflow-x:auto;padding:22px 8px;margin:12px 0;background:#f2f6f8} #calibration-line{height:18px;border-left:2px solid #183e55;border-right:2px solid #183e55;position:relative;box-sizing:border-box;max-width:none} #calibration-line::after{content:"";position:absolute;left:0;right:0;top:8px;border-top:2px solid #183e55} #calibration-error{color:#a52920} #actual-size-status{white-space:normal} #zoom-actual[aria-pressed="true"]{background:#d5ede9}

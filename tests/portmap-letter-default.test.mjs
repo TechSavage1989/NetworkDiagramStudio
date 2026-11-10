@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {newPageSetup,cleanPageSetup,visiblePagePaper} from '../src/web/page-options.mjs';
 import {cleanLayout} from '../src/web/layout.mjs';
 import {buildPages,printDocument} from '../src/web/diagram/index.mjs';
+import {sampleSite} from '../src/web/sample.mjs';
 import {adaptiveStack} from './fixtures/adaptive-port-maps.mjs';
 const mapPaper=project=>visiblePagePaper(project,{name:'MDF Port Map',family:'ports'});
 
@@ -37,4 +38,19 @@ test('new default builds and prints a complete Letter map, including stack membe
  assert.ok(Math.abs(page.width/page.height-11/8.5)<1e-8);
  assert.equal(page.items.filter(i=>i.reportPanel).length,5);
  assert.ok(printDocument(pages).includes('279.4000mm 215.9000mm'));
+});
+
+
+test('adaptive physical port maps retain descriptive navigation identities across paper changes and reopen',()=>{
+ const project=sampleSite(),original=buildPages(project).filter(p=>p.portMap?.switchportSheet);
+ assert.deepEqual(original.map(p=>p.displayName),['SW-1 / Port map','SW-2 / Port map']);
+ for(const preset of ['letter','a4']){
+  const changed=structuredClone(project);changed.layout={...changed.layout,pageSetup:newPageSetup()};changed.layout.pageSetup.visible.groups.ports.preset=preset;
+  for(const state of [changed,JSON.parse(JSON.stringify(changed))]){
+   const maps=buildPages(state).filter(p=>p.portMap?.switchportSheet);
+   assert.deepEqual(maps.map(p=>p.name),original.map(p=>p.name));
+   assert.deepEqual(maps.map(p=>p.displayName),original.map(p=>p.displayName));
+   assert.ok(maps.every(p=>p.adaptivePortMap));
+  }
+ }
 });

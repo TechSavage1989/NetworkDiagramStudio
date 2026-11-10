@@ -71,7 +71,7 @@ export function adaptivePortMap(item,palette,request,identity){
  if(!sheet||!(sheet.width>0&&sheet.height>0))throw new ReportCapacityError('Adaptive port maps require measured paper dimensions.');
  const make=()=>{
   const p=P.page(request,item.id+'|adaptive',P.displayName(inv),[P.modelLabel(inv),inv.ports.length+' interfaces'].filter(Boolean).join(' | '),identity.role,[item.id],sheet.width,sheet.height,true);
-  p.name=identity.name;p.reportMargin=legacy?24:margin;if(!legacy)p.contentTop-=4;return p;
+  p.name=identity.name;p.displayName=identity.displayName||p.displayName;p.reportMargin=legacy?24:margin;if(!legacy)p.contentTop-=4;return p;
  };
  const sample=make(),top=sample.contentTop,contentWidth=sheet.width-2*margin;
  const footerSpace=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?margin:65,guideHeight=P.symbolKeyHeight(inv,legacy?sheet.width-48:contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;

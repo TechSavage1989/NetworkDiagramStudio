@@ -124,6 +124,8 @@ try{
  assert.equal((await wirelessNames()).length,1,'short32-AP cards fit one readable sheet');
  await page.locator('#page-select').selectOption(String((await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name))));
  assert.match(await page.locator('#page-overflow-notice').textContent(),/AP details are 8\.3 pt/);
+ const assertNoticeFits=async()=>{const bounds=await page.locator('#page-overflow-notice').evaluate(node=>{const a=node.getBoundingClientRect(),b=node.parentElement.getBoundingClientRect();return {left:a.left,right:a.right,parentLeft:b.left,parentRight:b.right,scroll:node.scrollWidth,width:node.clientWidth,whiteSpace:getComputedStyle(node).whiteSpace};});assert.ok(bounds.left>=bounds.parentLeft-1&&bounds.right<=bounds.parentRight+1,'full notice remains inside page toolbar');assert.ok(bounds.scroll<=bounds.width+1,'notice wraps rather than clipping content');assert.equal(bounds.whiteSpace,'normal');};
+ await assertNoticeFits();const priorViewport=page.viewportSize();await page.setViewportSize({width:620,height:900});await assertNoticeFits();await page.setViewportSize(priorViewport);await assertNoticeFits();
  const adaptiveGeometry=await apGeometry();
  await page.screenshot({path:resolve(output,'wireless-adaptive-paper.png')});
  saved=await save('wireless-adaptive-paper.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'adaptive');

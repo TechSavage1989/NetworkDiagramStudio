@@ -1,3 +1,7 @@
+# Adaptive port-map navigation identity correction
+
+The new Letter creation default exposed an existing adaptive-renderer omission: fixed-paper maps retained their stable internal name but lost the descriptive " / Port map" display name. Preserve the original display identity when generating the measured adaptive sheet. Dynamic, Letter and A4 navigation labels now match across save/reopen; map contents and dimensions are unchanged. The original documentation and Actual size browser assertions remain intact and require hosted rerun.
+
 # Preview.49 integrated candidate
 
 Based on published/verified preview.48 main/tag0a9853b438093b38448508db8bfd9ccab2f970c7. Its browser/native/release checks, downloaded assets and updater feed passed; older pending .48 notes are historical. This candidate combines direct settings divider, grouped workspace commands and quick active-page paper controls, new-project Letter port maps, optical consistency, evidence-based port banks/MikroTik coverage, panel divider removal and explicit adaptive readable wireless paper mode. Full combined local/hosted tests and current genuine synthetic captures are required before release.
