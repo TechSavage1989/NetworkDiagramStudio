@@ -53,8 +53,12 @@ try{
  await page.pdf({path:resolve(output,'two-stack-letter.pdf'),preferCSSPageSize:true,printBackground:true});
  // A locked Letter page still accepts a deliberate move past its edge.
  const locked=wirelessTwoStackSite({preset:'letter',fit:'adaptive',locked:true});await open('two-stack-locked.nds.json',locked);await goTo('Wireless Connections 1');
- await page.locator('#edit-drawing').click();const ap=page.locator('#canvas svg [data-drawing-key*="|device|ap2-16|"]').first(),box=await ap.boundingBox(),canvas=await page.locator('#canvas').boundingBox();
- await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();for(let i=1;i<=12;i++)await page.mouse.move(box.x+box.width/2+i*((canvas.x+canvas.width-4-box.x-box.width/2)/12),box.y+box.height/2);await page.mouse.up();
+ await page.locator('#edit-drawing').click();const ap=page.locator('#canvas svg [data-drawing-key*="|device|ap2-16|"]').first();
+ // Start on verified AP artwork after the edit toolbars' layout has settled, so
+ // the press grabs the AP rather than starting a box selection on the background.
+ const start=await page.evaluate(async()=>{await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));const group=document.querySelector('#canvas svg [data-device-id="ap2-16"]')||document.querySelector('#canvas svg [data-drawing-key*="|device|ap2-16|"]'),b=group.getBoundingClientRect();for(const fx of [.5,.35,.65,.2,.8])for(const fy of [.5,.35,.65,.2,.8]){const x=b.x+b.width*fx,y=b.y+b.height*fy,hit=document.elementFromPoint(x,y);if(hit&&group.contains(hit)&&!hit.closest('text'))return {x,y};}return {error:'No visible AP artwork',bounds:{x:b.x,y:b.y,w:b.width,h:b.height},hit:document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.outerHTML.slice(0,160)};});
+ assert.ok(!start.error,'AP drag start: '+JSON.stringify(start));const box=await ap.boundingBox(),canvas=await page.locator('#canvas').boundingBox();
+ await page.mouse.move(start.x,start.y);await page.mouse.down();for(let i=1;i<=12;i++)await page.mouse.move(start.x+i*((canvas.x+canvas.width-4-start.x)/12),start.y);await page.mouse.up();
  await page.waitForFunction(()=>/moved/i.test(document.querySelector('#feedback').textContent),null,{timeout:120000});
  const moved=await ap.boundingBox(),sheet=await page.locator('#canvas svg > rect').first().boundingBox();result.offPage=moved.x+moved.width>sheet.x+sheet.width;assert.ok(moved.x>box.x+20,'the locked page accepted the manual move');
  await page.screenshot({path:resolve(output,'locked-manual-move.png')});
