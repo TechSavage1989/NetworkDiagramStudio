@@ -63,7 +63,7 @@ function symbolKeyHeight(inventory,width){
  return rows*18-1;
 }
 function symbolKey(p,y,palette,inventory){
- const a=p.items;let x=margin,lineY=y;
+ const a=p.items,margin=p.reportMargin??24;let x=margin,lineY=y;
  const example=Object.values(palette.vlans)[0]||'#b9cfdf',outline=Object.values(palette.aggregates)[0]||'#486ba4';
  const entry=(title,paint)=>{
   const step=textWidth(title,10)+35;

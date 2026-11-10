@@ -27,7 +27,11 @@ export function displayPortCaption(port){const name=String(port??'');return /por
 // A scene caption always retains its complete editable value. Both exporters
 // use the same measured lines and only fit a fixed box down to a readable size.
 export function textLayout(item){
- const original=Number(item.size)||12,min=Math.min(8,original),width=Math.max(1,item.w),height=Math.max(1,item.h);
+ // A paper presentation may shrink a previously valid wrapped label. Its
+ // source-space fit floor must shrink too, not reject the same text merely
+ // because the chosen physical sheet is smaller. Native/unpresented labels
+ // retain the established 8px floor.
+ const original=Number(item.size)||12,min=Math.min(8*Math.min(1,item.presentation?.fontScale||1),original),width=Math.max(1,item.w),height=Math.max(1,item.h);
  const failure=()=>Error('This text needs more space. Enlarge its text box or shorten the caption: '+String(item.value).slice(0,80));
  if(!item.art&&textWidth(String(item.value).replace(/\s/g,''),min,item.bold)-6>width*Math.max(1,Math.floor(height/(min*1.2))))throw failure();
  const at=size=>{const lines=item.art?String(item.value).split('\n'):wrapPortText(item.value,width+6,size,item.bold),lineHeight=lines.length===1?Math.min(height,size*1.2):size*1.2;return {lines,size,lineHeight};},fits=layout=>layout.lines.length*layout.lineHeight<=height+.001&&layout.lines.every(line=>textWidth(line,layout.size,item.bold)-6<=width+.001);

@@ -14,8 +14,13 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.BR
 const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 const open=async input=>{
+ const document=JSON.parse(typeof input==='string'?await readFile(input,'utf8'):input.buffer.toString('utf8')),name=document.project.name;
+ // File.text() yields after the input change handler starts. The previous
+ // 'Project opened' feedback is still present during that read; never use it
+ // alone as evidence that this fixture's drawing has replaced the old one.
+ await page.waitForFunction(()=>!document.querySelector('#open')?.disabled);
  await page.locator('#project-file').setInputFiles(input);
- await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent?.includes('Project opened'));
+ await page.waitForFunction(expected=>document.querySelector('#site')?.value===expected&&document.querySelector('#heading')?.textContent===expected&&!document.querySelector('#open')?.disabled&&!document.querySelector('#export')?.disabled&&!!document.querySelector('#canvas svg')&&document.querySelector('#feedback')?.textContent==='Project opened.',name);
 };
 const save=async name=>{
  const waiting=page.waitForEvent('download');await page.locator('#save').click();
@@ -68,6 +73,11 @@ try{
  saved=await save('wireless-proportional.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'layout');assert.equal(saved.doc.project.layout.pageSetup.visible.groups.wireless.preset,'letter');
  await open(saved.path);assert.equal((await wirelessNames()).length,1);
  const wirelessIndex=(await page.locator('#page-select option').allTextContents()).findIndex(name=>/Wireless Connections/.test(name));await page.locator('#page-select').selectOption(String(wirelessIndex));
+ const outside=await page.locator('#canvas').evaluate(canvas=>{
+  const svg=canvas.querySelector('svg'),paper=svg.querySelector(':scope>rect[fill="#fff"]')?.getBoundingClientRect();if(!paper)throw Error('Missing physical paper rectangle');
+  return [...svg.querySelectorAll('[data-device-id],path.diagram-cable,text[data-drawing-key]')].filter(node=>{const b=node.getBoundingClientRect();return b.width&&b.height&&(b.left<paper.left-2||b.top<paper.top-2||b.right>paper.right+2||b.bottom>paper.bottom+2);}).map(node=>node.getAttribute('data-drawing-key')||node.getAttribute('data-device-id'));
+ });
+ assert.deepEqual(outside,[],'choosing Letter keeps every wireless device, caption and cable within the physical sheet');
  await page.screenshot({path:resolve(output,'wireless-letter-proportional.png')});
  controls=await options();await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('readable');await apply(controls.dialog);
  const continued=(await wirelessNames()).length;assert.ok(continued>1&&continued<=4);

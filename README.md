@@ -63,13 +63,13 @@ Built-in optical sockets and generic installed optics use consistent, reference-
 **Review connection improvements before applying one undoable layout change.**
 <p align="center"><img src="docs/images/organize-connections.png" width="1000" alt="Organization preview with current and proposed cable length, bends, crossings and drawing footprint"></p>
 
-**Fit actual diagram bounds while keeping page headings readable.**
+**Fit complete diagram bounds inside the chosen paper while keeping page headings readable.**
 <p align="center"><img src="docs/images/paper-fit.png" width="900" alt="Actual generated Letter core diagram fitted to measured content bounds with readable site and documentation headings"></p>
 
 **Use more of each selected sheet with slimmer gutters and larger port maps.**
 <p align="center"><img src="docs/images/page-fill.png" width="900" alt="Actual generated Letter port map with a fictional five-member stack filling the available width and retaining its complete VLAN and LAG key"></p>
 
-**Keep dense wireless sheets readable with deliberate continuations.**
+**Choose readable wireless continuations when the complete drawing would make text too small.**
 <p align="center"><img src="docs/images/wireless-paper.png" width="900" alt="First of four actual generated readable Letter wireless sheets for a fictional eight-member stack with 32 uplinks; this continuation shows members 7 and 8 and eight uplinks"></p>
 
 
@@ -77,7 +77,7 @@ Built-in optical sockets and generic installed optics use consistent, reference-
 
 The separate [drawing-pages sidebar](docs/images/pages-sidebar.png) adapts to [compact desktop windows](docs/images/pages-sidebar-compact.png) and [narrow screens](docs/images/pages-sidebar-narrow.png).
 
-See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting. See the [physical text controls](docs/images/paper-readability-controls.png), [paper panel width controls](docs/images/paper-panel-controls.png), and [wireless side-space layout](docs/images/wireless-ap-side-space.png). The offline [User guide](docs/images/user-guide.png) provides searchable steps and adapts to [narrow windows](docs/images/user-guide-narrow.png).
+See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting. See the [physical text controls](docs/images/paper-readability-controls.png), [paper panel width controls](docs/images/paper-panel-controls.png), and [wireless side-space layout](docs/images/wireless-ap-side-space.png). See the [locked port map filling its sheet](docs/images/locked-port-map.png) and [valid device placement below a short information panel](docs/images/empty-panel-space-placement.png). The offline [User guide](docs/images/user-guide.png) provides searchable steps and adapts to [narrow windows](docs/images/user-guide-narrow.png).
 
 Cable labels and port numbers use centered text by default; explicit text-style edits remain available.
 
@@ -108,6 +108,8 @@ The releases index includes published previews. A pull request or local build ma
 
 ## How to use
 
+In Edit drawing, move devices into unused space below or beside a short information panel. Its actual content stays protected; the empty sidebar column is not reserved.
+
 Choose **User guide** in the top toolbar for searchable, offline step-by-step help. It explains paper and screen sizing, calibration, panel contents, editing, page locks and exports, with shortcuts to the relevant settings. Desktop **Help** remains the separate update/status control.
 
 In Edit drawing, select objects and choose [**Group**](docs/images/grouped-model-controls.png) to move or transform them together; **Ungroup** retains every position. Selecting a grouped member selects its group. Automatic link labels follow rerouted cables when selected with equipment, rather than becoming fixed obstacles during resizing. Explicit manual label placements remain fixed. Corner handles scale around a shared pivot, and the rotation handle rotates whole devices and text without flattening their native artwork. Unsupported native-detail rotations are rejected rather than distorted.
@@ -115,7 +117,7 @@ In Edit drawing, select objects and choose [**Group**](docs/images/grouped-model
 
 In Edit drawing, Ctrl+A (Command+A on macOS) selects diagram content without the information panel or page frame. Normal Select All remains available inside text fields. Scale, rotate and move selected content with Undo/redo; selecting or dragging the drawing does not select editor toolbar text.
 
-Auto-fit measures actual diagram content rather than carrying large empty source margins onto the selected paper. **Pages & layout → Minimum paper text (pt)** defaults to 8 for editable diagram labels and captions; choose Drawing defaults or an individual page, and use Text scale (%) to adjust lettering. A diagram that cannot fit at readable size warns about clipping instead of silently shrinking. Explicit font sizes, saved frames, native artwork and report typography are preserved. **Panel width (% of paper; 0 = automatic)** compacts short information panels automatically or rewraps them at a chosen 10–60% width. Generated site, title and documentation headings retain readable paper sizes. Wireless link-color keys retain readable paper text and pack into rows. Docked information panels use their own readable paper scale rather than shrinking with large diagrams, with space reserved beside the diagram. Very dense panels retain readable text and show an overflow warning; choose a larger sheet or fewer panel sections. Free-positioned and manually resized panel objects retain manual layout behavior. Older saved fitting frames show a prompt to open Page options and Save page options for the new readable fit; they are not silently rearranged. Once you deliberately move or resize objects, their accepted page frame is retained so Auto-fit does not cancel your transform; saving Page options recalculates the fit.
+Auto-fit measures actual diagram content rather than carrying large empty source margins onto the selected paper. **Pages & layout → Minimum paper text (pt)** defaults to 8 for editable diagram labels and captions; choose Drawing defaults or an individual page, and use Text scale (%) to adjust lettering. Choosing paper fits the entire automatic diagram inside the sheet. When the requested text minimum cannot fit, a warning reports the actual smaller text size; choose larger paper, fewer details or additional pages for readable printing. The target never forces automatic diagram content off-page. Explicit font sizes, saved frames, native artwork and report typography are preserved. **Panel width (% of paper; 0 = automatic)** compacts short information panels automatically or rewraps them at a chosen 10–60% width. Generated site, title and documentation headings retain readable paper sizes. Wireless link-color keys retain readable paper text and pack into rows. Docked information panels use their own readable paper scale rather than shrinking with large diagrams, with space reserved beside the diagram. Very dense panels retain readable text and show an overflow warning; choose a larger sheet or fewer panel sections. Free-positioned and manually resized panel objects retain manual layout behavior. Older saved fitting frames show a prompt to open Page options and Save page options for the new readable fit; they are not silently rearranged. Once you deliberately move or resize objects, their accepted page frame is retained so Auto-fit does not cancel your transform; saving Page options recalculates the fit.
 
 Page options can **Lock physical page size** when you explicitly check it. Selecting Letter or another paper size does not automatically lock it. A lock keeps the sheet dimensions and saved presentation frame, while moves and scaling can extend content off the page. Off-page content remains visible in Edit drawing; a warning explains that print/PDF and page-sized exports may clip it.
 
@@ -221,6 +223,8 @@ calibrated preview, not an absolute guarantee of physical size across monitors.
 Printing must use the same paper at 100% scale for a matching result. Dynamic
 canvases need a physical paper choice before Actual size is available.
 
+[Global text styles](docs/images/settings-preview-text.png), Pages & layout and [Page options](docs/images/settings-preview-paper.png) show an isolated live drawing preview beside resizable controls, with a [stacked layout on narrow windows](docs/images/settings-preview-narrow.png). Pan/zoom the preview while changing settings; pause automatic updates for large drawings. Apply saves one undoable change. Cancel, Close or Escape leaves the original drawing untouched. Other dialogs retain their existing workflow.
+
 ## Updates and settings
 
 Help opens a polished update review with compact installed/available version labels, formatted release headings and bullets, download progress, verification status and a fixed action footer. Long notes scroll inside the review while the close and install controls stay visible. The install screen explains recovery and reminds you to save unsaved diagram changes before restarting. A compact notice appears only when a newer release is available. Automatic checks and verified download/rollback behavior are unchanged.
@@ -230,6 +234,8 @@ For mixed-size printing, retain the document paper sizes in your print/PDF setti
 The Windows edition checks its public GitHub feed at startup, every five minutes while online, and when the window regains focus after two minutes. The update bar stays hidden until a newer release is detected, leaving the full editor height available. Open **Help** in the existing app header for **Check updates**, **Update details** and **Notices**. Manual checks show progress and their result in that dialog, including connection errors or an up-to-date result. The result identifies both the installed and latest published versions. A local build ahead of the feed is identified explicitly. **Update details** provides the last timestamp, HTTP result and a copyable report. A lookup times out after 25 seconds; manual retries bypass transient automatic retry delays while respecting GitHub rate-limit pauses. **Download** retrieves and verifies an offered executable. **Install and restart** is a separate decision. Save your project before restarting.
 
 Windows stores its WebView profile, release cache, staged update and retained rollback copy under **%LOCALAPPDATA%\NetworkDiagramStudio**. Projects and exports go to the location selected in the save dialog. The browser edition updates by replacing its extracted HTML with a newer download. Site inputs are parsed locally. Saved project files and drawings can contain hostnames, addressing and the artwork you imported.
+
+> Port-map Auto-fit uses narrow edge gutters and a full-width header, including on newly locked pages. Physical printers may still require their own non-printable margins. Previously saved manual/locked layouts retain their geometry until you refit them.
 
 ## Troubleshooting
 

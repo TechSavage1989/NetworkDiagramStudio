@@ -1,3 +1,69 @@
+# Hosted connection-key click readiness correction
+
+Run218 passed the new empty-panel placement drag suite. Its connection-label
+suite hovered the legend successfully, then force-clicked immediately after
+Edit drawing expanded the toolbar; the capture showed zero selection and no
+browser error. Forced input skipped target stability while ResizeObserver
+refitted the canvas. The test now uses normal stable pointer input and records
+the actual pointerdown drawing key, requiring one selected item as well as the
+existing bidirectional highlight assertions. No selection/collision code is
+changed. Local Chromium remains socket-blocked; the exact-head hosted rerun is
+required before claiming the click has passed.
+
+# Preview.47 combined regression validation
+
+At source2fa05f7, all678 Node tests passed with zero failures or skips, along with all9 independent Visio packages, offline build, repository guard and whitespace checks. This includes complete automatic Letter fit, locked adaptive port-map edge fill and valid placement under a short information panel. Hosted run218 passed18/20 browser suites, including the new live-preview, locked-map and drag-preview/commit regressions; legend pointer selection and project-load timing require final rechecks. Current genuine synthetic split-dialog, paper-control, locked-map and placement captures were downloaded, artifact hash verified and visually inspected. Final exact-head browser/native gates and immutable release verification remain mandatory.
+
+# Hosted paper fixture load synchronization correction
+
+Run218 observed the preceding two-wireless-page fixture immediately after requesting the dense one-page fixture. The test previously accepted stale “Project opened” feedback while File.text() was still pending. Its open helper now waits for matching parsed project name in both project field and heading, idle file controls, a ready drawing/export, and completed feedback. All one-whole-wireless-page, Letter containment, continuation, Undo/redo and save/reopen assertions remain unchanged. Local exact dense fixture produces one Dynamic wireless page and one whole Letter wireless page. Hosted rerun remains required.
+
+# Hosted settings-preview resize assertion
+
+Run217 passed19 of20 browser suites. The new settings suite passed draft isolation, Apply/Undo, invalid settings, pan/zoom and narrow dialog containment, then compared canvas HTML after resizing the browser against its pre-resize screen transform. The final cancellation assertion now ignores only the root SVG screen style; all page attributes and diagram shapes remain exact. Earlier cancellation assertions still compare full canvas HTML. Fresh hosted verification required.
+
+# Manual placement below information panels (preview.47 candidate)
+
+Direct drag/nudge and Place beside protect actual occupied panel item bounds,
+not an invisible full-height sidebar column. Empty space below/around a short
+key is available; decorative dividers and hidden/empty panels do not block it.
+A collision correction keeps the whole selected translation rigid and the drag
+preview uses the same correction as commit. Existing link-label/router validation
+remains enabled. Real sample movement, saved reopening, undo/redo and socket glue
+are covered by focused tests. Hosted direct-transforms adds actual drag preview /
+commit / saved-coordinate coverage; local Chromium cannot start because socket()
+is blocked, so that hosted gate remains required.
+
+# Preview.47 rebased local validation
+
+All666 Node tests pass with zero failures/skips on the source rebased to published .46; all9 independently checked Visio packages, offline build, repository guard and whitespace checks pass. Hosted20-suite browser/native verification and current split-dialog captures remain required. Newly reported Letter auto-fit and port-map-margin corrections are being developed separately; do not publish before their integration decision.
+
+# Preview.47 release preparation on verified preview.46
+
+Published baseline main/tag is 91ec4a5b1814c8afbb2310e2d342d41a359bf4f4. Preview.46 final PR and merged-main release gates passed all19 browser suites and native Windows checks; all3 public release assets were downloaded and matched API digests, sizes and SHA256SUMS, updater feed verified and merged branch removed. This follow-on preserves its source fixes and current documentation captures. Older pending notes below are historical.
+
+# Preview.47: transactional settings previews (not yet published)
+
+Targets Global text styles, Pages & layout, and Page options only. Resizable split controls and read-only preview use cloned candidates; Apply commits once, cancellation discards. Zoom/pan persist across repeated changes, invalid drafts retain the last valid drawing, and stale results cannot paint after close/replacement. Live preview can be paused. The preview is explicitly not calibrated Actual size.
+
+Focused local helper/control tests pass; final aggregate and hosted browser/native checks, screenshot review and immutable release verification remain required. Do not publish or merge this follow-on until preview.46 is published and verified.
+
+# Follow-on settings preview (local, not published)
+
+Based on the final preview.46 source bd9a1c9. Global text styles, Pages & layout and Page options now offer isolated live previews beside resizable controls. Read-only preview pan/zoom persists through setting changes, automatic updates can be paused, invalid drafts retain the last valid view, and cancellation never changes project/history. Apply remains one history entry. The original editor stays inert during these dialogs; individual object, link-style and other property dialogs retain their previous save workflow. SVG IDs are namespaced to prevent masks resolving against the original canvas.
+
+Six scheduler/isolation and five real page-layout editor closure regressions pass locally. Tentative preview collection clones/restores both layout and captured page definition, preserving automatic device membership and manual geometry when reverted. Automatic preview pauses after a rebuild of 750 ms or longer; manual refresh and explicit re-enable remain available. This bounds repeated typing freezes, not the cost of the first synchronous rebuild. Syntax, build and repository guard pass locally. Actual browser launch is blocked by sandbox socket() permission, so the new hosted browser-settings-preview gate and its three synthetic captures remain required. It covers repeated changes, invalid Apply, last-valid retention, Cancel/Escape, Undo/redo, pan/zoom, scope rerender and narrow layout. No version bump or remote publication has been performed by this work.
+
+# Integrated Letter fit documentation verified
+
+Regenerated paper-fit.png and wireless-paper.png through the actual PDF exporter from integrated preview.47 source 6ad9218 and visually inspected both. The fictional core fits Letter with 10.25 pt minimum editable text; explicit wireless continuation remains four sheets, first sheet members 7/8 and eight uplinks at 8.59 pt. These are actual exported output, not UI mockups. Default dense one-sheet fitting can still require smaller text, with truthful warnings.
+
+# Letter/A4 complete paper fit correction (pending integration)
+
+Both reported core/wireless screenshots showed the preview.46 readable-size floor enlarging models beyond selected Letter. Auto-fit now caps the common transform to available paper space and reports the actual text size when the target is impossible. Headers and docked keys retain independent physical typography; source positions and cable glue remain proportional. Saved frames/manual off-page transforms remain unchanged. Presented narrow labels scale their text-fit floor with the page transform. Fresh locked adaptive port maps avoid a second margin wrapper.
+
+Synthetic dense wireless/core containment, portrait/landscape, lock/reopen and manual-frame cases added. Final aggregate/browser/native verification and documentation capture remain required. No user screenshots or customer data enter source.
+
 # Preview.46 hosted browser corrections verified
 
 Run 215 at a0bf4c7 passes all 19 browser suites, including guide Escape, real pan navigation between offscreen objects, retained legacy refit guidance, and visible text/panel controls. Genuine synthetic guide (wide/narrow), text sizing and panel-width captures were downloaded, artifact SHA-256 verified and visually inspected before inclusion. Source is unchanged by this documentation commit. The original run 214 native Windows build, report media boxes, package and window/timer/update/rollback checks passed; exact final-head hosted gates and merged-main publication verification still remain required.
@@ -1212,3 +1278,9 @@ Pages & layout has Wireless APs and details (%) (25–400) and Wireless AP place
 The ordinary sample's Letter wireless pages now plan numeric label room before routing: both fit with at least 8.264pt actual text and no page overflow (switch width about 1031 physical px on a 1056px sheet). This removes a default 7.5pt-number-induced whole-switch enlargement, not all dense topology limits. New frame marker wirelessNumberScale preserves that plan across save/reopen; old frames remain compatible. Six focused AP tests and a synthetic side-column Visio package pass; full wireless aggregate and hosted browser validation are required on the combined head.
 
 Preview.46 documentation images were regenerated from the integrated source with synthetic inputs and visually inspected. paper-fit.png uses sampleSite on Letter; page-fill.png uses adaptiveProject('letter','landscape',5). wireless-paper.png now honestly shows the first of four explicit readable Letter continuations of the fictional eight-member/32-uplink fixture, not a tiny whole-topology fit. General text metrics measured 10.25pt on the core and 8.59pt on that wireless continuation; adaptive report typography remains preserved. The render helper is temporary, not a repository source dependency. Final hosted screenshots and full CI remain required.
+
+## Preview.47 adaptive port-map edge fill
+
+Fresh Auto-fit port maps use a 4 px chassis-safe gutter and a full-bleed header rather than a second locked-sheet border. Page lock no longer imposes the old reference socket-size ceiling; bank and complete key geometry still bound growth, preserving all members and socket proportions. Saved lock/edit frames without portMapFit:1 retain their legacy base so old manual coordinates do not jump. Fresh frames record the marker through the shared paper-fitting layer. Standalone report margins and Preserve mode are unchanged. Four-sided PDF printer hardware margins remain printer-dependent.
+
+Fictional five/eight-member and chassis Letter output was rendered through the actual PDF exporter and visually inspected; docs/images/page-fill.png is the current five-member output. Focused fresh-lock/save-reopen tests require the companion paper-fit correction. Hosted browser and native gates remain required before release.

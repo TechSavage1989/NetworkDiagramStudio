@@ -2,7 +2,7 @@ import {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReport
 import {sharedReportPalette} from './palette.mjs';
 import {reportDiagram,workspaceDiagrams,inventoryPages,blockedReport,validateReportScene,ReportCapacityError,numberReportPages,standardPortMapWidth} from './scene.mjs';
 import {reportPageLabel,reportFileStem} from './paper.mjs';
-import {cleanPageNumbers,targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions} from '../page-options.mjs';
+import {cleanPageSetup,cleanPageNumbers,targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions} from '../page-options.mjs';
 import {adaptivePortMap} from './adaptive-port-map.mjs';
 export {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReportInventory,validateInventory,inventoryCsv,technicianSummary,reportFolder,reportModelChoice} from './model.mjs';
 export {sharedReportPalette,aggregateKey,validateVlanColor,nativeFill,markerVlans,vlanIds,colorDifference} from './palette.mjs';
@@ -101,7 +101,8 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
    // Generate the same measured base on every rebuild, then the ordinary
    // applyDrawingEdits pass restores explicit patches by stable keys. Never
    // revert to the legacy arrangement merely because the first object moved.
-   const selected={...visible,...dimensions,width:dimensions.widthMm*96/25.4,height:dimensions.heightMm*96/25.4};
+   const frames=cleanPageSetup(project.layout?.pageSetup).visible,frame=visible.locked?frames?.lockFrames?.[finalName]:frames?.editFrames?.[finalName];
+   const selected={...visible,...dimensions,width:dimensions.widthMm*96/25.4,height:dimensions.heightMm*96/25.4,legacyAdaptive:!!frame&&frame.portMapFit!==1};
    try{
     const adapted=adaptivePortMap(item,palette,{...request,paper:selected},page);
     adapted.family='ports';adapted.printPaper=page.printPaper;pages[index]=adapted;

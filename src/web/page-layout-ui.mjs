@@ -2,8 +2,8 @@ import {cleanLabelBacking,LABEL_BACKING} from './label-backing-settings.mjs';
 import {cleanPresentation,presentation,panelFields,displayPageName} from './presentation.mjs';
 import {CORE_ARRANGEMENT_CHOICES,arrangeCoreLayout} from './core-arrangement.mjs';
 
-export function pageLayoutEditor({project,pages,selected,modal,field,button,apply,close}){
- const layout=structuredClone(project.layout||{});layout.presentation=cleanPresentation(layout.presentation);layout.corePages||=[];layout.reportPages||=[];
+export function pageLayoutEditor({project,pages,selected,modal,field,button,apply,close,preview}){
+ let layout=structuredClone(project.layout||{});layout.presentation=cleanPresentation(layout.presentation);layout.corePages||=[];layout.reportPages||=[];
  let key=selected||'*',store=()=>{};const include=new Set();
  const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;n.className=cls;return n;};
  const check=(parent,title,checked)=>{const label=el('label','','layout-check'),input=el('input');input.type='checkbox';input.checked=checked;input.setAttribute('aria-label',title);label.append(input,document.createTextNode(title));parent.append(label);return input;};
@@ -45,7 +45,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   const wirelessPlacement=field(grid,'Wireless AP placement',config.wirelessApPlacement,[['rows','Preserve rows (default)'],['sides','Use side space']]);
   sizes.append(el('p','Use side space tries measured AP columns beside the switch when their routes stay clear and no more crossed. Authored positions and frozen layouts are preserved; constrained diagrams keep their rows.','hint'));
   const equipment=global?numeric(grid,'All device sizes (%)',Math.round(config.deviceScale*100),10,400):null;
-  sizes.append(el('p','Text scale applies to this page or all pages through Drawing defaults. Minimum paper text defaults to 8 pt (0 disables it); it is measured on paper, not at screen zoom. Auto-fit enlarges the complete diagram only when needed, without breaking cable or label placement. If readable content cannot fit, choose larger paper or split the drawing. Explicit individual font sizes and saved page frames remain yours. Native artwork/report typography is preserved; enlarge its sheet if needed.','hint'));
+  sizes.append(el('p','Text scale applies to this page or all pages through Drawing defaults. Minimum paper text defaults to 8 pt (0 disables it); it is measured on paper, not at screen zoom. Auto-fit keeps the complete diagram inside the selected sheet, without breaking cable or label placement. If the text target cannot fit, a warning reports the actual text size; choose larger paper or split the drawing. Explicit individual font sizes and saved page frames remain yours. Native artwork/report typography is preserved; enlarge its sheet if needed.','hint'));
   const panel=el('fieldset','','layout-card');panel.append(el('legend','Information panel'));body.append(panel);
   const settings=config.panel,show=check(panel,'Show information panel',settings.visible),panelGrid=el('div','','layout-grid');panel.append(panelGrid);
   const placement=field(panelGrid,'Panel position',settings.position,[['left','Left of drawing'],['right','Right of drawing'],['top','Above drawing'],['free','Custom position']]),width=numeric(panelGrid,'Panel width',settings.width,120,1000),scale=numeric(panelGrid,'Panel scale (%)',settings.scale*100,10,400),panelText=numeric(panelGrid,'Panel text scale (%)',settings.textScale*100,10,400);
@@ -97,8 +97,8 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   const kind=field(creation,'New page type','core',[['core','Network diagram'],['ports','Port map'],['wireless','Wireless connections'],['logical','VLANs and routing'],['trunk','Trunk VLANs']]),newName=field(creation,'New page name','');
   for(const [title,target] of [['Page / devices',identity],['Sizes & text',sizes],['Panel details',panel],['New page',creation]])button(navigation,title,()=>{if(target===creation)creation.open=true;target.scrollIntoView({block:'start'});});
   button(creation,'Add page',()=>{store();const title=newName.value.trim();if(!title)throw Error('Enter a name for the new page.');if(entries().some(p=>displayPageName({layout},p)===title))throw Error('Choose a different page name.');const id=crypto.randomUUID();if(kind.value==='core'){key='network:'+id;layout.corePages.push({id,name:key,devices:[],showReferences:true});layout.presentation.pages[key]={name:title};}else{layout.reportPages.push({id,name:title,family:kind.value,devices:[]});key='report:'+id;}render();});
-  store=()=>{
-   const numericFields=(global||!inherited.checked?[drawing,text,minimumText,wirelessAp,equipment,...(show.checked?[width,paperWidth,scale,panelText,...(placement.value==='free'?[x,y]:[])]:[])]:[]).concat(backingPadding||[]).filter(Boolean);const invalid=numericFields.find(n=>!n.value||!Number.isFinite(+n.value)||+n.value<+n.min||+n.value>+n.max);if(invalid){invalid.focus();invalid.scrollIntoView({block:'center'});throw Error('Enter a value from '+invalid.min+' to '+invalid.max+' in the highlighted size or position field.');}
+  store=({quiet=false}={})=>{
+   const numericFields=(global||!inherited.checked?[drawing,text,minimumText,wirelessAp,equipment,...(show.checked?[width,paperWidth,scale,panelText,...(placement.value==='free'?[x,y]:[])]:[])]:[]).concat(backingPadding||[]).filter(Boolean);const invalid=numericFields.find(n=>!n.value||!Number.isFinite(+n.value)||+n.value<+n.min||+n.value>+n.max);if(invalid){if(!quiet){invalid.focus();invalid.scrollIntoView({block:'center'});}throw Error('Enter a value from '+invalid.min+' to '+invalid.max+' in the highlighted size or position field.');}
    if((global||!inherited.checked)&&show.checked&&+paperWidth.value>0&&+paperWidth.value<10)throw Error('Panel width must be 0 for automatic or 10–60 percent.');
    const next=global?layout.presentation.defaults:{...(name?.value.trim()?{name:name.value.trim()}:{}),...(!visible?.checked?{hidden:true}:{})};
    if(global||!inherited.checked)Object.assign(next,{drawingScale:+drawing.value/100,textScale:+text.value/100,minimumTextPt:+minimumText.value,wirelessApScale:+wirelessAp.value/100,wirelessApPlacement:wirelessPlacement.value,panel:{visible:show.checked,position:placement.value,width:+width.value,paperWidth:+paperWidth.value,scale:+scale.value/100,textScale:+panelText.value/100,x:+x.value,y:+y.value,sections:[...fields.children].filter(card=>sectionControls.find(c=>c.card===card)?.toggle.checked).map(card=>card.dataset.sectionId),
@@ -122,6 +122,19 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   const feedback=el('p','','layout-apply-feedback');feedback.setAttribute('role','alert');feedback.setAttribute('aria-live','assertive');feedback.tabIndex=-1;feedback.hidden=true;actions.before(feedback);
   button(actions,'Apply layout',()=>{try{store();const assigned=new Set([...layout.corePages,...layout.reportPages].flatMap(p=>p.devices));apply(layout,[...include].filter(id=>assigned.has(id)));close();}catch(error){feedback.textContent='Layout was not applied. '+error.message+' Your edits are still here; correct the setting and try again.';feedback.hidden=false;feedback.scrollIntoView({block:'nearest'});feedback.focus();}},'primary');button(actions,'Cancel',close);
   if(!global)button(actions,'Reset page layout',()=>{delete layout.presentation.pages[key];render();});
+  preview?.(body,()=>{
+   // store intentionally commits explicit Apply/page-switch edits, including
+   // converting automatic pages and clearing positions on rearrangement.
+   // A tentative preview must never advance that draft or its captured page.
+   const savedLayout=layout,savedDefinition=definition;
+   try{
+    layout=structuredClone(savedLayout);
+    definition=savedDefinition?[...layout.corePages,...layout.reportPages].find(p=>p.id===savedDefinition.id):null;
+    store({quiet:true});
+    const assigned=new Set([...layout.corePages,...layout.reportPages].flatMap(p=>p.devices));
+    return {layout,include:[...include].filter(id=>assigned.has(id)),selectedName:key==='*'?undefined:key};
+   }finally{layout=savedLayout;definition=savedDefinition;}
+  });
  }
  render();
 }

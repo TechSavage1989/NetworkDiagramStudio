@@ -44,9 +44,9 @@ test('reopened grouped devices retain socket glue and native local artwork',asyn
  for(const cable of after.items.filter(i=>i.type==='path'&&i.from&&i.to))for(const [end,point] of [[cable.from,cable.points[0]],[cable.to,cable.points.at(-1)]]){const body=after.items.find(i=>i.type==='device'&&i.key===end.device),socket=devicePoint(body,...body.ports[end.port]);assert.ok(Math.hypot(point[0]-socket[0],point[1]-socket[1])<1e-7);assert.ok(body.children.length);}
  assert.equal(project.layout.drawingGroups.length,1);
 });
-test('sidebar edge clamps a grouped translation together, never rearranging members',async()=>{
+test('occupied panel clamps a grouped translation together, never rearranging members',async()=>{
  const {moveDrawingItems}=await import('../src/web/drawing-edits.mjs');
- const edits=moveDrawingItems({...page,legendLayout:'sidebar',sidebar:{divider:50}},{},new Map([...keys].map(k=>[k,[-100,0]])),{preventSidebarOverlap:true});
+ const edits=moveDrawingItems({...page,items:[...page.items,{type:'rect',panelGroup:true,x:0,y:80,w:64,h:80}],legendLayout:'sidebar',sidebar:{divider:50}},{},new Map([...keys].map(k=>[k,[-100,0]])),{preventSidebarOverlap:true});
  assert.equal(edits[a.editKey].x,70);assert.equal(edits[b.editKey].x,270);
 });
 test('grouped chassis and attached optics transform once inside a locked top-panel page',async()=>{

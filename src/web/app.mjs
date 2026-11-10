@@ -1,3 +1,4 @@
+import {settingsPreview,isolatedPreview} from './settings-preview.mjs';
 import {pageLayoutNotice} from './page-layout-notice.mjs';
 import {openUserGuide} from './user-guide.mjs';
 import {diagramContentKeys,textEditingTarget} from './drawing-selection.mjs';
@@ -27,7 +28,7 @@ import {actualSizePaper} from './actual-size.mjs';
 import {diagramViewport} from './viewport.mjs';
 import {arrangeAnchors,arrangeBoxes,arrangeBoxesAtGap} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
-import {drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits,inverseDeviceDelta} from './drawing-edits.mjs';
+import {safeCoreMoveOffsets,drawingObjects,drawingBounds,moveDrawingItems,movementOffsets,placeDrawingDevices,scaleDrawingItems,cleanDrawingEdits,inverseDeviceDelta} from './drawing-edits.mjs';
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
@@ -79,7 +80,7 @@ let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0
 let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=false,drawingReady=false,displayedProject=null;
 const pageCache=new Map(),buildDrawing=(source=scoped(),options={})=>buildPages(source,{...options,cache:pageCache});
 const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
-let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null;
+let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null,settingsPreviewSession=null;
 let cablePoint=-1,snapLabelPick=null,contextMenu=null;
 const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:project.links,warnings:project.warnings}));
 const modelKinds=deviceKinds;
@@ -100,11 +101,11 @@ const slug=s=>String(s||'Network').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').sli
 function busy(on){working=on;window.NDSDesktop?.setBusy(on);for(const id of ['new','import','paste','open','export','export-menu','switchport-reports','drawing-organize','add-device','hardware','sample','print','svg'])if($(id))$(id).disabled=on||(['export','export-menu','print','svg'].includes(id)&&(!pages.length||!drawingReady))||(id==='drawing-organize'&&!pages[active]?.items.some(i=>i.type==='path'));
  // The Arrange control depends on the active page; recompute it after busy work.
  if($('drawing-arrange'))$('drawing-arrange').disabled=on||!(pages[active]?.coreDeviceIds&&pages[active]?.dynamic);}
-async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.dialog-task-error');if(!node){node=el('p','','error dialog-task-error');$('dialog-body').prepend(node);}node.textContent=e?.message||'The operation failed.';node.setAttribute('role','alert');node.tabIndex=-1;node.focus();node.scrollIntoView({block:'nearest'});}}finally{busy(false);}}
+async function task(action){if(working)return;busy(true);try{await action();}catch(e){say(e?.message||'The operation failed.');if($('dialog').open){let node=$('dialog-body').querySelector('.dialog-task-error');if(!node){node=el('p','','error dialog-task-error');($('dialog-body').querySelector('.settings-preview-controls')||$('dialog-body')).prepend(node);}node.textContent=e?.message||'The operation failed.';node.setAttribute('role','alert');node.tabIndex=-1;node.focus();node.scrollIntoView({block:'nearest'});}}finally{busy(false);}}
 function checkDiscard(){return !dirty||confirm('Discard the changes to this project?');}
-function close(){modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
+function close(){settingsPreviewSession?.dispose();settingsPreviewSession=null;modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;if($('dialog').open)$('dialog').close();}
 function commitInlineEdit(){if(!inlineSession)return true;if(!inlineSession.connected){inlineSession.cancel();return true;}return inlineSession.save();}
-function modal(title,className=''){cancelBesidePick();if(!commitInlineEdit())throw Error('Finish editing the diagram text first.');modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;$('dialog').className=className;$('dialog-title').textContent=title;const body=$('dialog-body');body.className='';body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
+function modal(title,className=''){settingsPreviewSession?.dispose();settingsPreviewSession=null;cancelBesidePick();if(!commitInlineEdit())throw Error('Finish editing the diagram text first.');modalHistoryScope=null;modalHistoryRefresh=null;modalGeneration++;$('dialog').className=className;$('dialog-title').textContent=title;const body=$('dialog-body');body.className='';body.replaceChildren();if(!$('dialog').open)$('dialog').showModal();return body;}
 function button(parent,label,fn,cls=''){const b=el('button',label,cls);b.type='button';b.onclick=()=>task(fn);parent.append(b);return b;}
 function line(parent,...nodes){const row=el('div','','itemrow');row.append(...nodes);parent.append(row);return row;}
 function actions(parent){const n=el('div','','actions');parent.append(n);return n;}
@@ -309,7 +310,7 @@ function removeSelectedCablePoint(){const item=selectedCable();if(!item||cablePo
 // Connector text with a white background sits on its own cable by design (only
 // that cable's jumps must stay clear), and its consecutive parts may touch.
 const ownCaption=(path,label)=>label.background&&path.linkId!=null&&path.linkId===label.linkId,sameCaption=(a,b)=>a.background&&b.background&&a.linkId!=null&&a.linkId===b.linkId&&a.labelRole===b.labelRole;
-function validateDrawing(){const rebuilt=buildDrawing();for(const p of rebuilt.filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&!sameCaption(a,b)&&intersects(a,b,0))||paths.some(r=>ownCaption(r,a)?(r.hops||[]).some(hop=>intersects(hop,a,1)):pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}return rebuilt;}
+function validateDrawing(source=scoped()){const rebuilt=buildDrawing(source);for(const p of rebuilt.filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&!sameCaption(a,b)&&intersects(a,b,0))||paths.some(r=>ownCaption(r,a)?(r.hops||[]).some(hop=>intersects(hop,a,1)):pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}return rebuilt;}
 function setDrawingEdits(next){
  project.layout||={};const previous=project.layout;const setup=cleanPageSetup(previous.pageSetup);for(const page of pages)if(page.pageLockFrame)setup.visible.lockFrames[page.name]=page.pageLockFrame;
  const accepted=pages[active];if(accepted?.presentationFrame&&!accepted.pageLockFrame)(setup.visible.editFrames||={})[accepted.name]??={...accepted.presentationFrame};
@@ -411,7 +412,7 @@ function startDrawingMove(key,event){
   moving=new Set(movementOffsets(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[1,1]]))).keys()),
   boxes=drawingObjects(page).filter(o=>moving.has(o.editKey)&&!moving.has(o.parent?.editKey)&&!(o.type==='path'&&!keys.has(o.editKey))).map(drawingBounds).filter(Boolean),targets=snapTargets(page,moving),elements=[...$('canvas').querySelectorAll('[data-drawing-key]')].filter(n=>!n.closest('.cable-controls')&&moving.has(n.getAttribute('data-drawing-key'))&&!moving.has(n.parentElement.closest('[data-drawing-key]')?.getAttribute('data-drawing-key'))),original=new Map(elements.map(n=>[n,{transform:n.getAttribute('transform'),d:n.getAttribute('d')}]));let started=false;
  const restore=()=>{for(const [n,s] of original){if(s.transform==null)n.removeAttribute('transform');else n.setAttribute('transform',s.transform);if(s.d)n.setAttribute('d',s.d);}showSnapGuides();};
- const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey);return snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis);};
+ const geometry=(dx,dy,e)=>{const axis=axisFor(dx,dy,e?.shiftKey),next=snapBoxes(boxes,[axis===1?0:dx,axis===0?0:dy],settings,targets,e?.altKey,axis),safe=safeCoreMoveOffsets(page,new Map([...keys].map(k=>[k,next.delta]))),delta=safe.get([...keys][0])||next.delta;return {...next,delta,guides:delta[0]===next.delta[0]?next.guides:[]};};
  return {preview(dx,dy,e){const next=geometry(dx,dy,e),[x,y]=next.delta;if(!started){drawingSelection.clear();for(const k of keys)drawingSelection.add(k);syncDrawingSelection();started=true;}
   const edits=moveDrawingItems(page,project.layout?.drawingEdits,new Map([...keys].map(k=>[k,[x,y]])));
   for(const [n,s] of original){const patch=edits[n.getAttribute('data-drawing-key')];if(s.d&&patch?.points)n.setAttribute('d',patch.points.map((p,i)=>(i?'L ':'M ')+p.join(' ')).join(' '));else{const object=drawingObjects(page).find(o=>o.editKey===n.getAttribute('data-drawing-key')),[px,py]=object?.normalized?inverseDeviceDelta(object.parent,x,y):[x,y];n.setAttribute('transform','translate('+px+' '+py+') '+(s.transform||''));}}
@@ -636,6 +637,11 @@ function linkStyleOptions(selected){
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
 
+function attachSettingsPreview(body,read,configure,{validate=false,selectedName=pages[active]?.name,viewState={}}={}){
+ const source=structuredClone(project);
+ settingsPreviewSession=settingsPreview(body,{read,initialPages:pages,selectedName,viewState,build:data=>isolatedPreview(source,draft=>configure(draft,structuredClone(data)),draft=>({pages:validate?validateDrawing(scoped(draft)):buildDrawing(scoped(draft)),selectedName:data?.selectedName}))});
+ return settingsPreviewSession;
+}
 function globalTextStyleOptions(){
  const body=modal('Global text styles');
  body.append(el('p','Set font size, color, weight and alignment for each category across this project. These are defaults for existing and future items. Individually edited text keeps its own settings; exported diagrams use the same styles.','hint'));
@@ -653,7 +659,7 @@ function globalTextStyleOptions(){
   controls.push({id,size,color,weight,align});
  }
  const bar=actions(body);
- button(bar,'Apply all text styles',()=>{
+ const collectStyles=()=>{
   const next={};
   for(const c of controls){
    const percent=Number(c.size.value),color=c.color.value.trim();
@@ -665,18 +671,23 @@ function globalTextStyleOptions(){
    if(c.align.value!=='default')style.align=c.align.value;
    next[c.id]=style;
   }
-  const previous=project.layout||{},cleaned=cleanGlobalTextStyles(next);
+  return cleanGlobalTextStyles(next);
+ };
+ button(bar,'Apply all text styles',()=>{
+  const previous=project.layout||{},cleaned=collectStyles();
   project.layout={...previous,textStyles:cleaned};
   let prepared;try{prepared=validateDrawing();}catch(error){project.layout=previous;throw error;}
   perform('text-styles',prepared);close();say('Global text styles saved for all drawing pages. Undo restores the previous styles.');
  },'primary');
  button(bar,'Reset all styles',()=>{for(const c of controls){c.size.value=100;c.color.value='';c.weight.value='default';c.align.value='default';}});
  button(bar,'Cancel',close);
+ attachSettingsPreview(body,collectStyles,(draft,styles)=>{draft.layout={...draft.layout,textStyles:styles};},{validate:true});
 }
 $('global-text-styles').onclick=()=>task(globalTextStyleOptions);
 
 function layoutOptions(selected=pages[active]?.name){
- pageLayoutEditor({project,pages:buildPages(scoped(),{includeHidden:true}),selected,modal,field,button,close,apply(layout,include=[]){
+ const previewView={};
+ pageLayoutEditor({project,pages:buildPages(scoped(),{includeHidden:true}),selected,modal,field,button,close,preview(body,read){attachSettingsPreview(body,read,(draft,data)=>{draft.devices=draft.devices.map(d=>data.include.includes(d.id)?{...d,hidden:false,scopeOverride:true}:d);draft.layout=cleanLayout(data.layout,draft.devices.map(d=>d.id));},{viewState:previewView}).request();},apply(layout,include=[]){
   const previous=project;project={...project,devices:project.devices.map(d=>include.includes(d.id)?{...d,hidden:false,scopeOverride:true}:d),layout:cleanLayout(layout,project.devices.map(d=>d.id))};
   let prepared;try{prepared=buildDrawing();}catch(error){project=previous;throw error;}
   perform('page-layout',prepared);viewport.fit();say('Page names, device selections and layout saved. Undo is available.');
@@ -686,6 +697,7 @@ $('page-layout').onclick=()=>task(()=>layoutOptions());
 function pageOptions(){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(project.layout?.pageSetup),body=modal('Page options');
  body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Wireless drawings scale proportionally to the selected paper by default, keeping the complete arrangement together. Readable continuation is available separately.','hint'));
+ body.append(el('p','The preview shows the visible drawing page, not a separate Print/PDF sheet. Print-paper settings can differ without changing this preview; check Print/PDF before printing. Use Preview page to inspect other affected sheets.','hint'));
  const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
  const groupRow=el('div'),pageRow=el('div');body.append(groupRow,pageRow);
  const group=field(groupRow,'Page group',familyOf(pages[active]),pageFamilies),page=field(pageRow,'Individual page',String(active),pages.map((item,i)=>[String(i),(item.displayName||item.name)+'  ('+(pageFamilies.find(([id])=>id===familyOf(item))?.[1]||familyOf(item))+')']));
@@ -746,18 +758,24 @@ function pageOptions(){
  const first=field(numberRow,'First page number',p.start),pad=field(numberRow,'Page number digits',p.pad,[[1,'1 - no padding'],[2,'01 - two digits'],[3,'001 - three digits']]),format=field(numbering,'Page number format',p.format);
  first.type='number';first.min=0;first.max=9999;first.step=1;format.maxLength=100;
  numbering.append(el('p','Available fields: {page}, {last}, {total}.','hint'));
- button(actions(body),'Save page options',()=>{
+ const collectPageLayout=()=>{
   if(preset.value==='custom'&&[width,height].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter custom visible page dimensions from 148 to 1500 mm.');
   if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
   if(first.value===''||!Number.isInteger(+first.value)||+first.value<0||+first.value>9999)throw Error('Use a first page number from 0 to 9999.');
   if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');
   store();visible.fitMode=fitMode.value;visible.wirelessFit=wirelessFit.value;visible.lockFrames={};visible.editFrames={};
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
-  const before=project.layout;project.layout={...before,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
+  return {...project.layout,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
+ };
+ const pageActions=actions(body);
+ button(pageActions,'Save page options',()=>{
+  const before=project.layout;project.layout=collectPageLayout();
   let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
   for(const page of prepared)if(page.pageLockFrame)project.layout.pageSetup.visible.lockFrames[page.name]=page.pageLockFrame;
   perform('page-options',prepared);close();viewport.fit();say('Visible page proportions, print settings and page numbering saved. Visible page layout updated.');
  },'primary');
+ button(pageActions,'Cancel',close);
+ attachSettingsPreview(body,()=>({layout:collectPageLayout(),selectedName:selectedScope==='page'?selectedPage:selectedScope==='group'?pages.find(item=>familyOf(item)===selectedGroup)?.name:undefined}),(draft,data)=>{draft.layout=data.layout;});
 }
 $('page-options').onclick=()=>task(pageOptions);
 function corePageChoices(){

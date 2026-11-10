@@ -99,12 +99,36 @@ test('Auto-fit uses spare paper for larger chassis sockets with narrow safe gutt
  }
 });
 
-test('locked port maps keep their established reference ceiling and printable inset',()=>{
+test('fresh locked port maps fill their paper without a second border or reference-size ceiling',()=>{
  const project=adaptiveProject('letter','landscape',5);project.layout.pageSetup.visible.groups.ports.locked=true;
  const page=maps(project)[0];assert.ok(page.pageLockFrame);
- assert.ok(page.adaptivePortMap.socketWidth<=30.001);
- const header=page.items[0];assert.ok(header.x>=24-1e-6);
- assert.ok(header.x+header.w<=page.width-24+1e-6);
+ assert.ok(page.adaptivePortMap.socketWidth>30);
+ const header=page.items[0];assert.equal(header.x,0);assert.equal(header.y,0);assert.equal(header.w,page.width);
+ assert.deepEqual(validateReportScene(page),[]);
+ const extent=panels(page);assert.ok(Math.min(...extent.map(p=>p.x))<5);
+ assert.ok(Math.max(...extent.map(p=>p.x+p.w))>page.width-5);
+ assert.equal(page.pageLockFrame.portMapFit,1);
+ project.layout.pageSetup.visible.lockFrames={[page.name]:page.pageLockFrame};
+ const reopened=JSON.parse(JSON.stringify(project));reopened.layout=cleanLayout(reopened.layout,reopened.devices.map(d=>d.id));
+ assert.deepEqual(shape(maps(reopened)[0]),shape(page));
+});
+
+test('saved legacy locked map frames retain their original reference base',()=>{
+ const project=adaptiveProject('letter','landscape',5);project.layout.pageSetup.visible.groups.ports.locked=true;
+ project.layout.pageSetup.visible.lockFrames={'Switchport reports|workspace|0':{scale:16/17,x:31.058823529411768,y:24,originX:0,originY:0,width:1056,height:816.0000000000001}};
+ const page=maps(project)[0];assert.ok(page.adaptivePortMap.socketWidth<=30.001);
+ assert.ok(Math.abs(page.items[0].x-31.058823529411768)<1e-8);assert.equal(page.items[0].y,24);
+ assert.ok(!page.pageLockFrame.portMapFit,'do not reinterpret historical frozen layouts');
+ assert.deepEqual(validateReportScene(page),[]);
+});
+
+test('adaptive port-map headers reach paper edges and dense banks use narrow safe gutters',()=>{
+ for(const members of [5,8])for(const preset of ['letter','a4']){
+  const page=maps(adaptiveProject(preset,'landscape',members))[0],header=page.items[0];
+  assert.equal(header.x,0);assert.equal(header.y,0);assert.equal(header.w,page.width);
+  assert.equal(page.reportMargin,4);assert.deepEqual(validateReportScene(page),[]);
+  assert.equal(numbers(page).length,members*52);
+ }
 });
 
 test('general diagram text minimum does not refit an already measured native adaptive map',()=>{

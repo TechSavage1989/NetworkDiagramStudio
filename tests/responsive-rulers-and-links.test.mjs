@@ -50,8 +50,8 @@ test('manual cable label remains pinned and keeps actual related cable identity'
  assert.equal(label.relatedCableKey,cable.editKey);
  assert.equal(label.background,'#FFFFFF');
 });
-test('core device drag cannot cross into the sidebar',()=>{
- const page={legendLayout:'sidebar',sidebar:{divider:300},items:[{type:'device',kind:'switch',editKey:'switch',x:430,y:200,w:200,h:60}]};
+test('core device drag protects actual panel content, not its entire column',()=>{
+ const page={legendLayout:'sidebar',sidebar:{divider:300},items:[{type:'device',kind:'switch',editKey:'switch',x:430,y:200,w:200,h:60},{type:'rect',panelGroup:true,x:38,y:147,w:276,h:130}]};
  const offsets=safeCoreMoveOffsets(page,new Map([['switch',[-300,20]]]));
  assert.deepEqual(offsets.get('switch'),[-110,20]);
  assert.deepEqual(safeCoreMoveOffsets(page,new Map([['switch',[50,20]]])).get('switch'),[50,20]);

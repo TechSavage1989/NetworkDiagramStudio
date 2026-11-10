@@ -3,15 +3,18 @@ import assert from 'node:assert/strict';
 import {cleanPresentation,presentation,cleanPanel} from '../src/web/presentation.mjs';
 import {fitVisiblePage,cleanPageSetup} from '../src/web/page-options.mjs';
 import {textLayout} from '../src/web/diagram/scene.mjs';
+import {readableModelScale} from '../src/web/paper-readability.mjs';
+import {contentBounds} from '../src/web/page-content-fit.mjs';
 import {paperPanel} from '../src/web/paper-panel.mjs';
 const scene=()=>({name:'Core Network',title:'Core Network',width:2400,height:1600,items:[{type:'text',pageHeading:'title',value:'Synthetic readability',x:30,y:30,w:600,h:40,size:24},{type:'text',editKey:'Core Network|port|a',value:'Port 24',x:800,y:700,w:80,h:18,size:12},{type:'path',points:[[0,200],[2200,200],[2200,1400]],weight:2,color:'#000000'},{type:'device',editKey:'Core Network|device|a',x:800,y:800,w:400,h:100,children:[],ports:{a:[.5,0]}}]});
 const project=(defaults={})=>({layout:{presentation:{defaults},pageSetup:{visible:{default:{preset:'letter',locked:true}}}}});
-test('readable paper floor is physical, preserves relative geometry and exposes overflow',()=>{
+test('paper selection fits the whole diagram instead of enforcing a floor outside the sheet',()=>{
  const p=project(),page=scene();fitVisiblePage(page,p);
- assert.equal(page.paperReadability.minimumPt,8);assert.ok(page.paperReadability.actualPt>=8-1e-8);assert.equal(page.pageOverflow,true);
+ assert.equal(page.paperReadability.minimumPt,8);assert.ok(page.paperReadability.actualPt<8);assert.equal(page.pageOverflow,false);
+ const bounds=contentBounds(page);assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.w<=page.width+1e-6&&bounds.y+bounds.h<=page.height+1e-6);
  const path=page.items.find(i=>i.type==='path'),device=page.items.find(i=>i.type==='device'),scale=device.w/400;
  assert.equal(path.points[1][0]-path.points[0][0],2200*scale);
- const label=page.items.find(i=>i.editKey?.includes('|port|'));assert.ok(textLayout(label).size*.75>=8-1e-8);
+ const label=page.items.find(i=>i.editKey?.includes('|port|'));assert.equal(textLayout(label).size*.75,page.paperReadability.actualPt);
 });
 test('explicit disabled minimum retains compact fit and global/per-page preferences normalize and reopen',()=>{
  const p=project({minimumTextPt:0}),page=scene();fitVisiblePage(page,p);assert.ok(page.paperReadability.actualPt<8);assert.equal(page.pageOverflow,false);
@@ -20,7 +23,7 @@ test('explicit disabled minimum retains compact fit and global/per-page preferen
  assert.equal(cleanPresentation({defaults:{minimumTextPt:-1,wirelessApScale:20}}).defaults.minimumTextPt,8);assert.equal(cleanPanel({paperWidth:100}).paperWidth,0);
 });
 test('larger lettering control increases physical minimum; explicit individual sizes are not overridden',()=>{
- const p=project({minimumTextPt:8,textScale:1.5}),page=scene();fitVisiblePage(page,p);assert.ok(page.paperReadability.actualPt>=12-1e-8);
+ const p=project({minimumTextPt:8,textScale:1.5}),page=scene();fitVisiblePage(page,p);assert.equal(page.paperReadability.minimumPt,12);assert.ok(page.paperReadability.actualPt<12);assert.equal(page.pageOverflow,false);
  const manual=scene(),authored=project();authored.layout.drawingEdits={'Core Network|port|a':{size:4}};manual.items.find(i=>i.editKey?.includes('|port|')).size=4;fitVisiblePage(manual,authored);assert.equal(manual.paperReadability.actualPt,null);assert.equal(manual.pageOverflow,false);
 });
 test('frozen frames preserve intentional transforms and expose small text instead of breaking the layout',()=>{
@@ -37,19 +40,20 @@ test('automatic panel trims empty row width while custom physical width rewraps 
 
 test('physical floor refines against final narrow and wrapped text boxes',()=>{
  for(const [value,w,h] of [['Port 24',60,18],['Port number 24',25,100],['Long wrapped caption text',25,100]]){
-  const page=scene(),text=page.items.find(i=>i.editKey?.includes('|port|'));Object.assign(text,{value,w,h,size:18});fitVisiblePage(page,project());
-  assert.ok(textLayout(text).size*.75>=8-1e-6,`${value}: ${textLayout(text).size*.75}pt`);
-  assert.ok(Math.abs(page.paperReadability.actualPt-textLayout(text).size*.75)<1e-6);
+  const page=scene(),text=page.items.find(i=>i.editKey?.includes('|port|'));Object.assign(text,{value,w,h,size:18});const p=project(),required=readableModelScale(page,p,.1,1,new Set(page.items.filter(i=>i.pageHeading)));const resized={...text,w:text.w*required.factor,h:text.h*required.factor,size:text.size*required.factor};
+  assert.ok(textLayout(resized).size*.75>=8-1e-6,`${value}: ${textLayout(resized).size*.75}pt`);
+  fitVisiblePage(page,p);assert.ok(Math.abs(page.paperReadability.actualPt-textLayout(text).size*.75)<1e-6);assert.equal(page.pageOverflow,false);
  }
 });
-test('large readable transforms survive locked and unlocked frame save/reopen',()=>{
+test('large deliberate saved transforms survive locks and reopen without automatic shrinking',()=>{
  for(const locked of [false,true]){
   const p=project({minimumTextPt:18,textScale:4});p.layout.pageSetup.visible.default.locked=locked;
-  const first=scene();fitVisiblePage(first,p);assert.ok(first.presentationFrame.scale>4);
-  const kind=locked?'lockFrames':'editFrames';p.layout.pageSetup.visible[kind]={[first.name]:first.presentationFrame};
-  p.layout.pageSetup=cleanPageSetup(JSON.parse(JSON.stringify(p.layout.pageSetup)));assert.deepEqual(p.layout.pageSetup.visible[kind][first.name],first.presentationFrame);
-  const reopened=scene();fitVisiblePage(reopened,p);assert.equal(reopened.presentationFrame.scale,first.presentationFrame.scale);
-  for(const [index,item] of first.items.entries())for(const key of ['x','y','w','h','size'])if(Number.isFinite(item[key]))assert.ok(Math.abs(item[key]-reopened.items[index][key])<1e-7);
+  const first=scene();fitVisiblePage(first,p);assert.equal(first.pageOverflow,false);
+  const kind=locked?'lockFrames':'editFrames',frame={...first.presentationFrame,scale:5};p.layout.pageSetup.visible[kind]={[first.name]:frame};
+  const deliberate=scene();fitVisiblePage(deliberate,p);assert.equal(deliberate.presentationFrame.scale,5);assert.equal(deliberate.pageOverflow,true);
+  p.layout.pageSetup=cleanPageSetup(JSON.parse(JSON.stringify(p.layout.pageSetup)));assert.deepEqual(p.layout.pageSetup.visible[kind][first.name],frame);
+  const reopened=scene();fitVisiblePage(reopened,p);assert.equal(reopened.presentationFrame.scale,deliberate.presentationFrame.scale);
+  for(const [index,item] of deliberate.items.entries())for(const key of ['x','y','w','h','size'])if(Number.isFinite(item[key]))assert.ok(Math.abs(item[key]-reopened.items[index][key])<1e-7);
  }
 });
 test('near-fit inventory pages reclaim outside whitespace without lowering readable text',async()=>{
