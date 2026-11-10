@@ -1,3 +1,7 @@
+# Preview.50 validation checkpoint
+
+All 723 combined Node tests and nine independent Visio packages pass. Hosted run 229 passes all 20 browser suites, including normal quick-paper AP/device readability checks. Native Windows lifecycle checks remain pending. Detailed screenshot measurement resolved the apparent mixed-side AP-caption concern: adjacent title ink has 36 blank pixel columns and scene boxes retain at least 2 physical points of clearance; no geometry correction was needed. Actual fictional captures were reviewed. Final exact-head hosted and publication verification remain required.
+
 # Preview.50 integration
 
 Baseline preview.49 is published and verified at main/tag d2c02765f3f698d68a80cff74ba1b5e83b037338. Its exact-head browser/native and publication gates passed; downloaded release assets, checksums and updater feed were verified. Earlier pending .49 entries below are historical. This candidate addresses normal-workflow wireless paper readability, independent device-caption typography and actual legend/cable stroke equality. Combined validation and publication are pending. Preserve explicit layout choices and authored geometry.
