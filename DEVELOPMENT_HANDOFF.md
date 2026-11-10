@@ -1,3 +1,7 @@
+# Preview.49 combined validation checkpoint
+
+All707 Node tests and nine independent Visio packages pass. Hosted run225 passed19/20 browser suites; the remaining preview Cancel comparison is being separated into strict SVG geometry and current viewport/ruler checks, not ignored. Genuine current synthetic UI screenshots were downloaded, digest verified and visually reviewed. Fixed adaptive display names now preserve descriptive page labels; long readability notices wrap within the workspace. Final exact-head browser/native and publication verification remain required.
+
 # Adaptive port-map navigation identity correction
 
 The new Letter creation default exposed an existing adaptive-renderer omission: fixed-paper maps retained their stable internal name but lost the descriptive " / Port map" display name. Preserve the original display identity when generating the measured adaptive sheet. Dynamic, Letter and A4 navigation labels now match across save/reopen; map contents and dimensions are unchanged. The original documentation and Actual size browser assertions remain intact and require hosted rerun.
