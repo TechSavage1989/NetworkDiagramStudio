@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {actualSizeScale,screenSignature,validCalibration,calibrationMatches} from '../src/web/actual-size.mjs';
+import {actualSizeScale,actualSizePaper,screenSignature,validCalibration,calibrationMatches} from '../src/web/actual-size.mjs';
 const signature=screenSignature({devicePixelRatio:1.25,screen:{width:1920,height:1080,colorDepth:24},visualViewport:{scale:1}});
 test('calibrated physical paper preserves exact size regardless of drawing units',()=>{
  for(const [preset,orientation,width,height] of [['letter','portrait',215.9,279.4],['a4','landscape',297,210],['a3','portrait',297,420],['custom','portrait',200,400]]){
@@ -48,4 +48,26 @@ test('viewport keeps physical scale through resize, preserves data and leaves th
  assert.equal(JSON.stringify(paper),original,'screen actions never modify page data');
  window.devicePixelRatio=1.25;events.get('resize')();actual.onclick();
  view.show('A4',svg,{...paper,visiblePaper:{preset:'dynamic'}});assert.equal(actual.disabled,true);assert.equal(actual['aria-pressed'],'false');
+});
+
+import {buildPages} from '../src/web/diagram/index.mjs';
+import {adaptiveProject} from './fixtures/adaptive-port-maps.mjs';
+import {sampleSite} from '../src/web/sample.mjs';
+test('real grown Dynamic builder pages cannot masquerade as physical custom paper',()=>{
+ const dynamic=adaptiveProject('dynamic'),page=buildPages(dynamic).find(p=>p.portMap?.switchportSheet);
+ assert.ok(page);assert.equal(page.paper.preset,'custom');assert.equal(page.dynamic,undefined);
+ const screenPage={...page,actualSizePaper:actualSizePaper(dynamic,page)};
+ assert.equal(actualSizeScale(screenPage,4),null);
+ const inherited=adaptiveProject();delete inherited.layout.pageSetup.visible.groups.ports;
+ inherited.layout.pageSetup.visible.default={preset:'dynamic'};
+ const grown=buildPages(inherited).find(p=>p.portMap?.switchportSheet);
+ assert.equal(grown.paper.preset,'custom');
+ assert.equal(actualSizeScale({...grown,actualSizePaper:actualSizePaper(inherited,grown)},4),null,'preferred Letter cannot legitimize a grown custom canvas');
+ const sample=sampleSite(),letter=buildPages(sample).find(p=>p.portMap?.switchportSheet);
+ assert.ok(actualSizeScale({...letter,actualSizePaper:actualSizePaper(sample,letter)},4)>0,'implicit Letter remains available');
+ sample.layout={switchport:{enabled:true,deviceIds:['sw-1']}};
+ const report=buildPages(sample).find(p=>p.family==='switchports');
+ assert.ok(report);assert.ok(Math.abs(actualSizeScale({...report,actualSizePaper:actualSizePaper(sample,report)},4)*report.width-297*4)<1e-7,'independent A4 reports retain physical paper');
+ const fixed=adaptiveProject('a4'),a4=buildPages(fixed).find(p=>p.portMap?.switchportSheet);
+ assert.ok(Math.abs(actualSizeScale({...a4,actualSizePaper:actualSizePaper(fixed,a4)},4)*a4.width-297*4)<1e-7);
 });

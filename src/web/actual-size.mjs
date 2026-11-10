@@ -1,4 +1,4 @@
-import {paperDimensions} from './page-options.mjs';
+import {paperDimensions,cleanPageSetup,pageFamily,pageGeometry} from './page-options.mjs';
 
 export const calibrationKey='nds.screen-calibration.v1';
 export function screenSignature(win){
@@ -8,9 +8,23 @@ export function validCalibration(value){
  return value?.version===1&&Number.isFinite(value.pxPerMm)&&value.pxPerMm>=1&&value.pxPerMm<=16&&value.signature&&['dpr','width','height','depth','zoom'].every(k=>Number.isFinite(value.signature[k]));
 }
 export function calibrationMatches(value,signature){return validCalibration(value)&&Object.keys(signature).every(k=>value.signature[k]===signature[k]);}
+// Explicit Dynamic page/group choices must not become physical merely because
+// the builder labels its grown canvas with generated custom-paper dimensions.
+export function actualSizePaper(project,page){
+ const family=page?.family||pageFamily(page?.name||''),setup=cleanPageSetup(project?.layout?.pageSetup);
+ if(family==='switchports'&&page?.switchportReport)return page.visiblePaper||page.paper;
+ const choice=setup.visible.pages[page?.name]||setup.visible.groups[family];
+ if(choice?.preset==='dynamic')return choice;
+ if(page?.visiblePaper)return page.visiblePaper;
+ const geometry=pageGeometry(project,family);
+ const expected=paperDimensions(geometry.paper),rendered=paperDimensions(page?.paper);
+ // Preferred Letter is only a starting size for a growing builder canvas.
+ // It is physical only if the completed sheet still matches that size.
+ return !geometry.dynamic&&expected&&rendered&&Math.abs(expected.widthMm-rendered.widthMm)<.01&&Math.abs(expected.heightMm-rendered.heightMm)<.01?page.paper:{preset:'dynamic'};
+}
 // Use the physical sheet, not the editor's expanded off-page viewBox.
 export function actualSizeScale(page,pxPerMm){
- const dimensions=paperDimensions(page?.visiblePaper||(!page?.dynamic?page?.paper:null));
+ const dimensions=paperDimensions(page&&Object.hasOwn(page,'actualSizePaper')?page.actualSizePaper:page?.visiblePaper||(!page?.dynamic?page?.paper:null));
  if(!dimensions||!Number.isFinite(page?.width)||page.width<=0||!Number.isFinite(pxPerMm)||pxPerMm<=0)return null;
  return dimensions.widthMm*pxPerMm/page.width;
 }

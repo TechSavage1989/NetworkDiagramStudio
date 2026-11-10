@@ -8,7 +8,7 @@ paper first. Physical sheets retain scale when the viewport is too small and can
 be panned; Fit/manual zoom leave 1:1 mode. Projects and export dimensions are
 unchanged. Resolution alone cannot establish real size; recheck each monitor.
 
-All 603 Node tests, offline build, repository guard and whitespace checks pass.
+All 604 Node tests, offline build, repository guard and whitespace checks pass.
 Hosted Edge integration is added in
 tests/browser-actual-size.mjs. Local Chromium cannot launch because socket creation
 is blocked, including an approved elevated launch; no local UI capture or physical

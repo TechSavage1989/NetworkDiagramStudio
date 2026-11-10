@@ -21,6 +21,7 @@ import {deviceMacs,inputMacAddresses} from './device-details.mjs';
 import {inlineTextEditor} from './inline-text.mjs';
 import {ProjectHistory} from './history.mjs';
 import {cleanSnap,snapPoint,snapBoxes,boxSelected,dragAxis} from './snapping.mjs';
+import {actualSizePaper} from './actual-size.mjs';
 import {diagramViewport} from './viewport.mjs';
 import {arrangeAnchors,arrangeBoxes,arrangeBoxesAtGap} from './arrange.mjs';
 import {filterStencilMasters} from './stencil-search.mjs';
@@ -937,7 +938,7 @@ function draw(prepared){
  active=Math.max(0,Math.min(active,pages.length-1));
  pageNavigation();
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
-  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),pages[active]);}
+  if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),{...pages[active],actualSizePaper:actualSizePaper(project,pages[active])});}
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
  for(const id of ['export','export-menu','print','svg'])$(id).disabled=!pages.length||working;
  typeHighlights.show(canvas.querySelector('svg'));

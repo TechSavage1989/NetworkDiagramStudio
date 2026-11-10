@@ -8,7 +8,7 @@ import {pathToFileURL} from 'node:url';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
 const output=resolve(process.env.NDS_QA_OUTPUT||'.artifacts/actual-size');await mkdir(output,{recursive:true});
 const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE_PATH||undefined,args:['--no-sandbox']});
-const page=await browser.newPage({viewport:{width:1366,height:900}}),errors=[];
+const page=await browser.newPage({viewport:{width:1366,height:900},screen:{width:1920,height:1080}}),errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
