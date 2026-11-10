@@ -4,9 +4,9 @@
 // envelopes, not manufacturing dimensions or inferred interface capabilities.
 export function connectorEnvelope(form){
  if(/RJ|copper/i.test(form))return {w:.025,h:.020};
- if(/QSFP/i.test(form))return {w:.029,h:.017};
+ if(/QSFP/i.test(form))return {w:.029,h:.029*8.5/18.35};
  if(/CX4|X2/i.test(form))return {w:.052,h:.029};
- return {w:.028,h:.014};
+ return {w:.028,h:.028*8.6/13.7};
 }
 export function consistentSockets(panel){
  if(!panel)return panel;

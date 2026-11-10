@@ -1,3 +1,4 @@
+import {readableModelScale,paperTextMetrics} from './paper-readability.mjs';
 import {paperPanel,paperLinkKey} from './paper-panel.mjs';
 import {contentBounds,paperFurniture,placePaperFurniture} from './page-content-fit.mjs';
 export function cleanPageNumbers(raw){const p=raw&&typeof raw==='object'?raw:{};return {show:p.show===true,footer:p.footer===true,start:Number.isInteger(p.start)&&p.start>=0&&p.start<=9999?p.start:1,pad:Number.isInteger(p.pad)&&p.pad>=1&&p.pad<=5?p.pad:2,format:typeof p.format==='string'&&p.format.length<=100?p.format:'{page} / {last}'};}
@@ -19,7 +20,7 @@ export function cleanPageSetup(raw){
   default:cleanPaper(p.default),
   overrides:Object.fromEntries(pageFamilies.filter(([key])=>p.overrides?.[key]).map(([key])=>[key,cleanPaper(p.overrides[key])])),
   printPaper:p.printPaper&&p.printPaper.preset!=='dynamic'?cleanPaper(p.printPaper):null,
-  visible:{lockFrames:Object.fromEntries(Object.entries(visible.lockFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(f.panelFit===1?{panelFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),editFrames:Object.fromEntries(Object.entries(visible.editFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=4&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(f.panelFit===1?{panelFit:1}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),fitMode:visible.fitMode==='preserve'?'preserve':'optimize',wirelessFit,default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
+  visible:{lockFrames:Object.fromEntries(Object.entries(visible.lockFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=10000&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(f.panelFit===1?{panelFit:1}:{}),...(Number.isFinite(f.wirelessNumberScale)&&f.wirelessNumberScale>1&&f.wirelessNumberScale<=4?{wirelessNumberScale:f.wirelessNumberScale}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),editFrames:Object.fromEntries(Object.entries(visible.editFrames||{}).filter(([name,f])=>safe(name)&&f&&['scale','x','y','originX','originY','width','height'].every(k=>Number.isFinite(f[k])&&Math.abs(f[k])<1e8)&&f.scale>0&&f.scale<=10000&&f.width>0&&f.height>0).slice(0,500).map(([name,f])=>[name,{...Object.fromEntries(['scale','x','y','originX','originY','width','height'].map(k=>[k,f[k]])),...(f.contentFit===1?{contentFit:1}:{}),...(f.panelFit===1?{panelFit:1}:{}),...(Number.isFinite(f.wirelessNumberScale)&&f.wirelessNumberScale>1&&f.wirelessNumberScale<=4?{wirelessNumberScale:f.wirelessNumberScale}:{}),...(['layout','readable','readable-legacy'].includes(f.wirelessFit)?{wirelessFit:f.wirelessFit}:{})}])),fitMode:visible.fitMode==='preserve'?'preserve':'optimize',wirelessFit,default:cleanPaper(visible.default),groups:Object.fromEntries(pageFamilies.filter(([key])=>groups[key]).map(([key])=>[key,cleanPaper(groups[key])])),pages:Object.fromEntries(Object.entries(individual).filter(([name])=>safe(name)).slice(0,500).map(([name,paper])=>[name,cleanPaper(paper)]))}
  };
 }
 export function pageFamily(name){return /^Switchport reports/i.test(name)?'switchports':/^(?:MDF Port Map|Port Inventory)/i.test(name)?'ports':/^Wireless Connections/i.test(name)?'wireless':/^VLANs and Routing/i.test(name)?'logical':/^Trunk VLAN/i.test(name)?'trunk':'core';}
@@ -72,6 +73,12 @@ export function fitVisiblePage(page,project){
  // full page a second time or introduce another border of empty space.
  if(!paper.locked&&page.adaptivePortMap&&visibleFitMode(project)==='optimize'&&Math.abs(page.width/page.height-dimensions.ratio)<1e-7){
   page.visiblePaper=paper;page.visibleFitMode='optimize';
+  // Native adaptive report layouts already enforce their own readable socket
+  // minimum and fit every member/key. Never run a second fit merely because
+  // the general diagram-label preference is larger; that would shrink them
+  // and reinterpret saved absolute edits. Report the actual paper size only.
+  const unit=page.width/(dimensions.widthMm*96/25.4),check=readableModelScale(page,project,1,unit,new Set(page.items.filter(i=>i.pageFrame||i.pageHeading)));
+  page.paperReadability={minimumPt:check.minimumPt,actualPt:check.metrics.minimum?check.metrics.minimum/unit*.75:null,preserved:true,overflow:false};
   page.printPaper=cleanPageSetup(project?.layout?.pageSetup).printPaper||paper;
   return page;
  }
@@ -80,7 +87,7 @@ export function fitVisiblePage(page,project){
  const visible=cleanPageSetup(project?.layout?.pageSetup).visible,editFrame=!locked?visible.editFrames[page.name]:null;
  const frozen=locked?visible.lockFrames[page.name]:editFrame;
  const contentFit=!preserve&&(!frozen||frozen.contentFit===1)&&page.items.some(i=>i.pageHeading);
- let furniture=null,measured=null,panel=null;
+ let furniture=null,measured=null,panel=null,readability=null;
  let factor=1,dx=(width-sourceW)/2,dy=(height-sourceH)/2;
  if(!preserve||frozen){
   // Calculate a size-independent page frame. Scaling to fill it gives an
@@ -105,9 +112,23 @@ export function fitVisiblePage(page,project){
    }
    measured=contentBounds(page,new Set([...furniture.automatic,...(panel?.items||[])]));
    if(measured){
-    const body=panel?.body||furniture.body;factor=Math.min(4,body.w/measured.w,body.h/measured.h);
-    dx=body.x+(body.w-measured.w*factor)/2-measured.x*factor;
-    dy=body.y+(body.h-measured.h*factor)/2-measured.y*factor;
+    let body=panel?.body||furniture.body;factor=Math.min(4,body.w/measured.w,body.h/measured.h);
+    readability=readableModelScale(page,project,factor,unit,new Set([...furniture.automatic,...(panel?.items||[])]));
+    if(!frozen){
+     factor=readability.factor;
+     if(measured.w*factor>body.w+1e-6||measured.h*factor>body.h+1e-6){
+      // Use disposable outside whitespace before declaring readable content
+      // too large. Keep the heading and any panel rail untouched; 2 paper px
+      // remains at the content edge. Frozen/manual frames never change here.
+      const edge=2*unit,left=(page.originX||0)+edge,right=(page.originX||0)+targetW-edge,bottom=(page.originY||0)+targetH-edge;
+      const x=Math.abs(body.x-furniture.body.x)<1e-6?left:body.x;
+      const end=Math.abs(body.x+body.w-furniture.body.x-furniture.body.w)<1e-6?right:body.x+body.w;
+      body={...body,x,w:end-x,h:Math.max(body.h,bottom-body.y)};
+     }
+    }
+    readability.body=body;
+    dx=body.x+Math.max(0,body.w-measured.w*factor)/2-measured.x*factor;
+    dy=body.y+Math.max(0,body.h-measured.h*factor)/2-measured.y*factor;
    }
   }
   if(frozen){factor=frozen.scale;dx=frozen.x;dy=frozen.y;
@@ -146,10 +167,12 @@ export function fitVisiblePage(page,project){
  page.pageOverflow=locked&&(contentX<(page.originX||0)-1e-6||contentY<(page.originY||0)-1e-6||contentX+sourceW*factor>(page.originX||0)+page.width+1e-6||contentY+sourceH*factor>(page.originY||0)+page.height+1e-6);
  {const bounds=contentBounds(page);page.pageOverflow=(!contentFit&&page.pageOverflow)||!!(locked||editFrame)&&!!bounds&&(bounds.x<(page.originX||0)-1e-6||bounds.y<(page.originY||0)-1e-6||bounds.x+bounds.w>(page.originX||0)+page.width+1e-6||bounds.y+bounds.h>(page.originY||0)+page.height+1e-6);}
  page.pageOverflow=page.pageOverflow||!!panel?.overflow;
- page.presentationFrame={scale:factor,x:preserve&&!frozen?0:dx,y:preserve&&!frozen?0:dy,originX:page.originX,originY:page.originY,width:page.width,height:page.height,...(contentFit?{contentFit:1}:{}),...(contentFit&&!page.panelFitLegacy?{panelFit:1}:{}),...(page.wirelessLayout?{wirelessFit:page.wirelessLayout.paperFit||'layout'}:{})};
+ if(readability){const body=readability.body||panel?.body||furniture.body;const exceeds=frozen?!!page.pageOverflow:measured.w*factor>body.w+1e-6||measured.h*factor>body.h+1e-6;page.pageOverflow||=exceeds;const finalText=paperTextMetrics(page,project,new Set([...furniture.automatic,...(panel?.items||[])]));page.paperReadability={minimumPt:readability.minimumPt,actualPt:finalText.minimum?finalText.minimum/(page.width/physicalW)*.75:null,preserved:!!frozen,overflow:exceeds};}
+ page.presentationFrame={scale:factor,x:preserve&&!frozen?0:dx,y:preserve&&!frozen?0:dy,originX:page.originX,originY:page.originY,width:page.width,height:page.height,...(contentFit?{contentFit:1}:{}),...(contentFit&&!page.panelFitLegacy?{panelFit:1}:{}),...(page.wirelessLayout?{wirelessFit:page.wirelessLayout.paperFit||'layout',...(page.wirelessLayout.numberScale>1?{wirelessNumberScale:page.wirelessLayout.numberScale}:{})}:{})};
  if(locked)page.pageLockFrame={...page.presentationFrame};
  page.widthMm=page.width*25.4/96;page.heightMm=page.height*25.4/96;
  page.visiblePaper=paper;page.visibleFitMode=preserve?'preserve':'optimize';
  page.printPaper=cleanPageSetup(project?.layout?.pageSetup).printPaper||paper;
+ if(!readability){const check=readableModelScale(page,project,1,page.width/physicalW,new Set(page.items.filter(i=>i.pageFrame||i.pageHeading||i.panelGroup)));page.paperReadability={minimumPt:check.minimumPt,actualPt:check.metrics.minimum?check.metrics.minimum/(page.width/physicalW)*.75:null,preserved:true,overflow:false};}
  return page;
 }

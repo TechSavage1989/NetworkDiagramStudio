@@ -254,3 +254,14 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
 #screen-calibration{width:min(1100px,94vw);max-height:90vh;overflow:auto} .calibration-scroll{overflow-x:auto;padding:22px 8px;margin:12px 0;background:#f2f6f8} #calibration-line{height:18px;border-left:2px solid #183e55;border-right:2px solid #183e55;position:relative;box-sizing:border-box;max-width:none} #calibration-line::after{content:"";position:absolute;left:0;right:0;top:8px;border-top:2px solid #183e55} #calibration-error{color:#a52920} #actual-size-status{white-space:normal} #zoom-actual[aria-pressed="true"]{background:#d5ede9}
 
 #screen-calibration>p,#screen-calibration>label,#screen-calibration>.dialog-actions{margin-left:20px;margin-right:20px} #screen-calibration .calibration-scroll{margin:12px 20px} #screen-calibration>.dialog-actions{margin-bottom:20px}
+
+/* Read-only help uses the shared modal and stays usable on narrow windows. */
+.user-guide-dialog{width:min(900px,94vw)}
+.user-guide-dialog #dialog-body{max-height:72vh;overflow:auto;user-select:text}
+.guide-topic-links{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.guide-topic-links button{font-size:12px;text-align:left}
+.guide-topic{border:1px solid #cfdae2;border-radius:8px;padding:12px;margin:10px 0;scroll-margin:12px}
+.guide-topic summary{cursor:pointer;font-weight:700;color:#164957;font-size:16px}
+.guide-topic li{margin:10px 0;line-height:1.55}
+.guide-tip{border-left:3px solid #408c88;background:#eef6f5;padding:10px;line-height:1.5}
+@media(max-width:620px){.guide-topic-links{display:grid;grid-template-columns:1fr 1fr}.guide-topic{padding:9px}.guide-topic ol{padding-left:22px}}

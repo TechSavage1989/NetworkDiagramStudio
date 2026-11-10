@@ -1,3 +1,4 @@
+import {connectorEnvelope} from './connector-geometry.mjs';
 import {devicePoint,rotatedDeviceAnchor} from './device-geometry.mjs';
 import {labelBackingItems} from './label-backings.mjs';
 import {logicalPort} from '../physical-links.mjs';
@@ -130,7 +131,7 @@ export function addDevice(page,project,d,bounds,key,opts={}){
     rect(g.children,.012,.20,.016,.60,d.kind==='firewall'?'#AD6450':'#65838D');
     label(g.children,.06,.15,.88,.7,'Port layout needs a model or mapped stencil',10,false,C.muted,'center');
   }
-  if(opts.apEdge)g.ports[opts.apEdge]=[.5,opts.apEdge==='uplink.top'?0:1];
+  if(opts.apEdge)g.ports[opts.apEdge]=opts.apEdge==='uplink.left'?[0,.5]:opts.apEdge==='uplink.right'?[1,.5]:[.5,opts.apEdge==='uplink.top'?0:1];
   editDeviceShape(page,project,g);
   const artworkScale=g.w/(placement.w/(opts.fillBounds?1:factor));
   if(artworkScale!==1)for(const child of g.children)if(child.type==='text'&&!Number.isFinite(project.layout?.drawingEdits?.[child.editKey]?.size))child.size*=artworkScale;
@@ -314,7 +315,8 @@ export function optic(page,project,device,body,anchor,info){
   const optics=project.optics||{}, forti=/forti/i.test([device.vendor,device.model].join(' '));
   const selection=info.slot==='sr' && forti ? optics.fg_sr||optics.sr : optics[info.slot];
   const asset=actualAsset(project,typeof selection==='object'&&selection?{stencil:selection}:{stencilId:selection});
-  const ratio=asset?asset.width/asset.height:2;
+  const point=body.ports?.[anchor.port],socket=point&&body.children?.find(c=>c.socketPart===0&&Math.abs(c.x+c.w/2-point[0])<1e-6&&Math.abs(c.y+c.h/2-point[1])<1e-6);
+  const envelope=connectorEnvelope(socket?.socketForm||'SFP'),ratio=asset?asset.width/asset.height:envelope.w/envelope.h;
   const bounds=fitRatio(ratio,0,0,Math.max(4,body.w*.028),Math.max(3,body.h*.20));
   const w=bounds.w,h=bounds.h,key='plug-'+page.items.length;
   const assigned=asset?.anchors?.cable;

@@ -52,7 +52,7 @@ export function automaticPanelContent(project,devices,options={}){
   return [name(d),...new Set((options.addressMode==='mac'?[]:[d.ip,...(d.ips||[])]).filter(Boolean)).values(),mac].filter(Boolean).join(' · ');
  }).filter(value=>value.includes(' · '));
  const models=devices.map(d=>{const details=deviceDetails(d,project);return details?[name(d),details].join(' · '):'';}).filter(Boolean);
- const routes=devices.flatMap(d=>(d.routes||[]).map(r=>name(d)+' · '+(typeof r==='string'?r:[r.destination||r.prefix||r.network,r.gateway||r.nextHop,r.interface].map(text).filter(Boolean).join(' · '))));
+ const routes=devices.flatMap(d=>(d.routes||[]).map(r=>typeof r==='string'?text(r):[r?.destination||r?.prefix||r?.network,r?.gateway||r?.nextHop,r?.interface].map(text).filter(Boolean).join(' · ')).filter(Boolean).map(r=>name(d)+' · '+r));
  const ports=devices.flatMap(d=>devicePorts(d).filter(p=>options.portMode==='described'?p.description:options.portMode==='vlans'?p.native!=null||p.tagged?.length:p.description||p.native!=null||p.tagged?.length||p.speed||p.state).map(p=>[describePort(d,p),text(p.description),p.native!=null?'Native VLAN '+text(p.native):'',p.tagged?.length?'Tagged '+p.tagged.join(', '):'',text(p.speed),text(p.state)].filter(Boolean).join(' · ')));
  return {vlans, lags:rows(groups),apPorts,vsfPorts,uplinks,optics,status,addresses:rows(addresses),models:rows(models),routes:rows(routes),ports:rows(ports)};
 }
@@ -62,7 +62,7 @@ export function panelRows(id,auto,options){
  if(Object.hasOwn(options.sectionContent||{},id)&&options.sectionContent[id].trim())content=rows(options.sectionContent[id].split(/\r?\n/).map(text));
  else if(id==='notes')content=text(options.notes)?[text(options.notes)]:[];
  else content=rows(auto[id]||[]);
- if(!content.length)return options.emptySections==='hide'?[]:[panelEmptyMessages[id]||'No custom content entered.'];
+ if(!content.length)return options.emptySections==='explain-opt-in'?[panelEmptyMessages[id]||'No custom content entered.']:[];
  const limit=options.rowLimit||80;
  return content.length>limit?[...content.slice(0,limit),`${content.length-limit} more items. Increase Rows per section in Pages & layout to show more.`]:content;
 }

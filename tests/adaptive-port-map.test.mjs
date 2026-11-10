@@ -106,3 +106,12 @@ test('locked port maps keep their established reference ceiling and printable in
  const header=page.items[0];assert.ok(header.x>=24-1e-6);
  assert.ok(header.x+header.w<=page.width-24+1e-6);
 });
+
+test('general diagram text minimum does not refit an already measured native adaptive map',()=>{
+ const project=adaptiveProject('letter','landscape',5),original=maps(project)[0];
+ project.layout.presentation={defaults:{minimumTextPt:12}};
+ const after=maps(project)[0];assert.deepEqual(shape(after),shape(original));
+ assert.deepEqual(validateReportScene(after),[]);assert.equal(after.paperReadability.preserved,true);
+ assert.equal(after.paperReadability.minimumPt,12);assert.ok(after.paperReadability.actualPt<12);
+ assert.equal(numbers(after).length,260);
+});

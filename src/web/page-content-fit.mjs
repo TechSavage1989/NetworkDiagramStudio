@@ -23,7 +23,7 @@ export function contentBounds(page,exclude=new Set()){
 // Explicit furniture edits keep their saved offsets and sizes in paper units.
 // Legacy callers without the original geometry keep edited objects as content.
 export function paperFurniture(page,project,width,height,unit,margin){
- const edits=project?.layout?.drawingEdits||{},items=page.items.filter(i=>(i.pageHeading||i.pageFrame)&&(!edits[i.editKey]||i._pageFurnitureSource&&(i.pageHeading||i.pageFrame==='brand'))),automatic=new Set(items),placements=new Map(),left=(page.originX||0)+margin,right=(page.originX||0)+width-margin,top=(page.originY||0)+margin,bottom=(page.originY||0)+height-margin,span=right-left;
+ const edits=project?.layout?.drawingEdits||{},items=page.items.filter(i=>(i.pageHeading||i.pageFrame)&&(!edits[i.editKey]||i._pageFurnitureSource&&(i.pageHeading||['brand','header-background'].includes(i.pageFrame)))),automatic=new Set(items),placements=new Map(),left=(page.originX||0)+margin,right=(page.originX||0)+width-margin,top=(page.originY||0)+margin,bottom=(page.originY||0)+height-margin,span=right-left;
  const find=role=>items.find(i=>(i.pageHeading||i.pageFrame)===role);
  const text=(item,x,y,w)=>{
   if(!item)return 0;
@@ -38,11 +38,16 @@ export function paperFurniture(page,project,width,height,unit,margin){
   const h=Number.isFinite(patch?.h)?patch.h*unit:Math.max(size*1.25,wrapPortText(item.value,w,size,item.bold).length*size*1.25);
   placements.set(item,{x,y,w,h,size,scale:unit/(prev.scale||1)});return Math.max(h,y+h-originalY);
  };
- const brand=find('brand'),projectName=find('project'),brandWidth=brand?Math.min(span*.43,264*unit):0;
- let y=top;
- const nameHeight=text(projectName,left,y,Math.max(unit,span-brandWidth-(brand?16*unit:0))),brandHeight=text(brand,right-brandWidth,y,brandWidth);
+ const banner=find('header-background'),inset=banner?12*unit:0,brand=find('brand'),projectName=find('project'),brandWidth=brand?Math.min((span-2*inset)*.43,264*unit):0;
+ let y=top+(banner?6*unit:0);
+ const nameHeight=text(projectName,left+inset,y,Math.max(unit,span-2*inset-brandWidth-(brand?16*unit:0))),brandHeight=text(brand,right-inset-brandWidth,y,brandWidth);
  if(projectName||brand)y+=Math.max(nameHeight,brandHeight)+5*unit;
- const title=find('title');if(title)y+=text(title,left,y,span)+3*unit;
+ const title=find('title');if(title)y+=text(title,left+inset,y,span-2*inset)+3*unit;
+ if(banner){
+  const prev=banner.presentation||{scale:1},patch=edits[banner.editKey],source=banner._pageFurnitureSource;let box={x:left,y:top,w:span,h:y-top+3*unit,scale:unit/(prev.scale||1)};
+  if(patch&&source){for(const k of ['x','y'])if(Number.isFinite(patch[k]))box[k]+=(patch[k]-source[k])*unit;for(const k of ['w','h'])if(Number.isFinite(patch[k]))box[k]=patch[k]*unit;}
+  placements.set(banner,box);y+=6*unit;
+ }
  const subtitle=find('subtitle');if(subtitle)y+=text(subtitle,left,y,span)+6*unit;
  const rule=find('rule');if(rule){placements.set(rule,{x:left,y,w:span,h:unit,scale:unit/(rule.presentation?.scale||1)});y+=unit+6*unit;}
  const number=find('footer-number'),footer=find('footer-name'),footerRule=find('footer-rule');let footerHeight=0;
