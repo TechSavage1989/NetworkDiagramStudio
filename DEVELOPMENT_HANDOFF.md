@@ -1,3 +1,31 @@
+# Preview.48 integration
+
+Baseline is published preview.47 main/tag 797f580f4ee9a177df6f34bb7a1b57ccad7bf0b2. Its final 20 browser suites, native validation and release gates passed; downloaded assets, SHA256SUMS and updater feed were verified. Earlier pending .47 entries below are historical. Preview.48 combines calibrated settings navigation and wireless automatic-frame/side-space fixes. Final combined local and hosted verification remains pending; do not describe it as published before release verification.
+
+# Preview controls and calibrated settings view (follow-on candidate)
+
+Settings live preview now retains its user choice, adapting debounce after slow rebuilds instead of automatically unchecking itself. Controls width uses one bounded slider and persists across layout scope rerenders. Transform-based pan supports fitted pages, left/middle dragging and pointer-centred wheel zoom; navigation is separate from draft settings. Preview Actual size/Calibrate screen share the main drawing calibration and actualSizePaper classification. Physical scale remains fixed through pane resize; zoom/Fit leaves 1:1 mode. Calibration listeners dispose when settings dialogs close/rebuild, and same-window calibration changes propagate to the main drawing.
+
+Focused queue/scale/calibration/guide tests pass. Local Chromium still cannot start because socket() is denied, including the permitted escalated attempt; hosted settings/actual-size and native verification plus genuine updated screenshots remain required. No release or version change is included in this handoff.
+# Wireless side-space follow-up (preview.48 candidate)
+
+Explicit AP size/side-placement changes in Pages & layout now refit automatic
+wireless frames without unlocking paper. Re-applying Use side space repairs an
+old automatic row frame; authored object geometry and unrelated pages stay
+untouched. Side-space compares measured lateral columns and mixed surrounding
+rows, balancing crossings against cable travel rather than silently vetoing
+all shorter side arrangements. Saved side/mixed plans carry a validated
+wirelessPlan marker so reopening or moving an AP cannot revert the base to rows.
+
+A fictional eight-member/32-uplink stack at150% AP size now uses side space plus
+top/bottom rows. On Letter, physical AP detail text improves from4.17pt to4.71pt
+and crossings fall from22 to14 at that scale; all hardware/caption/route checks
+remain clear. This is an improvement, not readable8pt on an impossibly dense
+single sheet. Larger paper or the existing readable-continuation mode remains
+necessary. Actual generated SVG output was rendered and visually inspected.
+Hosted tests add actual side placement, saving/reopening and a current capture;
+full aggregate/native/browser gates remain required before publication.
+
 # Hosted connection-key click readiness correction
 
 Run218 passed the new empty-panel placement drag suite. Its connection-label

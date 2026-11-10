@@ -1,48 +1,67 @@
+import {createActualSizeView} from './actual-size.mjs';
 let previewSerial=0;
+const previewPreferences={live:true,controlsWidth:400};
 // Preview work is isolated from the project/history. Late results cannot paint
 // after a newer draft, a dialog replacement or cancellation.
 export function previewQueue({read,build,publish,state=()=>{},delay=300,schedule=setTimeout,cancel=clearTimeout,now=()=>performance.now(),slowAfter=750}){
- let generation=0,timer=null,disposed=false,autoPaused=false;
- const request=(wait=delay,{manual=false}={})=>{
-  if(disposed||autoPaused&&!manual)return;const current=++generation;if(timer!=null)cancel(timer);state('pending');
-  timer=schedule(async()=>{timer=null;const started=now();try{const draft=read();const result=await build(draft);if(!disposed&&current===generation){publish(result);if(now()-started>=slowAfter&&!manual){autoPaused=true;state('slow');}else state('ready');}}catch(error){if(!disposed&&current===generation){const paused=!manual&&now()-started>=slowAfter;if(paused)autoPaused=true;state('error',error,{paused});}}},wait);
+ let generation=0,timer=null,disposed=false,adaptiveDelay=delay;
+ const request=(wait=adaptiveDelay,{manual=false}={})=>{
+  if(disposed)return;const current=++generation;if(timer!=null)cancel(timer);state('pending');
+  timer=schedule(async()=>{timer=null;const started=now();try{const draft=read();const result=await build(draft);if(!disposed&&current===generation){publish(result);const slow=now()-started>=slowAfter;adaptiveDelay=slow?Math.min(2000,Math.max(delay,now()-started)):delay;state(slow?'slow':'ready');}}catch(error){if(!disposed&&current===generation){const slow=now()-started>=slowAfter;if(slow)adaptiveDelay=Math.min(2000,Math.max(delay,now()-started));state('error',error);}}},wait);
  };
- return {request,resume(){autoPaused=false;},pause(){generation++;if(timer!=null)cancel(timer);timer=null;},dispose(){disposed=true;generation++;if(timer!=null)cancel(timer);timer=null;}};
+ return {request,resume(){},pause(){generation++;if(timer!=null)cancel(timer);timer=null;},dispose(){disposed=true;generation++;if(timer!=null)cancel(timer);timer=null;}};
 }
+
 export function isolatedPreview(source,configure,build){const draft=structuredClone(source);configure(draft);return build(draft);}
 
-export function settingsPreview(body,{read,build,initialPages=[],selectedName='',viewState={}}){
+// Screen-only navigation never mutates page geometry. Unlike scroll offsets,
+// translations allow panning a fitted/smaller page in every direction.
+export function previewZoomAt(view,factor,x,y){
+ const scale=Math.max(.0001,Math.min(16,view.scale*factor));
+ return {...view,mode:'custom',scale,x:x-(x-view.x)*scale/view.scale,y:y-(y-view.y)*scale/view.scale};
+}
+export function settingsPreview(body,{read,build,initialPages=[],selectedName='',viewState={},preferences=previewPreferences}){
  const dialog=body.closest('dialog'),el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;n.className=cls;return n;};
  dialog.classList.add('settings-preview-dialog');
  const controls=el('section','','settings-preview-controls');controls.setAttribute('aria-label','Settings controls');controls.append(...body.childNodes);
  const view=el('section','','settings-preview-view');view.setAttribute('aria-label','Live diagram preview');
- const toolbar=el('div','','settings-preview-toolbar'),liveLabel=el('label','Live preview'),live=el('input');live.type='checkbox';live.checked=viewState.live!==false;liveLabel.prepend(live);toolbar.append(liveLabel);
+ const toolbar=el('div','','settings-preview-toolbar'),liveLabel=el('label','Live preview'),live=el('input');live.type='checkbox';live.checked=viewState.live??preferences.live;liveLabel.prepend(live);toolbar.append(liveLabel);
  const action=(title,fn)=>{const b=el('button',title);b.type='button';b.onclick=fn;toolbar.append(b);return b;};
- const update=action('Update preview',()=>queue.request(0,{manual:true}));
+ action('Update preview',()=>queue.request(0,{manual:true}));
  const pagesLabel=el('label','Preview page'),picker=el('select');picker.setAttribute('aria-label','Preview page');pagesLabel.append(picker);toolbar.append(pagesLabel);
  const status=el('p','Current drawing. Changes are previewed, not saved.','settings-preview-status');status.setAttribute('role','status');status.setAttribute('aria-live','polite');status.dataset.state='ready';
- const viewport=el('div','','settings-preview-viewport');viewport.setAttribute('aria-label','Read-only preview: drag to pan');viewport.tabIndex=0;
+ const viewport=el('div','','settings-preview-viewport');viewport.setAttribute('aria-label','Read-only preview. Drag or middle-drag to pan. Scroll to zoom.');viewport.tabIndex=0;
  const stage=el('div','','settings-preview-stage');viewport.append(stage);
- const zoomLabel=el('span','','settings-preview-zoom');let zoom=viewState.zoom||1,currentPage=null,rendered=initialPages,name=selectedName,disposed=false;
- const fit=()=>{if(disposed||!currentPage)return;viewState.zoom=zoom;const width=currentPage.width||1200,height=currentPage.height||800,ratio=Math.min(Math.max(1,viewport.clientWidth-20)/width,Math.max(1,viewport.clientHeight-20)/height),w=Math.max(1,width*ratio*zoom),h=Math.max(1,height*ratio*zoom);stage.style.width=w+'px';stage.style.height=h+'px';zoomLabel.textContent=Math.round(zoom*100)+'% of fit';};
- action('−',()=>{zoom=Math.max(.25,zoom/1.25);fit();}).setAttribute('aria-label','Preview zoom out');
- action('Fit preview',()=>{zoom=1;fit();viewport.scrollTo(0,0);});
- action('+',()=>{zoom=Math.min(16,zoom*1.25);fit();}).setAttribute('aria-label','Preview zoom in');toolbar.append(zoomLabel);
- const widthLabel=el('label','Controls width','settings-preview-width'),width=el('input');width.type='range';width.min=280;width.max=720;width.value=400;width.step=20;width.setAttribute('aria-label','Settings controls width');width.oninput=()=>controls.style.width=width.value+'px';widthLabel.append(width);toolbar.append(widthLabel);
- view.append(toolbar,status,viewport,el('p','Read-only preview. Drag to pan; zoom stays set as you change settings. This is not calibrated Actual size. Apply saves once; Cancel or Close discards the draft.','hint'));
+ const zoomLabel=el('span','','settings-preview-zoom');let currentPage=initialPages.find(p=>p.name===selectedName)||initialPages[0],svg=null,rendered=initialPages,name=selectedName,disposed=false,actualView;
+ if(!viewState.mode)Object.assign(viewState,{mode:'fit',scale:1,x:0,y:0});
+ const paint=()=>{if(disposed||!svg)return;stage.style.transform='translate('+viewState.x+'px,'+viewState.y+'px) scale('+viewState.scale+')';zoomLabel.textContent=(viewState.scale<.01?(viewState.scale*100).toFixed(2):Math.round(viewState.scale*100))+'%';actualView?.refresh();};
+ const fit=()=>{if(disposed||!svg)return;const box=svg.viewBox.baseVal,scale=Math.max(.0001,Math.min(16,Math.min((viewport.clientWidth-20)/box.width,(viewport.clientHeight-20)/box.height)));Object.assign(viewState,{mode:'fit',scale,x:(viewport.clientWidth-box.width*scale)/2,y:(viewport.clientHeight-box.height*scale)/2});paint();};
+ const zoom=(factor,x=viewport.clientWidth/2,y=viewport.clientHeight/2)=>{if(!svg)return;Object.assign(viewState,previewZoomAt(viewState,factor,x,y));paint();};
+ action('−',()=>zoom(1/1.25)).setAttribute('aria-label','Preview zoom out');
+ action('Fit preview',fit);
+ action('+',()=>zoom(1.25)).setAttribute('aria-label','Preview zoom in');toolbar.append(zoomLabel);
+ const actual=action('Actual size',()=>{}),calibrate=action('Calibrate screen',()=>{}),actualStatus=el('p','','settings-preview-actual');actualStatus.setAttribute('role','status');
+ const widthLabel=el('label','Controls width','settings-preview-width'),width=el('input');width.type='range';width.min=280;width.max=720;width.value=viewState.controlsWidth??preferences.controlsWidth;width.step=10;width.setAttribute('aria-label','Settings controls width');
+ const setControlsWidth=()=>{const max=Math.max(280,Math.min(720,body.clientWidth-320));width.max=max;const value=Math.max(280,Math.min(max,Number(width.value)));width.value=value;controls.style.width=value+'px';width.setAttribute('aria-valuetext',value+' pixels');};
+ width.oninput=()=>{viewState.controlsWidth=preferences.controlsWidth=Number(width.value);setControlsWidth();};widthLabel.append(width);toolbar.append(widthLabel);controls.style.width=width.value+'px';
+ view.append(toolbar,status,actualStatus,viewport,el('p','Read-only preview. Drag to pan; wheel or +/− to zoom; 0 fits. Actual size uses your screen calibration. Apply saves once; Cancel or Close discards the draft.','hint'));
  body.replaceChildren(controls,view);
- const display=()=>{const oldX=viewState.left||0,oldY=viewState.top||0;currentPage=rendered.find(p=>p.name===name)||rendered[0];stage.replaceChildren();if(currentPage){name=currentPage.name;picker.value=name;stage.innerHTML=currentPage.svg;const svg=stage.querySelector('svg');if(svg){const prefix='settings-preview-'+(++previewSerial)+'-',ids=new Map([...svg.querySelectorAll('[id]')].map(node=>[node.id,prefix+node.id]));for(const node of [svg,...svg.querySelectorAll('*')])for(const attr of [...node.attributes]){if(attr.name==='id'&&ids.has(attr.value))node.setAttribute(attr.name,ids.get(attr.value));else if(/href$/.test(attr.name)&&attr.value.startsWith('#')&&ids.has(attr.value.slice(1)))node.setAttribute(attr.name,'#'+ids.get(attr.value.slice(1)));else if(attr.value.includes('url(#'))node.setAttribute(attr.name,attr.value.replace(/url\(#([^)]*)\)/g,(all,id)=>ids.has(id)?'url(#'+ids.get(id)+')':all));}svg.setAttribute('aria-label','Preview diagram');}fit();viewport.scrollTo(oldX,oldY);}else{stage.textContent='No visible pages for these settings.';stage.style.width='100%';stage.style.height='100%';}};
+ actualView=createActualSizeView({button:actual,calibrate,status:actualStatus,getPage:()=>currentPage,isActive:()=>viewState.mode==='actual',leave:()=>{if(viewState.mode==='actual')viewState.mode='custom';},setScale:(scale,preserve)=>{if(!svg)return;const box=svg.viewBox.baseVal;Object.assign(viewState,{mode:'actual',scale,x:preserve?viewState.x:20+(box.x-(currentPage.originX||0))*scale,y:preserve?viewState.y:20+(box.y-(currentPage.originY||0))*scale});paint();}});
+ const display=()=>{const previous=currentPage,oldSvg=svg;currentPage=rendered.find(p=>p.name===name)||rendered[0];stage.replaceChildren();svg=null;if(currentPage){name=currentPage.name;picker.value=name;stage.innerHTML=currentPage.svg;svg=stage.querySelector('svg');if(svg){const prefix='settings-preview-'+(++previewSerial)+'-',ids=new Map([...svg.querySelectorAll('[id]')].map(node=>[node.id,prefix+node.id]));for(const node of [svg,...svg.querySelectorAll('*')])for(const attr of [...node.attributes]){if(attr.name==='id'&&ids.has(attr.value))node.setAttribute(attr.name,ids.get(attr.value));else if(/href$/.test(attr.name)&&attr.value.startsWith('#')&&ids.has(attr.value.slice(1)))node.setAttribute(attr.name,'#'+ids.get(attr.value.slice(1)));else if(attr.value.includes('url(#'))node.setAttribute(attr.name,attr.value.replace(/url\(#([^)]*)\)/g,(all,id)=>ids.has(id)?'url(#'+ids.get(id)+')':all));}svg.setAttribute('aria-label','Preview diagram');const box=svg.viewBox.baseVal;stage.style.width=box.width+'px';stage.style.height=box.height+'px';if(previous?.name===currentPage.name&&oldSvg&&viewState.mode!=='fit'){viewState.x+=(box.x-oldSvg.viewBox.baseVal.x)*viewState.scale;viewState.y+=(box.y-oldSvg.viewBox.baseVal.y)*viewState.scale;}if(viewState.mode==='actual'){actualView.refresh();if(viewState.mode==='actual')actualView.activate({preserve:true});else paint();}else if(viewState.mode==='fit')fit();else paint();}}else{stage.textContent='No visible pages for these settings.';stage.style.width='auto';stage.style.height='auto';stage.style.transform='none';}actualView.refresh();};
  const publish=result=>{rendered=result.pages||result;const oldName=name;picker.replaceChildren(...rendered.map(p=>{const option=el('option',p.displayName||p.name);option.value=p.name;return option;}));if(result.selectedName&&rendered.some(p=>p.name===result.selectedName))name=result.selectedName;else name=oldName;display();};
- const queue=previewQueue({read,build,publish,state(kind,error,{paused=false}={}){if(kind==='ready'||kind==='slow')controls.querySelector('.dialog-task-error')?.remove();if(kind==='slow'||paused){live.checked=false;viewState.live=false;}status.dataset.state=kind;status.textContent=kind==='slow'?'Preview updated. Automatic updates paused because this drawing takes time to rebuild. Use Update preview, or re-enable Live preview to try again.':kind==='pending'?'Updating preview… Your project is unchanged.':kind==='error'?'Not previewed: '+error.message+' The last valid preview is retained.'+(paused?' Automatic updates paused because this drawing takes time to rebuild. Use Update preview to retry, or re-enable Live preview.':''):'Preview only — not saved.'+(currentPage?.pageOverflow?' Off-page content may be clipped in print/export.':'');}});
+ const queue=previewQueue({read,build,publish,state(kind,error){if(kind==='ready'||kind==='slow')controls.querySelector('.dialog-task-error')?.remove();status.dataset.state=kind;status.textContent=kind==='slow'?(live.checked?'Preview updated. Live preview stays on; slower drawings wait longer between edits.':'Preview updated. Live preview remains paused.'):kind==='pending'?'Updating preview… Your project is unchanged.':kind==='error'?'Not previewed: '+error.message+' The last valid preview is retained.':'Preview only — not saved.'+(currentPage?.pageOverflow?' Off-page content may be clipped in print/export.':'');}});
  const changed=event=>{if(event.type==='click'&&!event.target.closest('button'))return;if(live.checked)queue.request();else{status.dataset.state='paused';status.textContent='Preview paused. Use Update preview to see these changes.';}};
  for(const type of ['input','change','click'])controls.addEventListener(type,changed);
- live.onchange=()=>{viewState.live=live.checked;if(live.checked){queue.resume();queue.request(0);}else{queue.pause();status.dataset.state='paused';status.textContent='Live preview paused. Use Update preview when ready.';}};
+ live.onchange=()=>{viewState.live=preferences.live=live.checked;if(live.checked){queue.resume();queue.request(0);}else{queue.pause();status.dataset.state='paused';status.textContent='Live preview paused. Use Update preview when ready.';}};
  picker.onchange=()=>{name=picker.value;display();};
- let drag=null;viewport.onpointerdown=event=>{if(event.button!==0)return;drag={x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};viewport.setPointerCapture(event.pointerId);event.preventDefault();};
- viewport.onpointermove=event=>{if(drag)viewport.scrollTo(drag.left+drag.x-event.clientX,drag.top+drag.y-event.clientY);};viewport.onpointerup=viewport.onpointercancel=()=>{drag=null;};
- viewport.addEventListener('scroll',()=>{viewState.left=viewport.scrollLeft;viewState.top=viewport.scrollTop;});
- const observer=new ResizeObserver(fit);observer.observe(viewport);
- const dispose=()=>{if(disposed)return;disposed=true;queue.dispose();observer.disconnect();for(const type of ['input','change','click'])controls.removeEventListener(type,changed);dialog.removeEventListener('close',dispose);};
- dialog.addEventListener('close',dispose);publish(initialPages);requestAnimationFrame(fit);
+ let drag=null;viewport.onpointerdown=event=>{if(!svg||![0,1].includes(event.button))return;drag={id:event.pointerId,x:event.clientX,y:event.clientY,left:viewState.x,top:viewState.y,mode:viewState.mode};viewport.focus({preventScroll:true});viewport.setPointerCapture(event.pointerId);event.preventDefault();};
+ viewport.onpointermove=event=>{if(drag&&event.pointerId===drag.id){viewState.x=drag.left+event.clientX-drag.x;viewState.y=drag.top+event.clientY-drag.y;if(viewState.mode==='fit')viewState.mode='custom';paint();}};
+ const release=event=>{if(!drag||event.pointerId!==drag.id)return;if(viewport.hasPointerCapture(event.pointerId))viewport.releasePointerCapture(event.pointerId);drag=null;};viewport.onpointerup=viewport.onpointercancel=release;
+ viewport.addEventListener('wheel',event=>{event.preventDefault();const box=viewport.getBoundingClientRect();zoom(Math.exp(-event.deltaY*.0015),event.clientX-box.left,event.clientY-box.top);},{passive:false});
+ viewport.addEventListener('keydown',event=>{if(['+','=','-','0',' '].includes(event.key)){event.preventDefault();event.stopPropagation();if(event.key==='0')fit();else if(event.key!==' ')zoom(event.key==='-'?1/1.25:1.25);}});
+ viewport.addEventListener('dragstart',event=>event.preventDefault());
+ const observer=new ResizeObserver(()=>{setControlsWidth();if(viewState.mode==='fit')fit();else paint();});observer.observe(viewport);observer.observe(body);
+ const dispose=()=>{if(disposed)return;disposed=true;queue.dispose();actualView.dispose();observer.disconnect();for(const type of ['input','change','click'])controls.removeEventListener(type,changed);dialog.removeEventListener('close',dispose);};
+ dialog.addEventListener('close',dispose);publish(initialPages);requestAnimationFrame(()=>{if(!disposed){setControlsWidth();if(viewState.mode==='fit')fit();}});
  return {dispose,request:()=>{if(live.checked)queue.request(0);},controls,view};
 }

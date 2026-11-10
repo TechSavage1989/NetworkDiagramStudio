@@ -223,7 +223,9 @@ calibrated preview, not an absolute guarantee of physical size across monitors.
 Printing must use the same paper at 100% scale for a matching result. Dynamic
 canvases need a physical paper choice before Actual size is available.
 
-[Global text styles](docs/images/settings-preview-text.png), Pages & layout and [Page options](docs/images/settings-preview-paper.png) show an isolated live drawing preview beside resizable controls, with a [stacked layout on narrow windows](docs/images/settings-preview-narrow.png). Pan/zoom the preview while changing settings; pause automatic updates for large drawings. Apply saves one undoable change. Cancel, Close or Escape leaves the original drawing untouched. Other dialogs retain their existing workflow.
+[Global text styles](docs/images/settings-preview-text.png), Pages & layout and [Page options](docs/images/settings-preview-paper.png) show an isolated live drawing preview beside resizable controls, with a [stacked layout on narrow windows](docs/images/settings-preview-narrow.png). Drag or middle-drag to pan at any zoom, scroll to zoom, and use **Controls width** to resize the controls. **Live preview** stays as you set it, including on slow drawings; slower previews debounce typing rather than turn themselves off. **Actual size** uses the same screen calibration as the main drawing for physical paper, including while changing page settings. Fit or manual zoom leaves 1:1 mode. You can pause automatic updates yourself. Apply saves one undoable change. Cancel, Close or Escape leaves the original drawing untouched. Other dialogs retain their existing workflow.
+
+Wireless **Use side space** can place APs beside and around the switch. Apply it in **Pages & layout** to refit an automatic page; authored positions remain yours. Increase **Wireless APs and details (%)** to enlarge APs relative to the switch. Very dense Letter sheets still need larger paper or readable continuations for small details.
 
 ## Updates and settings
 

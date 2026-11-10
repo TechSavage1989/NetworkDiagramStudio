@@ -108,34 +108,53 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
   choices.push({W,H,start,switchY,width,...spacing,apSize,pitch,banks,rows,metrics,col,score,panel,rowCount});
  }
  choices.push(...sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,ends,apSize,pitch));
- return choices.sort((a,b)=>a.score-b.score||a.col-b.col);
+ const retained=wirelessFrame(project)?.wirelessPlan;
+ return (retained?choices.filter(choice=>choice.planKey===retained):choices).sort((a,b)=>a.score-b.score||a.col-b.col);
 }
 
 // Side columns use the open space beside a stack instead of forcing every AP
 // into long top/bottom rows. Keep authored placements and frozen layouts on
 // their established plan; these candidates only rearrange automatic content.
+function wirelessFrame(project){
+ const visible=project.layout?.pageSetup?.visible||{},frames={...visible.lockFrames,...visible.editFrames};
+ return frames[project._wirelessFrameName]||frames[project._wirelessPresentationName]||frames[(project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections'];
+}
 function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,ends,apSize,pitch){
- const visible=project.layout?.pageSetup?.visible||{},edits=project.layout?.drawingEdits||{};
- if(wirelessSettings(project).wirelessApPlacement!=='sides'||!geometry.dynamic||project._wirelessLegacyPaper||edges.length<8||Object.keys({...visible.lockFrames,...visible.editFrames}).some(key=>key.includes('Wireless Connections'))||Object.entries(edits).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>value[k]!=null)))return [];
+ const edits=project.layout?.drawingEdits||{},frozen=wirelessFrame(project),retained=!!frozen?.wirelessPlan;
+ if((wirelessSettings(project).wirelessApPlacement!=='sides'&&!retained)||!geometry.dynamic||project._wirelessLegacyPaper||edges.length<8||(frozen&&!retained)||(!retained&&Object.entries(edits).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>value[k]!=null))))return [];
  const result=[],ordered=ends.slice().sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx),left=new Set(ordered.slice(0,Math.ceil(ends.length/2)).map(v=>v.e.idx));
- for(const col of [132,180,245].map(w=>w*apScale(project))){
+ for(const col of [132,180,245].map(w=>w*apScale(project)))for(const fraction of [1,.5]){
   const sides={left:[],right:[]};
-  for(const v of ends)sides[left.has(v.e.idx)?'left':'right'].push({...v,caption:captions(project,db,v.e,col)});
+  const horizontal={top:[],bottom:[]};
+  const sideIds=fraction===1?new Set(ends.map(v=>v.e.idx)):new Set([...ordered.slice(0,Math.ceil(ends.length/4)),...ordered.slice(-Math.floor(ends.length/4))].map(v=>v.e.idx));
+  const middle=ends.filter(v=>!sideIds.has(v.e.idx)).sort((a,b)=>a.anchor.y-b.anchor.y||a.anchor.x-b.anchor.x),topIds=new Set(middle.slice(0,Math.ceil(middle.length/2)).map(v=>v.e.idx));
+  for(const v of ends){const item={...v,caption:captions(project,db,v.e,col)};if(sideIds.has(v.e.idx))sides[left.has(v.e.idx)?'left':'right'].push(item);else horizontal[topIds.has(v.e.idx)?'top':'bottom'].push(item);}
+  for(const entries of Object.values(horizontal))entries.sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y);
   for(const [side,entries] of Object.entries(sides))entries.sort((a,b)=>a.anchor.y-b.anchor.y||((side==='left'&&a.anchor.side==='top'||side==='right'&&a.anchor.side==='bottom')?-1:1)*(a.anchor.x-b.anchor.x)||a.e.idx-b.e.idx);
   const bankHeight=entries=>entries.reduce((n,v)=>n+Math.max(v.caption.height,v.apGeometry.h)+18,0),bankWidth=entries=>Math.max(0,...entries.map(v=>v.caption.width+v.apGeometry.w+14));
   const leftWidth=bankWidth(sides.left),rightWidth=bankWidth(sides.right),lanes=48+Math.max(18,pitch)*Math.max(sides.left.length,sides.right.length),start=204;
-  const W=72+leftWidth+lanes+panel.w+lanes+rightWidth,H=start+Math.max(panel.h,bankHeight(sides.left),bankHeight(sides.right))+36,switchX=36+leftWidth+lanes,switchY=start+(H-start-36-panel.h)/2;
+  const rowWidth=entries=>entries.reduce((n,v)=>n+Math.max(v.caption.width,v.apGeometry.w)+18,0),rowHeight=entries=>entries.length?Math.max(...entries.map(v=>v.caption.height+v.apGeometry.h))+48+pitch*entries.length:0;
+  const topHeight=rowHeight(horizontal.top),bottomHeight=rowHeight(horizontal.bottom),middleHeight=Math.max(panel.h,bankHeight(sides.left),bankHeight(sides.right));
+  const W=Math.max(72+leftWidth+lanes+panel.w+lanes+rightWidth,72+rowWidth(horizontal.top),72+rowWidth(horizontal.bottom)),H=start+topHeight+middleHeight+bottomHeight+36,switchX=(W-(72+leftWidth+lanes+panel.w+lanes+rightWidth))/2+36+leftWidth+lanes,switchY=start+topHeight+(middleHeight-panel.h)/2;
   const placements=[];
   for(const [side,entries] of Object.entries(sides)){
-   let y=start+(H-start-36-bankHeight(entries))/2;
-   for(const v of entries){const h=Math.max(v.caption.height,v.apGeometry.h),apX=side==='left'?36+leftWidth-v.apGeometry.w:switchX+panel.w+lanes;
+   let y=start+topHeight+(middleHeight-bankHeight(entries))/2;
+   for(const v of entries){const h=Math.max(v.caption.height,v.apGeometry.h),apX=side==='left'?switchX-lanes-v.apGeometry.w:switchX+panel.w+lanes;
     placements.push({...v,side,x:apX,y:y+(h-v.apGeometry.h)/2,captionX:side==='left'?apX-14-v.caption.width/2:apX+v.apGeometry.w+14+v.caption.width/2,captionY:y+(h-v.caption.height)/2});y+=h+18;
+   }
+  }
+  for(const [side,entries] of Object.entries(horizontal)){
+   let cursor=(W-rowWidth(entries))/2;
+   const height=entries.length?Math.max(...entries.map(v=>v.caption.height)):0;
+   for(const v of entries){const cell=Math.max(v.caption.width,v.apGeometry.w)+18,center=cursor+cell/2;cursor+=cell;
+    const y=side==='top'?start+height+6:start+topHeight+middleHeight+48+pitch*entries.length;
+    placements.push({...v,side,x:center-v.apGeometry.w/2,y,captionX:center,captionY:side==='top'?start:y+v.apGeometry.h+10});
    }
   }
   // Match the existing area/long-axis objective; physical source text is never
   // reduced to win this candidate. Routing still validates every placement.
   const score=Math.max(W,H)**2+.15*W*H;
-  result.push({kind:'sides',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:'sides',placements});
+  result.push({planKey:(fraction===1?'sides':'surround')+':'+Math.round(col/apScale(project)),kind:fraction===1?'sides':'surround',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:fraction===1?'sides':'surround',placements});
  }
  return result;
 }
@@ -170,11 +189,11 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
  portNumbers(page.items,sw,physicalPorts(device),{selected:new Set(edges.map(e=>e.sp.toLowerCase())),fontScale:wirelessNumberScale(project)});
  applyDrawingEdits(page,project);
  if([...nodes.values()].some(n=>n.angle)){const bodies=[...nodes.values()].map(deviceBounds);if(page.items.some(i=>i.wirelessCaption&&bodies.some(b=>intersects(i,b,2))))throw Object.assign(Error('This rotated wireless equipment needs more space around its captions. Move the devices apart or adjust the rotation.'),{code:'CORE_LAYOUT_CAPACITY'});}
- const numberBoxes=wirelessNumberLeads(page,sw,endData,project),obstacles=[...numberBoxes.obstacles,...page.items.filter(i=>i.type==='text'&&!i.portNumberRole&&(i.wirelessCaption||!i.deviceTextOwner))],planned=coreRoutes(routed,[],endData,banks,nodes,{left:sw.x,right:sw.x+sw.w,minX:36,maxX:layout.W-36,pitch:layout.pitch,railPitch:layout.pitch,topClearance:12,bottomClearance:12,obstacles,uniform:lineSpacing(project,page.name),directionNeutralLevels:true,peerFacingGapLanes:layout.kind==='sides'});
+ const numberBoxes=wirelessNumberLeads(page,sw,endData,project),obstacles=[...numberBoxes.obstacles,...page.items.filter(i=>i.type==='text'&&!i.portNumberRole&&(i.wirelessCaption||!i.deviceTextOwner))],planned=coreRoutes(routed,[],endData,banks,nodes,{left:sw.x,right:sw.x+sw.w,minX:36,maxX:layout.W-36,pitch:layout.pitch,railPitch:layout.pitch,topClearance:12,bottomClearance:12,obstacles,uniform:lineSpacing(project,page.name),directionNeutralLevels:true,peerFacingGapLanes:!!layout.placements});
  // Validate every complete lead once, including internal number bands.
  planned.cost[0]+=planned.routes.filter(r=>numberBoxes.numbers.some(box=>crossesText(r.points,box,r.weight/2))).length;
  for(const r of planned.routes){const e=edges.find(e=>e.idx===r.e.idx);route(page,r.a.anchor,r.b.anchor,r.points,r.a.info.color,'AP link '+(e.idx+1),r.a.info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status});Object.assign(page.items.at(-1),{editKey:pathKey(project,e),linkId:e.idx,weight:pathWeight(project,e)});}
- page.wirelessLayout={numberScale:wirelessNumberMinimum(project),kind:layout.kind||'banks',rows:layout.rowCount,deviceId:device.id,memberIds:(device.stackMembers||[]).map(m=>String(m.id)),padding:layout.padding,memberGaps:layout.memberGaps,links:edges.map(e=>e.idx),routingCost:planned.cost,routingStats:planned.stats};
+ page.wirelessLayout={...(layout.planKey?{planKey:layout.planKey}:{}),numberScale:wirelessNumberMinimum(project),kind:layout.kind||'banks',rows:layout.rowCount,deviceId:device.id,memberIds:(device.stackMembers||[]).map(m=>String(m.id)),padding:layout.padding,memberGaps:layout.memberGaps,links:edges.map(e=>e.idx),routingCost:planned.cost,routingStats:planned.stats};
  return page;
 }
 
@@ -250,25 +269,23 @@ function wirelessPages(project,db,{portNumbers,tablePages,empty}){
    for(let batchIndex=0;batchIndex<batches.length;batchIndex++){const batch=batches[batchIndex],candidate=organizing(project,pageScope(project,device,batchIndex));
     const numberedName=(project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections '+(out.length+1),pageProject={...project,_wirelessFrameName:numberedName,...(project.layout?.presentation?.pages?.[numberedName]?{_wirelessPresentationName:numberedName}:{})};
     const spacing=stackSpacing(pageProject,device,batch,width),choices=bankLayout(pageProject,db,device,batch,width,spacing,geometry);if(!choices.length)throw capacityError('This wireless caption needs more space. Choose a larger or dynamic page.');
-    let selected,error,attempts=0,candidates=0,clearChecks=0;const evaluated=[];
+    let selected,error,attempts=0,candidates=0,clearChecks=0;
     const alternatives=[...new Map(choices.map(choice=>[choice.rowCount,choice])).keys()].map(rows=>choices.find(choice=>choice.rowCount===rows));alternatives.push(...choices.filter(choice=>!alternatives.includes(choice)).slice(0,3));
     // A zero-collision result is necessary, not sufficient: compare several
     // valid arrangements for crossings, bends and footprint instead of always
     // keeping the first layout. Bound this search on large wireless sites.
-    const aesthetic=page=>{const c=page.wirelessLayout.routingCost;return c[2]+c[3]*55+c[4]*8+page.width*page.height*.00035;};
+    // Penalize crossings strongly, but do not veto a substantially shorter
+    // clear side plan solely because it has one more legitimate crossing.
+    const aesthetic=page=>{const c=page.wirelessLayout.routingCost;return c[2]+c[3]*(wirelessSettings(pageProject).wirelessApPlacement==='sides'?200:55)+c[4]*8+page.width*page.height*.00035;};
     for(const choice of alternatives.slice(0,candidate?1:Math.min(4,alternatives.length))){
      attempts++;
      try{
       const page=renderBankPage(pageProject,db,device,batch,choice,batchIndex,portNumbers),cost=page.wirelessLayout.routingCost;
-      evaluated.push(page);candidates+=page.wirelessLayout.routingStats.candidates;
+      candidates+=page.wirelessLayout.routingStats.candidates;
       if(!selected||cost[0]+cost[1]<selected.wirelessLayout.routingCost[0]+selected.wirelessLayout.routingCost[1]||cost[0]+cost[1]===selected.wirelessLayout.routingCost[0]+selected.wirelessLayout.routingCost[1]&&aesthetic(page)<aesthetic(selected))selected=page;
       if(!cost[0]&&!cost[1]&&++clearChecks>=3&&cost[3]===0)break;
      }catch(e){if(e.code!=='CORE_LAYOUT_CAPACITY')throw e;error=e;}
     }
-    // Side space is useful only when it also stays at least as neat as the
-    // best safe established bank layout. Shorter wire must not buy more jumps.
-    const bankFallback=evaluated.filter(page=>page.wirelessLayout.kind==='banks'&&!page.wirelessLayout.routingCost[0]&&!page.wirelessLayout.routingCost[1]).sort((a,b)=>aesthetic(a)-aesthetic(b))[0];
-    if(selected?.wirelessLayout.kind==='sides'&&bankFallback&&selected.wirelessLayout.routingCost[3]>bankFallback.wirelessLayout.routingCost[3])selected=bankFallback;
     if(!selected||selected.wirelessLayout.routingCost[0]||selected.wirelessLayout.routingCost[1]){
      if(!candidate&&batch.length>1){const middle=Math.ceil(batch.length/2);batches.splice(batchIndex,1,batch.slice(0,middle),batch.slice(middle));batchIndex--;continue;}
      else throw error||capacityError('This wireless page needs more room for its connections.');

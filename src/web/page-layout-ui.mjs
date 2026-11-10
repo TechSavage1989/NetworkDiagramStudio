@@ -1,3 +1,4 @@
+import {refitWirelessPresentation} from './wireless-presentation.mjs';
 import {cleanLabelBacking,LABEL_BACKING} from './label-backing-settings.mjs';
 import {cleanPresentation,presentation,panelFields,displayPageName} from './presentation.mjs';
 import {CORE_ARRANGEMENT_CHOICES,arrangeCoreLayout} from './core-arrangement.mjs';
@@ -43,7 +44,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   const minimumText=numeric(grid,'Minimum paper text (pt)',config.minimumTextPt,0,18);minimumText.step=.5;
   const wirelessAp=numeric(grid,'Wireless APs and details (%)',Math.round(config.wirelessApScale*100),25,400);
   const wirelessPlacement=field(grid,'Wireless AP placement',config.wirelessApPlacement,[['rows','Preserve rows (default)'],['sides','Use side space']]);
-  sizes.append(el('p','Use side space tries measured AP columns beside the switch when their routes stay clear and no more crossed. Authored positions and frozen layouts are preserved; constrained diagrams keep their rows.','hint'));
+  sizes.append(el('p','Use side space compares columns and surrounding rows to fill space around the switch. Changing AP size or placement refits automatic pages; authored positions stay unchanged. Dense drawings may still need a larger sheet or readable continuations.','hint'));
   const equipment=global?numeric(grid,'All device sizes (%)',Math.round(config.deviceScale*100),10,400):null;
   sizes.append(el('p','Text scale applies to this page or all pages through Drawing defaults. Minimum paper text defaults to 8 pt (0 disables it); it is measured on paper, not at screen zoom. Auto-fit keeps the complete diagram inside the selected sheet, without breaking cable or label placement. If the text target cannot fit, a warning reports the actual text size; choose larger paper or split the drawing. Explicit individual font sizes and saved page frames remain yours. Native artwork/report typography is preserved; enlarge its sheet if needed.','hint'));
   const panel=el('fieldset','','layout-card');panel.append(el('legend','Information panel'));body.append(panel);
@@ -100,6 +101,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   store=({quiet=false}={})=>{
    const numericFields=(global||!inherited.checked?[drawing,text,minimumText,wirelessAp,equipment,...(show.checked?[width,paperWidth,scale,panelText,...(placement.value==='free'?[x,y]:[])]:[])]:[]).concat(backingPadding||[]).filter(Boolean);const invalid=numericFields.find(n=>!n.value||!Number.isFinite(+n.value)||+n.value<+n.min||+n.value>+n.max);if(invalid){if(!quiet){invalid.focus();invalid.scrollIntoView({block:'center'});}throw Error('Enter a value from '+invalid.min+' to '+invalid.max+' in the highlighted size or position field.');}
    if((global||!inherited.checked)&&show.checked&&+paperWidth.value>0&&+paperWidth.value<10)throw Error('Panel width must be 0 for automatic or 10–60 percent.');
+   const previousPresentation=structuredClone(layout.presentation);
    const next=global?layout.presentation.defaults:{...(name?.value.trim()?{name:name.value.trim()}:{}),...(!visible?.checked?{hidden:true}:{})};
    if(global||!inherited.checked)Object.assign(next,{drawingScale:+drawing.value/100,textScale:+text.value/100,minimumTextPt:+minimumText.value,wirelessApScale:+wirelessAp.value/100,wirelessApPlacement:wirelessPlacement.value,panel:{visible:show.checked,position:placement.value,width:+width.value,paperWidth:+paperWidth.value,scale:+scale.value/100,textScale:+panelText.value/100,x:+x.value,y:+y.value,sections:[...fields.children].filter(card=>sectionControls.find(c=>c.card===card)?.toggle.checked).map(card=>card.dataset.sectionId),
     customSections:sectionControls.filter(c=>c.card.isConnected&&c.id.startsWith('custom-')).map(c=>({id:c.id,title:c.heading.value.trim().slice(0,80)||'Custom section'})),
@@ -107,6 +109,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
     sectionContent:Object.fromEntries(sectionControls.filter(c=>c.card.isConnected&&c.override.value.trim()).map(c=>[c.id,c.override.value.slice(0,16000)])),
     modulesMode:moduleDetails.value,vlanMode:vlanMode.value,addressMode:addressMode.value,portMode:portMode.value,rowLimit:+rowLimit.value,emptySections:emptySections.value,notes:notes.value}});
    if(global){layout.labelBacking={mode:backingMode.value,padding:+backingPadding.value};next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;if(hops.value==='bundle')layout.hopStyle='bundle';else delete layout.hopStyle;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
+   refitWirelessPresentation(layout,previousPresentation,pages);
    if(deviceChecks.length){const chosen=deviceChecks.filter(([,input])=>input.checked).map(([id])=>id);
     if(!page.reportId)layout.coreExclude=(layout.coreExclude||[]).filter(id=>!chosen.includes(id));
     if(definition)definition.devices=chosen;else if(JSON.stringify(chosen)!==JSON.stringify(page.coreDeviceIds)){definition={id:crypto.randomUUID(),name:page.name,devices:chosen,showReferences:true};layout.corePages.push(definition);}

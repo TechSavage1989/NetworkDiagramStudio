@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {previewQueue,isolatedPreview} from '../src/web/settings-preview.mjs';
+import {previewQueue,isolatedPreview,previewZoomAt} from '../src/web/settings-preview.mjs';
 const timers=()=>{let id=0;const jobs=new Map();return {jobs,schedule:fn=>{jobs.set(++id,fn);return id;},cancel:key=>jobs.delete(key),async run(){const entry=jobs.entries().next().value;if(!entry)return;const [key,fn]=entry;jobs.delete(key);return fn();}};};
 test('preview candidate and builder cannot mutate authoritative project data',()=>{
  const source={devices:[{id:'a',ports:[{name:'1'}]}],layout:{textStyles:{}}},before=structuredClone(source);
@@ -23,14 +23,12 @@ test('invalid drafts report failure without replacing the last valid preview',as
  const q=previewQueue({...t,read:()=>{if(bad)throw Error('Invalid size');return 1;},build:x=>x,publish:x=>published.push(x),state:(state,error)=>states.push([state,error?.message])});
  q.request();await t.run();bad=true;q.request();await t.run();assert.deepEqual(published,[1]);assert.deepEqual(states.at(-1),['error','Invalid size']);q.dispose();
 });
-test('slow automatic builds pause future typing updates but allow manual refresh and explicit resume',async()=>{
- const t=timers(),published=[],states=[];let clock=0;
- const q=previewQueue({...t,now:()=>clock,slowAfter:750,read:()=>1,build:x=>{clock+=1800;return x;},publish:x=>published.push(x),state:x=>states.push(x)});
+test('slow automatic builds retain live mode and coalesce further changes with adaptive delay',async()=>{
+ const t=timers(),published=[],states=[],waits=[];let clock=0;
+ const q=previewQueue({...t,schedule:(fn,wait)=>{waits.push(wait);return t.schedule(fn);},now:()=>clock,slowAfter:750,read:()=>1,build:x=>{clock+=1800;return x;},publish:x=>published.push(x),state:x=>states.push(x)});
  q.request();await t.run();assert.equal(states.at(-1),'slow');assert.deepEqual(published,[1]);
- q.request();assert.equal(t.jobs.size,0,'typing cannot repeatedly trigger expensive builds');
- q.request(0,{manual:true});await t.run();assert.equal(states.at(-1),'ready');assert.deepEqual(published,[1,1]);
- q.request();assert.equal(t.jobs.size,0,'manual refresh does not re-enable automatic rebuilds');
- q.resume();q.request();await t.run();assert.equal(states.at(-1),'slow');assert.equal(published.length,3);
+ q.request();q.request();assert.equal(t.jobs.size,1);assert.equal(waits.at(-1),1800,'slower drawings debounce typing without changing live preference');await t.run();assert.equal(published.length,2);
+ q.pause();assert.equal(t.jobs.size,0);q.request(0,{manual:true});assert.equal(waits.at(-1),0);await t.run();assert.equal(published.length,3);
 });
 test('fast previews remain live and disposed slow results do not report a false pause',async()=>{
  const t=timers(),states=[];let clock=0,release;
@@ -39,12 +37,11 @@ test('fast previews remain live and disposed slow results do not report a false 
  const pending=previewQueue({...t,now:()=>clock,read:()=>1,build:()=>new Promise(r=>release=r),publish:()=>assert.fail(),state:x=>states.push(x)});
  pending.request();const run=t.run();pending.dispose();clock+=2000;release(1);await run;assert.equal(states.at(-1),'pending');
 });
-test('slow failed automatic builds pause repeated work, preserve error, and allow manual retry',async()=>{
+test('slow failed builds retain errors and allow the next live correction',async()=>{
  const t=timers(),states=[],published=[];let clock=0,bad=true;
  const q=previewQueue({...t,now:()=>clock,read:()=>1,build:x=>{clock+=1800;if(bad)throw Error('Dense layout failed');return x;},publish:x=>published.push(x),state:(...args)=>states.push(args)});
- q.request();await t.run();assert.equal(states.at(-1)[0],'error');assert.equal(states.at(-1)[1].message,'Dense layout failed');assert.deepEqual(states.at(-1)[2],{paused:true});assert.deepEqual(published,[]);
- q.request();assert.equal(t.jobs.size,0);bad=false;q.request(0,{manual:true});await t.run();assert.deepEqual(published,[1]);
- q.request();assert.equal(t.jobs.size,0,'successful manual retry does not silently resume automatic updates');
+ q.request();await t.run();assert.equal(states.at(-1)[0],'error');assert.equal(states.at(-1)[1].message,'Dense layout failed');assert.deepEqual(published,[]);
+ bad=false;q.request();assert.equal(t.jobs.size,1);await t.run();assert.deepEqual(published,[1]);
 });
 test('stale and disposed slow failures stay silent',async()=>{
  for(const stop of ['pause','dispose']){
@@ -52,4 +49,13 @@ test('stale and disposed slow failures stay silent',async()=>{
   const q=previewQueue({...t,now:()=>clock,read:()=>1,build:()=>new Promise((_,r)=>reject=r),publish:()=>assert.fail(),state:(...args)=>states.push(args)});
   q.request();const pending=t.run();q[stop]();clock+=1800;reject(Error('Obsolete failure'));await pending;assert.deepEqual(states,[['pending']]);
  }
+});
+
+test('preview zoom anchors the pointer, leaves actual-size mode and allows arbitrary pan translations',()=>{
+ const initial={x:-300,y:80,scale:1.2,mode:'actual'},x=200,y=160;
+ const next=previewZoomAt(initial,1.25,x,y);
+ assert.equal(next.mode,'custom');assert.equal(next.scale,1.5);
+ assert.ok(Math.abs((x-initial.x)/initial.scale-(x-next.x)/next.scale)<1e-8);
+ assert.ok(Math.abs((y-initial.y)/initial.scale-(y-next.y)/next.scale)<1e-8);
+ assert.deepEqual(initial,{x:-300,y:80,scale:1.2,mode:'actual'});
 });
