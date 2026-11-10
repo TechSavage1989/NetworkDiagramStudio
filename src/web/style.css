@@ -265,3 +265,19 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
 .guide-topic li{margin:10px 0;line-height:1.55}
 .guide-tip{border-left:3px solid #408c88;background:#eef6f5;padding:10px;line-height:1.5}
 @media(max-width:620px){.guide-topic-links{display:grid;grid-template-columns:1fr 1fr}.guide-topic{padding:9px}.guide-topic ol{padding-left:22px}}
+
+/* Settings and drawing stay visible together; the authoritative editor remains inert. */
+#dialog.settings-preview-dialog{box-sizing:border-box;width:calc(100vw - 24px);max-width:none;height:calc(100dvh - 24px);max-height:none;margin:12px;overflow:hidden}
+.settings-preview-dialog[open]{display:flex;flex-direction:column}.settings-preview-dialog .modalhead{flex:none}
+.settings-preview-dialog #dialog-body{display:flex;gap:0;padding:0;min-height:0;max-height:none;overflow:hidden;flex:1}
+.settings-preview-controls{width:400px;min-width:280px;max-width:60%;flex:none;resize:horizontal;overflow:auto;padding:16px;box-sizing:border-box;border-right:1px solid #cbd8dd}
+.settings-preview-controls .form-grid,.settings-preview-controls .layout-grid,.settings-preview-controls .layout-fields,.settings-preview-controls .form-columns{grid-template-columns:minmax(0,1fr);grid-auto-flow:row;grid-template-rows:none}
+.settings-preview-controls .layout-footer{margin:0 -16px;padding:12px 16px}.settings-preview-controls input,.settings-preview-controls select{max-width:100%;box-sizing:border-box}
+.settings-preview-view{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;padding:12px;background:#edf2f4}
+.settings-preview-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.settings-preview-toolbar label{display:flex;gap:5px;align-items:center;margin:0;font-size:12px}.settings-preview-toolbar input[type=checkbox]{width:auto;margin:0}.settings-preview-toolbar select{max-width:220px;margin:0}.settings-preview-toolbar button{padding:5px 9px}.settings-preview-width input{width:100px;margin:0}
+.settings-preview-status{min-height:20px;margin:8px 0;font-size:12px;color:#285363}.settings-preview-status[data-state=error]{color:#9b2525}.settings-preview-status[data-state=pending]{color:#755400}
+.settings-preview-viewport{flex:1;min-height:180px;overflow:auto;background:#dbe5e9;touch-action:none;cursor:grab;user-select:none;padding:10px;box-sizing:border-box}.settings-preview-viewport:active{cursor:grabbing}
+.settings-preview-stage{margin:0 auto;background:white;box-shadow:0 2px 9px #18374726;flex:none}.settings-preview-stage>svg{display:block;width:100%;height:100%;pointer-events:none}.settings-preview-view>.hint{margin:8px 0 0;font-size:11px}
+@media(max-width:800px){.settings-preview-dialog #dialog-body{flex-direction:column}.settings-preview-controls{width:100%!important;max-width:100%;height:40%;max-height:55%;min-height:150px;resize:vertical;border-right:0;border-bottom:1px solid #cbd8dd}.settings-preview-view{min-height:220px}.settings-preview-width{display:none!important}.settings-preview-toolbar select{max-width:160px}}
+
+.settings-preview-controls>.actions:last-child{position:sticky;bottom:-16px;background:white;border-top:1px solid #cbd8dd;padding:12px 0;margin-bottom:0;z-index:2}

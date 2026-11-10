@@ -68,6 +68,7 @@ jobs:
             @{ name = 'page-navigation'; script = 'tests/browser-page-navigation.mjs' },
             @{ name = 'actual-size'; script = 'tests/browser-actual-size.mjs' },
             @{ name = 'user-guide'; script = 'tests/browser-user-guide.mjs' },
+            @{ name = 'settings-preview'; script = 'tests/browser-settings-preview.mjs' },
             @{ name = 'connection-labels'; script = 'tests/browser-connection-labels.mjs' },
             @{ name = 'adaptive-port-map'; script = 'tests/browser-adaptive-port-map.mjs' },
             @{ name = 'standard-port-map'; script = 'tests/browser-standard-port-map.mjs' },

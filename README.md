@@ -221,6 +221,8 @@ calibrated preview, not an absolute guarantee of physical size across monitors.
 Printing must use the same paper at 100% scale for a matching result. Dynamic
 canvases need a physical paper choice before Actual size is available.
 
+Global text styles, Pages & layout and Page options show an isolated live drawing preview beside resizable controls. Pan/zoom the preview while changing settings; pause automatic updates for large drawings. Apply saves one undoable change. Cancel, Close or Escape leaves the original drawing untouched. Other dialogs retain their existing workflow.
+
 ## Updates and settings
 
 Help opens a polished update review with compact installed/available version labels, formatted release headings and bullets, download progress, verification status and a fixed action footer. Long notes scroll inside the review while the close and install controls stay visible. The install screen explains recovery and reminds you to save unsaved diagram changes before restarting. A compact notice appears only when a newer release is available. Automatic checks and verified download/rollback behavior are unchanged.

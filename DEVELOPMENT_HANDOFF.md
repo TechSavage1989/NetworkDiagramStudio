@@ -1,3 +1,23 @@
+# Preview.47 rebased local validation
+
+All666 Node tests pass with zero failures/skips on the source rebased to published .46; all9 independently checked Visio packages, offline build, repository guard and whitespace checks pass. Hosted20-suite browser/native verification and current split-dialog captures remain required. Newly reported Letter auto-fit and port-map-margin corrections are being developed separately; do not publish before their integration decision.
+
+# Preview.47 release preparation on verified preview.46
+
+Published baseline main/tag is 91ec4a5b1814c8afbb2310e2d342d41a359bf4f4. Preview.46 final PR and merged-main release gates passed all19 browser suites and native Windows checks; all3 public release assets were downloaded and matched API digests, sizes and SHA256SUMS, updater feed verified and merged branch removed. This follow-on preserves its source fixes and current documentation captures. Older pending notes below are historical.
+
+# Preview.47: transactional settings previews (not yet published)
+
+Targets Global text styles, Pages & layout, and Page options only. Resizable split controls and read-only preview use cloned candidates; Apply commits once, cancellation discards. Zoom/pan persist across repeated changes, invalid drafts retain the last valid drawing, and stale results cannot paint after close/replacement. Live preview can be paused. The preview is explicitly not calibrated Actual size.
+
+Focused local helper/control tests pass; final aggregate and hosted browser/native checks, screenshot review and immutable release verification remain required. Do not publish or merge this follow-on until preview.46 is published and verified.
+
+# Follow-on settings preview (local, not published)
+
+Based on the final preview.46 source bd9a1c9. Global text styles, Pages & layout and Page options now offer isolated live previews beside resizable controls. Read-only preview pan/zoom persists through setting changes, automatic updates can be paused, invalid drafts retain the last valid view, and cancellation never changes project/history. Apply remains one history entry. The original editor stays inert during these dialogs; individual object, link-style and other property dialogs retain their previous save workflow. SVG IDs are namespaced to prevent masks resolving against the original canvas.
+
+Six scheduler/isolation and five real page-layout editor closure regressions pass locally. Tentative preview collection clones/restores both layout and captured page definition, preserving automatic device membership and manual geometry when reverted. Automatic preview pauses after a rebuild of 750 ms or longer; manual refresh and explicit re-enable remain available. This bounds repeated typing freezes, not the cost of the first synchronous rebuild. Syntax, build and repository guard pass locally. Actual browser launch is blocked by sandbox socket() permission, so the new hosted browser-settings-preview gate and its three synthetic captures remain required. It covers repeated changes, invalid Apply, last-valid retention, Cancel/Escape, Undo/redo, pan/zoom, scope rerender and narrow layout. No version bump or remote publication has been performed by this work.
+
 # Preview.46 hosted browser corrections verified
 
 Run 215 at a0bf4c7 passes all 19 browser suites, including guide Escape, real pan navigation between offscreen objects, retained legacy refit guidance, and visible text/panel controls. Genuine synthetic guide (wide/narrow), text sizing and panel-width captures were downloaded, artifact SHA-256 verified and visually inspected before inclusion. Source is unchanged by this documentation commit. The original run 214 native Windows build, report media boxes, package and window/timer/update/rollback checks passed; exact final-head hosted gates and merged-main publication verification still remain required.
