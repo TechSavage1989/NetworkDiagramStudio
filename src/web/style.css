@@ -248,7 +248,7 @@ main:not(:has(>.pages-sidebar:not([hidden]))){grid-template-columns:250px minmax
 input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-editor]{user-select:text;-webkit-user-select:text}
 /* The editor can show and select off-sheet content; exports keep their page frame. */
 #canvas.diagram-view>svg{overflow:visible}
-#page-overflow-notice{font-size:11px;text-align:left;white-space:normal}
+#page-overflow-notice{flex:1 1 100%;width:100%;min-width:0;max-width:100%;font-size:11px;text-align:left;white-space:normal;overflow-wrap:anywhere}
 
 /* Screen-only physical reference: never part of a diagram or export. */
 #screen-calibration{width:min(1100px,94vw);max-height:90vh;overflow:auto} .calibration-scroll{overflow-x:auto;padding:22px 8px;margin:12px 0;background:#f2f6f8} #calibration-line{height:18px;border-left:2px solid #183e55;border-right:2px solid #183e55;position:relative;box-sizing:border-box;max-width:none} #calibration-line::after{content:"";position:absolute;left:0;right:0;top:8px;border-top:2px solid #183e55} #calibration-error{color:#a52920} #actual-size-status{white-space:normal} #zoom-actual[aria-pressed="true"]{background:#d5ede9}
@@ -270,16 +270,36 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
 #dialog.settings-preview-dialog{box-sizing:border-box;width:calc(100vw - 24px);max-width:none;height:calc(100dvh - 24px);max-height:none;margin:12px;overflow:hidden}
 .settings-preview-dialog[open]{display:flex;flex-direction:column}.settings-preview-dialog .modalhead{flex:none}
 .settings-preview-dialog #dialog-body{display:flex;gap:0;padding:0;min-height:0;max-height:none;overflow:hidden;flex:1}
-.settings-preview-controls{width:400px;min-width:280px;max-width:calc(100% - 320px);flex:none;overflow:auto;padding:16px;box-sizing:border-box;border-right:1px solid #cbd8dd}
+.settings-preview-controls{width:400px;min-width:280px;max-width:calc(100% - 320px);flex:none;overflow:auto;padding:16px;box-sizing:border-box;border-right:0}
 .settings-preview-controls .form-grid,.settings-preview-controls .layout-grid,.settings-preview-controls .layout-fields,.settings-preview-controls .form-columns{grid-template-columns:minmax(0,1fr);grid-auto-flow:row;grid-template-rows:none}
 .settings-preview-controls .layout-footer{margin:0 -16px;padding:12px 16px}.settings-preview-controls input,.settings-preview-controls select{max-width:100%;box-sizing:border-box}
 .settings-preview-view{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;padding:12px;background:#edf2f4}
-.settings-preview-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.settings-preview-toolbar label{display:flex;gap:5px;align-items:center;margin:0;font-size:12px}.settings-preview-toolbar input[type=checkbox]{width:auto;margin:0}.settings-preview-toolbar select{max-width:220px;margin:0}.settings-preview-toolbar button{padding:5px 9px}.settings-preview-width input{width:100px;margin:0}
+.settings-preview-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.settings-preview-toolbar label{display:flex;gap:5px;align-items:center;margin:0;font-size:12px}.settings-preview-toolbar input[type=checkbox]{width:auto;margin:0}.settings-preview-toolbar select{max-width:220px;margin:0}.settings-preview-toolbar button{padding:5px 9px}
 .settings-preview-status{min-height:20px;margin:8px 0;font-size:12px;color:#285363}.settings-preview-status[data-state=error]{color:#9b2525}.settings-preview-status[data-state=pending]{color:#755400}
 .settings-preview-viewport{position:relative;flex:1;min-height:180px;overflow:hidden;background:#dbe5e9;touch-action:none;cursor:grab;user-select:none;padding:0;box-sizing:border-box}.settings-preview-viewport:active{cursor:grabbing}
 .settings-preview-stage{position:absolute;left:0;top:0;transform-origin:0 0;background:white;box-shadow:0 2px 9px #18374726;flex:none}.settings-preview-stage>svg{display:block;width:100%;height:100%;pointer-events:none}.settings-preview-view>.hint{margin:8px 0 0;font-size:11px}
-@media(max-width:800px){.settings-preview-dialog #dialog-body{flex-direction:column}.settings-preview-controls{width:100%!important;max-width:100%;height:40%;max-height:55%;min-height:150px;resize:vertical;border-right:0;border-bottom:1px solid #cbd8dd}.settings-preview-view{min-height:220px}.settings-preview-width{display:none!important}.settings-preview-toolbar select{max-width:160px}}
+.settings-preview-divider{flex:none;width:10px;display:flex;align-items:center;justify-content:center;background:#e2eaee;cursor:col-resize;touch-action:none;user-select:none;outline-offset:-2px}.settings-preview-divider::after{content:'';width:3px;height:32px;border-radius:2px;background:#718d99}.settings-preview-divider:hover,.settings-preview-divider:focus-visible,.settings-preview-divider.resizing{background:#c3dce6}.settings-preview-divider:focus-visible{outline:2px solid #176d91}
+@media(max-width:800px){.settings-preview-dialog #dialog-body{flex-direction:column}.settings-preview-controls{width:100%!important;max-width:100%;height:40%;max-height:none;min-height:150px;border-right:0;border-bottom:0}.settings-preview-view{min-height:220px;overflow:auto}.settings-preview-divider{width:auto;height:10px;cursor:row-resize}.settings-preview-divider::after{width:32px;height:3px}.settings-preview-toolbar select{max-width:160px}}
 
 .settings-preview-controls>.actions:last-child{position:sticky;bottom:-16px;background:white;border-top:1px solid #cbd8dd;padding:12px 0;margin-bottom:0;z-index:2}
 
-.settings-preview-actual:empty{display:none}.settings-preview-actual{font-size:12px;margin:0 0 8px;color:#285363}.settings-preview-width{border-left:1px solid #b9c9cf;padding-left:10px;margin-left:4px!important}.settings-preview-zoom{min-width:40px;font-size:12px}
+.settings-preview-actual:empty{display:none}.settings-preview-actual{font-size:12px;margin:0 0 8px;color:#285363}.settings-preview-zoom{min-width:40px;font-size:12px}
+
+/* Keep drawing commands visible, but make their purpose scanable. */
+.stagebar .workspace-actions{gap:6px 10px;align-items:center;min-width:0;max-width:100%}
+.workspace-action-group{display:flex;flex-direction:column;gap:2px;min-width:0;max-width:100%;padding:2px 0}
+.workspace-group-label{font-size:10px;font-weight:700;line-height:1.1;color:#526d7b;letter-spacing:.04em}
+.workspace-group-buttons{display:flex;align-items:center;flex-wrap:wrap;gap:4px;min-width:0}
+.workspace-actions .workspace-action-group button{font-size:12px;padding:4px 8px;white-space:nowrap}
+.workspace-actions .zoom-tools{flex-wrap:wrap;max-width:100%}
+.workspace-actions .workspace-edit{border-color:#387c8b;color:#0b5967;align-self:center}
+.workspace-actions .workspace-edit[aria-pressed=true]{background:#146374;color:white;border-color:#146374}
+@media(max-width:620px){.stagebar .workspace-actions{margin-left:0;justify-content:flex-start}.workspace-group-label{font-size:11px}}
+
+.quick-page-paper{display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:2px 10px;max-width:100%;font-size:12px}
+.quick-page-paper label{font-size:12px;margin:0}
+.quick-page-paper select{width:auto;max-width:160px;padding:3px 6px;font-size:12px}
+#active-page-paper-status{font-size:11px;color:#526d7b;white-space:nowrap}
+.quick-page-paper:has(#active-page-paper:disabled):has(#active-page-paper-status:empty){display:none}
+@media(pointer:coarse){.settings-preview-divider{width:24px}}
+@media(pointer:coarse) and (max-width:800px){.settings-preview-divider{width:auto;height:24px}}

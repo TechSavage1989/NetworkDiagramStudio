@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {previewQueue,isolatedPreview,previewZoomAt} from '../src/web/settings-preview.mjs';
+import {previewQueue,isolatedPreview,previewZoomAt,previewPanelLimits} from '../src/web/settings-preview.mjs';
 const timers=()=>{let id=0;const jobs=new Map();return {jobs,schedule:fn=>{jobs.set(++id,fn);return id;},cancel:key=>jobs.delete(key),async run(){const entry=jobs.entries().next().value;if(!entry)return;const [key,fn]=entry;jobs.delete(key);return fn();}};};
 test('preview candidate and builder cannot mutate authoritative project data',()=>{
  const source={devices:[{id:'a',ports:[{name:'1'}]}],layout:{textStyles:{}}},before=structuredClone(source);
@@ -58,4 +58,16 @@ test('preview zoom anchors the pointer, leaves actual-size mode and allows arbit
  assert.ok(Math.abs((x-initial.x)/initial.scale-(x-next.x)/next.scale)<1e-8);
  assert.ok(Math.abs((y-initial.y)/initial.scale-(y-next.y)/next.scale)<1e-8);
  assert.deepEqual(initial,{x:-300,y:80,scale:1.2,mode:'actual'});
+});
+
+test('settings divider bounds reserve visible preview in both orientations',()=>{
+ assert.deepEqual(previewPanelLimits(1200),{min:280,max:720});
+ assert.deepEqual(previewPanelLimits(900),{min:280,max:570});
+ assert.deepEqual(previewPanelLimits(500,true),{min:150,max:270});
+ assert.deepEqual(previewPanelLimits(250,true),{min:150,max:150});
+});
+
+test('stacked divider reserves wrapped preview tools and touch hit area',()=>{
+ assert.deepEqual(previewPanelLimits(800,true,400,24),{min:150,max:376});
+ assert.deepEqual(previewPanelLimits(500,true,400,24),{min:150,max:150});
 });

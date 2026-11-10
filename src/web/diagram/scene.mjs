@@ -321,7 +321,10 @@ export function optic(page,project,device,body,anchor,info){
   const asset=actualAsset(project,typeof selection==='object'&&selection?{stencil:selection}:{stencilId:selection});
   const point=body.ports?.[anchor.port],socket=point&&body.children?.find(c=>c.socketPart===0&&Math.abs(c.x+c.w/2-point[0])<1e-6&&Math.abs(c.y+c.h/2-point[1])<1e-6);
   const envelope=connectorEnvelope(socket?.socketForm||'SFP'),ratio=asset?asset.width/asset.height:envelope.w/envelope.h;
-  const bounds=fitRatio(ratio,0,0,Math.max(4,body.w*.028),Math.max(3,body.h*.20));
+  // Built-in module faces use the same optical envelope as their sockets,
+  // not a chassis-height cap that made modules on single devices smaller.
+  // Explicit imported artwork retains its established fitting behavior.
+  const bounds=asset?fitRatio(ratio,0,0,Math.max(4,body.w*.028),Math.max(3,body.h*.20)):{w:body.w*envelope.w,h:body.w*envelope.h};
   const w=bounds.w,h=bounds.h,key='plug-'+page.items.length;
   const assigned=asset?.anchors?.cable;
   const port=Array.isArray(assigned)&&assigned.length===2&&assigned.every(n=>Number.isFinite(n)&&n>=0&&n<=1)?assigned:[.5,.5];

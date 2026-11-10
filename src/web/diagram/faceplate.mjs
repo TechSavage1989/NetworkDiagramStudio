@@ -46,7 +46,6 @@ function baseLayout(p){
  if(p.sockets){
   const max=Math.max(p.module?1:29,...p.sockets.map(s=>s[1]));
   for(const [n,col,row,form,suffix] of p.sockets){const lastRow=Math.max(...p.sockets.filter(s=>s[3]===form).map(s=>s[2]));let x=.052+col*(.91/(max+1)),y=lastRow>1?.18+.62*row/lastRow:row===0?.32:.70;
-   if(p.models.some(m=>['JL675A','JL676A','R9Y04A'].includes(m))){if(n>=49)x=n<=50?.03386:.08466;else x=.138056+Math.floor((n-1)/2)*(.770069/23);y=n>=49?(row===0?.33153:.70476):(row===0?.34575:.69055);}
    if(p.models.some(m=>/^J973[12]A$/.test(m))){x=.33+(Number(n)-1)*.137;y=.58;}
    const measured=p.socketPoints?.[n];if(measured)[x,y]=measured;
    const name=String(n);add(name,x,y,form,'front',measured?.[2]||p.socketWidth||(p.models.some(m=>/^J973[12]A$/.test(m))?.11:p.module?.05:.022),.25,suffix!=='M',row===0?'up':'down');

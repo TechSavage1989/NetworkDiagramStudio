@@ -17,13 +17,13 @@ import {documentationMode,documentationSections,includeTrunkReference,interfaceA
 import {corePages} from './core.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
 import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
-import {cleanPageNumbers,footerAllowance,pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage} from '../page-options.mjs';
+import {cleanPageNumbers,footerAllowance,pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage,printGeometry} from '../page-options.mjs';
 import {applyLinkStyles} from '../link-styles.mjs';
 import {orderedDevices,hopStyle} from '../layout.mjs';
 import {comparePorts,hasPortDetails,consecutivePorts,wrapPortText,portColumnPrefix,portRanges,portNumberBox} from '../port-table.mjs';
 import {textWidth,intersects} from './labels.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
-import {C,addDevice,bridge,fresh,getAnchor,label,linkLegend,list,mediaInfo,optic,physicalPorts,portList,portNumber,rate,rect,route,split,state,svgPage,value,xml} from './scene.mjs';
+import {C,addDevice,bridge,textLayout,fresh,getAnchor,label,linkLegend,list,mediaInfo,optic,physicalPorts,portList,portNumber,rate,rect,route,split,state,svgPage,value,xml} from './scene.mjs';
 export {exportVisio,exportStencil} from './visio.mjs';
 
 const cmp=(a,b)=>String(a).localeCompare(String(b),'en',{numeric:true,sensitivity:'base'});
@@ -876,6 +876,20 @@ export function buildPages(project={},options={}){
     if(cleanPageNumbers(project.layout?.pageNumbers).footer){rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';}const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
     applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);applyGlobalTextStyles(p,project.layout?.textStyles,project.layout?.drawingEdits);dockInformationPanel(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);p.svg=svgPage({...p,title:p.displayName});
   });
+  // Adaptive wireless paper mode is judged in real printed points, after
+  // headers, panels and final paper fitting. Never certify a tiny AP card by
+  // measuring its unscaled source font. Continue only the automatic drawing;
+  // frozen/manual pages remain authoritative.
+  for(const p of visible.filter(p=>p.wirelessLayout?.adaptiveAP)){
+   const captions=p.items.filter(i=>i.wirelessCaption);
+   const automatic=captions.filter(i=>!Number.isFinite(project.layout?.drawingEdits?.[i.editKey]?.size)),unit=.75*printGeometry(p).width/p.width;
+   if(captions.length)p.paperReadability={...p.paperReadability,apAutoActualPt:automatic.length?Math.min(...automatic.map(i=>textLayout(i).size))*unit:null,apActualPt:Math.min(...captions.map(i=>textLayout(i).size))*.75*printGeometry(p).width/p.width,apMinimumPt:Math.max(8,presentation(project,p).minimumTextPt||8)};
+  }
+  const short=visible.filter(p=>p.wirelessLayout?.adaptiveAP&&!p.wirelessLayout.adaptiveFrozen&&p.wirelessLayout.links.length>1&&p.paperReadability.apAutoActualPt!=null&&p.paperReadability.apAutoActualPt<p.paperReadability.apMinimumPt-.05);
+  if(short.length){
+   const limit=Math.max(1,Math.min(...short.map(p=>Math.floor(p.wirelessLayout.links.length/2))));
+   if(limit<(project._wirelessBatchLimit||Infinity))return buildPages({...project,_wirelessBatchLimit:limit},{...options,cache:undefined});
+  }
   return options.includeHidden?pages:visible;
 }
 export function printDocument(pages){

@@ -1,3 +1,47 @@
+# Native navigation between different edited titles
+
+Preview.49 grouped controls leave a shorter native-window canvas. The accepted EDGE title remains revealed, but the subsequent unselected SW-1 title can be off-screen. NativeSmoke now uses bounded real CDP middle-button pan gestures before changing to that other title, matching the existing browser recovery gate. It preserves zoom and the original painted-glyph targeting, repeated same-title edit, Escape and detached-session assertions. No production geometry or reveal behavior changes. Six focused JavaScript harness checks pass; actual native Windows execution remains required.
+
+# Preview.49 combined validation checkpoint
+
+All707 Node tests and nine independent Visio packages pass. Hosted run225 passed19/20 browser suites; the remaining preview Cancel comparison is being separated into strict SVG geometry and current viewport/ruler checks, not ignored. Genuine current synthetic UI screenshots were downloaded, digest verified and visually reviewed. Fixed adaptive display names now preserve descriptive page labels; long readability notices wrap within the workspace. Final exact-head browser/native and publication verification remain required.
+
+# Adaptive port-map navigation identity correction
+
+The new Letter creation default exposed an existing adaptive-renderer omission: fixed-paper maps retained their stable internal name but lost the descriptive " / Port map" display name. Preserve the original display identity when generating the measured adaptive sheet. Dynamic, Letter and A4 navigation labels now match across save/reopen; map contents and dimensions are unchanged. The original documentation and Actual size browser assertions remain intact and require hosted rerun.
+
+# Preview.49 integrated candidate
+
+Based on published/verified preview.48 main/tag0a9853b438093b38448508db8bfd9ccab2f970c7. Its browser/native/release checks, downloaded assets and updater feed passed; older pending .48 notes are historical. This candidate combines direct settings divider, grouped workspace commands and quick active-page paper controls, new-project Letter port maps, optical consistency, evidence-based port banks/MikroTik coverage, panel divider removal and explicit adaptive readable wireless paper mode. Full combined local/hosted tests and current genuine synthetic captures are required before release.
+
+# Direct sidebar divider follow-up
+
+Replaced settings controls-width range with a directly draggable separator. Pointer capture and a fixed gesture origin avoid feedback as toolbar content reflows. The separator is keyboard accessible (arrows, Shift+arrows, Home/End), becomes an up/down divider in stacked windows, remembers the chosen dimensions across settings scopes/dialogs, and does not rebuild diagram geometry. Cancel/lost capture/disposal release gestures. Actual-size scale, live-preview choice and screen pan remain independent.
+
+Focused queue/geometry checks pass. Hosted browser-settings-preview now tests actual divider drag, unchanged SVG, fixed calibrated scale and stacked keyboard resize; fresh real screenshots and final combined gates remain required.
+# Direct active-page paper controls (follow-on)
+
+Paper preset and orientation are now available next to the page picker. Each change is a single undoable selected-page override, preserving the existing fit mode, physical lock, print override and authored objects. Only that page's saved fit frames are cleared so the requested size can take effect; other pages retain theirs. Dynamic removes the selected physical lock. Custom opens Page options directly on its custom fields and does not mutate until Save. Current status exposes Locked/Unlocked and Auto-fit/Preserve layout. The helper has three immutable/scope tests; hosted page-navigation adds no-dialog changes, undo and custom cancellation, plus all existing responsive tests. Hosted execution remains required.
+
+# Drawing workspace hierarchy (follow-on)
+
+The stage toolbar now groups the existing commands into View, Styles, Page and Output without changing button IDs, keyboard order, handlers or adding hidden menus. Edit drawing stays directly accessible and has an active-state treatment. Tooltips distinguish paper/fit controls from content/layout controls. Responsive browser navigation checks require every grouped button to remain in the viewport. Current screenshots must be replaced from the hosted actual browser captures before publication. Local Chromium remains blocked by socket() permission; this is not a completed visual validation.
+# New port-map Letter default
+
+New projects and the fictional sample initialize the Port maps family to Letter landscape via newPageSetup. Project cleaning/loading remains unchanged, preserving old Dynamic pages, explicit paper preferences and saved frames. Configuration imports into a new project inherit that creation default. Standalone report paper remains independent. Focused new/default/override/reopen tests accompany this change; combined hosted gates remain required.
+# Uniform optical schematic faces (pending release integration)
+
+Mixed C9500 SFP/QSFP cages now share one visual envelope, also used by generic
+installed modules rather than a chassis-height cap. Centers, port identities,
+copper geometry, imported art and explicit user size edits remain intact.
+27 focused hardware/optical/module/report tests pass. Actual fictional C9500
+PDF output was inspected and saved as optical-uniform.png. Final combined
+aggregate, hosted gates and publication remain release coordinator work.
+The separate port-group-position request is not claimed complete by this change.
+# Information panel divider removal
+
+The decorative vertical rule is no longer generated in core page scenes, so the shared screen/SVG/PDF/Visio output omits it. Panel content, docking and occupied-footprint collision protection remain unchanged. Focused panel/manual-placement tests cover the change; combined release validation remains required.
+
 # Preview.48 verification checkpoint
 
 All685 combined Node tests and nine independent Visio packages pass. Hosted run221 passed all20 Edge suites, including shared calibration and side-space save/reopen. Genuine current screenshots were downloaded, artifact digest verified and visually inspected. The narrow-preview capture now requires an actual620x900 viewport, stacked controls and exact PNG dimensions because Playwright capture otherwise restored its remembered wide viewport after CDP resize. Native/final exact-head and publication verification remain required.
@@ -1326,3 +1370,12 @@ Preview.46 documentation images were regenerated from the integrated source with
 Fresh Auto-fit port maps use a 4 px chassis-safe gutter and a full-bleed header rather than a second locked-sheet border. Page lock no longer imposes the old reference socket-size ceiling; bank and complete key geometry still bound growth, preserving all members and socket proportions. Saved lock/edit frames without portMapFit:1 retain their legacy base so old manual coordinates do not jump. Fresh frames record the marker through the shared paper-fitting layer. Standalone report margins and Preserve mode are unchanged. Four-sided PDF printer hardware margins remain printer-dependent.
 
 Fictional five/eight-member and chassis Letter output was rendered through the actual PDF exporter and visually inspected; docs/images/page-fill.png is the current five-member output. Focused fresh-lock/save-reopen tests require the companion paper-fit correction. Hosted browser and native gates remain required before release.
+
+# Aruba grouped copper faceplates
+
+The 6000/6100 48-port normalized-coordinate override flattened the four twelve-port banks. Restored the intervening gaps without moving the optical bank or changing numbering; removed the redundant renderer-specific uniform-pitch override. Verified against the HPE 6000/6100 Installation and Getting Started Guide front-panel figures (page7). Family-only48G shares this geometry without acquiring an exact SKU. The6200F already retains four banks and is now regression-covered. Focused grouping/import tests pass; final aggregate and rendered release review remain required.
+
+# Supported MikroTik faceplate coverage
+
+The browser faceplate catalog previously contained only CRS326-24G-2S+IN, while native RouterOS imports recognize seven models and produce MIKROTIK-SHARED signature identities. Added all seven exact and shared-layout records from official product front photos/dimensions, including bank gaps/rows and physical QSFP cage aliases. Unknown identity remains unknown; no console data-port anchors are invented. See docs/MIKROTIK_FACEPLATES.md for the complete supported scope and references. Actual app PDF/SVG outputs were rendered and inspected, with a fictional exported screenshot retained. Forty-one existing hardware/config tests plus the new model/group regressions pass. Final combined release gates remain required.
+Adaptive wireless paper mode (`wirelessFit:adaptive`, Page options → Optimize APs for paper (readable)) is explicit; preserve-layout remains unchanged. Measure real AP caption textLayout after physical paper fitting. Side-column plans enlarge AP cards relative to the complete switch stack; if automatic AP text remains below max(8 pt, configured minimum), continue by link batches while repeating the full stack. Preserve all links, source-port labels, explicit fonts and saved/manual geometry. Persist adaptive factor, batch limit and selected plan with page frames. Small physical socket artwork is not certified as 8 pt: show its separate warning and include full port labels on AP cards. Keep wireless-adaptive-paper.test.mjs and the independent hosted adaptive-paper fixture; inspect actual PDF/print geometry, not only containment.

@@ -7,28 +7,22 @@ Imported manufacturer artwork keeps its own aspect ratio and mapped anchors.
 
 ## Reference and application
 
-- [SFP MSA / INF-8074i, Table 1, page 6](https://members.snia.org/document/dl/26184)
-  gives the front nosepiece width and height as 13.7 mm and 8.6 mm. The generic
-  SFP/SFP+/SFP28 face uses that approximately 1.59:1 front-view aspect instead of
-  the previous flattened 2:1 rectangle.
-- [SFF-8661, QSFP+ 4X module, basic views](https://www.gigalight.com/downloads/standards/sff-8661.pdf)
-  gives the housing width and height as 18.35 mm and 8.5 mm. The generic QSFP face
-  uses that approximately 2.16:1 aspect. The schematic width is retained so dense
-  researched port-center layouts do not acquire overlapping cages.
-- RJ45 envelopes are unchanged. These references constrain the optical front
-  aspect, not the exact cage/bezel dimensions, tolerances, latch detail, or
-  relative millimetre scale of every connector on a device.
+All built-in SFP, SFP+, SFP28, QSFP and X2 optical faces now use one schematic
+size: .028 of the shared chassis width, with a 13.7:8.6 front aspect. This is
+an intentionally uniform visual convention requested for readable diagrams,
+not a claim that their real physical form factors are identical. Device port
+metadata and capacities remain unchanged. RJ45 and copper CX4 are unchanged.
+The SFP aspect is based on [INF-8074i](https://members.snia.org/document/dl/26184).
 
-Installed generic optics follow the host socket's form factor when it is known,
-otherwise the existing generic SFP illustration is used. The module legend keeps
-the same aspect rather than stretching its body into a fixed-height icon. Native
-artwork, custom size edits and imported module assets remain authoritative.
+Generic installed modules use that same envelope at the host device's scale;
+they no longer shrink differently according to the chassis height. Imported
+artwork and explicit size edits remain authoritative. Different user-applied
+device/page scales still scale the entire device, including its ports.
 
-The editor, SVG, print/PDF and Visio use the shared scene geometry. Tests verify
-SFP/QSFP aspects, unchanged centers, all catalog socket collision checks, cable
-endpoint glue, and PDF rectangle proportions. This is a correction to schematic
-proportions, not a claim of precise hardware manufacture or exhaustive module
-support.
+SVG, PDF and Visio share the scene geometry. Tests verify mixed C9500 SFP/QSFP
+size equality, chassis/stack normalization, unchanged centers, generic module
+size, cable endpoint glue and PDF aspect. Port-map report geometry already
+uses one optical face size per common report scale.
 
 ## Rendered synthetic example
 
@@ -37,3 +31,7 @@ its fictional sample site. It shows the SFP socket and installed-module shapes
 alongside unchanged copper connectors, and the matching module legend.
 
 ![Schematic optical sockets and module legend](images/optical-proportions.png)
+
+The following actual PDF rendering exercises the mixed C9500 SFP/QSFP layout:
+
+![Uniform schematic optical faces](images/optical-uniform.png)

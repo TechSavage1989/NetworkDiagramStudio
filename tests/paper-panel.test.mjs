@@ -54,12 +54,22 @@ test('old saved frames require explicit refit rather than moving the user diagra
  delete p.layout.pageSetup.visible.lockFrames;const refit=core(p);assert.equal(refit.panelFitLegacy,false);assert.equal(refit.pageLockFrame.panelFit,1);
 });
 
-test('panel separator follows left, right and top docks without crossing content',()=>{
+test('panel docks retain content spacing without a decorative vertical divider',()=>{
  for(const position of ['left','right','top']){
   const page=core(make('letter',true,position)),divider=page.items.find(i=>i.pageFrame==='sidebar');
   const panel=contentBounds({items:page.items.filter(i=>i.panelGroup)}),body=contentBounds({items:page.items.filter(i=>!i.panelGroup&&!i.pageFrame&&!i.pageHeading)});
-  if(position==='left'){assert.ok(divider);assert.ok(panel.x+panel.w<divider.x&&divider.x+divider.w<body.x);}
+  assert.equal(divider,undefined);
+  if(position==='left')assert.ok(panel.x+panel.w<body.x);
   if(position==='right')assert.ok(body.x+body.w<panel.x);
   if(position==='top')assert.ok(panel.y+panel.h<body.y);
+ }
+});
+
+test('dynamic and fixed core scenes omit panel divider across rebuild and exports',()=>{
+ for(const preset of ['dynamic','letter'])for(const locked of [false,true]){
+  const project=make(preset,locked),page=core(project);
+  assert.ok(page.items.some(i=>i.panelGroup));
+  assert.ok(!page.items.some(i=>i.pageFrame==='sidebar'));
+  assert.equal(core(JSON.parse(JSON.stringify(project))).svg,page.svg);
  }
 });

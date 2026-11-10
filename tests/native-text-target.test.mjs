@@ -25,3 +25,19 @@ test('native title target fails with diagnostics rather than clicking an obstruc
 test('native ordinary controls retain their center target',async()=>{
  const result=await vm.runInNewContext(script,context({text:false}));assert.equal(result.x,45);assert.equal(result.y,25);
 });
+
+const navigation=source.split('async Task PanEditorTargetIntoView')[1].match(/expression=\$\$"""([\s\S]*?)"""/)[1].replace('{{query}}',JSON.stringify('#title'));
+function navigationContext(bounds,canvas={left:410,right:1028,top:522.6875,bottom:727.0625}){
+ return {document:{querySelector:s=>s==='#canvas'?{getBoundingClientRect:()=>canvas}:bounds?{getBoundingClientRect:()=>bounds}:null},innerWidth:1028,innerHeight:749,requestAnimationFrame:fn=>queueMicrotask(fn)};
+}
+test('native navigation plans bounded real pan for different offscreen title',async()=>{
+ const step=await vm.runInNewContext(navigation,navigationContext({left:636.55,right:655.9,top:774.71,bottom:784.71}));
+ assert.ok(step.dy<0);assert.ok(Math.abs(step.dy)<=72.1875);assert.ok(step.y+step.dy>=552.6875);assert.ok(step.x>=440&&step.x<=998);
+ assert.match(source,/type="mouseMoved",x=endX,y=endY,button="middle",buttons=4/);
+ assert.match(source,/Native title navigation changed zoom/);
+});
+test('native navigation leaves an already visible target alone and fails closed without a canvas',async()=>{
+ assert.equal((await vm.runInNewContext(navigation,navigationContext({left:600,right:650,top:580,bottom:600}))).visible,true);
+ assert.match((await vm.runInNewContext(navigation,navigationContext(null))).error,/missing/);
+ assert.match((await vm.runInNewContext(navigation,navigationContext({left:0,right:1,top:0,bottom:1},{left:0,right:50,top:0,bottom:50}))).error,/no pointer navigation area/);
+});
