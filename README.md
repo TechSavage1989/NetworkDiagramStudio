@@ -74,7 +74,7 @@ Network engineers can use the Windows application or the offline browser edition
 
 The separate [drawing-pages sidebar](docs/images/pages-sidebar.png) adapts to [compact desktop windows](docs/images/pages-sidebar-compact.png) and [narrow screens](docs/images/pages-sidebar-narrow.png).
 
-See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png).
+See [port and VLAN controls](docs/images/port-vlan-controls.png), [existing-device stack associations](docs/images/device-stacks.png), and a [configured information panel](docs/images/panel-content.png). The [readable paper information rail](docs/images/panel-paper-readable.png) and [wireless color key](docs/images/wireless-paper-key.png) keep their text independent of model fitting.
 
 Cable labels and port numbers use centered text by default; explicit text-style edits remain available.
 

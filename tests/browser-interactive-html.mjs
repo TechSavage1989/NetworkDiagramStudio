@@ -22,6 +22,7 @@ try{
  await viewer.goto(pathToFileURL(path).href);await viewer.locator('#drawing svg').waitFor();await settle();assert.ok(await viewer.locator('#drawing path').count()>0);assert.ok(await viewer.locator('#pages button').count()>1);
  // Inspect real exported cable/device associations without exposing project records.
  const cable=viewer.locator('#drawing .diagram-cable').first();await cable.focus();await settle();
+ assert.equal(await cable.evaluate(n=>n===document.activeElement),true,'Cable receives real keyboard focus');
  assert.match(await viewer.locator('#inspection').textContent(),/LAB-a.*p1.*LAB-b.*p1/);
  assert.ok(await viewer.locator('#drawing [data-device-id].viewer-related').count()>=2);
  await cable.press('Enter');await viewer.locator('#stage').press('Escape');assert.equal(await viewer.locator('.viewer-active').count(),0);

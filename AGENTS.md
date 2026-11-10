@@ -254,3 +254,5 @@ within the same physical member gap. Require fewer crossings without new blocked
 geometry, merged strokes or socket-lead conflicts; keep anchors, AP positions and
 saved bends fixed. Opposite-direction row sharing still runs afterward. Cover
 both the five-member/member-three fan and eight-member/member-seven return case.
+
+Use addEventListener('focusin', ...) for delegated HTML-viewer keyboard inspection, not an onfocusin expando. Ignore focus on the empty stage so search-result text persists; verify actual SVG focus and the resulting inspection details in hosted Edge.

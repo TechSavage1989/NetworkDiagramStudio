@@ -65,7 +65,7 @@ function viewer(){
  stage.onpointermove=e=>{if(!drag&&!pinned)inspect(target(e.target));if(drag?.id===e.pointerId){x=drag.x+e.clientX-drag.sx;y=drag.y+e.clientY-drag.sy;paint();}};
  stage.onpointerup=e=>{if(drag?.id!==e.pointerId)return;const d=drag;drag=null;if(Math.hypot(e.clientX-d.sx,e.clientY-d.sy)<5){inspect(target(d.target),true);}};
  stage.onpointerleave=()=>{if(!pinned)inspect(null);};
- stage.onfocusin=e=>{if(!pinned)inspect(target(e.target));};
+ stage.addEventListener('focusin',e=>{const node=target(e.target);if(node&&!pinned)inspect(node);});
  stage.onpointercancel=()=>{drag=null;};stage.onlostpointercapture=()=>{drag=null;};
  stage.onkeydown=e=>{if(e.key==='Escape'){pinned=null;inspect(null);}else if(e.key==='Enter'||e.key===' '){inspect(target(e.target),true);}else if(e.key==='+'||e.key==='=')zoom(1.25);else if(e.key==='-')zoom(.8);else if(e.key==='0')fit();else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){x+=e.key==='ArrowLeft'?40:e.key==='ArrowRight'?-40:0;y+=e.key==='ArrowUp'?40:e.key==='ArrowDown'?-40:0;paint();}else return;e.preventDefault();};
  // Scene text includes a full-value title and painted tspans; never concatenate both.

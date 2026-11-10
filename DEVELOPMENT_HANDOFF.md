@@ -1,3 +1,22 @@
+# Preview.45 integrated validation
+
+The combined calibration, multi-selection resize, readable paper-panel/key,
+interactive HTML and upper wireless routing source passed all 621 Node tests
+with no failures or skipped cases. Offline build, repository guard, whitespace
+checks and all nine independently validated Visio packages pass. Use
+`node --test --test-concurrency=1 tests/*.test.mjs` when several checkouts share
+the constrained cloud workspace; simultaneous full suites caused resource
+failures, not an accepted substitute for this clean combined pass.
+
+PR #44 source head e508a885 passed 17 of 18 hosted browser suites, including
+large resize, paper panels/key and legacy refit. The HTML keyboard inspection
+check exposed an ineffective onfocusin property assignment; use a delegated
+focusin event listener and ignore stage-only focus so search results persist.
+This correction retains the real keyboard assertion and needs fresh hosted CI.
+The current generated Letter wireless image was re-rendered from this combined
+source with synthetic data. Final-head hosted checks and immutable release
+verification remain required before claiming preview.45 published.
+
 # Preview.45: multi-selection resize caption regression
 
 Bulk resizing previously wrote absolute positions for every selected generated
