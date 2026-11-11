@@ -1,3 +1,69 @@
+# Preview.56: instant site-name typing, larger wireless APs, compact stacks, core port numbers
+
+Baseline: published preview.55. The owner reported:
+- typing a site name froze the app for over 30 seconds;
+- Wireless Connections 1 (8-member stack, 32 APs) printed APs too small with room to spare;
+- dynamic and proportional layouts should look like the paper plans;
+- stack gaps kept left- and right-turning leads on separate rows;
+- core pages should show switch ports.
+
+The owner also asked for a modern UI rebuild; that follows as its own release.
+
+- **Site name (app.mjs).** The heading updates on input. The rename commits once (one perform: one rebuild and one Undo step) after an 800 ms pause, on Enter or on change/blur. draw() leaves a pending rename in the field.
+  - Built editor, large fictional site: typing 6 characters took 10.6 s, now 0.26 s; the commit takes 1.9 s.
+- **Shared gap levels (routing.mjs).**
+  - shareGapLevels pairs the k-th innermost left- and right-turning leads of one gap on level k, level 0 farthest from the sockets. Innermost-farthest avoids every same-side crossing in the gap; the reverse order produced 136 crossings on Letter.
+  - equipmentGapPlan takes a side() estimate.
+  - wireless shareChoiceGaps re-measures each bank choice's stack from choiceSides: planned AP positions, with saved AP x positions taking precedence. It shifts bottom rows up, or for side choices recenters the side columns.
+  - coreRoutes assigns the same shared levels from its real sides (directionNeutralLevels) and falls back to one level per lead.
+- **Sideways exits (crossesPanel).** A stack member's own lead may no longer leave through the side of its member: the exit segment from inside to outside the member region must be vertical. This fixed the line across member 7 in the owner's crop.
+- **AP card factors (planPaperView).**
+  - Whole-switch sheets build choices at AP_FACTORS [1, 1.15, 1.3, 1.5, 1.75, 2] (captions memoized per project, so widths reuse them), ranked by printed AP size (fit × factor).
+  - A factor stays only while the port numbers keep max(min(85% of best, 4 pt), min(best, 3.5 pt), 8 pt where reached). Number size is measured per stack width (numberSizeAt).
+  - Broken AP names over a tenth count 25% smaller and do not meet the target.
+  - A sheet with more crossings than APs keeps rendering further candidates until tidy (`tidy` comes before size in `better`).
+  - Whole vs members-only views compare stackFit, not AP size.
+  - Frames and the memo carry wirelessApFactor.
+- **Dynamic plan (buildWirelessPages).**
+  - Dynamic pages, and the implicit Keep complete layout once geometry is authored, render paperPlanPages with `_wirelessPaperPlan.dynamic`, planned against printPaper or Letter landscape, always with the whole stack.
+  - Authored wireless geometry: the arrangement is chosen by withoutWirelessPositions(project), then drawn with the edits (only).
+  - Port number scale ignores fit mode on dynamic plans.
+  - Falls back to the established planner for:
+    - an explicit Keep complete layout;
+    - legacy frames;
+    - a fixed drawing page geometry;
+    - capacity errors;
+    - an unauthored routing compromise.
+- **Single-sheet frames.** A saved frame of a site with one wireless sheet ("Wireless Connections", unnumbered) now reopens its plan. This was a latent mismatch.
+- **Core port numbers (core.mjs).**
+  - Every uncabled switch/firewall socket gets an upright number (portNumbers scales 1, .85, .7; skipped when none fits).
+  - Cabled sockets keep their port label, so cable routes are identical with numbers on or off.
+  - layout.corePortNumbers:false (Layout & content) turns them off; the page cache ignores it outside core.
+  - Numbers are pushed to page.items: applyDrawingEdits had replaced the `items` alias.
+
+Printed sizes, two-stack fictional site with owner-like four-line cards (AP text / smallest port number, sheet 1 | sheet 2):
+
+| Paper | preview.55 | preview.56 |
+|---|---|---|
+| Letter | 4.3 \| 5.2 pt | 5.07/3.92 \| 5.19/4.62 pt |
+| A4 | 4.2 \| 5.1 pt | 4.51/4.01 \| 5.13/4.56 pt |
+| Tabloid | 5.9 \| 7.3 pt | 7.47/4.43 \| 7.88/5.39 pt |
+
+On every sheet, crossings are at most the AP count and at least 90% of AP names stay on one line.
+
+Tests:
+- Updated where the old dynamic planner or old floors were asserted: compatibility (continuation via explicit Continue on sheets), equipment-scale, text-layout, ap-scale, compact, paper-plan, adaptive-paper, return-order, side-space, density and centered labels.
+- New: core-port-numbers.test.mjs.
+- The full node suite passes (736).
+
+Editor layout (style.css screen layer, index.html):
+- The stage toolbar starts with the Edit drawing switch right after the page title, so it sits in the same place at every width; groups are quiet segmented clusters with visually hidden labels.
+- The app bar uses quiet buttons with Export… as the only filled one.
+- The edit bar is one flowing row of compact chips (#drawing-tools is display:contents), with icons for Undo/Redo, Snap settings… and the Place beside directions. At 1366 px it takes three short rows instead of four.
+- Device rows keep Up/Down/Delete as small icon buttons on the same line.
+- No IDs, texts or accessible names changed.
+- Three browser suites that CI does not run had gone stale and now pass again: wan-placement (selection handles share their object's key), core-arrangement (an exact label after the clear buttons arrived) and organize-connections (legend keys carry editor-only keyboard attributes). All 25 browser suites pass locally.
+
 # Preview.55: faster rebuilds and instant Undo/Redo
 
 Baseline: published preview.54. Owner report: the app is slow to load any change. Every speedup leaves output unchanged. Every page's SVG for eleven fictional projects hashes identically before and after: the two-stack site (dynamic, MAC, Letter, bundle jumps with a text style), the sample, the MDF lookalike, the modular chassis, two AP labs, parallel uplinks and tall captions.

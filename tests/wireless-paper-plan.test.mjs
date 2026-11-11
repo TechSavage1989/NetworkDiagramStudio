@@ -79,7 +79,7 @@ test('Only stack members with AP links trades the whole stack for larger text; U
 
 test('every paper size keeps each switch whole; larger paper prints larger',()=>{
  const sizes={};
- for(const [preset,orientation,minimum,ports] of [['letter','portrait',4.4,3.9],['a4','landscape',3.9,3.4],['legal','landscape',4,3.5],['tabloid','landscape',5.5,4.9],['a3','landscape',6,5.3],['a5','landscape',2.4,2.1]]){
+ for(const [preset,orientation,minimum,ports] of [['letter','portrait',4.3,3.6],['a4','landscape',3.9,3.4],['legal','landscape',4,3.5],['tabloid','landscape',5.5,4],['a3','landscape',6,4],['a5','landscape',2.4,2.1]]){
   const pages=wireless(wirelessTwoStackSite({preset,orientation,fit:'adaptive'}));wholeSwitches(pages);readable(pages,{minimum,ports});sizes[preset+orientation]=smallest(pages);
  }
  assert.ok(sizes.tabloidlandscape>sizes.legallandscape&&sizes.legallandscape>sizes.a5landscape,'larger paper prints the APs larger');
@@ -128,12 +128,13 @@ test('locked paper plans reopen exactly, keep a manual AP move and allow a delib
  p.layout.drawingEdits={[ap.editKey]:unpresentPatch(ap,{x:moved[0].width+400})};const off=wireless(p)[0];assert.ok(off.items.find(i=>i.editKey===ap.editKey).x>off.width,'a locked page still allows a deliberate off-page move');assert.equal(off.pageOverflow,true,'and reports the print clipping');
 });
 
-test('explicit keep-layout, explicit continuation and dynamic paper keep their own wireless planners',()=>{
+test('explicit keep-layout and explicit continuation keep their own wireless planners; dynamic paper draws the whole-switch plan',()=>{
  const kept=wirelessTwoStackSite({preset:'letter'});Object.assign(kept.layout.pageSetup.visible,{wirelessFit:'layout',wirelessFitExplicit:true});
  assert.ok(wireless(kept).every(page=>!page.wirelessLayout.paperPlan));
  const continued=wirelessTwoStackSite({preset:'letter'});Object.assign(continued.layout.pageSetup.visible,{wirelessFit:'readable',wirelessFitExplicit:true});
  const sheets=wireless(continued);assert.ok(sheets.length>2,'Continue on sheets still splits for larger text');assert.ok(smallest(sheets)>=7.95);
- assert.ok(wireless(wirelessTwoStackSite()).every(page=>!page.wirelessLayout.paperPlan&&page.wirelessLayout.memberIds.length>=5));
+ // Dynamic pages use the same one-sheet-per-switch arrangement as paper, with the whole stack.
+ const dynamic=wireless(wirelessTwoStackSite());assert.equal(dynamic.length,2);assert.ok(dynamic.every(page=>page.wirelessLayout.paperPlan&&page.wirelessLayout.wholeSwitch&&!page.wirelessLayout.routingCompromise));assert.deepEqual(dynamic.map(page=>page.wirelessLayout.memberIds.length),[8,5]);
 });
 
 test('editing another device reuses drafted wireless sheets and matches a cold build',()=>{

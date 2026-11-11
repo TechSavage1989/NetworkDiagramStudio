@@ -1,4 +1,5 @@
 import {actualAsset,addDevice,cableWeight,getAnchor,physicalPorts} from './scene.mjs';
+import {shareGapLevels} from './routing.mjs';
 
 // A family of sheets has one hardware width. Height comes from the complete
 // artwork; page capacity may change the grouping, never an individual scale.
@@ -6,18 +7,19 @@ export const equipmentPadding=.6;
 // Busy gaps grow by the painted widths of the actual departing cables. Values
 // are fractions of hardware width, so every chassis keeps its native aspect
 // ratio and only the empty space between adjacent members changes.
-export function equipmentGapPlan(project,device,links,width,{padding=equipmentPadding,weight,clearance=2}={}){
+export function equipmentGapPlan(project,device,links,width,{padding=equipmentPadding,weight,clearance=2,side}={}){
  if(!canContinueEquipment(project,device))return {padding,memberGaps:{}};
  const panel=addDevice({items:[]},project,device,[0,0,width,1],'gap-measure',{fitWidth:true,padding}),regions=panel.panelRegions||[],gaps=new Map();
  for(const [index,link] of links.entries()){
   const ports=link.sw===device.id?[link.sp]:[...(link.a===device.id?[link.ap]:[]),...(link.b===device.id?[link.bp]:[])];
   for(const port of ports){const thickness=(typeof weight==='function'?weight(link):weight)||link.weight||cableWeight,anchor=getAnchor(panel,port,'top',index,{weight:thickness});if(!anchor.escapeRange)continue;
    const [lo,hi]=anchor.escapeRange,upper=regions.find(r=>Math.abs(panel.y+(r.y+r.h)*panel.h-lo)<.01),lower=regions.find(r=>Math.abs(panel.y+r.y*panel.h-hi)<.01);if(!upper?.memberId||!lower?.memberId||upper.memberId===lower.memberId)continue;
-   const key=upper.memberId+'/'+lower.memberId;if(!gaps.has(key))gaps.set(key,[]);gaps.get(key).push(thickness);
+   // With known turn directions (side), opposite leads share levels.
+   const key=upper.memberId+'/'+lower.memberId;if(!gaps.has(key))gaps.set(key,[]);gaps.get(key).push({thickness,x:anchor.x,side:typeof side==='function'?side(link,anchor):null});
   }
  }
  const minimum=.035*Math.max(.49,Math.min(1,padding))**2;
- return {padding,memberGaps:Object.fromEntries([...gaps].map(([key,widths])=>[key,Math.max(minimum,(widths.reduce((sum,w)=>sum+w,0)+clearance*(widths.length+1))/panel.w)]))};
+ return {padding,memberGaps:Object.fromEntries([...gaps].map(([key,entries])=>{const levels=shareGapLevels(entries).map(level=>Math.max(...level.map(v=>v.thickness)));return [key,Math.max(minimum,(levels.reduce((sum,w)=>sum+w,0)+clearance*(levels.length+1))/panel.w)];}))};
 }
 export function equipmentSize(project,device,width){
  const g=addDevice({items:[]},project,device,[0,0,width,1],'measure',{fitWidth:true,padding:equipmentPadding});

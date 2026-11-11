@@ -1,3 +1,4 @@
+import {unpresentPatch} from '../src/web/presentation.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {parseConfig,mergeModels} from '../src/web/imports/index.mjs';
 import {buildPages,exportVisio} from '../src/web/diagram/index.mjs';
@@ -17,9 +18,12 @@ test('native artwork edits retain text weight/alignment and independently named 
 test('a repeated switch on continued wireless pages has independent editable positions',()=>{
  const site=sampleSite();site.devices=site.devices.filter(d=>d.id==='sw-1'||d.kind==='ap');site.links=site.devices.filter(d=>d.kind==='ap').map((d,i)=>({a:'sw-1',ap:'1/1/'+(i*2+1),b:d.id,bp:'eth0',media:'copper'}));
  // Force another sheet by reusing a jack column in a synthetic mapped front.
+ // Dynamic pages keep a routable switch whole; explicit continuation on
+ // Letter still splits it, which is what this identity check needs.
  const sw=site.devices[0];sw.stencil={id:'many',name:'Lab',dataUrl:png,width:10,height:1,anchors:Object.fromEntries(site.links.map((e,i)=>[e.ap,[i%2?.3:.2,.3]]))};
+ const pageSetup={visible:{wirelessFit:'readable',wirelessFitExplicit:true,default:{preset:'letter'}}};site.layout={pageSetup};
  const pages=buildPages(site).filter(p=>p.title==='Wireless Connections');assert.ok(pages.length>1);const groups=pages.map(p=>p.items.find(i=>i.sourceId==='sw-1'&&i.kind==='switch'));assert.equal(new Set(groups.map(g=>g.editKey)).size,groups.length);
- site.layout={drawingEdits:{[groups[0].editKey]:{x:groups[0].x+20}}};const after=buildPages(site).filter(p=>p.title==='Wireless Connections').map(p=>p.items.find(i=>i.sourceId==='sw-1'&&i.kind==='switch'));assert.equal(after[0].x,groups[0].x+20);assert.equal(after[1].x,groups[1].x);
+ site.layout={pageSetup,drawingEdits:{[groups[0].editKey]:unpresentPatch(groups[0],{x:groups[0].x+20})}};const after=buildPages(site).filter(p=>p.title==='Wireless Connections').map(p=>p.items.find(i=>i.sourceId==='sw-1'&&i.kind==='switch'));const source=item=>(item.x-(item.presentation?.x||0))/(item.presentation?.scale||1);assert.ok(Math.abs(source(after[0])-(source(groups[0])+20/(groups[0].presentation?.scale||1)))<1e-6,'the moved copy keeps its saved position');assert.ok(Math.abs(source(after[1])-source(groups[1]))<1e-6,'the other copy is untouched');
 });
 test('far-end configuration evidence corrects a reported HA endpoint without discarding the report',()=>{
  const sw={id:'sw',name:'LAB-SW',kind:'switch',fromConfig:true,ports:[{name:'49',description:'Uplink-to-LAB-FortiGate-x3'}]},fw={id:'lab-fortigate-120g',name:'LAB-FortiGate-120G',kind:'firewall',fromConfig:true,ports:[{name:'ha'},{name:'x3'}]},reported={a:'sw',ap:'49',b:fw.id,bp:'ha'},m=mergeModels({devices:[sw,fw],links:[reported]});assert.equal(m.links[0].bp,'x3');assert.equal(m.links[0].reportedEndpoints[0].bp,'ha');assert.ok(m.warnings.some(w=>/verify the connection/.test(w)));

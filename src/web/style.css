@@ -326,3 +326,120 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
  main.project-collapsed:not(:has(> .pages-sidebar:not([hidden]))){grid-template-columns:minmax(0,1fr)}
 }
 .welcome-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+
+/* ===== Modern workspace (preview.57) =====================================
+   One calm layer over the established rules: a slim dark app bar of quiet
+   buttons, one aligned drawing toolbar that starts with the Edit drawing
+   switch, a compact page row and edit bar, and lighter panels. Every control
+   keeps its ID and text; icons only replace text visually where the button
+   keeps its accessible name and tooltip. */
+@media screen{
+ :root{--ui-bg:#eef2f5;--ui-surface:#fff;--ui-subtle:#f6f9fa;--ui-line:#dfe6ea;--ui-ink:#183544;--ui-muted:#627684;--ui-accent:#0f6b7c;--ui-accent-strong:#0b5765;--ui-accent-soft:#e3f1f4;--ui-accent-line:#9ccbd4;--ui-radius:7px;--ui-control:30px}
+ body{background:var(--ui-bg)}
+ button{border-radius:var(--ui-radius)}
+ :focus-visible{outline:2px solid #2a9aad;outline-offset:2px}
+ /* App bar ---------------------------------------------------------------- */
+ .appbar{padding:5px 14px;gap:10px;border-bottom:1px solid #0d2230}
+ .appbar .brand span{display:none}
+ .appbar .brand strong{font-size:15px;letter-spacing:.01em}
+ .appbar .site-tools{gap:2px;padding-right:10px;margin-right:2px;border-right:1px solid rgba(255,255,255,.16)}
+ .appbar .site-tools button,.appbar .toolbar button:not(.primary){background:transparent;color:#d9e7eb;border:1px solid transparent;padding:5px 10px;font-size:12.5px;font-weight:600;line-height:1.2}
+ .appbar .site-tools button:hover:not(:disabled),.appbar .toolbar button:not(.primary):hover:not(:disabled){background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.16);color:#fff}
+ .appbar .toolbar{gap:2px}
+ .appbar .toolbar button.primary{background:#2a9aad;border:1px solid #2a9aad;color:#fff;padding:5px 14px;font-size:12.5px;margin:0 4px}
+ .appbar .toolbar button.primary:hover:not(:disabled){background:#33aec2;border-color:#33aec2}
+ /* Drawing toolbar: title, then Edit drawing, then the command groups in one
+    aligned row that wraps group by group under the same left edge. Group
+    names stay available to assistive technology. */
+ .stagebar{background:var(--ui-surface);padding:6px 14px;gap:6px 12px;flex-wrap:wrap;align-items:flex-start;border-bottom:1px solid var(--ui-line)}
+ .stage-title{flex:0 1 auto;min-width:60px;height:var(--ui-control);gap:6px;align-items:center}
+ .stagebar h1{font-size:15.5px;font-weight:700;max-width:220px;line-height:var(--ui-control)}
+ #toggle-project.panel-toggle{flex:none;font-size:0;width:28px;height:28px;padding:0;display:inline-grid;place-items:center;background:transparent;border:1px solid transparent;color:var(--ui-muted)}
+ #toggle-project.panel-toggle::before{content:"\00AB";font-size:18px;line-height:1;font-weight:600}
+ #toggle-project.panel-toggle[aria-pressed="true"]::before{content:"\00BB"}
+ #toggle-project.panel-toggle:hover{background:var(--ui-subtle);border-color:var(--ui-line);color:var(--ui-ink)}
+ .stagebar .workspace-actions{flex:1 1 520px;margin-left:0;justify-content:flex-start;gap:6px;align-items:center;flex-wrap:wrap;min-width:0;max-width:100%}
+ .workspace-group-label{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+ .workspace-action-group{flex-direction:row;align-items:center;gap:1px;padding:2px;background:var(--ui-subtle);border:1px solid var(--ui-line);border-radius:9px}
+ .workspace-action-group .workspace-group-buttons,.workspace-actions .zoom-tools{display:flex;gap:2px;align-items:center;flex-wrap:nowrap}
+ .workspace-actions .workspace-action-group button,.workspace-actions .zoom-tools button{background:transparent;border:1px solid transparent;color:var(--ui-ink);font-size:12.5px;font-weight:600;padding:0 9px;height:26px;white-space:nowrap;border-radius:7px}
+ .workspace-actions .workspace-action-group button:hover:not(:disabled),.workspace-actions .zoom-tools button:hover:not(:disabled){background:#fff;border-color:var(--ui-line);box-shadow:0 1px 2px rgba(24,53,68,.08)}
+ .workspace-actions .zoom-tools #zoom-out,.workspace-actions .zoom-tools #zoom-in{width:26px;padding:0;font-size:17px;line-height:1}
+ .workspace-actions .zoom-tools #zoom-level{min-width:40px;font-size:12px;color:var(--ui-muted);font-variant-numeric:tabular-nums}
+ .workspace-actions #zoom-actual[aria-pressed="true"]{background:var(--ui-accent-soft);border-color:var(--ui-accent-line);color:var(--ui-accent-strong)}
+ /* Edit drawing: a switch at the start of the toolbar, always in the same
+    place, showing at a glance whether the drawing is being edited. */
+ .workspace-actions #edit-drawing.workspace-edit{order:-1;flex:none;align-self:center;display:inline-flex;align-items:center;gap:8px;height:var(--ui-control);margin-right:8px;padding:0 10px 0 12px;font-size:13px;font-weight:700;color:var(--ui-accent-strong);background:var(--ui-accent-soft);border:1px solid var(--ui-accent-line);border-radius:999px}
+ .workspace-actions #edit-drawing.workspace-edit::after{content:"";flex:none;width:26px;height:14px;border-radius:999px;background:#b9cdd3 radial-gradient(circle at 7px 50%,#fff 5px,transparent 5.5px);transition:background-color .15s}
+ .workspace-actions #edit-drawing.workspace-edit:hover:not(:disabled){background:#d4eaef;border-color:var(--ui-accent)}
+ .workspace-actions #edit-drawing.workspace-edit[aria-pressed="true"],.workspace-actions #edit-drawing.workspace-edit[aria-pressed="true"]:hover:not(:disabled){background:var(--ui-accent);border-color:var(--ui-accent);color:#fff;box-shadow:0 0 0 3px rgba(15,107,124,.16)}
+ .workspace-actions #edit-drawing.workspace-edit[aria-pressed="true"]::after{background:#5fd0a6 radial-gradient(circle at 19px 50%,#fff 5px,transparent 5.5px)}
+ /* Page row: status on the left, page and paper pickers on the right. */
+ .pagebar{background:var(--ui-subtle);border-bottom:1px solid var(--ui-line);min-height:34px;padding:0 6px 0 0}
+ #feedback{color:var(--ui-muted);font-size:12px;-webkit-line-clamp:1}
+ #feedback:not(:empty){padding:3px 14px}
+ .pagebar .page-picker label,.quick-page-paper label{font-size:12px;font-weight:600;color:var(--ui-muted)}
+ .pagebar select{height:26px;font-size:12px;border-radius:6px}
+ .pagebar .page-picker select{width:180px}
+ #page-position,#active-page-paper-status{font-size:11.5px;color:var(--ui-muted)}
+ #page-overflow-notice,.pagebar .warning{border-radius:6px;font-size:12px;padding:3px 10px}
+ /* Edit bar: compact chips in one wrapping row, clusters divided by hairlines. */
+ .edit-bars{background:var(--ui-subtle);border-bottom:1px solid var(--ui-line);padding:5px 14px;gap:5px 3px}
+ .drawing-tools{gap:3px}
+ /* The main edit tools flow straight into the bar, so Place beside and the
+    cable tools continue on the same line when there is room. */
+ .edit-bars>#drawing-tools:not([hidden]){display:contents}
+ .edit-bars>.placement-tools,.edit-bars>.cable-tools{margin-left:4px;padding-left:8px;border-left:1px solid var(--ui-line)}
+ .drawing-tools button,.drawing-tools summary{font-size:11.5px;font-weight:600;padding:0 7px;height:26px;background:var(--ui-surface);border:1px solid var(--ui-line);border-radius:6px}
+ .drawing-tools button:hover:not(:disabled){border-color:var(--ui-accent-line);background:#f1f8f9}
+ .drawing-tools button[aria-pressed="true"]{background:var(--ui-accent-soft);border-color:var(--ui-accent-line);color:var(--ui-accent-strong)}
+ .drawing-tools select{height:26px;min-height:26px;font-size:11.5px;border-radius:6px}
+ #drawing-arrange{max-width:150px}
+ .drawing-tools label{font-size:11.5px;color:var(--ui-muted);font-weight:600}
+ .drawing-tools span.tool-sep{height:18px;margin:0 4px;background:var(--ui-line)}
+ #drawing-selection{font-size:12px;font-weight:700;color:var(--ui-accent-strong);min-width:66px}
+ #drawing-undo,#drawing-redo{font-size:0;width:28px;padding:0}
+ #drawing-undo::before,#drawing-redo::before{font-size:15px;line-height:1;content:"\21B6"}
+ #drawing-redo::before{content:"\21B7"}
+ #drawing-snap-options{font-size:0;width:28px;padding:0}
+ #drawing-snap-options::before{content:"\2699\FE0E";font-size:14px;line-height:1}
+ #drawing-beside [data-place]{font-size:0;width:28px;padding:0}
+ #drawing-beside [data-place]::before{font-size:14px;line-height:1;content:"\2190"}
+ #drawing-beside [data-place="right"]::before{content:"\2192"}
+ #drawing-beside [data-place="above"]::before{content:"\2191"}
+ #drawing-beside [data-place="below"]::before{content:"\2193"}
+ #drawing-beside:not(:has([data-place][aria-pressed="true"])) #placement-status{display:none}
+ .edit-bars>.placement-tools{background:transparent;padding-top:0;padding-bottom:0;padding-right:0;border-radius:0}
+ .placement-tools strong{font-size:12px;color:var(--ui-muted)}
+ #placement-status{font-size:11.5px;color:var(--ui-muted)}
+ .edit-bars>.cable-tools{background:var(--ui-accent-soft);border-radius:6px;padding:2px 8px;border-left:0}
+ /* Project panel: smaller section heads, compact actions, one-line rows
+    with their order and delete actions as small icon buttons. */
+ .project-sidebar{background:var(--ui-surface);border-right:1px solid var(--ui-line)}
+ .project-sidebar section{padding-bottom:12px}
+ .project-sidebar .eyebrow,.pages-sidebar .eyebrow{font-size:10.5px;letter-spacing:.08em;color:var(--ui-muted);margin:12px 0 6px}
+ .project-sidebar h2,.pages-sidebar h2{font-size:14px;margin:0 0 4px}
+ .project-sidebar .hint{font-size:11.5px;line-height:1.35;color:var(--ui-muted)}
+ .project-sidebar button.full{padding:6px 10px;font-size:12.5px;margin-top:5px}
+ .project-sidebar #site,.project-sidebar #filter{height:32px;font-size:13px;border-radius:var(--ui-radius)}
+ .project-sidebar .scope-actions button,.project-sidebar .device-list-actions button,#add-device{font-size:11.5px;padding:3px 8px;background:var(--ui-subtle);border-color:var(--ui-line)}
+ .device-row{grid-template-columns:18px minmax(0,1fr) auto auto;align-items:center;gap:0 4px;padding:4px 4px 4px 2px;border-radius:6px}
+ .device-row>input[type=checkbox]{grid-column:1;grid-row:1}
+ .device-row>.device-details{grid-column:2;grid-row:1}
+ .device-row:hover,.device-row:focus-within{background:var(--ui-subtle)}
+ .device-row .device-details{padding:2px 4px;font-size:13px}
+ .device-row .device-details small{font-size:11px}
+ .device-row>.order-buttons{grid-column:3;grid-row:1;flex-direction:row;margin:0;gap:2px;align-self:center}
+ .device-row>.delete-device{grid-column:4;grid-row:1}
+ .device-row .order-buttons button,.device-row .delete-device{font-size:0;min-width:0;width:24px;height:24px;padding:0;display:inline-grid;place-items:center;background:transparent;border:1px solid transparent;color:var(--ui-muted);opacity:.55;transition:opacity .12s}
+ .device-row .order-buttons button::before{content:"\2191";font-size:13px;line-height:1}
+ .device-row .order-buttons button+button::before{content:"\2193"}
+ .device-row .delete-device::before{content:"\2715";font-size:11px;line-height:1;color:#9a2931}
+ .device-row:hover .order-buttons button:not(:disabled),.device-row:focus-within .order-buttons button:not(:disabled),.device-row:hover .delete-device,.device-row:focus-within .delete-device{opacity:1}
+ .device-row .order-buttons button:hover:not(:disabled){background:#fff;border-color:var(--ui-line)}
+ .device-row .order-buttons button:disabled{opacity:.18}
+ /* Pages rail and status bar. */
+ .pages-sidebar{background:var(--ui-subtle);border-right:1px solid var(--ui-line)}
+ .statusbar{background:var(--ui-surface);border-top:1px solid var(--ui-line);color:var(--ui-muted);font-size:12px}
+ @media(max-width:620px){.stagebar{flex-wrap:wrap}.stagebar .workspace-actions{flex-basis:100%}}
+}

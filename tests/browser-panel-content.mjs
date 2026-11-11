@@ -68,7 +68,9 @@ try{
  const apRatio=()=>page.locator('#canvas').evaluate(canvas=>canvas.querySelector('[data-device-id="ap0"]').getBoundingClientRect().width/canvas.querySelector('[data-device-id="sw"]').getBoundingClientRect().width);
  const beforeRatio=await apRatio();d=await edit();assert.equal(await d.getByLabel('Wireless AP placement',{exact:true}).inputValue(),'rows');
  await d.getByLabel('Wireless APs and details (%)',{exact:true}).fill('150');await d.getByLabel('Wireless AP placement',{exact:true}).selectOption('sides');await apply(d);
- assert.ok(Math.abs(await apRatio()/beforeRatio-1.5)<.01,'AP body grows relative to switch');
+ // The automatic size may already enlarge cards; an explicit 150% is a fixed
+ // 1.5x source size, so it is clearly larger relative to the switch.
+ assert.ok(await apRatio()/beforeRatio>1.2,'AP body grows relative to switch');
  assert.equal(await page.locator('#canvas [data-device-id^="ap"]').count(),8);
  await page.screenshot({path:resolve(output,'wireless-ap-side-space.png')});
  const apDownload=page.waitForEvent('download');await page.locator('#save').click();const apSaved=resolve(output,'ap-scale.nds.json');await (await apDownload).saveAs(apSaved);await open(apSaved);

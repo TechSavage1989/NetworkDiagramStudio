@@ -17,7 +17,7 @@ export function cachedDraftPages(cache,family,project,build){
  // snapping never changes a drawing; arrangement and cable text affect only
  // network pages; even line spacing affects network and wireless pages.
  delete input.layout.snapping;
- if(family!=='core'){delete input.layout.coreArrangement;delete input.layout.cableCaptions;}
+ if(family!=='core'){delete input.layout.coreArrangement;delete input.layout.cableCaptions;delete input.layout.corePortNumbers;}
  if(family!=='core'&&family!=='wireless'){delete input.layout.lineSpacing;delete input.layout.hopStyle;}
  // Source selection has already been composed into devices/links. Raw evidence
  // and source metadata do not participate in drawing calculations.

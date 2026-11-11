@@ -46,7 +46,7 @@ test('generated and imported core and wireless cables retain their editable conn
 
 test('long project names, access point names and table values are fully visible',()=>{
  const site=sampleSite();site.name=Array.from({length:16},(_,i)=>'Campus'+i).join(' ');const ap=site.devices.find(d=>d.kind==='ap');ap.name='LAB-WIRELESS-ACCESS-POINT-WITH-A-LONG-BUT-USEFUL-LOCATION-NAME';site.devices[0].routes=[{destination:'W'.repeat(110),gateway:'192.0.2.254'}];const pages=buildPages(site);
- assert.ok(pages.every(page=>!page.svg.includes('…')));assert.ok(pages.every(page=>page.items.find(item=>item.value===site.name)));const title=pages.filter(page=>page.title==='Wireless Connections').flatMap(page=>page.items).find(item=>item.value===ap.name);assert.ok(title);assert.ok(textLayout(title).lines.length>1);assert.equal(textLayout(title).size,18);
+ assert.ok(pages.every(page=>!page.svg.includes('…')));assert.ok(pages.every(page=>page.items.find(item=>item.value===site.name)));const title=pages.filter(page=>page.title==='Wireless Connections').flatMap(page=>page.items).find(item=>item.value===ap.name);assert.ok(title);assert.ok(textLayout(title).lines.length>1);assert.ok(textLayout(title).size>=18,'the long AP name wraps at its full size (cards may be enlarged, never shrunk)');
  const table=pages.filter(page=>page.title==='VLANs and Routing').flatMap(page=>page.items.filter(item=>item.type==='text'));assert.ok(table.filter(item=>/^W+$/.test(item.value)).map(item=>item.value).join('').includes('W'.repeat(110)));
 });
 

@@ -14,8 +14,9 @@ const project={...mdfLookalike(),stencils:{},optics:{},warnings:[]};project.layo
 const fixture=resolve(output,'wan-lab.nds.json');await writeFile(fixture,JSON.stringify({format:'NetworkDiagramStudio',schema:1,project}));
 const browser=await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE_PATH||undefined,args:['--no-sandbox']}),page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[],result={};
 page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
-// Body boxes in drawing coordinates, read from the rendered SVG.
-const boxes=()=>page.locator('#canvas svg').evaluate(svg=>Object.fromEntries([...svg.querySelectorAll('[data-drawing-key$="|body"]')].map(n=>{const b=n.getBBox(),m=n.getCTM(),s=svg.getCTM().inverse().multiply(m);return [n.dataset.drawingKey,{x:s.a*b.x+s.e,y:s.d*b.y+s.f,w:b.width*s.a,h:b.height*s.d}];})));
+// Body boxes in drawing coordinates, read from the rendered SVG. Selection
+// handles carry their object's key, so they are skipped.
+const boxes=()=>page.locator('#canvas svg').evaluate(svg=>Object.fromEntries([...svg.querySelectorAll('[data-drawing-key$="|body"]')].filter(n=>!n.closest('.transform-controls')).map(n=>{const b=n.getBBox(),m=n.getCTM(),s=svg.getCTM().inverse().multiply(m);return [n.dataset.drawingKey,{x:s.a*b.x+s.e,y:s.d*b.y+s.f,w:b.width*s.a,h:b.height*s.d}];})));
 const body=key=>page.locator(`#canvas svg [data-drawing-key="${key}"]`);
 const key=id=>'Core Network|device|'+id+'|body',firewall=key('fw'),cards=['handoff:fw/port1','handoff:fw/port11'].map(key),reference=key('mdf');
 const feedback=pattern=>page.waitForFunction(source=>new RegExp(source,'i').test(document.querySelector('#feedback').textContent),pattern.source);
