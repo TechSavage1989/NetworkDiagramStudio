@@ -412,11 +412,6 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
  .edit-bars>.placement-tools{background:transparent;padding-top:0;padding-bottom:0;padding-right:0;border-radius:0}
  .placement-tools strong{font-size:12px;color:var(--ui-muted)}
  #placement-status{font-size:11.5px;color:var(--ui-muted)}
- /* A selected device's caption corners open as a small menu, so selecting a
-    device never adds a toolbar row (the drawing must not move under the pointer). */
- .device-caption-menu .caption-options{grid-template-columns:auto;min-width:190px}
- .device-caption-menu .caption-options label{display:flex;justify-content:space-between;align-items:center;gap:8px}
- .device-caption-menu[hidden]{display:none}
  .edit-bars>.cable-tools{background:var(--ui-accent-soft);border-radius:6px;padding:2px 8px;border-left:0}
  /* Project panel: smaller section heads, compact actions, one-line rows
     with their order and delete actions as small icon buttons. */
