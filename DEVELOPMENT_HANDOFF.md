@@ -5,8 +5,10 @@ Baseline: published preview.57. The owner asked about placing device names at sp
 - **Discoverable placement:** Layout & content shows Device name position and Device details position on every network page as well as the drawing defaults (the dialog opens on the current page; preview.57 showed them only under Drawing defaults).
 - **Per device:** layout.deviceCaptions.devices[id] = {name?, info?}.
   - Set in the device editor ("Name position / Details position (network pages)") or in Edit drawing.
-  - In Edit drawing, a selected network-page device shows a compact Name & details menu (a details popover holding #device-name-corner and #device-info-corner) next to Rotation.
-  - The first version showed both selects inline. That added a toolbar row on selection and moved the drawing, so the native Shift multi-selection check clicked the wrong place. As a menu the bar stays the same height (asserted in browser-page-layout-defaults).
+  - In Edit drawing, the object Properties dialog of a selected network-page device has Name position and Details position, saved with its other properties in one history action (setDrawingEdits' new alsoLayout step).
+  - Two earlier versions put the choice in the toolbar, as inline selects and then as a small menu. Inline selects added a row whenever a device was selected and moved the drawing under the pointer; the native Shift multi-selection check failed on the PR. With the menu, the PR run passed but the native Shift drag-axis check failed on the publish run, so preview.58 was not published.
+  - Selecting a device now changes the toolbar exactly as in preview.57, and the browser check asserts the bar height.
+  - The release intent's revision is 2, so this follow-up publishes preview.58.
   - Choosing a corner clears that caption's dragged x/y so it follows the corner. One history action, validated.
   - core.mjs, placeDeviceTitles and the paper pass read deviceCaptionPlacement(project, id).
 - **Port numbers:** core numbering no longer requires switch/firewall kinds. Every device that draws real sockets is numbered from its port inventory (routers such as the Juniper SRX300, patch panels and so on). Handoff cards and generic symbols without sockets stay plain.

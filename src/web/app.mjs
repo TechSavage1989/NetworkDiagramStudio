@@ -152,9 +152,6 @@ function syncDrawingSelection(){
  $('drawing-group').disabled=drawingSelection.size<2;$('drawing-ungroup').disabled=!(project.layout?.drawingGroups||[]).some(g=>g.keys.some(k=>drawingSelection.has(k)));
  syncQuickText(single);
  $('device-transform-tools').hidden=!editDrawing||single?.type!=='device';if(single?.type==='device')$('device-angle').value=Math.round((single.angle||0)*180/Math.PI*100)/100;
- // A selected network-page device can place its own name and details.
- const captioned=single?.type==='device'&&single.kind!=='handoff'&&!!pages[active]?.coreDeviceIds?.includes(single.sourceId);$('device-caption-tools').hidden=!captioned;
- if(captioned){const own=project.layout?.deviceCaptions?.devices?.[single.sourceId]||{},drawing=deviceCaptionPlacement({layout:{...project.layout,deviceCaptions:{...project.layout?.deviceCaptions,devices:undefined}}});for(const [slot,id] of [['name','device-name-corner'],['info','device-info-corner']]){const select=$(id);select.options[0].textContent='Default ('+CAPTION_CORNER_LABELS[drawing[slot]]+')';select.value=own[slot]||'';}}
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
  $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
@@ -203,17 +200,6 @@ function setDeviceAngle(degrees){
 }
 $('device-angle').onchange=()=>task(()=>{try{setDeviceAngle($('device-angle').value);}finally{syncDrawingSelection();}});
 $('device-angle-reset').onclick=()=>task(()=>setDeviceAngle(0));
-// One device's name or details corner; a caption it had been dragged to
-// follows the new corner. One validated history action.
-function setDeviceCorner(slot,value){
- const item=drawingSelection.size===1?pages[active]?.items.find(i=>drawingSelection.has(i.editKey)&&i.type==='device'):null;if(!item?.sourceId)return;
- const before=project.layout,next=structuredClone(before||{}),own=next.deviceCaptions?.devices?.[item.sourceId]||{};
- setDeviceCaptionCorners(next,item.sourceId,{...own,[slot]:value});project.layout=next;
- let prepared;try{prepared=validateDrawing();}catch(error){project.layout=before;throw error;}
- perform('drawing',prepared);say((slot==='name'?'Name':'Details')+' position saved for '+(project.devices.find(d=>d.id===item.sourceId)?.name||'this device')+'. Undo is available.');
-}
-$('device-name-corner').onchange=()=>task(()=>{try{setDeviceCorner('name',$('device-name-corner').value);}finally{syncDrawingSelection();}});
-$('device-info-corner').onchange=()=>task(()=>{try{setDeviceCorner('info',$('device-info-corner').value);}finally{syncDrawingSelection();}});
 $('quick-text-edit').onclick=()=>editOnDoubleClick([...drawingSelection][0]);
 for(const id of ['quick-text-size','quick-text-bold','quick-text-align','quick-text-color','quick-text-angle'])$(id).onchange=()=>task(()=>{try{quickTextChange(id==='quick-text-angle');}finally{const item=pages[active]&&drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));syncQuickText(item);revealSelectedText();}});
 function revealSelectedText(){const key=drawingSelection.size===1?[...drawingSelection][0]:null;if(!key)return;requestAnimationFrame(()=>{if(drawingSelection.size!==1||!drawingSelection.has(key))return;const item=pages[active]&&drawingObjects(pages[active]).find(o=>o.editKey===key);if(rotatable(item)){const bounds=drawingBounds(item);viewport.reveal({...bounds,y:bounds.y-28,h:bounds.h+28});}});}
@@ -344,10 +330,12 @@ function removeSelectedCablePoint(){const item=selectedCable();if(!item||cablePo
 // that cable's jumps must stay clear), and its consecutive parts may touch.
 const ownCaption=(path,label)=>label.background&&path.linkId!=null&&path.linkId===label.linkId,sameCaption=(a,b)=>a.background&&b.background&&a.linkId!=null&&a.linkId===b.linkId&&a.labelRole===b.labelRole;
 function validateDrawing(source=scoped()){const rebuilt=buildDrawing(source);for(const p of rebuilt.filter(p=>p.coreDeviceIds)){const texts=p.items.filter(i=>i.type==='text'),paths=p.items.filter(i=>i.type==='path');for(const a of texts.filter(i=>i.labelRole))if(texts.some(b=>a!==b&&!sameCaption(a,b)&&intersects(a,b,0))||paths.some(r=>ownCaption(r,a)?(r.hops||[]).some(hop=>intersects(hop,a,1)):pathCrossesText(r,a,1)))throw Error('This change overlaps a link label. Move the object or cable clear of the label.');}return rebuilt;}
-function setDrawingEdits(next){
+// `alsoLayout` changes the new layout in the same validated history action
+// (for example a device's caption corners saved with its other properties).
+function setDrawingEdits(next,alsoLayout){
  project.layout||={};const previous=project.layout;const setup=cleanPageSetup(previous.pageSetup);for(const page of pages)if(page.pageLockFrame)setup.visible.lockFrames[page.name]=page.pageLockFrame;
  const accepted=pages[active];if(accepted?.presentationFrame&&!accepted.pageLockFrame)(setup.visible.editFrames||={})[accepted.name]??={...accepted.presentationFrame};
- project.layout={...previous,pageSetup:setup,drawingEdits:cleanDrawingEdits(next)};
+ project.layout={...previous,pageSetup:setup,drawingEdits:cleanDrawingEdits(next)};alsoLayout?.(project.layout);
  const format=pages[active]?.portMap?.presentation;if(format&&(!previous.portMap?.presentation||previous.portMap.presentation==='auto'))project.layout.portMap={...previous.portMap,presentation:format};
  // Validation has not changed the displayed SVG. Keep its editor and draft
  // attached when rejecting an edit, rather than leaving an invisible input lock.
@@ -1389,6 +1377,9 @@ function editDrawingObject(key){
  if(item.type==='vector')inputs.commands=field(body,'Vector commands (JSON, normalized coordinates)',JSON.stringify(item.commands),'multiline');
  if(item.type==='path'){const bar=actions(body);button(bar,'Edit bend points',()=>editCablePoints(item));if(item.sourceLink)button(bar,'Connect endpoints',()=>connectSelectedCable(item));}
  const scaleObject=item.type!=='path'&&!linkedSwatch?field(body,'Scale this object (%)',100):null;if(scaleObject){scaleObject.type='number';scaleObject.min=10;scaleObject.max=400;}
+ // A network-page device places its own name and details (saved with its
+ // other properties; a dragged caption follows its new corner).
+ const corners=item.type==='device'&&item.kind!=='handoff'&&item.sourceId&&page.coreDeviceIds?.includes(item.sourceId)?(()=>{const own=project.layout?.deviceCaptions?.devices?.[item.sourceId]||{},drawing=deviceCaptionPlacement({layout:{...project.layout,deviceCaptions:{...project.layout?.deviceCaptions,devices:undefined}}}),choices=slot=>[['','Drawing default ('+CAPTION_CORNER_LABELS[drawing[slot]]+')'],...CAPTION_CORNERS.map(v=>[v,CAPTION_CORNER_LABELS[v]])],grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);return {own,name:property(grid,'Name position (network pages)',own.name||'',choices('name')),info:property(grid,'Details position (network pages)',own.info||'',choices('info'))};})():null;
  const bar=actions(body);button(bar,'Save object',()=>{
   const change={};for(const [k,input] of Object.entries(inputs)){if(['w','h','size','weight'].includes(k)){const n=k==='size'?storedFontSize(item,fontUnitsFromField(input,item)):(k==='weight'?lineWidthValue(input):Number(input.value))/(normalized&&['w','h'].includes(k)?100:1);if(!Number.isFinite(n)||n<=0)throw Error('Use a valid positive size.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
   if(labelRotation){change.rotationMode=labelRotation.value==='auto'?'auto':'fixed';if(change.rotationMode==='fixed')change.angle=Number(labelRotation.value)*Math.PI/180;}
@@ -1399,7 +1390,7 @@ function editDrawingObject(key){
   if(item.type==='path'||linkedSwatch){const style={...captions.value,color:picker.value,opacity:picker.opacity},patch={...project.layout?.drawingEdits?.[item.editKey],...clean};for(const key of ['color','fill','opacity'])delete patch[key];if(linkedSwatch){if(inputs.name.value===item.name&&item.name===item.linkType+' color key')delete patch.name;if(Number(inputs.weight.value)!==initialWeight)style.weight=lineWidthValue(inputs.weight)/(presentation(project,page).drawingScale||1);delete patch.weight;delete patch.h;delete patch.stroke;setLegendStyle(item.linkType,legendDetails?.value||{},style,{[item.editKey]:patch});}else{const selected=details?.value,changed=selected&&(selected.media!==String(connection.media||'unknown').trim()||selected.speed!==String(connection.speed||'').trim());if(changed)saveConnection(project.links.findIndex(link=>sameConnection(link,item.sourceLink)),{...connection,...selected},{drawing:item,patch,style});else setLinkStyle(item.linkType,style,{[item.editKey]:patch});}}
   else if(item.legendEntry&&item.linkType&&clean.value!==editableText(item)){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:clean.value},{[item.editKey]:patch});}
   else if(item.legendEntry&&item.linkType){const patch={...project.layout?.drawingEdits?.[item.editKey],...clean};if(project.layout?.drawingEdits?.[item.editKey]?.value==null)delete patch.value;setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});}
-  else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}});picker?.remember();close();say('Drawing object saved.');
+  else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...clean}},corners&&(corners.name.value!==(corners.own.name||'')||corners.info.value!==(corners.own.info||''))?layout=>setDeviceCaptionCorners(layout,item.sourceId,{name:corners.name.value,info:corners.info.value}):undefined);picker?.remember();close();say('Drawing object saved.');
  },'primary');
  button(bar,'Cancel',close);
  button(bar,'Reset object',()=>{const next={...project.layout?.drawingEdits};delete next[item.editKey];if(item.legacyEditKey)delete next[item.legacyEditKey];setDrawingEdits(next);close();});

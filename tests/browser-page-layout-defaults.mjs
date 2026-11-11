@@ -158,9 +158,10 @@ try{
  const bodyKey='Core Network|device|sw-1|body',titleKey='Core Network|title|sw-1';
  const titleBefore=await sceneBox(titleKey),bodyBefore=await sceneBox(bodyKey);assert.ok(titleBefore.y+titleBefore.h<=bodyBefore.y+1,'the name starts above its device');
  await page.locator('#edit-drawing').click();const barBefore=await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height);await page.locator('#canvas svg [data-drawing-key="'+bodyKey+'"]').first().click({position:{x:8,y:8}});
- await page.locator('#device-caption-tools').waitFor();assert.ok(await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height)<=barBefore+4,'selecting a device does not add a toolbar row, so the drawing does not move');
- await page.locator('#device-caption-tools summary').click();await page.locator('#device-name-corner').waitFor();assert.equal(await page.locator('#device-name-corner').inputValue(),'');
- await page.locator('#device-name-corner').selectOption('below-right');await page.waitForFunction(()=>/Name position saved/.test(document.querySelector('#feedback').textContent));
+ await page.waitForFunction(()=>document.querySelector('#drawing-selection').textContent==='1 selected');assert.ok(await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height)<=barBefore+4,'selecting a device does not add a toolbar row, so the drawing does not move');
+ await page.locator('#drawing-properties').click();const props=page.locator('#dialog'),namePosition=props.getByLabel('Name position (network pages)',{exact:true});
+ assert.equal(await namePosition.inputValue(),'');assert.match(await namePosition.locator('option').first().textContent(),/Drawing default \(Above, left\)/);
+ await namePosition.selectOption('below-right');await props.getByRole('button',{name:'Save object',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  const titleAfter=await sceneBox(titleKey),bodyAfter=await sceneBox(bodyKey);assert.ok(titleAfter.y>=bodyAfter.y+bodyAfter.h-1,'the chosen device name moves below its device');
  assert.ok(bodyAfter.x+bodyAfter.w-(titleAfter.x+titleAfter.w)<bodyAfter.w/2,'toward the right edge');
  await page.keyboard.press('Control+z');await page.waitForFunction(key=>{const n=document.querySelector('#canvas svg [data-drawing-key="'+key+'"]');return !!n;},titleKey);
