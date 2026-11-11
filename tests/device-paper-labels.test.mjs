@@ -11,7 +11,11 @@ test('automatic device names and details meet physical target without changing h
  const labels=p.items.filter(i=>i.titleOwner);assert.equal(labels.length,2);
  for(const i of labels){assert.ok(textLayout(i).size/unit*.75>=8-1e-6);assert.ok(!intersects(i,p.items[0],1));assert.ok(!pathCrossesText(p.items.at(-1),i));}assert.ok(!intersects(...labels));}
 });
-test('explicit caption geometry and size remain authoritative',()=>{const p=fixture(),before=structuredClone(p.items);readableDeviceLabels(p,{layout:{drawingEdits:{'Core Network|title|a':{x:320},'Core Network|detail|a':{size:4}}}});assert.deepEqual(p.items,before);});
+// A caption the user moved stays where it was dropped but keeps its readable
+// size (moving it must not shrink it); an explicit size stays authoritative.
+test('a moved caption keeps its position and readable size, an explicit size stays',()=>{const p=fixture(),before=structuredClone(p.items);readableDeviceLabels(p,{layout:{drawingEdits:{'Core Network|title|a':{x:320},'Core Network|detail|a':{size:4}}}});
+ const title=p.items.find(i=>i.editKey==='Core Network|title|a');assert.equal(title.x,before[1].x);assert.equal(title.y,before[1].y);assert.ok(textLayout(title).size*.75>=8-1e-6,'the moved name is readable');
+ assert.deepEqual(p.items.filter(i=>i!==title),before.filter(i=>i.editKey!=='Core Network|title|a'),'the sized detail, the device and the cable are unchanged');});
 test('crowded page reports unmet label target without hiding it or overlapping',()=>{const p=fixture();p.items.push({type:'device',sourceId:'block',x:0,y:0,w:p.width,h:p.height,children:[]});const before=structuredClone(p.items);readableDeviceLabels(p,{layout:{}});assert.deepEqual(p.items,before);assert.ok(p.deviceLabelReadability.every(r=>!r.improved&&r.actualPt<r.targetPt));});
 test('zero configured minimum and explicit preserve fitting retain old label geometry',async()=>{const p=fixture(),before=structuredClone(p);readableDeviceLabels(p,{layout:{presentation:{defaults:{minimumTextPt:0}}}});assert.deepEqual(p,before);});
 test('Letter and A4 dense hardware pages keep automatic name/model captions readable across reopen',async()=>{
@@ -25,7 +29,12 @@ test('Letter and A4 dense hardware pages keep automatic name/model captions read
   const after=buildPages(JSON.parse(JSON.stringify(p)))[0];assert.deepEqual(after.items.filter(i=>i.titleOwner),labels);
  }
 });
-test('an authored device transform retains its attached caption geometry',()=>{const p=fixture();p.items[0].editKey='Core Network|device|a';const before=structuredClone(p.items);readableDeviceLabels(p,{layout:{drawingEdits:{'Core Network|device|a':{x:320,w:300}}}});assert.deepEqual(p.items,before);});
+// A moved or resized device keeps readable automatic captions beside it;
+// the device itself is never changed.
+test('an authored device transform keeps readable captions next to it',()=>{const p=fixture();p.items[0].editKey='Core Network|device|a';const device=structuredClone(p.items[0]);readableDeviceLabels(p,{layout:{drawingEdits:{'Core Network|device|a':{x:320,w:300}}}});
+ assert.deepEqual(p.items[0],device);const [title,detail]=p.items.filter(i=>i.titleOwner);
+ for(const i of [title,detail])assert.ok(textLayout(i).size*.75>=8-1e-6);
+ assert.ok(title.y+title.h<=device.y&&device.y-(title.y+title.h)<20,'the name is just above its device');assert.ok(detail.y>=device.y+device.h&&detail.y-(device.y+device.h)<20,'the details are just below');});
 test('grown captions reserve later labels even when those already meet the minimum',()=>{
  const p=fixture();const detail=p.items.find(i=>i.titleSlot==='detail');Object.assign(detail,{x:320,y:300,w:200,h:13,size:10.6666667});
  readableDeviceLabels(p,{layout:{}});const labels=p.items.filter(i=>i.titleOwner);assert.ok(!intersects(labels[0],labels[1]));assert.equal(detail.x,320);assert.equal(detail.y,300);

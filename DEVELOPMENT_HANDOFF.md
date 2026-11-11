@@ -1,3 +1,56 @@
+# Preview.57: point font sizes, one Paper layout choice, captions beside their device, faster edits
+
+Baseline: published preview.56. The owner asked for:
+- actual font sizes in Text styles (and other text size fields) instead of percentages;
+- one "Optimize for paper" choice that affects everything, not only APs;
+- device names and details always next to their device (name above, details below, on the left), with a choice of corner for each;
+- text no longer shrinking after moving text or devices;
+- faster edits.
+
+What changed:
+- **Point sizes** (global-text-styles.mjs, app.mjs):
+  - textStyles[category].size is a point size (4–96 pt at full drawing size). It replaces an older scale, which stays until a size is chosen.
+  - The dialog shows built-in sizes as placeholders and what each prints at on the open page.
+  - The quick Size box and Properties use points, through the item's font scale, with the printed size in their tooltip.
+  - Faceplate text was shown multiplied by its panel width in the quick Size box. It is absolute; only imported artwork text is relative to its panel.
+- **Paper layout** (app.mjs): one select replaces Content fit mode and Wireless paper layout:
+  - Optimize for paper = optimize + adaptive;
+  - continuing wireless sheets = optimize + readable;
+  - keeping wireless arrangements = optimize + layout;
+  - keeping the existing layout = preserve.
+  - The guide and the readability notice say "Paper layout".
+- **Captions** (device-captions.mjs, labels.mjs, core.mjs, device-paper-labels.mjs):
+  - layout.deviceCaptions picks the corner for names and details (Layout & content).
+  - Core creation, placeDeviceTitles and the paper pass try that corner first, slide along the same edge, then the other side, then beside the device.
+  - Dynamic pages may place below the last device.
+- **No shrinking after a move** (device-paper-labels.mjs):
+  - The paper pass skipped captions the user moved, and every caption of a moved device. The first move pins every device, so every caption fell back to its small unfitted size.
+  - Moved captions now grow in place.
+  - Captions of moved or pinned devices are placed like any automatic caption.
+- **Faster edits** (page-cache.mjs, index.mjs, wireless-layout.mjs, core.mjs):
+  - Per-family paper frames: the first edit on a page no longer replans other families.
+  - Text styles left out of planner keys.
+  - Finished-page memo.
+  - Wireless keys ignore other switches' scoped edits.
+  - Core port numbers memoized.
+  - Warm builds equal cold builds at every step, including port maps named as Switchport sheets. The first memo version missed those, and the new rebuild-speed test catches it.
+
+Measured on the large fictional site (Letter, built editor, Chromium):
+
+| Edit | preview.56 code | preview.57 |
+|---|---|---|
+| First edit on the network page | 1.51 s | 0.49 s |
+| Next edits on the network page | 0.47 s | 0.32 s |
+| Undo | 0.45 s | 0.30 s |
+| First AP move | 2.13 s | 1.64 s |
+| Next AP moves | 1.39 s | 0.54 s |
+| Text style change (buildPages) | 6.8 s | 0.33 s |
+
+Tests:
+- New: device-captions.test.mjs (default corners, chosen corners, moved device/caption keep readable size).
+- New: rebuild-speed tests for finished-page reuse after edits on every page family, and for text styles reusing every planned page.
+- Updated: device-paper-labels (moved caption grows in place; authored device keeps readable captions beside it), settings-preview and page-layout-defaults browser checks (points, Paper layout), page-layout-notice wording, undo/redo reuse (now uses an AP size change).
+
 # Preview.56: instant site-name typing, larger wireless APs, compact stacks, core port numbers
 
 Baseline: published preview.55. The owner reported:

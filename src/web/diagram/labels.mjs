@@ -1,3 +1,5 @@
+import {deviceCaptionPlacement,captionCorner} from '../device-captions.mjs';
+export {captionCorner};
 import {devicePoint,deviceBounds} from './device-geometry.mjs';
 // Deterministic placement against actual text boxes and every cable segment.
 // Per-character advance (in ems) for ASCII, matching the original class order:
@@ -39,7 +41,8 @@ function visibleOffsets(origin,direction,step,limit,lo,hi){
  return out;
 }
 export function placeDeviceTitles(page,project,nodes){
- const minX=page.dynamic?(page.originX||0)+36:page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38,minY=page.dynamic?(page.originY||0)+36:151,maxX=(page.originX||0)+(page.width||1200)-38,maxY=(page.originY||0)+(page.height||975)-69;
+ const corners=deviceCaptionPlacement(project);
+ const minX=page.dynamic?(page.originX||0)+36:page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38,minY=page.dynamic?(page.originY||0)+36:151,maxX=(page.originX||0)+(page.width||1200)-38,maxY=page.dynamic?Infinity:(page.originY||0)+(page.height||975)-69;
  const edits=project.layout?.drawingEdits||{},titles=page.items.filter(i=>i.titleOwner),paths=page.items.filter(i=>i.type==='path'),bodies=[...nodes.values()].map(g=>({...g,...deviceBounds(g),angle:0})),occupied=[...page.items.filter(i=>i.type==='text'&&!i.titleOwner).map(i=>({...i})),...embeddedTextBoxes(page)];
  for(const node of bodies)for(const slot of ['title','detail']){
   const group=titles.filter(i=>i.titleOwner===node.sourceId&&(i.titleSlot||'title')===slot);if(!group.length)continue;
@@ -48,10 +51,13 @@ export function placeDeviceTitles(page,project,nodes){
   // Reserving the complete string's unwrapped width would make a valid box
   // impossible to place, even when it fits by itself on an otherwise empty page.
   const x0=group[0].x,y0=group[0].y,w=Math.max(...group.map(i=>i.x-x0+i.w)),h=Math.max(...group.map(i=>i.y-y0+i.h)),candidates=[];
-  const xs=visibleOffsets(node.x,1,8,Math.max(0,node.w-w),minX,maxX-w).map(p=>p.x);
-  if(slot==='detail')for(const x of xs)candidates.push({x,y:node.y+node.h+5,w,h});
-  for(const gap of [5,9,14,20,28,38,50,64])for(const x of xs)candidates.push({x,y:node.y-h-gap,w,h});
-  for(const gap of [7,12,18,26,36,48])for(const x of xs)candidates.push({x,y:node.y+node.h+gap,w,h});
+  // The chosen corner comes first (name above and details below on the left
+  // by default), sliding along the device edge, then the other side of the
+  // same device, and only then beside it.
+  const corner=captionCorner(node,slot==='detail'?corners.info:corners.name,w,h);
+  const xs=(corner.right?visibleOffsets(node.x+node.w-w,-1,8,Math.max(0,node.w-w),minX,maxX-w):visibleOffsets(node.x,1,8,Math.max(0,node.w-w),minX,maxX-w)).map(p=>p.x);
+  const above=()=>{for(const gap of [5,9,14,20,28,38,50,64])for(const x of xs)candidates.push({x,y:node.y-h-gap,w,h});},below=()=>{for(const gap of [5,7,12,18,26,36,48,64])for(const x of xs)candidates.push({x,y:node.y+node.h+gap,w,h});};
+  if(corner.above){above();below();}else{below();above();}
   candidates.push({x:node.x-w-12,y:node.y,w,h},{x:node.x+node.w+12,y:node.y,w,h});
   const clear=b=>!bodies.some(n=>intersects(b,n,3))&&!occupied.some(t=>intersects(b,t,3))&&!paths.some(p=>pathCrossesText(p,b,3));
   let fit=candidates.find(b=>b.x>=minX&&b.x+b.w<=maxX&&b.y>=minY&&b.y+b.h<maxY&&clear(b));
@@ -59,10 +65,10 @@ export function placeDeviceTitles(page,project,nodes){
    // A growing canvas has no paper boundary. Search obstacle edges near the
    // device, then reserve an outside column if the surrounding routes are full.
    // Merely increasing page height cannot fix a blocked caption beside a body.
-   const obstacles=[...bodies,...occupied,...paths.flatMap(p=>p.points.map(([x,y])=>({x,y,w:0,h:0})))],preferredY=slot==='detail'?node.y+node.h+5:node.y-h-6;
+   const obstacles=[...bodies,...occupied,...paths.flatMap(p=>p.points.map(([x,y])=>({x,y,w:0,h:0})))],preferredY=corner.y,anchorX=corner.x;
    const nearest=(values,origin)=>[...new Set(values)].sort((a,b)=>Math.abs(a-origin)-Math.abs(b-origin)).slice(0,64);
-   const xs=nearest([node.x,node.x+node.w-w,...obstacles.flatMap(b=>[b.x-w-12,b.x+b.w+12])],node.x),ys=nearest([preferredY,...obstacles.flatMap(b=>[b.y-h-9,b.y+b.h+9])],preferredY);
-   const extra=xs.flatMap(x=>ys.map(y=>({x,y,w,h}))).sort((a,b)=>Math.abs(a.x-node.x)+Math.abs(a.y-preferredY)-Math.abs(b.x-node.x)-Math.abs(b.y-preferredY));
+   const xs=nearest([node.x,node.x+node.w-w,...obstacles.flatMap(b=>[b.x-w-12,b.x+b.w+12])],anchorX),ys=nearest([preferredY,...obstacles.flatMap(b=>[b.y-h-9,b.y+b.h+9])],preferredY);
+   const extra=xs.flatMap(x=>ys.map(y=>({x,y,w,h}))).sort((a,b)=>Math.abs(a.x-anchorX)+Math.abs(a.y-preferredY)-Math.abs(b.x-anchorX)-Math.abs(b.y-preferredY));
    fit=extra.find(clear)||{x:Math.max(...obstacles.map(b=>b.x+b.w))+24,y:preferredY,w,h};
   }
   if(!fit){const error=Error('This page needs more space for a device title. Move a device to another core page.');Object.assign(error,{code:'CORE_LAYOUT_CAPACITY',role:'title',owner:node.sourceId,page:page.name,slot});throw error;}

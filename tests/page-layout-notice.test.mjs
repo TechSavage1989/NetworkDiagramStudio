@@ -28,7 +28,7 @@ test('automatic fitted small text explains the tradeoff without recommending a u
 
 test('a whole-switch wireless sheet explains its text size and how to get larger text',()=>{
  const notice=pageLayoutNotice({wirelessLayout:{wholeSwitch:true,links:[1,2,3]},paperReadability:{apActualPt:5.8,apMinimumPt:8}});
- assert.match(notice,/all 3 AP links stay on this sheet with their switch/);assert.match(notice,/5\.8 pt/);assert.match(notice,/larger paper/);assert.match(notice,/Continue on sheets/);
+ assert.match(notice,/all 3 AP links stay on this sheet with their switch/);assert.match(notice,/5\.8 pt/);assert.match(notice,/larger paper/);assert.match(notice,/Paper layout → continuing wireless sheets/);
  assert.doesNotMatch(pageLayoutNotice({wirelessLayout:{wholeSwitch:true,links:[1]},paperReadability:{apActualPt:8.4,apMinimumPt:8}}),/stay on this sheet/);
  assert.match(pageLayoutNotice({wirelessLayout:{wholeSwitch:true,links:[1],routingCompromise:true}}),/could not be routed fully clear/);
  const both=pageLayoutNotice({wirelessLayout:{wholeSwitch:true,links:[1,2]},paperReadability:{apActualPt:5.6,apMinimumPt:8,minimumPt:8,actualPt:4.9,overflow:false}});

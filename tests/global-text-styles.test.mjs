@@ -49,3 +49,15 @@ test('category styling never changes paths, hardware geometry or unrelated text'
  assert.deepEqual(wire,{type:'path',weight:4,color:'#123456',points:[[0,0],[40,0]]});
  assert.equal(title.bold,true);assert.equal(title.color,'#FF0077');assert.equal(title.size,12);
 });
+
+test('category sizes are actual point sizes that replace a legacy scale',()=>{
+ const result=cleanLayout({textStyles:{deviceNames:{size:10,scale:1.5},linkLabels:{size:2},portLabels:{size:200},pageTitles:{size:24.456}}},[]).textStyles;
+ assert.deepEqual(result.deviceNames,{size:10},'a point size wins over an older scale');
+ assert.equal(Object.hasOwn(result,'linkLabels'),false);assert.equal(Object.hasOwn(result,'portLabels'),false);
+ assert.equal(result.pageTitles.size,24.46);
+ const big=label('site|device',{titleOwner:'switch',titleSlot:'title',size:14,w:150,h:24}),small=label('site|detail',{titleOwner:'switch',titleSlot:'title',size:9,w:150,h:24}),edited=label('site|edited',{titleOwner:'switch',titleSlot:'title',size:11});
+ applyGlobalTextStyles({items:[big,small,edited]},{deviceNames:{size:12}},{'site|edited':{size:11}});
+ assert.equal(big.size,16,'12 pt is 16 drawing units');assert.equal(small.size,16,'every name in the category gets the chosen size');
+ assert.ok(Math.abs(big.w-150*16/14)<1e-9,'the text box follows its new size');
+ assert.equal(edited.size,11,'an individually edited size stays');
+});

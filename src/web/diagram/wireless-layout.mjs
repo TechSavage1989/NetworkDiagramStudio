@@ -340,7 +340,7 @@ function balancedBatches(edges,count){
 const wholePlans=new Map();
 function wholePlanKey(project,db,source,sorted,first){
  const layout=project.layout||{},wireless=([key])=>/Wireless Connections/.test(key),visible=layout.pageSetup?.visible||{};
- return JSON.stringify([first,project._reportPrefix||'',project._wirelessPaperPlan,source,sorted.map(e=>[e.idx,e.sp,e.apId,e.apPort,e.media,e.speed,e.status,db.devices.get(e.apId)]),layout.presentation,layout.textStyles,layout.linkStyles,layout.hopStyle,layout.lineSpacing,layout.labelBacking,layout.cableCaptions,Object.entries(layout.drawingEdits||{}).filter(wireless),Object.entries({...visible.lockFrames,...visible.editFrames}).filter(wireless),visible.wirelessFit,visible.fitMode,visible.wirelessStack,visible.marginMm]);
+ return JSON.stringify([first,project._reportPrefix||'',project._wirelessPaperPlan,source,sorted.map(e=>[e.idx,e.sp,e.apId,e.apPort,e.media,e.speed,e.status,db.devices.get(e.apId)]),layout.presentation,layout.linkStyles,layout.hopStyle,layout.lineSpacing,layout.labelBacking,layout.cableCaptions,Object.entries(layout.drawingEdits||{}).filter(entry=>wireless(entry)&&!foreignWirelessEdit(entry[0],source.id,db)),Object.entries({...visible.lockFrames,...visible.editFrames}).filter(wireless),visible.wirelessFit,visible.fitMode,visible.wirelessStack,visible.marginMm]);
 }
 // Position edits on wireless pages (moved APs, captions, bends): a dynamic
 // sheet chooses its arrangement without them, then draws it with them.
@@ -623,10 +623,13 @@ export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
 // links and non-wireless drawing edits: the switch, its APs, their links (with
 // their global indices), the sheet position and every setting stay in the key.
 // Long strings (stencil artwork) are keyed by identity, not re-serialized.
+// An edit scoped to another switch's sheets (Wireless Connections|<switch>|…)
+// never changes this switch's sheets, so moving an AP re-renders only its own.
+function foreignWirelessEdit(key,switchId,db){const m=/(?:^|\|)Wireless Connections\|([^|]+)\|/.exec(key);return !!m&&m[1]!==switchId&&db.devices.has(m[1]);}
 const switchDrafts=new Map(),longStrings=new Map();
 function switchDraftKey(project,db,sw,records,first,width){
  const {devices,links,evidence,warnings,layout={},...rest}=project,wireless=key=>/Wireless Connections/.test(key);
- const drafting={...layout,drawingEdits:Object.fromEntries(Object.entries(layout.drawingEdits||{}).filter(([key])=>wireless(key)))};
+ const drafting={...layout,textStyles:undefined,drawingEdits:Object.fromEntries(Object.entries(layout.drawingEdits||{}).filter(([key])=>wireless(key)&&!foreignWirelessEdit(key,sw,db)))};
  const apIds=[...new Set(records.map(e=>e.apId))].sort();
  return JSON.stringify([first,width,rest,drafting,db.devices.get(sw),apIds.map(id=>db.devices.get(id)),records.map(e=>[e.idx,e.sw,e.sp,e.apId,e.apPort,e.media,e.speed,e.status,e.a,e.ap,e.b,e.bp])],(key,value)=>{
   if(typeof value!=='string'||value.length<4096)return value;
