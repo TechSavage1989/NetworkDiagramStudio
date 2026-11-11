@@ -727,7 +727,7 @@ function pageOptions(initialPreset){
  body.append(el('p','The preview shows the visible drawing page, not a separate Print/PDF sheet. Print-paper settings can differ without changing this preview; check Print/PDF before printing. Use Preview page to inspect other affected sheets.','hint'));
  const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
  const groupRow=el('div'),pageRow=el('div');body.append(groupRow,pageRow);
- const group=field(groupRow,'Page group',familyOf(pages[active]),pageFamilies),page=field(pageRow,'Individual page',String(active),pages.map((item,i)=>[String(i),(item.displayName||item.name)+'  ('+(pageFamilies.find(([id])=>id===familyOf(item))?.[1]||familyOf(item))+')']));
+ const group=field(groupRow,'Page group',familyOf(pages[active]),pageFamilies.map(([key,label])=>[key,key==='ports'?'Port maps and inventory':label])),page=field(pageRow,'Individual page',String(active),pages.map((item,i)=>[String(i),(item.displayName||item.name)+'  ('+(pageFamilies.find(([id])=>id===familyOf(item))?.[1]||familyOf(item))+')']));
  const paperRow=el('div','','form-columns');body.append(paperRow);
  const preset=field(paperRow,'Visible page proportions','dynamic',[['inherit','Inherit drawing default / page group'],['dynamic','Dynamic / Fit all'],...paperSizes.filter(([id])=>id!=='original')]);
  const orientation=field(paperRow,'Page orientation','landscape',[['landscape','Landscape'],['portrait','Portrait']]);
@@ -907,6 +907,9 @@ function evidence(){
 }
 const warningText=x=>typeof x==='string'?x:(x?.message||x?.text||'Review imported evidence.');
 function familyOf(page){return page?.family||pageFamily(page?.title||page?.name||'');}
+// Sidebar page groups: Port Inventory tables are their own group, while their
+// paper and other family settings stay shared with the port maps.
+function pageGroupOf(page){return familyOf(page)==='ports'&&/^Port Inventory\b/i.test(page?.title||page?.name||'')?'inventory':familyOf(page);}
 let pageTabClickTimer=null;
 function renamePageTab(page,button){
  if(!commitInlineEdit())return;
@@ -940,9 +943,9 @@ function pageNavigation(){
  const expanded=new Set([...families.querySelectorAll('details[open]')].map(item=>item.dataset.family));
  const scroll=families.scrollTop,previous=families.querySelector('[aria-current="page"]')?.dataset.page,focused=families.contains(document.activeElement)?document.activeElement.dataset.page:null;
  navigation.hidden=!pages.length;families.replaceChildren();picker.replaceChildren();
- const current=familyOf(pages[active]),labels=[...pageFamilies,['switchports','Switchport reports']],groups=[...new Set(pages.map(familyOf))];
+ const current=pageGroupOf(pages[active]),labels=[...pageFamilies,['inventory','Port inventory'],['switchports','Switchport reports']],groups=[...new Set(pages.map(pageGroupOf))];
  for(const group of groups){
-  const entries=pages.map((page,index)=>({page,index})).filter(({page})=>familyOf(page)===group);
+  const entries=pages.map((page,index)=>({page,index})).filter(({page})=>pageGroupOf(page)===group);
   const title=labels.find(([id])=>id===group)?.[1]||group;
   const menu=el('details','','page-group'),summary=el('summary',title+' ('+entries.length+')');
   menu.dataset.family=group;menu.open=group===current||expanded.has(group);

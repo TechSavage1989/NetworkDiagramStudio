@@ -9,13 +9,15 @@ export function hasAuthoredWirelessGeometry(layout){
 // choice. Upgrade automatic geometry, not authored objects or legacy frames
 // whose source layout is unknown. No source project mutation on open/render.
 // Preview.49/50 adaptive frames recorded an enlarge-then-shrink plan whose
-// readability retry could split a site into one AP per sheet. Without
-// authored wireless geometry those frames are automatic output: drop them so
-// the paper-size planner replaces them (paper and lock choices stay).
+// readability retry could split a site into one AP per sheet, and preview.51
+// frames (wirelessPaperPlan 1) a plan that continued one switch's APs on
+// more sheets. Without authored wireless geometry those frames are automatic
+// output: drop them so the one-sheet-per-switch planner replaces them (paper
+// and lock choices stay).
 function upgradeAdaptiveFrames(project){
  const layout=project.layout||{},raw=layout.pageSetup?.visible||{};
  if(hasAuthoredWirelessGeometry(layout)||raw.fitMode==='preserve')return project;
- const stale=field=>Object.entries(raw[field]||{}).filter(([name,frame])=>wireless(name)&&frame?.wirelessFit==='adaptive'&&!frame.wirelessPaperPlan).map(([name])=>name);
+ const stale=field=>Object.entries(raw[field]||{}).filter(([name,frame])=>wireless(name)&&frame?.wirelessFit==='adaptive'&&frame.wirelessPaperPlan!==2).map(([name])=>name);
  if(!stale('lockFrames').length&&!stale('editFrames').length)return project;
  const setup=cleanPageSetup(layout.pageSetup);for(const field of ['lockFrames','editFrames'])for(const name of stale(field))delete setup.visible[field][name];
  const {pageSetup,...otherLayout}=layout;return {...project,layout:{pageSetup:setup,...otherLayout}};

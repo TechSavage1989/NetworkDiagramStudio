@@ -1,3 +1,61 @@
+# Preview.52: one wireless sheet per switch; Port inventory page group
+
+Baseline: published preview.51 (main ce06fb8). Owner feedback on preview.51:
+- Every AP connected to one switch must stay on that switch's sheet, on any paper size.
+- The APs must scale and be placed anywhere on the page to fill it and stay readable.
+- Port Inventory must be its own page group.
+
+Change (wireless-layout.mjs paperPlanPages/planPaperView/bankLayout; index.mjs retry; page-options.mjs frames; wireless-paper-defaults.mjs migration; page-layout-notice.mjs; app.mjs pageGroupOf):
+
+- **One sheet per switch:**
+  - paperPlanPages plans each switch's complete AP set as one sheet (whole mode).
+  - It compares the AP-carrying members with the complete stack. The complete stack is planned only when its optimistic narrow-stack estimate is more than 5% larger.
+  - Splitting remains only for the opt-in Continue on sheets, a kept preview.51 plan-1 frame with authored edits, or a switch where no candidate renders at all.
+  - buildPages' readability retry skips wholeSwitch sheets.
+- **Staggered paper rows:**
+  - Rows ≥ 2 per side deal APs alternately in port order (ring = index mod rows; ring 0 nearest the switch).
+  - Each card is centered at cell/2 + floor(i/R)·step + ring·step/R, with step ≥ R·max(cell/2 + 8 + pitch/2, apHalf + clearance + pitch/2).
+  - Every outer cable therefore drops straight between inner cards. Ring 0 reserves the horizontal lanes and outer rings reserve two pitches.
+  - Before this, 2-row candidates had up to 55 obstructed routes and lost to one long row of wrapped 104-unit cards.
+- **Ranking:**
+  - Printed scale is discounted by 1.5% per wrapped caption line per card; title wraps count ×3.
+  - Near ties (within 5%) keep fewer wraps, then the route cost.
+  - Whole mode tries up to 8 candidates per width and stops once a clean sheet leaves nothing within 5%.
+  - When nothing is clean, the least compromised sheet is kept and flagged with routingCompromise; the notice says so.
+- **Frames:**
+  - wirelessPaperPlan 2 marks one-sheet plans; 1 is the preview.51 split.
+  - Plan-1 and preview.49/50 adaptive frames are dropped unless authored wireless geometry depends on them. A kept plan-1 frame sets _wirelessPaperSplit and reopens its saved split.
+- **Notice:** "all N AP links stay on this sheet with their switch, so AP details are X pt (below the 8 pt target). Choose larger paper…, or Page options → Wireless paper layout → Continue on sheets."
+- **Narrow windows:** splitting Port inventory out made the page-navigation suite land on a port map page whose long page note squeezed the canvas to 57 px at 390×844 (hosted Edge failed "responsive canvas stays usable"). The page note now scrolls within about three lines (max-height 4.5em), and the stacked ≤620 px layout keeps the canvas at least min(320px, 55vh).
+- **Native Shift-axis check:** it failed twice on hosted Windows (the preview.51 publish run and this PR), with identical numbers each time: x moved exactly +60 px and y moved −32 px together with the canvas (canvas y 490.69, transform unchanged). The canvas had moved without the resize compensation, so the screen rectangle could not tell an axis failure from chrome movement. A canvas-relative check fails in the compensated case instead. NativeSmoke now measures the device in drawing coordinates (getBBox with svg.getCTM()⁻¹·group.getCTM()): y unchanged within 0.5 px and x moved by exactly the 60 px drag at the gesture's zoom (±2 px). Locally it passes with Shift, including after a simulated 32 px uncompensated reflow, and fails without Shift.
+- **Port inventory group:**
+  - The sidebar group key is pageGroupOf: Port Inventory pages are 'inventory' and labelled "Port inventory". The paper family stays 'ports'.
+  - In the Pages & layout Page group select, 'ports' is labelled "Port maps and inventory".
+  - The export order is unchanged.
+
+Measured (fictional, Node, printed points from textLayout × physical paper; every sheet clean, every AP once, one sheet per switch):
+
+| Site | Paper | Sheets | AP text | Port numbers | Crossings |
+| --- | --- | --- | --- | --- | --- |
+| Two-stack (32 + 28 APs) | Letter landscape | 2 | 5.56 / 5.40 pt | 4.94 / 4.80 pt | 30 / 24 |
+| Two-stack | Letter portrait | 2 | 6.28 / 6.41 pt | | |
+| Two-stack | A4 landscape | 2 | 5.37 / 6.35 pt | | |
+| Two-stack | A4 portrait | 2 | 6.51 / 6.24 pt | | |
+| Two-stack | Legal | 2 | 6.65 / 7.38 pt | | |
+| Two-stack | Tabloid | 2 | 8.08 / 8.35 pt | | |
+| Two-stack | A3 | 2 | 8.17 / 7.94 pt | | |
+| Two-stack | A5 landscape | 2 | 3.92 / 4.48 pt | | |
+| 32-AP lab | Letter landscape | 1 | 5.82 pt | | |
+| 32-AP lab | Letter portrait | 1 | 6.92 pt | | |
+| 32-AP lab | A3 | 1 | 8.55 pt | | |
+
+Planning time is 1–9 s per paper size for the two-stack site. preview.51 used 4 Letter sheets at 8.4–9.4 pt; explicit Continue on sheets gives 8 Letter sheets at about 9.7 pt.
+
+Limitations:
+- About 32 APs on one Letter sheet cannot reach 8 pt with full captions (name, model, port, address, MAC). The notice reports the size.
+- Long hyphenated names (LAB-AP-Outdoor-1) can break once at a hyphen in narrow columns.
+- Some direction-neutral crossings remain in the lane band, 24–48 per dense sheet.
+
 # Preview.51: wireless paper plans (60-page Letter regression)
 
 Baseline: published preview.50 (main 8b2dbc7). Reported: selecting Letter on a dense wireless page produced 60 Wireless Connections pages, one AP each at 5.5 pt; earlier releases kept APs tiny along the top/bottom beside unused side space.
