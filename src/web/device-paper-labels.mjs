@@ -22,7 +22,6 @@ export function readableDeviceLabels(page,project,unit=1){
   result.push({key:item.editKey,targetPt:requested,actualPt:textLayout(item).size/unit*.75,improved:true});
  }
  if(!automatic.length){if(result.length)page.deviceLabelReadability=result;return;}
- const corners=deviceCaptionPlacement(project);
  const bodies=page.items.filter(i=>i.type==='device'&&i.kind!=='plug').map(i=>({...i,...deviceBounds(i)})),paths=page.items.filter(i=>i.type==='path');
  const occupied=page.items.filter(i=>(i.type==='text'||i.panelGroup)&&!i.hidden),edge=2*unit,left=(page.originX||0)+edge,right=(page.originX||0)+page.width-edge,top=(page.originY||0)+edge,bottom=(page.originY||0)+page.height-edge;
  // A top dock is a horizontal header rail, not unused side whitespace.
@@ -47,7 +46,7 @@ export function readableDeviceLabels(page,project,unit=1){
    // of the device, and only then beside it. Closer gaps win within a tier.
    // Slide along the edge from the chosen corner (past a cable rising into
    // a corner socket, for example) before giving up the corner.
-   const corner=captionCorner(body,item.titleSlot==='detail'?corners.info:corners.name,w,h),anchor=corner.x,span=Math.max(0,body.w-w),step=Math.max(8*unit,span/24);
+   const corners=deviceCaptionPlacement(project,item.titleOwner),corner=captionCorner(body,item.titleSlot==='detail'?corners.info:corners.name,w,h),anchor=corner.x,span=Math.max(0,body.w-w),step=Math.max(8*unit,span/24);
    const xs=[...new Set([...Array.from({length:Math.floor(span/step)+1},(_,k)=>corner.right?anchor-k*step:anchor+k*step),body.x+span/2,corner.right?body.x:body.x+span])];
    for(const [tier,above] of [[0,corner.above],[1,!corner.above]])for(const gap of [3,8,16,28,44,64])for(const x of xs)candidates.push({x,y:above?body.y-h-gap*unit:body.y+body.h+gap*unit,w,h,size,rank:tier*1e6+(gap+Math.abs(x-anchor)/(4*unit))*1e3+h*.2});
    for(const y of [body.y,body.y+(body.h-h)/2,body.y+body.h-h])candidates.push({x:body.x-w-8*unit,y,w,h,size,rank:2e6+Math.abs(y-body.y)},{x:body.x+body.w+8*unit,y,w,h,size,rank:2e6+Math.abs(y-body.y)});

@@ -1,3 +1,19 @@
+# Preview.58: per-device caption corners, port numbers on every device with sockets
+
+Baseline: published preview.57. The owner asked about placing device names at specific corners of a device, and for port numbers on every device where they are relevant.
+
+- **Discoverable placement:** Layout & content shows Device name position and Device details position on every network page as well as the drawing defaults (the dialog opens on the current page; preview.57 showed them only under Drawing defaults).
+- **Per device:** layout.deviceCaptions.devices[id] = {name?, info?}.
+  - Set in the device editor ("Name position / Details position (network pages)") or in Edit drawing.
+  - In Edit drawing, a selected network-page device shows Name and Details selects (#device-name-corner, #device-info-corner) next to Rotation.
+  - Choosing a corner clears that caption's dragged x/y so it follows the corner. One history action, validated.
+  - core.mjs, placeDeviceTitles and the paper pass read deviceCaptionPlacement(project, id).
+- **Port numbers:** core numbering no longer requires switch/firewall kinds. Every device that draws real sockets is numbered from its port inventory (routers such as the Juniper SRX300, patch panels and so on). Handoff cards and generic symbols without sockets stay plain.
+- Tests:
+  - device-captions.test.mjs: per-device corners, cleaning, dragged caption follows.
+  - core-port-numbers.test.mjs: a router is numbered, a generic server is not.
+  - browser-page-layout-defaults: fields on the network page; one device's name moves below-right in Edit drawing; one Undo restores it.
+
 # Preview.57: point font sizes, one Paper layout choice, captions beside their device, faster edits
 
 Baseline: published preview.56. The owner asked for:

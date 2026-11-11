@@ -21,3 +21,11 @@ test('core pages number uncabled switch sockets without changing any cable',()=>
  assert.equal(paths(core),paths(plain),'cable routes do not depend on the numbers');
  assert.equal(cleanLayout({corePortNumbers:true},[]).corePortNumbers,undefined,'on is the default and is not stored');
 });
+
+// Every device that draws real sockets is numbered, not only switches and
+// firewalls; generic symbols without sockets stay plain.
+test('routers and other devices with drawn sockets are numbered too',()=>{
+ const project={name:'Fictional router lab',devices:[{id:'r1',name:'LAB-RTR',kind:'router',vendor:'Juniper',model:'SRX300',ports:Array.from({length:8},(_,i)=>({name:'ge-0/0/'+i,state:'up'}))},{id:'s1',name:'LAB-SW',kind:'switch',vendor:'Aruba',model:'JL255A',ports:Array.from({length:24},(_,i)=>({name:String(i+1),state:'up'}))},{id:'u1',name:'LAB-SRV',kind:'server',ports:[{name:'NIC1',state:'up'}]}],links:[{a:'r1',ap:'ge-0/0/0',b:'s1',bp:'1'},{a:'u1',ap:'NIC1',b:'s1',bp:'2'}],layout:{}};
+ const core=buildPages(project).find(page=>page.coreDeviceIds),numbers=id=>core.items.filter(i=>i.portNumberRole==='text'&&i.sourceId===id).length;
+ assert.ok(numbers('r1')>0,'the router faceplate is numbered');assert.ok(numbers('s1')>0);assert.equal(numbers('u1'),0,'a generic server symbol has no sockets to number');
+});

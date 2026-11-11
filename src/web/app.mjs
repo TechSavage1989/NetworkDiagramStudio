@@ -34,6 +34,7 @@ import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-
 import {cableControls} from './cable-controls.mjs';
 import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
 import {globalTextCategories,cleanGlobalTextStyles,globalTextCategory,TEXT_STYLE_PT} from './global-text-styles.mjs';
+import {deviceCaptionPlacement,setDeviceCaptionCorners,CAPTION_CORNERS,CAPTION_CORNER_LABELS} from './device-captions.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
@@ -151,6 +152,9 @@ function syncDrawingSelection(){
  $('drawing-group').disabled=drawingSelection.size<2;$('drawing-ungroup').disabled=!(project.layout?.drawingGroups||[]).some(g=>g.keys.some(k=>drawingSelection.has(k)));
  syncQuickText(single);
  $('device-transform-tools').hidden=!editDrawing||single?.type!=='device';if(single?.type==='device')$('device-angle').value=Math.round((single.angle||0)*180/Math.PI*100)/100;
+ // A selected network-page device can place its own name and details.
+ const captioned=single?.type==='device'&&single.kind!=='handoff'&&!!pages[active]?.coreDeviceIds?.includes(single.sourceId);$('device-caption-tools').hidden=!captioned;
+ if(captioned){const own=project.layout?.deviceCaptions?.devices?.[single.sourceId]||{},drawing=deviceCaptionPlacement({layout:{...project.layout,deviceCaptions:{...project.layout?.deviceCaptions,devices:undefined}}});for(const [slot,id] of [['name','device-name-corner'],['info','device-info-corner']]){const select=$(id);select.options[0].textContent='Default ('+CAPTION_CORNER_LABELS[drawing[slot]]+')';select.value=own[slot]||'';}}
  $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
  $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
@@ -199,6 +203,17 @@ function setDeviceAngle(degrees){
 }
 $('device-angle').onchange=()=>task(()=>{try{setDeviceAngle($('device-angle').value);}finally{syncDrawingSelection();}});
 $('device-angle-reset').onclick=()=>task(()=>setDeviceAngle(0));
+// One device's name or details corner; a caption it had been dragged to
+// follows the new corner. One validated history action.
+function setDeviceCorner(slot,value){
+ const item=drawingSelection.size===1?pages[active]?.items.find(i=>drawingSelection.has(i.editKey)&&i.type==='device'):null;if(!item?.sourceId)return;
+ const before=project.layout,next=structuredClone(before||{}),own=next.deviceCaptions?.devices?.[item.sourceId]||{};
+ setDeviceCaptionCorners(next,item.sourceId,{...own,[slot]:value});project.layout=next;
+ let prepared;try{prepared=validateDrawing();}catch(error){project.layout=before;throw error;}
+ perform('drawing',prepared);say((slot==='name'?'Name':'Details')+' position saved for '+(project.devices.find(d=>d.id===item.sourceId)?.name||'this device')+'. Undo is available.');
+}
+$('device-name-corner').onchange=()=>task(()=>{try{setDeviceCorner('name',$('device-name-corner').value);}finally{syncDrawingSelection();}});
+$('device-info-corner').onchange=()=>task(()=>{try{setDeviceCorner('info',$('device-info-corner').value);}finally{syncDrawingSelection();}});
 $('quick-text-edit').onclick=()=>editOnDoubleClick([...drawingSelection][0]);
 for(const id of ['quick-text-size','quick-text-bold','quick-text-align','quick-text-color','quick-text-angle'])$(id).onchange=()=>task(()=>{try{quickTextChange(id==='quick-text-angle');}finally{const item=pages[active]&&drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));syncQuickText(item);revealSelectedText();}});
 function revealSelectedText(){const key=drawingSelection.size===1?[...drawingSelection][0]:null;if(!key)return;requestAnimationFrame(()=>{if(drawingSelection.size!==1||!drawingSelection.has(key))return;const item=pages[active]&&drawingObjects(pages[active]).find(o=>o.editKey===key);if(rotatable(item)){const bounds=drawingBounds(item);viewport.reveal({...bounds,y:bounds.y-28,h:bounds.h+28});}});}
@@ -1154,6 +1169,10 @@ function editDevice(current,afterSave){
  const options=[['','Schematic front'],...Object.values(project.stencils).filter(a=>a.view!=='rear').map(s=>[s.id,s.name])];
  const shape=field(body,'Front-panel stencil',d.stencilId||'',options);
  const scale=field(body,'Device scale (%)',Math.round((d.scale||1)*100));scale.type='number';scale.min=10;scale.max=400;scale.step=5;
+ // Network-page name and details corners for this device only.
+ const ownCorners=(d.id&&project.layout?.deviceCaptions?.devices?.[d.id])||{},drawingCorners=deviceCaptionPlacement({layout:{...project.layout,deviceCaptions:{...project.layout?.deviceCaptions,devices:undefined}}});
+ const cornerChoices=slot=>[['','Drawing default ('+CAPTION_CORNER_LABELS[drawingCorners[slot]]+')'],...CAPTION_CORNERS.map(v=>[v,CAPTION_CORNER_LABELS[v]])];
+ const namePlace=field(body,'Name position (network pages)',ownCorners.name||'',cornerChoices('name')),infoPlace=field(body,'Details position (network pages)',ownCorners.info||'',cornerChoices('info'));
  if(current)button(actions(body),'Configure device stack',()=>configureDeviceStack(d));
  const hardware=el('details');hardware.append(el('summary','Stack members and installed modules'));body.append(hardware);
  hardware.append(el('p','Confirm each member model and installed card. For 2920 rear bays A/B use J9731A (SFP+) or J9732A (copper). For Cisco network modules use slot NM. For 3560-E X2-1/X2-2 slots use CVR-X2-SFP or the installed X2 transceiver model. Leave unknown cards unassigned.','hint'));
@@ -1192,6 +1211,7 @@ function editDevice(current,afterSave){
   try{project.devices=project.devices.map(old=>old===current?next:{...old});if(!current)project.devices.push(next);project.stencils=Object.fromEntries(Object.entries(project.stencils).map(([id,s])=>[id,{...s,models:[...(s.models||[])]}]));
    const key=modelKey(next.vendor,next.model);if(key&&shape.value){for(const s of Object.values(project.stencils))s.models=s.models.filter(k=>k!==key);project.stencils[shape.value].models.push(key);assignMatching(project.stencils[shape.value]);}
    if(pageChoice.value!==assignedCorePage(d.id)){project.layout=structuredClone(project.layout||{});assignCorePage(project.layout,next,pageChoice.value);}
+   if(namePlace.value!==(ownCorners.name||'')||infoPlace.value!==(ownCorners.info||'')){project.layout=structuredClone(project.layout||{});setDeviceCaptionCorners(project.layout,id,{name:namePlace.value,info:infoPlace.value});}
    const prepared=validateDrawing();perform('devices',prepared);close();say('Device saved.');afterSave?.();
   }catch(error){Object.assign(project,before);throw error;}
  },'primary');
