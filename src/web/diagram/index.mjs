@@ -890,7 +890,9 @@ export function buildPages(project={},options={}){
   // Split further only when that measurably enlarges the printed AP text.
   // Earlier releases halved every sheet until each held one AP, even though
   // the planner then printed the remaining AP smaller (or no larger).
-  const short=visible.filter(p=>p.wirelessLayout?.adaptiveAP&&!p.wirelessLayout.adaptiveFrozen&&p.wirelessLayout.links.length>1&&p.paperReadability.apAutoActualPt!=null&&p.paperReadability.apAutoActualPt<p.paperReadability.apMinimumPt-.05);
+  // A whole-switch sheet keeps every AP with its switch on any paper; its
+  // readability notice reports the size instead of splitting it.
+  const short=visible.filter(p=>p.wirelessLayout?.adaptiveAP&&!p.wirelessLayout.adaptiveFrozen&&!p.wirelessLayout.wholeSwitch&&p.wirelessLayout.links.length>1&&p.paperReadability.apAutoActualPt!=null&&p.paperReadability.apAutoActualPt<p.paperReadability.apMinimumPt-.05);
   if(short.length&&(options._wirelessRetry||0)<2){
    const limit=Math.max(1,Math.min(...short.map(p=>Math.floor(p.wirelessLayout.links.length/2))));
    if(limit<(project._wirelessBatchLimit||Infinity)){

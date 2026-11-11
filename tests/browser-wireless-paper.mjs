@@ -1,7 +1,8 @@
 // Real-browser regression for wireless paper: choosing Letter with the normal
-// page-size control on a dense, fictional two-stack site must give a few
-// readable sheets (not one AP per page), survive undo/redo and save/reopen,
-// print every sheet on Letter, and let a locked page take a manual off-page move.
+// page-size control on a dense, fictional two-stack site must keep every AP on
+// its own switch's sheet (one sheet per switch, never one AP per page), fill
+// the sheet, survive undo/redo and save/reopen, print every sheet on Letter,
+// and let a locked page take a manual off-page move.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
@@ -26,13 +27,14 @@ try{
  await goTo('Wireless Connections 1');
  // The normal quick page-size control, as a user would choose Letter.
  const started=Date.now();await page.locator('#active-page-paper').selectOption('letter');
- await page.waitForFunction(()=>document.getElementById('active-page-paper').value==='letter'&&/Wireless connections \((\d+)\)/i.test(document.querySelector('#page-families')?.textContent||'')&&!/Wireless connections \(2\)/i.test(document.querySelector('#page-families').textContent),null,{timeout:180000});
+ await page.waitForFunction(()=>document.getElementById('active-page-paper').value==='letter'&&/Automatic AP layout/.test(document.getElementById('page-overflow-notice')?.textContent||''),null,{timeout:180000});
  result.letterSeconds=(Date.now()-started)/1000;result.letterSheets=await wirelessCount();
- assert.ok(result.letterSheets>=2&&result.letterSheets<=4,'Letter gives a few readable sheets, not '+result.letterSheets);
+ assert.equal(result.letterSheets,2,'Letter keeps one sheet per switch, not '+result.letterSheets);
+ result.notice=await page.locator('#page-overflow-notice').textContent();assert.match(result.notice,/all 32 AP links stay on this sheet with their switch/);
  for(let n=1;n<=result.letterSheets;n++){
-  await goTo('Wireless Connections '+n);const m=await apPoints();assert.ok(m.count>=20,'sheet '+n+' carries its AP cards');
+  await goTo('Wireless Connections '+n);const m=await apPoints();assert.ok(m.count>=4*[32,28][n-1],'sheet '+n+' carries every AP card of its switch');
   // Every sheet is Letter landscape (11 in = 1056 physical px wide).
-  const pt=m.min*1056/m.width*.75;(result.apPoints||=[]).push(Number(pt.toFixed(2)));assert.ok(pt>=7.95,'sheet '+n+' AP text prints at '+pt.toFixed(2)+' pt');
+  const pt=m.min*1056/m.width*.75;(result.apPoints||=[]).push(Number(pt.toFixed(2)));assert.ok(pt>=5.2,'sheet '+n+' AP text prints at '+pt.toFixed(2)+' pt');
   await page.locator('#zoom-fit').click();await page.screenshot({path:resolve(output,'letter-sheet-'+n+'.png')});
  }
  // Continuation sheets show the Letter paper they inherit from the plan.

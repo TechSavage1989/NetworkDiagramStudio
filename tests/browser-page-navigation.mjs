@@ -35,6 +35,11 @@ try{
  const groups=page.locator('#page-families .page-group'),portGroup=groups.filter({hasText:'Port maps'});
  assert.ok(await groups.count()>=3,'sample has multiple page groups');
  assert.equal(await portGroup.count(),1);
+ // Port Inventory tables are their own sidebar group, separate from the maps.
+ const inventoryGroup=groups.filter({has:page.locator('summary',{hasText:/^Port inventory \(\d+\)$/})});
+ assert.equal(await inventoryGroup.count(),1,'Port inventory has its own page group');
+ assert.ok((await inventoryGroup.locator('button[data-page]').allTextContents()).every(name=>/^Port Inventory/.test(name)),'the inventory group lists only inventory pages');
+ assert.ok((await portGroup.locator('button[data-page]').allTextContents()).every(name=>!/^Port Inventory/.test(name)),'port maps no longer list inventory pages');
  await portGroup.locator('summary').click();
  assert.ok(await portGroup.evaluate(e=>e.open),'sidebar group expands its page list');
  assert.equal(await page.locator('main > aside#page-navigation').count(),1,'page groups live in their own sidebar');
