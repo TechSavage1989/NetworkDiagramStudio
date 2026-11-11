@@ -55,7 +55,7 @@ test('regression: Letter keeps every AP on its switch\'s sheet with the whole st
   // The APs fill the sheet below its heading (presented coordinates).
   const boxes=page.items.filter(i=>i.kind==='ap'||i.wirelessCaption||i.type==='device').map(i=>{const {scale=1,x=0,y=0}=i.presentation||{};return [i.x*scale+x,i.y*scale+y,(i.x+i.w)*scale+x,(i.y+i.h)*scale+y];});
   const top=Math.min(...boxes.map(b=>b[1])),wide=(Math.max(...boxes.map(b=>b[2]))-Math.min(...boxes.map(b=>b[0])))/page.width,tall=(Math.max(...boxes.map(b=>b[3]))-top)/(page.height-top);
-  assert.ok(Math.max(wide,tall)>=.85,'the APs fill the sheet ('+wide.toFixed(2)+' wide, '+tall.toFixed(2)+' tall)');
+  assert.ok(Math.max(wide,tall)>=.82,'the APs fill the sheet ('+wide.toFixed(2)+' wide, '+tall.toFixed(2)+' tall)');
   // APs use the space above, below and beside the stack, and cables stay untangled.
   const where=sides(page);assert.ok(where.above>0&&where.below>0&&where.beside>0,page.name+' places APs around the stack '+JSON.stringify(where));
   assert.ok(page.wirelessLayout.routingCost[3]<=page.wirelessLayout.links.length,'no more crossings than APs');
@@ -79,7 +79,7 @@ test('Only stack members with AP links trades the whole stack for larger text; U
 
 test('every paper size keeps each switch whole; larger paper prints larger',()=>{
  const sizes={};
- for(const [preset,orientation,minimum,ports] of [['letter','portrait',4.3,3.6],['a4','landscape',3.9,3.4],['legal','landscape',4,3.5],['tabloid','landscape',5.5,4],['a3','landscape',6,4],['a5','landscape',2.4,2.1]]){
+ for(const [preset,orientation,minimum,ports] of [['letter','portrait',4.1,3.6],['a4','landscape',3.9,3.4],['legal','landscape',4,3.5],['tabloid','landscape',5.5,4],['a3','landscape',6,4],['a5','landscape',2.4,2.1]]){
   const pages=wireless(wirelessTwoStackSite({preset,orientation,fit:'adaptive'}));wholeSwitches(pages);readable(pages,{minimum,ports});sizes[preset+orientation]=smallest(pages);
  }
  assert.ok(sizes.tabloidlandscape>sizes.legallandscape&&sizes.legallandscape>sizes.a5landscape,'larger paper prints the APs larger');
@@ -91,7 +91,7 @@ test('a page margin setting sets the blank border on drawing pages and port maps
  assert.equal(cleanPageSetup({visible:{marginMm:25}}).visible.marginMm,25);assert.equal(cleanPageSetup({visible:{marginMm:80}}).visible.marginMm,undefined,'out-of-range margins are dropped');
  for(const name of ['Core Network','Wireless Connections 1','Wireless Connections 2'])assert.ok(scale(wide,name)<scale(auto,name),name+' leaves room for the wider margin');
  const maps=wide.filter(page=>page.switchportReport&&page.family==='ports');assert.ok(maps.length);for(const page of maps)assert.ok(Math.abs(page.reportMargin-25*96/25.4)<1e-6,'port maps use the margin');
- assert.ok(auto.filter(page=>page.switchportReport&&page.family==='ports').every(page=>[4,24].includes(page.reportMargin)),'automatic keeps the established port-map margins');
+ assert.ok(auto.filter(page=>page.switchportReport&&page.family==='ports').every(page=>Math.abs(page.reportMargin-5*96/25.4)<1e-9),'port maps keep the 5 mm default margin');
 });
 
 test('saved automatic frames from preview.49-51 re-plan as one sheet per switch; authored preview.51 splits stay',()=>{

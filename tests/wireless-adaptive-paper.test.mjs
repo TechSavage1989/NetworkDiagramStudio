@@ -43,7 +43,7 @@ test('long AP names stay on the switch sheet and remain legible on Letter and A4
  for(const preset of ['letter','a4']){const pages=wireless(lab({long:true,preset}));assert.equal(pages.length,1);check(pages,32);}
 });
 test('portrait adaptive paper retains every link and readableAP details',()=>{
- const pages=wireless(lab({orientation:'portrait'}));assert.equal(pages.length,1);check(pages,32,{minimum:4.4,ports:3.6});
+ const pages=wireless(lab({orientation:'portrait'}));assert.equal(pages.length,1);check(pages,32,{minimum:4.4,ports:3.5});
 });
 test('saved adaptive side/continuation plans reopen exactly and preserve a subsequent authored move',()=>{
  const p=lab({long:true,locked:true}),pages=wireless(p);check(pages,32);

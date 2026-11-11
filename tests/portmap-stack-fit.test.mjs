@@ -21,7 +21,7 @@ test('eight-member VSF stays on one dynamic logical port-map page with one legen
  assert.equal(pages.length,1,'the stack must not paginate into two-member sheets');
  const page=pages[0],groups=new Set(page.items.filter(item=>item.reportPanel).map(item=>String(item.reportGroup)));
  assert.equal(groups.size,8,'all eight members remain visible with their physical sockets');
- assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1,'the VLAN/LAG key is not repeated');
+ assert.equal(page.items.filter(item=>item.type==='text'&&item.reportKeyHeading==='vlans').length,1,'the VLAN key is not repeated');
  assert.equal(page.role,'workspace','large stacks use readable full-size member rows rather than a shrunken one-page fit');
  assert.ok(page.height>=816,'the logical canvas preserves the nominal height and grows when required');
  const numbers=page.items.filter(item=>item.reportPortRole==='number');
@@ -49,7 +49,7 @@ test('every one-through-eight-member VSF map keeps the full stack and one key on
   assert.equal(pages.length,1,members+' members should be a single logical map');
   const page=pages[0],groups=new Set(page.items.filter(item=>item.reportPanel).map(item=>String(item.reportGroup)));
   assert.equal(groups.size,members,'all member faceplates retained');
-  assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
+  assert.equal(page.items.filter(item=>item.type==='text'&&item.reportKeyHeading==='vlans').length,1);
   assert.ok(page.items.filter(item=>item.reportPortRole==='number').length>=members*48);
  }
 });
@@ -65,7 +65,7 @@ test('landscape pages maximize member size without forcing columns, splitting, o
  assert.equal(new Set(bodies.map(body=>Math.round(body.x))).size,1,'the measured single-column layout keeps larger readable members on this paper');
  assert.ok(page.adaptivePortMap,'page must be reflowed, not only uniformly shrunk');
  assert.ok(page.items.filter(item=>item.reportPortRole==='number').every(item=>item.size>=8));
- assert.equal(page.items.filter(item=>item.type==='text'&&item.value==='VLAN and LAG key').length,1);
+ assert.equal(page.items.filter(item=>item.type==='text'&&item.reportKeyHeading==='vlans').length,1);
  assert.ok(page.items.some(item=>item.reportPort?.startsWith('8/')));
  const same=map(project(settings,8))[0];
  assert.equal(same.svg,page.svg,'responsive stack layout is deterministic');

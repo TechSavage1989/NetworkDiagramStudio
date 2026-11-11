@@ -75,11 +75,11 @@ test('automatic fit reuses the full sheet and uniformly scales content rather th
 });
 
 
-test('Auto-fit halves the presentation gutter while locked and preserve frames stay authoritative',()=>{
+test('Auto-fit keeps the 5 mm default page margin, locked or not, and preserve frames stay authoritative',()=>{
  for(const preset of ['letter','a4','a3','a5'])for(const orientation of ['portrait','landscape'])for(const locked of [false,true]){
   const paper={preset,orientation,locked},dimensions=paperDimensions(paper),width=dimensions.widthMm*96/25.4,height=dimensions.heightMm*96/25.4;
   const original={name:'Synthetic page',width,height,items:[{type:'rect',x:0,y:0,w:width,h:height}]};
-  const fitted=fitVisiblePage(structuredClone(original),{layout:{pageSetup:{visible:{default:paper}}}}),item=fitted.items[0],inset=locked?24:12;
+  const fitted=fitVisiblePage(structuredClone(original),{layout:{pageSetup:{visible:{default:paper}}}}),item=fitted.items[0],inset=5*96/25.4;
   const gaps=[item.x,item.y,fitted.width-item.x-item.w,fitted.height-item.y-item.h];
   assert.ok(Math.min(...gaps)>=inset-1e-6);assert.ok(Math.abs(Math.min(...gaps)-inset)<1e-6);
   assert.ok(Math.abs(item.w/item.h-width/height)<1e-9);

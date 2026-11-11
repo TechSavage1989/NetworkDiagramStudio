@@ -24,14 +24,16 @@ function arrange(plan,columns){
  }
  return {...plan,bands,width:columns*width+(columns-1)*GAP,height:bands.reduce((sum,band)=>sum+band.height+plan.gap,0)};
 }
+// VLANs and LAGs each have their own heading.
 function keyPlan(inv,palette,width){
- const rows=P.keyRows(inv,palette,width,true,true);
- return {width,rows,height:22+rows.reduce((sum,row)=>sum+row.height,0)};
+ const sections=P.keySections(inv,palette,width,true,true);
+ return {width,sections,height:sections.reduce((sum,section)=>sum+22+section.rows.reduce((total,row)=>total+row.height,0)+2,0)};
 }
 function drawKey(p,plan,x,y){
  const a=p.items;
- P.text(a,x,y,plan.width,'VLAN and LAG key',11,true);y+=22;
- for(const row of plan.rows){
+ for(const section of plan.sections){
+ P.text(a,x,y,plan.width,section.title,11,true,'#16364a','left',{editKey:p.name+'|key-heading|'+section.key,reportKeyHeading:section.key});y+=22;
+ for(const row of section.rows){
   for(const [column,entry] of row.entries.entries()){
    const left=x+column*row.columnWidth;
    rect(a,left,y+1,14,12,entry.fill,entry.stroke||'#536779',entry.stroke?2:.7);
@@ -41,9 +43,11 @@ function drawKey(p,plan,x,y){
     else P.ellipse(a,left+18.5,y+2,10,10,entry.fill,'#263c49',.5,extra);
    }
    const marked=entry.vlan;
-   P.text(a,left+(marked?36:22),y,row.columnWidth-(marked?44:30),entry.title,10,false,'#16364a','left',{reportKeyTitle:entry.id});
+   P.text(a,left+(marked?36:22),y,row.columnWidth-(marked?44:30),entry.title,entry.font||10,false,'#16364a','left',{reportKeyTitle:entry.id});
   }
   y+=row.height;
+ }
+ y+=2;
  }
 }
 function preserveLegacyKeys(page,previous){

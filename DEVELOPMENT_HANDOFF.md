@@ -1,3 +1,43 @@
+# Preview.59: 5 mm page margin, information panel always fits, port map details, fewer inventory pages
+
+Baseline: published preview.58. The owner sent a Letter network page whose information panel ran off the bottom of the sheet and asked for:
+- a default 5 mm border on all four edges, still adjustable;
+- an information panel that always fits;
+- port map changes:
+  - the cable-move safety note;
+  - separate VLAN and LAG headings;
+  - member, model and hardware in each heading;
+  - port descriptions when there is room;
+  - double-click editing of the Switchport builder's device details;
+  - imported stencils;
+- smaller Port Inventory text and fewer pages.
+
+What changed:
+- **Page margin** (page-options.mjs): DEFAULT_PAGE_MARGIN_MM=5. pageMarginPx always returns a margin, so drawings, wireless sheets and port maps (adaptive ones included) share it. Paper & print shows "5 (default)".
+- **Information panel** (paper-panel.mjs):
+  - A side panel taller than the sheet flows into balanced columns: whole rows, a heading kept with its first row, up to six columns and 60% of the sheet width.
+  - It shrinks only when no column count reaches the readable floor, and never below 5 pt.
+  - Moved rows shift their presentation too, so inverse edits stay in panel coordinates.
+  - information-panel.mjs draws multi-line rows (notes) one line per item (`_rowText`). saveTextEdit writes the whole row back under the original key.
+- **Port map sheets** (reports/scene.mjs):
+  - CABLE_MOVE_NOTE in the footer of every map role.
+  - keySections, with VLANs and LAGs / trunks headings and denser fonts for long lists.
+  - hardwareSummary in each panel heading, with serial number and asset tag added while they fit.
+  - Port descriptions (describedPorts, descriptionLayout, drawDescriptions) are drawn only when all fit. reportDiagram may accept candidates that keep 85% of the best marker size to make room.
+  - adaptive-port-map.mjs draws the same key sections.
+- **Port map details** (port-map-details.mjs, app.mjs editPortMapDetails):
+  - Opened by double-clicking a panel or its heading (reportPanel/reportDevice plus reportMember/reportSlot/reportIdentity), or a device on a faceplate port map. Properties offers it too.
+  - Saves name, model, IP, MAC, member/module model (hardwareComposition) and reportDetails rows in one validated history action.
+  - The model list is shared with the device editor (hardwareModelList).
+- **Imported stencils:** devices with actualAsset() keep the faceplate port map sheet. Port map options → Devices with an imported stencil can choose the builder sheet (`portMap.stencilSheets:false`).
+- **Port Inventory:**
+  - 10.35 px cells and tight rows print at 8 pt on Letter inside the 5 mm margin.
+  - Consecutive devices share sheets (bookletInventory start.fullBar), and the shared page's portMap lists every device and record.
+  - Inventory pages are top-aligned.
+  - On the two-stack fixture this gives 3 sheets instead of 4; the sample site needs 1 instead of 2.
+- **Tests:** port-map-sheet-details, port-map-details (with a stencil case) and browser-port-map-details. The paper-panel test now expects columns instead of overflow. Margin expectations in the adaptive, visible-proportion and wireless tests moved to 5 mm; wireless print sizes are about 3% smaller because of the wider border.
+- **Owner's last message** was "\storage". Its meaning is unclear; ask what they meant.
+
 # Preview.58: per-device caption corners, port numbers on every device with sockets
 
 Baseline: published preview.57. The owner asked about placing device names at specific corners of a device, and for port numbers on every device where they are relevant.

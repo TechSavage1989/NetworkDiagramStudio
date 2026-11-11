@@ -443,3 +443,5 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
  .statusbar{background:var(--ui-surface);border-top:1px solid var(--ui-line);color:var(--ui-muted);font-size:12px}
  @media(max-width:620px){.stagebar{flex-wrap:wrap}.stagebar .workspace-actions{flex-basis:100%}}
 }
+/* Port map details (double-click a device on a port map page). */
+.port-map-detail-group{border:1px solid var(--rule);border-radius:8px;padding:8px 12px 10px;margin:10px 0 0}.port-map-detail-group legend{font-weight:600;padding:0 4px}

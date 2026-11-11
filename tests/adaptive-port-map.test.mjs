@@ -19,7 +19,7 @@ test('five/eight-member stacks use measured A4 and Letter layouts with every por
   assert.ok(Math.abs(page.height*25.4/96-dimensions.heightMm)<1e-6);
   assert.equal(panels(page).length,members);assert.equal(numbers(page).length,members*52);
   assert.ok(numbers(page).every(i=>i.size>=8));assert.deepEqual(validateReportScene(page),[]);
-  assert.equal(page.items.filter(i=>i.value==='VLAN and LAG key').length,1);
+  assert.equal(page.items.filter(i=>i.reportKeyHeading==='vlans').length,1);
   assert.equal(new Set(numbers(page).map(i=>i.reportPort)).size,members*52);
   const rows=panels(page).sort((a,b)=>a.x-b.x||a.y-b.y);
   assert.deepEqual(rows.map(i=>i.reportGroup),Array.from({length:members},(_,i)=>'Member '+(i+1)));
@@ -105,8 +105,9 @@ test('fresh locked port maps fill their paper without a second border or referen
  assert.ok(page.adaptivePortMap.socketWidth>30);
  const header=page.items[0];assert.equal(header.x,0);assert.equal(header.y,0);assert.equal(header.w,page.width);
  assert.deepEqual(validateReportScene(page),[]);
- const extent=panels(page);assert.ok(Math.min(...extent.map(p=>p.x))<5);
- assert.ok(Math.max(...extent.map(p=>p.x+p.w))>page.width-5);
+ // The banks reach the 5 mm default page margin on both sides.
+ const margin=5*96/25.4,extent=panels(page);assert.ok(Math.min(...extent.map(p=>p.x))<margin+5);assert.ok(Math.min(...extent.map(p=>p.x))>=margin-1e-6);
+ assert.ok(Math.max(...extent.map(p=>p.x+p.w))>page.width-margin-5);
  assert.equal(page.pageLockFrame.portMapFit,1);
  project.layout.pageSetup.visible.lockFrames={[page.name]:page.pageLockFrame};
  const reopened=JSON.parse(JSON.stringify(project));reopened.layout=cleanLayout(reopened.layout,reopened.devices.map(d=>d.id));
@@ -122,11 +123,11 @@ test('saved legacy locked map frames retain their original reference base',()=>{
  assert.deepEqual(validateReportScene(page),[]);
 });
 
-test('adaptive port-map headers reach paper edges and dense banks use narrow safe gutters',()=>{
+test('adaptive port-map headers reach paper edges and dense banks keep the 5 mm page margin',()=>{
  for(const members of [5,8])for(const preset of ['letter','a4']){
   const page=maps(adaptiveProject(preset,'landscape',members))[0],header=page.items[0];
   assert.equal(header.x,0);assert.equal(header.y,0);assert.equal(header.w,page.width);
-  assert.equal(page.reportMargin,4);assert.deepEqual(validateReportScene(page),[]);
+  assert.ok(Math.abs(page.reportMargin-5*96/25.4)<1e-9);assert.deepEqual(validateReportScene(page),[]);
   assert.equal(numbers(page).length,members*52);
  }
 });
