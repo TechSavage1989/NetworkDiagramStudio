@@ -26,6 +26,7 @@ Change (wireless-layout.mjs paperPlanPages/planPaperView/bankLayout; index.mjs r
   - wirelessPaperPlan 2 marks one-sheet plans; 1 is the preview.51 split.
   - Plan-1 and preview.49/50 adaptive frames are dropped unless authored wireless geometry depends on them. A kept plan-1 frame sets _wirelessPaperSplit and reopens its saved split.
 - **Notice:** "all N AP links stay on this sheet with their switch, so AP details are X pt (below the 8 pt target). Choose larger paper…, or Page options → Wireless paper layout → Continue on sheets."
+- **Narrow windows:** splitting Port inventory out made the page-navigation suite land on a port map page whose long page note squeezed the canvas to 57 px at 390×844 (hosted Edge failed "responsive canvas stays usable"). The page note now scrolls within about three lines (max-height 4.5em), and the stacked ≤620 px layout keeps the canvas at least min(320px, 55vh).
 - **Port inventory group:**
   - The sidebar group key is pageGroupOf: Port Inventory pages are 'inventory' and labelled "Port inventory". The paper family stays 'ports'.
   - In the Pages & layout Page group select, 'ports' is labelled "Port maps and inventory".
