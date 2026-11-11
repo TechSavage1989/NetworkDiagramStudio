@@ -1,3 +1,55 @@
+# Preview.53: whole stack, APs all around it, upright numbers, page margin, faster rebuilds
+
+Baseline: published preview.52 (main cbc1c2f). Owner feedback, with screenshots of their real project (not in the repository):
+- The member 3 sheet (staggered rows) was good.
+- The member 7 sheet put all 32 APs in side columns. Names broke mid-word and the space above and below was empty. The likely cause was a saved Use side space choice, which preview.52 treated as side-only.
+- The owner wants the whole stack visible if possible, upright port numbers (they were sideways), a configurable page margin, and faster redraws.
+
+Changes (wireless-layout.mjs, diagram/index.mjs portNumbers, page-options.mjs, reports/scene.mjs and index.mjs, adaptive-port-map.mjs, app.mjs Page options):
+- **Whole stack by default:** paperPlanPages plans the members-only view and then the complete stack, starting the complete stack at the width the members-only view routed at. The complete stack wins unless it prints more than 30% smaller or is compromised. `visible.wirelessStack:'members'` (Page options → Wireless stack view) restores members only.
+- **Mixed layouts:** they now try a quarter, half or three quarters of the APs at the sides; plan keys gain `:25`/`:75`. Use side space keeps every placement-based layout (mixed, sides, columns) and excludes only pure rows.
+- **Ranking whole sheets:**
+  - The best two candidates of each kind within 75% of the top are rendered.
+  - They are compared by effective size: legible fit × max(.65, 1 − .07 × crossings/APs).
+  - Ties go to whole-line cards, then route cost.
+  - The search stops at the first width that gives a clean sheet, and after two port-number room failures at one width it moves to the next width.
+  - Before this, side-only columns with 114–127 crossings beat clean mixed layouts on A4, Legal and Tabloid.
+- **Upright numbers:** `portNumbers(...,{upright:true})` never falls back to rotated numbers. Wireless paper plans (readableWidth and renderBankPage) widen the stack instead.
+- **Speed:**
+  - wholePlans memoizes {view, planKey, width} per switch over every input that shapes the choice. A rebuild renders that one candidate.
+  - Two-stack site on Letter: cold about 6–8 s, warm about 1.5 s for the whole build, and the warm SVG is identical to cold.
+  - Frames record wirelessPlanWidth and wirelessSubset, and a saved whole-switch frame re-renders exactly its plan. Without this, a manual AP move on a locked sheet could switch views and lose its edit key.
+- **Draft reuse:** switchDrafts caches each switch's drafted wireless sheets, keyed on the whole project except other devices, links and non-wireless drawing edits. The key includes the switch, its APs, their links with global indices, the sheet position and the common width. Editor-like profile (two-stack site, dynamic paper, page cache):
+
+  | Change | Before | After |
+  | --- | --- | --- |
+  | Rename MDF | 3.5 s | 0.58 s |
+  | Rename one AP | 3.8 s | 2.6 s (its switch only) |
+  | Text or line-jump style | about 3.5 s | unchanged (every sheet re-plans) |
+
+  The ports family (about 0.4 s) and core (about 0.1 s) are the remainder.
+- **Page margin:** `visible.marginMm` (0–50, empty = automatic), read through pageMarginPx in fitVisiblePage, the wireless paperBody, builder port-map sheets (`request.margin`, report-scene MARGIN default 24) and adaptive maps (default 4). Standalone Switchport reports are unchanged.
+
+- **Margin bug found during render checks:** the near-fit reclaim widened the body into outside whitespace down to 2 px, so content ignored a 25 mm margin. An explicit margin is now never reclaimed. Rendered core and wireless Letter pages with 25 mm were inspected.
+
+Measured (fictional two-stack site with MAC lines; printed points; every sheet clean, whole stack, mixed layout):
+
+| Paper | AP text, 8-member / 5-member stack | Port numbers |
+| --- | --- | --- |
+| Letter | 4.24 / 4.73 | ≥ 3.77 |
+| Letter portrait | 4.61 / 4.93 | |
+| A4 | 4.10 / 5.06 | |
+| Legal | 4.24 / 5.24 | |
+| Tabloid | 5.80 / 7.16 | |
+| A3 | 6.23 / 7.44 | |
+| A5 | 2.58 / 3.18 | |
+
+Crossings are 6–31 per sheet. Members only on Letter gives about 5.6 pt.
+
+Limitations:
+- The whole-stack view makes dense 8-member sheets small on Letter. The notice reports it, and Wireless stack view offers members only.
+- The owner's exact project was not available. Their side-columns sheet is reproduced only through the Use side space reasoning.
+
 # Preview.52: one wireless sheet per switch; Port inventory page group
 
 Baseline: published preview.51 (main ce06fb8). Owner feedback on preview.51:

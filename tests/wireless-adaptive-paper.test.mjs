@@ -14,7 +14,7 @@ function lab({count=32,long=false,preset='letter',orientation='landscape',locked
 }
 // One sheet per switch keeps all 32 APs together; text is as large as that
 // allows on the paper (measured floors, not the 8 pt continuation target).
-function check(pages,count,{minimum=5.2,ports=4.5}={}){
+function check(pages,count,{minimum=4,ports=3.5}={}){
  assert.deepEqual(pages.flatMap(p=>p.wirelessLayout.links).sort((a,b)=>a-b),Array.from({length:count},(_,i)=>i));
  for(const page of pages){
   assert.equal(page.pageOverflow,false);assert.deepEqual(page.wirelessLayout.routingCost.slice(0,2),[0,0]);
@@ -32,15 +32,18 @@ function check(pages,count,{minimum=5.2,ports=4.5}={}){
   for(const path of paths){for(const [point,anchor] of [[path.points[0],path.from],[path.points.at(-1),path.to]])for(const [index,key] of ['x','y'].entries())assert.ok(Math.abs(point[index]-anchor[key])<1e-6);}
  }
 }
-test('adaptive Letter keeps all 32 AP cards with their switch on one sheet, used member only',()=>{
+test('adaptive Letter keeps all 32 AP cards with their switch and the whole stack on one sheet',()=>{
  const p=lab(),saved=JSON.stringify(p),pages=wireless(p);assert.equal(pages.length,1);assert.ok(pages[0].wirelessLayout.wholeSwitch);check(pages,32);assert.equal(JSON.stringify(p),saved);
- for(const page of pages){assert.ok(page.wirelessLayout.paperPlan);assert.deepEqual(page.wirelessLayout.memberIds,['7']);assert.match(page.items.find(i=>i.pageHeading==='subtitle'||/access-point uplinks/.test(i.value||''))?.value||'',/member 7/);}
+ assert.equal(pages[0].wirelessLayout.memberIds.length,8,'the whole stack is visible');assert.ok(pages[0].items.filter(i=>i.portNumberRole==='text').every(i=>!i.angle),'port numbers stay upright');
+ // Only stack members with AP links: the AP member alone, larger text.
+ const members=lab();members.layout.pageSetup.visible.wirelessStack='members';const sheet=wireless(members);assert.equal(sheet.length,1);check(sheet,32,{minimum:5.2,ports:4.5});
+ for(const page of sheet){assert.ok(page.wirelessLayout.paperPlan);assert.deepEqual(page.wirelessLayout.memberIds,['7']);assert.match(page.items.find(i=>i.pageHeading==='subtitle'||/access-point uplinks/.test(i.value||''))?.value||'',/member 7/);}
 });
 test('long AP names stay on the switch sheet and remain legible on Letter and A4',()=>{
  for(const preset of ['letter','a4']){const pages=wireless(lab({long:true,preset}));assert.equal(pages.length,1);check(pages,32);}
 });
 test('portrait adaptive paper retains every link and readableAP details',()=>{
- const pages=wireless(lab({orientation:'portrait'}));assert.equal(pages.length,1);check(pages,32,{minimum:6.2,ports:5.5});
+ const pages=wireless(lab({orientation:'portrait'}));assert.equal(pages.length,1);check(pages,32,{minimum:4.4,ports:3.9});
 });
 test('saved adaptive side/continuation plans reopen exactly and preserve a subsequent authored move',()=>{
  const p=lab({long:true,locked:true}),pages=wireless(p);check(pages,32);
