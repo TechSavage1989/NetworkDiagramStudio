@@ -2,6 +2,7 @@ import {refitWirelessPresentation} from './wireless-presentation.mjs';
 import {cleanLabelBacking,LABEL_BACKING} from './label-backing-settings.mjs';
 import {cleanPresentation,presentation,panelFields,displayPageName} from './presentation.mjs';
 import {CORE_ARRANGEMENT_CHOICES,arrangeCoreLayout} from './core-arrangement.mjs';
+import {deviceCaptionPlacement} from './device-captions.mjs';
 
 export function pageLayoutEditor({project,pages,selected,modal,field,button,apply,close,preview}){
  let layout=structuredClone(project.layout||{});layout.presentation=cleanPresentation(layout.presentation);layout.corePages||=[];layout.reportPages||=[];
@@ -27,6 +28,12 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   const captions=global?check(identity,'Show cable type and speed on connection lines',layout.cableCaptions===true):null;
   if(captions)identity.append(el('p','The connection key already names each cable color, so this text is off unless chosen. A caption you moved or edited stays visible.','hint'));
   const numbers=global?check(identity,'Show port numbers on network pages',layout.corePortNumbers!==false):null;
+  // Device names and details stay next to their device on network pages, at
+  // the chosen corner when it is clear (name above and details below, on the
+  // left, by default).
+  const corners=['above-left','above-right','below-left','below-right'].map(v=>[v,{'above-left':'Above, left','above-right':'Above, right','below-left':'Below, left','below-right':'Below, right'}[v]]),captionPlacement=deviceCaptionPlacement({layout});
+  const namePlace=global?field(identity,'Device name position (network pages)',captionPlacement.name,corners):null,infoPlace=global?field(identity,'Device details position (network pages)',captionPlacement.info,corners):null;
+  if(namePlace)identity.append(el('p','Each name and detail line stays next to its own device: at this corner when it is clear, otherwise slid along the same edge, then on the other side of the device.','hint'));
   const backing=cleanLabelBacking(layout.labelBacking);
   const backingMode=global?field(identity,'Port/link label backing',backing.mode,[['white','White'],['transparent','Transparent']]):null;
   const backingPadding=global?numeric(identity,'Port/link label padding (px)',backing.padding,LABEL_BACKING.min,LABEL_BACKING.max):null;
@@ -109,7 +116,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
     sectionTitles:Object.fromEntries(sectionControls.filter(c=>c.card.isConnected).map(c=>[c.id,c.heading.value.trim().slice(0,80)]).filter(([,title])=>title)),
     sectionContent:Object.fromEntries(sectionControls.filter(c=>c.card.isConnected&&c.override.value.trim()).map(c=>[c.id,c.override.value.slice(0,16000)])),
     modulesMode:moduleDetails.value,vlanMode:vlanMode.value,addressMode:addressMode.value,portMode:portMode.value,rowLimit:+rowLimit.value,emptySections:emptySections.value,notes:notes.value}});
-   if(global){layout.labelBacking={mode:backingMode.value,padding:+backingPadding.value};next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;if(numbers.checked)delete layout.corePortNumbers;else layout.corePortNumbers=false;if(hops.value==='bundle')layout.hopStyle='bundle';else delete layout.hopStyle;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
+   if(global){layout.labelBacking={mode:backingMode.value,padding:+backingPadding.value};next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;if(numbers.checked)delete layout.corePortNumbers;else layout.corePortNumbers=false;layout.deviceCaptions={name:namePlace.value,info:infoPlace.value};if(hops.value==='bundle')layout.hopStyle='bundle';else delete layout.hopStyle;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
    refitWirelessPresentation(layout,previousPresentation,pages);
    if(deviceChecks.length){const chosen=deviceChecks.filter(([,input])=>input.checked).map(([id])=>id);
     if(!page.reportId)layout.coreExclude=(layout.coreExclude||[]).filter(id=>!chosen.includes(id));

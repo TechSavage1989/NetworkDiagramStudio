@@ -6,10 +6,10 @@ import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry,targetPageAspect} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
-import {coreLinkKey as linkKey,coreArrangement,lineSpacing,cableCaptions,hopStyle,corePortNumbers} from '../layout.mjs';
+import {coreLinkKey as linkKey,coreArrangement,lineSpacing,cableCaptions,hopStyle,corePortNumbers,deviceCaptionPlacement} from '../layout.mjs';
 import {coreSidebar} from './sidebar.mjs';
 import {coreRoutes,ROUTE_STYLE} from './routing.mjs';
-import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth} from './labels.mjs';
+import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth,captionCorner} from './labels.mjs';
 import {applyDrawingEdits,editDeviceShape} from '../drawing-edits.mjs';
 import {linkCaption,hasLineCaption,linkWeight} from '../link-styles.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
@@ -213,6 +213,7 @@ function moduleLegend(page,project){
   label(target.items,38,y+top+8*iconScale,detail.w,detail.h,detail.value,detail.size,detail.bold,C.muted);Object.assign(target.items.at(-1),{editKey:portsKey,moduleLegend:true,full:true});y+=height;
  }if(Object.keys(inherited).length)for(const target of [page,...extra])applyDrawingEdits(target,project);return extra;
 }
+const numberMemo=new Map();
 export function corePages(project,inventory,{portNumbers}={}){
  const geometry=pageGeometry(project,'core'),{width:baseW,height:baseH,dynamic}=geometry,BOTTOM=baseH-74;
  const db=handoffs(inventory,project.layout?.suppressedHandoffs),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];
@@ -300,6 +301,7 @@ export function corePages(project,inventory,{portNumbers}={}){
   // device sideways while the user is moving one selected device.
   if(dynamic)sidebar.bodyLeft+=leftReserve;
   if(W<1200)sidebar.bodyLeft=Math.max(sidebar.contentLeft+38,Math.min(sidebar.bodyLeft,W-738));
+  const captionCorners=deviceCaptionPlacement(pageProject);
   const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;page.corePageId=sheet.corePageId;
   page.connectionLayout={railPitch,expansion,padding:fit.padding,spreadHandoffs:!!sheet.spreadHandoffs,columnOnly:!!sheet.columnOnly,arrangement,columns:sheet.packedColumns};page.coreArrangement=arrangement;page.arrangementFallback=!!sheet.fallback;
   const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);
@@ -319,11 +321,12 @@ export function corePages(project,inventory,{portNumbers}={}){
    const d=viewDevice(sheet,id),m=pageSizes.get(id),position=packing?.positions.get(id),b=bounds(d,(position?TOP+position.y:row)+m.top*scale,width,sidebar.bodyLeft+(position?position.x-(width-bounds(d,0,width)[2])/2:0));b[3]=m.body*scale;
    const node=addDevice(page,pageProject,d,b,'core-'+i,{fitWidth:d.kind!=='handoff',...m.equipment});nodes.set(id,node);
    if(d.kind!=='handoff'){
-    const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleY=node.y-titleHeight-6;
-    label(items,node.x,titleY,titleWidth,titleHeight,titleValue,titleSize,titlePatch.bold??true);Object.assign(items.at(-1),{full:true,titleOwner:id,editKey:titleKey});
+    const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleAt=captionCorner(node,captionCorners.name,titleWidth,titleHeight);
+    label(items,titleAt.x,titleAt.y,titleWidth,titleHeight,titleValue,titleSize,titlePatch.bold??true,C.ink,titleAt.align);Object.assign(items.at(-1),{full:true,titleOwner:id,editKey:titleKey});
     const detail=deviceDetails(d,project);
     const detailKey=page.name+'|detail|'+id,detailPatch=pageProject.layout?.drawingEdits?.[detailKey]||{},detailValue=detailPatch.value??detail,detailSize=detailPatch.size||12,detailWidth=detailPatch.w||Math.min(node.w,textWidth(detailValue,detailSize,detailPatch.bold)),detailHeight=Math.max(detailPatch.h||18,wrapPortText(detailValue,detailWidth,detailSize,detailPatch.bold).length*detailSize*1.2);
-    label(items,node.x,node.y+node.h+5,detailWidth,detailHeight,detailValue,detailSize,detailPatch.bold??false,C.muted);Object.assign(items.at(-1),{full:true,titleOwner:id,titleSlot:'detail',editKey:detailKey});
+    const detailAt=captionCorner(node,captionCorners.info,detailWidth,detailHeight);
+    label(items,detailAt.x,detailAt.y,detailWidth,detailHeight,detailValue,detailSize,detailPatch.bold??false,C.muted,detailAt.align);Object.assign(items.at(-1),{full:true,titleOwner:id,titleSlot:'detail',editKey:detailKey});
    }
    if(d.kind==='handoff'){label(items,node.x+8,node.y,node.w-16,node.h,d.name,12,true,C.ink,'center');items.at(-1).deviceTextOwner=id;if(d.ip)label(items,node.x-20,node.y-19,node.w+40,14,d.ip,10,false,C.muted,'center');}
    row+=m.height*scale+expansion;
@@ -363,9 +366,15 @@ export function corePages(project,inventory,{portNumbers}={}){
    const d=db.devices.get(id);if(!d||!['switch','firewall'].includes(d.kind)||node.angle||node.offPage||!node.children?.some(c=>c.socketPart===0))continue;
    const cabled=new Set(used.flatMap(e=>[e.a===id?e.ap:null,e.b===id?e.bp:null]).filter(Boolean).map(port=>String(port).toLowerCase()));
    const ports=physicalPorts(d).filter(port=>!cabled.has(String(port.name).toLowerCase()));if(!ports.length)continue;
-   for(const fontScale of [1,.85,.7]){const temp={name:page.name,items:[]};try{portNumbers(temp.items,node,ports,{selected:new Set(),upright:true,fontScale});}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;continue;}
-    // page.items (not the earlier items alias, replaced by applyDrawingEdits).
-    applyDrawingEdits(temp,pageProject);page.items.push(...temp.items);break;}
+   // Numbers depend only on the faceplate, its position and the uncabled
+   // ports, so an edit elsewhere reuses them instead of measuring again.
+   const key=JSON.stringify([page.name,node.x,node.y,node.w,node.h,node.masterKey,node.children.map(c=>[c.x,c.y,c.w,c.h,c.socketPart,c.portName]),ports.map(port=>port.name)]);
+   let numbers=numberMemo.get(key);
+   if(!numbers){numbers=[];for(const fontScale of [1,.85,.7]){const out=[];try{portNumbers(out,node,ports,{selected:new Set(),upright:true,fontScale});}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;continue;}numbers=out;break;}
+    if(numberMemo.size>=512)numberMemo.clear();numberMemo.set(key,numbers);}
+   if(!numbers.length)continue;
+   // page.items (not the earlier items alias, replaced by applyDrawingEdits).
+   const temp={name:page.name,items:structuredClone(numbers)};applyDrawingEdits(temp,pageProject);page.items.push(...temp.items);
   }
   const pinnedTitles=new Set(items.filter(i=>i.titleOwner&&(Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.x)||Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.y))).map(i=>i.titleOwner));
   const obstacles=[...items.filter(i=>i.type==='text'&&!i.portNumberRole&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>{const owner=deviceBounds(b.owner);return b.x<owner.x||b.y<owner.y||b.x+b.w>owner.x+owner.w||b.y+b.h>owner.y+owner.h;})];

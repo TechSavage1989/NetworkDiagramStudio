@@ -2,7 +2,7 @@ import {effectiveWirelessPaperProject} from '../wireless-paper-defaults.mjs';
 import {cleanLabelBacking} from '../label-backing-settings.mjs';
 import {devicePoint,deviceRegionBounds} from './device-geometry.mjs';
 import {physicalInventory} from '../physical-links.mjs';
-import {cachedDraftPages} from './page-cache.mjs';
+import {cachedDraftEntry,finishedPageMemo,rememberFinished,familyEditsOf} from './page-cache.mjs';
 import {buildSwitchportReports,sharedReportPalette,aggregateKey,cleanSwitchportSettings,portMapSheets} from '../reports/index.mjs';
 import {luminance} from '../reports/palette.mjs';
 import {portLabelLayout,portLabelText} from './port-label-layout.mjs';
@@ -855,7 +855,11 @@ function logical(project,db,options={}){
 }
 export function buildPages(project={},options={}){
   project=effectiveWirelessPaperProject(project);
-  const db=inventory(project),cached=(family,build)=>cachedDraftPages(options.cache,family,project,build),pages=[...cached('core',()=>corePages(project,physicalInventory(db),{portNumbers})),...cached('ports',()=>portMaps(project,db)),...cached('wireless',()=>wireless(project,physicalInventory(db))),...cached('logical',()=>logical(project,db)),...cached('switchports',()=>buildSwitchportReports(project))];
+  // Drafts shared with the cache are copied only when their page has to be
+  // finished again; an unchanged page reuses its finished copy.
+  const memo=finishedPageMemo(options.cache),sources=new Map();
+  const cached=(family,build)=>{if(!options.cache)return build();const entry=cachedDraftEntry(options.cache,family,project,build);return entry.pages.map((page,i)=>{const own=entry.shared?{...page}:page;sources.set(own,{shared:entry.shared?page:null,token:family+':'+entry.serial+':'+i,family});return own;});};
+  const db=inventory(project),pages=[...cached('core',()=>corePages(project,physicalInventory(db),{portNumbers})),...cached('ports',()=>portMaps(project,db)),...cached('wireless',()=>wireless(project,physicalInventory(db))),...cached('logical',()=>logical(project,db)),...cached('switchports',()=>buildSwitchportReports(project))];
   for(const report of cleanReportPages(project.layout?.reportPages,(project.devices||[]).map(d=>d.id))){
     const selected=new Set(report.devices),copy={...project,devices:(project.devices||[]).filter(d=>selected.has(d.id)),links:(project.links||[]).filter(l=>selected.has(l.a)&&selected.has(l.b)),_reportPrefix:'report:'+report.id},data=inventory(copy);
     const generated=report.family==='ports'?portMaps(copy,data):report.family==='wireless'?wireless(copy,physicalInventory(data)):logical(copy,data,{includeTrunks:report.family==='trunk',includeLogical:report.family==='logical'}).filter(p=>pageFamily(p.title)===report.family);
@@ -867,8 +871,26 @@ export function buildPages(project={},options={}){
     const n=(seen.get(p.name)||0)+1;seen.set(p.name,n);
     if(totals.get(p.name)>1)p.name+=' '+n;
   });
-  const visible=pages.filter(p=>!presentation(project,p).hidden);
+  let visible=pages.filter(p=>!presentation(project,p).hidden);
+  // A finished page depends on its draft, its name and position, the layout
+  // settings and its own family's drawing edits.
+  const reused=new Set(),store=new Map();
+  if(memo){
+   const rest=JSON.stringify([{...project.layout,drawingEdits:undefined},Object.entries(project).filter(([k])=>k.startsWith('_'))]),familyEdits=new Map(),editsFor=family=>{if(!familyEdits.has(family))familyEdits.set(family,familyEditsOf(project,family));return familyEdits.get(family);};
+   const position=new Map(visible.map((p,i)=>[p,i]));
+   for(let i=0;i<pages.length;i++){
+    const p=pages[i],src=sources.get(p);if(!src)continue;
+    // A page drafted by one family can carry another family's name (port maps
+    // drawn as Switchport report sheets), so both families' edits count.
+    const named=pageFamily(p.name.split('|')[0]),key=src.token+'|'+p.name+'|'+(position.get(p)??-1)+'|'+visible.length,edits=named===src.family?editsFor(src.family):editsFor(src.family)+'\n'+editsFor(named),hit=memo.get(key);
+    if(hit&&hit.rest===rest&&hit.edits===edits){pages[i]=structuredClone(hit.page);reused.add(pages[i]);rememberFinished(memo,key,hit,pages.length);continue;}
+    if(src.shared){pages[i]=structuredClone(src.shared);pages[i].name=p.name;}
+    store.set(pages[i],{key,rest,edits});
+   }
+   visible=pages.filter(p=>!presentation(project,p).hidden);
+  }
   pages.forEach(p=>{
+    if(reused.has(p))return;
     p.labelBacking=cleanLabelBacking(project.layout?.labelBacking);
     applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??p.displayName;item.w=Math.max(item.w,textWidth(item.value,item.size,true));}
     // Switchport sheets already reserve measured headers, keys and footers.
@@ -880,6 +902,7 @@ export function buildPages(project={},options={}){
     if(cleanPageNumbers(project.layout?.pageNumbers).footer){rect(p.items,36,bottom-47,right-72,1,C.rule);p.items.at(-1).pageFrame='footer-rule';label(p.items,36,bottom-39,right-228,21,p.displayName,12,false,C.muted);p.items.at(-1).pageFrame='footer-name';}const number=pageNumber(project.layout?.pageNumbers,Math.max(0,visible.indexOf(p)),visible.length);if(number!=null){label(p.items,right-200,bottom-40,164,22,number,13,true,C.teal,'right');Object.assign(p.items.at(-1),{editKey:p.name+'|page-number',pageFrame:'footer-number'});}
     applyDrawingEdits(p,project);if(!p.coreDeviceIds&&(project.layout?.presentation?.pages?.[p.name]?.panel||project.layout?.presentation?.pages?.[p.name.split('|')[0]]?.panel||Object.entries(presentation(project,p).panel).some(([k,v])=>k==='visible'?!v:k==='position'?v!=='left':k==='width'?v!==244:['scale','textScale'].includes(k)?v!==1:k==='sections'?v.some(k=>!['connections','modules'].includes(k)):false)))informationPanel(p,project);scaleText(p,project);applyGlobalTextStyles(p,project.layout?.textStyles,project.layout?.drawingEdits);dockInformationPanel(p,project);fitDynamicPage(p,project,{footer:true});scalePage(p,project);fitVisiblePage(p,project);matchLegendStrokeWidths(p);p.svg=svgPage({...p,title:p.displayName});
   });
+  for(const [p,info] of store)rememberFinished(memo,info.key,{rest:info.rest,edits:info.edits,page:structuredClone(p)},pages.length);
   // Adaptive wireless paper mode is judged in real printed points, after
   // headers, panels and final paper fitting. Never certify a tiny AP card by
   // measuring its unscaled source font. Continue only the automatic drawing;
