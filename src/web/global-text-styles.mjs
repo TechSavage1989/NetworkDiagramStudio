@@ -1,5 +1,8 @@
 // Project-wide defaults for each editable drawing text category.
 // Each preset is optional. Explicit per-object edits always take priority.
+// A category size is an actual font size in points at full drawing size
+// (1 pt = 4/3 drawing units). Projects saved before point sizes keep their
+// relative scale until a size is chosen.
 export const globalTextCategories=[
  ['deviceNames','Device names'],
  ['deviceDetails','Device details and model captions'],
@@ -15,12 +18,15 @@ export const globalTextCategories=[
 const ids=new Set(globalTextCategories.map(([id])=>id));
 const isObject=x=>x&&typeof x==='object'&&!Array.isArray(x);
 const hex=/^#[0-9A-Fa-f]{6}$/;
+export const TEXT_STYLE_PT={min:4,max:96};
+export const ptToUnits=pt=>pt/.75;
 export function cleanGlobalTextStyles(raw={}){
  const src=isObject(raw)?raw:{},result={};
  for(const [key,value] of Object.entries(src)){
   if(!ids.has(key)||!isObject(value))continue;
   const out={};
-  if(Number.isFinite(value.scale)&&value.scale>=.4&&value.scale<=2.5&&value.scale!==1)out.scale=value.scale;
+  if(Number.isFinite(value.size)&&value.size>=TEXT_STYLE_PT.min&&value.size<=TEXT_STYLE_PT.max)out.size=Math.round(value.size*100)/100;
+  else if(Number.isFinite(value.scale)&&value.scale>=.4&&value.scale<=2.5&&value.scale!==1)out.scale=value.scale;
   if(typeof value.color==='string'&&hex.test(value.color))out.color=value.color.toUpperCase();
   if(typeof value.bold==='boolean')out.bold=value.bold;
   if(['left','center','right'].includes(value.align))out.align=value.align;
@@ -50,8 +56,8 @@ export function applyGlobalTextStyles(page,raw,edits={}){
   if(style.color&&!Object.hasOwn(local,'color'))item.color=style.color;
   if(typeof style.bold==='boolean'&&!Object.hasOwn(local,'bold'))item.bold=style.bold;
   if(style.align&&!Object.hasOwn(local,'align'))item.align=style.align;
-  if(style.scale&&!Object.hasOwn(local,'size')){
-   const factor=style.scale,oldWidth=item.w,oldHeight=item.h;
+  if((style.size||style.scale)&&!Object.hasOwn(local,'size')&&item.size>0){
+   const factor=style.size?ptToUnits(style.size)/item.size:style.scale,oldWidth=item.w,oldHeight=item.h;
    item.size*=factor;
    // Retain fixed table-column widths and faceplate bounds; textLayout may
    // reduce font size to its readable floor when a fixed cell is too narrow.

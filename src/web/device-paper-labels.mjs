@@ -22,7 +22,7 @@ export function readableDeviceLabels(page,project,unit=1){
  for(const item of automatic){
   const body=bodies.find(b=>b.sourceId===item.titleOwner);
   if(!body||['x','y','w','h','angle'].some(k=>Number.isFinite(edits[body.editKey]?.[k]))){continue;}
-  const category=item.titleSlot==='detail'?'deviceDetails':'deviceNames',requested=minimum*(project.layout?.textStyles?.[category]?.scale||1),target=requested*unit/ .75;
+  const category=item.titleSlot==='detail'?'deviceDetails':'deviceNames',style=project.layout?.textStyles?.[category],requested=Number.isFinite(style?.size)?style.size:minimum*(style?.scale||1),target=requested*unit/ .75;
   if(textLayout(item).size>=target-.001){continue;}
   const size=Math.max(item.size,target),natural=textWidth(item.value,size,item.bold),widths=[Math.min(natural,Math.max(body.w,160*unit)),Math.min(natural,Math.max(body.w,240*unit)),Math.min(natural,320*unit)].filter((v,i,a)=>v>0&&a.indexOf(v)===i),candidates=[];
   for(const w of widths){

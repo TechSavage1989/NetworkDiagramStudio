@@ -75,7 +75,7 @@ try{
  await open({name:'wireless-paper.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:dense}))});
  const wirelessNames=async()=>(await page.locator('#page-select option').allTextContents()).filter(name=>/Wireless Connections/.test(name));
  assert.equal((await wirelessNames()).length,1);
- controls=await options();assert.equal(await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).inputValue(),'adaptive');await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('layout');
+ controls=await options();assert.equal(await controls.dialog.getByLabel('Paper layout',{exact:true}).inputValue(),'optimize');await controls.dialog.getByLabel('Paper layout',{exact:true}).selectOption('keep-wireless');
  await controls.dialog.getByLabel('Apply visible page proportions to',{exact:true}).selectOption('group');
  await controls.dialog.getByLabel('Page group',{exact:true}).selectOption('wireless');
  await controls.dialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');
@@ -109,12 +109,12 @@ try{
  // readable-continuation budget. The side-space test intentionally enlarged
  // APs to150%, which correctly needs more sheets and is a different case.
  await open(resolve(output,'wireless-proportional.nds.json'));
- controls=await options();await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).selectOption('readable');await apply(controls.dialog);
+ controls=await options();await controls.dialog.getByLabel('Paper layout',{exact:true}).selectOption('continue');await apply(controls.dialog);
  const continued=(await wirelessNames()).length;assert.ok(continued>1&&continued<=4);
  saved=await save('wireless-readable.nds.json');assert.equal(saved.doc.project.layout.pageSetup.visible.wirelessFit,'readable');
  await page.keyboard.press('Control+z');assert.equal((await wirelessNames()).length,1);
  await page.keyboard.press('Control+Shift+z');assert.equal((await wirelessNames()).length,continued);
- await open(saved.path);assert.equal((await wirelessNames()).length,continued);controls=await options();assert.equal(await controls.dialog.getByLabel('Wireless paper layout',{exact:true}).inputValue(),'readable');await close(controls.dialog);
+ await open(saved.path);assert.equal((await wirelessNames()).length,continued);controls=await options();assert.equal(await controls.dialog.getByLabel('Paper layout',{exact:true}).inputValue(),'continue');await close(controls.dialog);
  // Independent fixture: optimize means readable side cards, not a tiny
  // containment-only fit. Keep old preserve/readable cases above unchanged.
  const adaptive=wirelessApLab(32,8);adaptive.name='Fictional adaptive wireless paper';

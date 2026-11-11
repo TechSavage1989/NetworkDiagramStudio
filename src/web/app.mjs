@@ -33,13 +33,13 @@ import {safeCoreMoveOffsets,drawingObjects,drawingBounds,moveDrawingItems,moveme
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
-import {globalTextCategories,cleanGlobalTextStyles} from './global-text-styles.mjs';
+import {globalTextCategories,cleanGlobalTextStyles,globalTextCategory,TEXT_STYLE_PT} from './global-text-styles.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
 import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
 import {quickPagePaperLayout} from './quick-page-paper.mjs';
-import {visiblePagePaper,cleanPageNumbers,pageNumber,cleanPageSetup,newPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles,paperDimensions} from './page-options.mjs';
+import {visiblePagePaper,cleanPageNumbers,pageNumber,cleanPageSetup,newPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles,paperDimensions,printGeometry} from './page-options.mjs';
 import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
 import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
@@ -162,19 +162,34 @@ function syncDrawingSelection(){
  else $('cable-point-info').textContent='Move near a cable to highlight it, then click to select.';
  viewport.syncCableInteraction();
 }
+// Text sizes are shown and entered as actual font sizes in points at full
+// drawing size (1 pt = 4/3 drawing units). A page fitted to paper presents
+// its text through a font scale; the printed size is reported beside it.
+// Imported artwork text is stored relative to its panel width.
+const textFontScale=item=>{const p=item?.presentation;return p?(p.fontScale||(item.normalized?1:p.scale)||1):1;};
+const presentedFontUnits=item=>item.type==='arttext'&&item.parent?item.size*item.parent.w:item.size;
+const storedFontSize=(item,units)=>item.type==='arttext'&&item.parent?units/item.parent.w:units;
+const drawingPt=item=>presentedFontUnits(item)/textFontScale(item)*.75;
+const printedPt=(item,page=pages[active])=>presentedFontUnits(item)*.75*(page?printGeometry(page).width/page.width:1);
+const roundPt=v=>Math.round(v*10)/10;
+function printedNote(item){const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'Prints at this size.':'This page is fitted to its paper, so it prints at '+roundPt(printed)+' pt.';}
+function fontUnitsFromField(input,item){
+ if(input.value===input.dataset.shown)return presentedFontUnits(item);
+ const pt=Number(input.value);if(!input.value||!Number.isFinite(pt)||pt<1||pt>360)throw Error('Font size must be between 1 and 360 pt.');
+ return pt/.75*textFontScale(item);
+}
 function syncQuickText(item){
  const bar=$('quick-text-tools');bar.hidden=!editDrawing||!['text','arttext'].includes(item?.type);if(bar.hidden)return;
- $('quick-text-size').value=Math.round((item.normalized?item.size*item.parent.w:item.size)*100)/100;
+ const size=$('quick-text-size');size.value=size.dataset.shown=String(roundPt(drawingPt(item)));size.title='Font size in points. '+printedNote(item);
  $('quick-text-bold').checked=!!item.bold;$('quick-text-align').value=item.align||'left';
  $('quick-text-color').value=/^#[0-9a-f]{6}$/i.test(item.color||'')?item.color:'#17364a';
  $('quick-text-angle').value=Math.round((item.angle||0)*180/Math.PI*100)/100;
 }
 function quickTextChange(rotationChanged=false){
  const item=drawingObjects(pages[active]).find(o=>drawingSelection.has(o.editKey));if(!['text','arttext'].includes(item?.type))return;
- const size=Number($('quick-text-size').value),degrees=Number($('quick-text-angle').value);
- if(!Number.isFinite(size)||size<1||size>500||!$('quick-text-size').value)throw Error('Text size must be between 1 and 500.');
+ const units=fontUnitsFromField($('quick-text-size'),item),degrees=Number($('quick-text-angle').value);
  if(!Number.isFinite(degrees)||!$('quick-text-angle').value||Math.abs(degrees)>360)throw Error('Rotation must be between -360 and 360 degrees.');
- const patch=unpresentPatch(item,{size:item.normalized?size/item.parent.w:size,bold:$('quick-text-bold').checked,align:$('quick-text-align').value,color:$('quick-text-color').value,...(rotationChanged?{angle:degrees*Math.PI/180,rotationMode:'fixed'}:{})});
+ const patch=unpresentPatch(item,{size:storedFontSize(item,units),bold:$('quick-text-bold').checked,align:$('quick-text-align').value,color:$('quick-text-color').value,...(rotationChanged?{angle:degrees*Math.PI/180,rotationMode:'fixed'}:{})});
  setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...patch}});
 }
 function setDeviceAngle(degrees){
@@ -648,28 +663,44 @@ function attachSettingsPreview(body,read,configure,{validate=false,selectedName=
 }
 function globalTextStyleOptions(){
  const body=modal('Global text styles');
- body.append(el('p','Set font size, color, weight and alignment for each category across this project. These are defaults for existing and future items. Individually edited text keeps its own settings; exported diagrams use the same styles.','hint'));
- const presets=cleanGlobalTextStyles(project.layout?.textStyles),controls=[];
+ body.append(el('p','Set an actual font size in points, plus color, weight and alignment, for each category across this project. Leave a size blank to keep the built-in sizes. Sizes are at full drawing size: a page fitted to smaller paper prints proportionally smaller, as shown under each size. Individually edited text keeps its own settings; exported diagrams use the same styles.','hint'));
+ const presets=cleanGlobalTextStyles(project.layout?.textStyles),controls=[],page=pages[active];
+ const span=values=>{const lo=roundPt(Math.min(...values)),hi=roundPt(Math.max(...values));return (lo===hi?lo:lo+'–'+hi)+' pt';};
+ const median=values=>[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
  const rows=el('div','','global-text-styles');body.append(rows);
  for(const [id,title] of globalTextCategories){
   const settings=presets[id]||{},section=el('details','','text-style-section'),heading=el('summary',title);rows.append(section);section.append(heading);
   const grid=el('div','','form-grid');section.append(grid);
-  const size=field(grid,'Font size (%)',Math.round((settings.scale||1)*100));size.type='number';size.min=40;size.max=250;size.step=5;
+  // Current sizes on the open page (or anywhere in the drawing set) show the
+  // built-in size and how much smaller a paper-fitted page prints.
+  const scan=list=>list.flatMap(p=>p.items.filter(i=>i.type==='text'&&!i.hidden&&i.size>0&&globalTextCategory(i)===id).map(i=>({drawn:drawingPt(i),printed:printedPt(i,p),page:p})));
+  const found=scan(page?[page]:[]),stats=found.length?found:scan(pages),where=stats[0]?.page?.displayName||stats[0]?.page?.name||'';
+  const legacy=!settings.size&&settings.scale?String(roundPt(stats.length?median(stats.map(v=>v.drawn)):10.5*settings.scale)):null;
+  const size=field(grid,'Font size (pt)',settings.size?String(settings.size):legacy||'');size.type='number';size.min=TEXT_STYLE_PT.min;size.max=TEXT_STYLE_PT.max;size.step='any';
+  size.placeholder=stats.length&&!settings.size&&!legacy?'Built-in ('+span(stats.map(v=>v.drawn))+')':'Built-in';
+  const note=el('p','','hint text-size-note');size.after(note);
+  const ratio=stats.length?median(stats.map(v=>v.printed/v.drawn)):1;
+  const describe=()=>{const value=Number(size.value);
+   if(!size.value.trim())note.textContent=stats.length&&!settings.size&&!legacy?'Prints at '+span(stats.map(v=>v.printed))+' on '+where+'.':'Uses the built-in sizes.';
+   else if(!Number.isFinite(value))note.textContent='';
+   else note.textContent=Math.abs(ratio-1)<.05?'Prints at this size'+(where?' on '+where:'')+'.':'Prints at about '+roundPt(value*ratio)+' pt on '+where+', which is fitted to its paper.';
+  };
+  size.addEventListener('input',describe);describe();
   const color=field(grid,'Text color (hex, blank for default)',settings.color||'');color.placeholder='Default';color.maxLength=7;
   const weight=field(grid,'Weight',settings.bold==null?'default':String(settings.bold),[['default','Use built-in weight'],['true','Bold'],['false','Regular']]);
   const align=field(grid,'Alignment',settings.align||'default',[['default','Use built-in alignment'],['left','Left'],['center','Center'],['right','Right']]);
-  const reset=button(section,'Reset '+title,()=>{size.value=100;color.value='';weight.value='default';align.value='default';});
+  const reset=button(section,'Reset '+title,()=>{size.value='';color.value='';weight.value='default';align.value='default';describe();});
   reset.classList.add('secondary');
-  controls.push({id,size,color,weight,align});
+  controls.push({id,title,size,legacy,scale:settings.scale,color,weight,align,describe});
  }
  const bar=actions(body);
  const collectStyles=()=>{
   const next={};
   for(const c of controls){
-   const percent=Number(c.size.value),color=c.color.value.trim();
-   if(!Number.isFinite(percent)||percent<40||percent>250)throw Error('Choose font sizes between 40% and 250% in '+globalTextCategories.find(([id])=>id===c.id)[1]+'.');
+   const raw=c.size.value.trim(),color=c.color.value.trim(),style={};
+   if(raw&&c.legacy&&raw===c.legacy)style.scale=c.scale;
+   else if(raw){const pt=Number(raw);if(!Number.isFinite(pt)||pt<TEXT_STYLE_PT.min||pt>TEXT_STYLE_PT.max)throw Error('Choose font sizes between '+TEXT_STYLE_PT.min+' and '+TEXT_STYLE_PT.max+' pt in '+c.title+', or leave the size blank for the built-in sizes.');style.size=pt;}
    if(color&&!/^#[0-9a-fA-F]{6}$/.test(color))throw Error('Enter a six-digit hex color (for example #16364A), or leave the color blank.');
-   const style={scale:percent/100};
    if(color)style.color=color;
    if(c.weight.value!=='default')style.bold=c.weight.value==='true';
    if(c.align.value!=='default')style.align=c.align.value;
@@ -683,7 +714,7 @@ function globalTextStyleOptions(){
   let prepared;try{prepared=validateDrawing();}catch(error){project.layout=previous;throw error;}
   perform('text-styles',prepared);close();say('Global text styles saved for all drawing pages. Undo restores the previous styles.');
  },'primary');
- button(bar,'Reset all styles',()=>{for(const c of controls){c.size.value=100;c.color.value='';c.weight.value='default';c.align.value='default';}});
+ button(bar,'Reset all styles',()=>{for(const c of controls){c.size.value='';c.color.value='';c.weight.value='default';c.align.value='default';c.describe();}});
  button(bar,'Cancel',close);
  attachSettingsPreview(body,collectStyles,(draft,styles)=>{draft.layout={...draft.layout,textStyles:styles};},{validate:true});
 }
@@ -723,7 +754,7 @@ $('active-page-paper').onchange=()=>{const preset=$('active-page-paper').value;t
 $('active-page-orientation').onchange=()=>{const orientation=$('active-page-orientation').value;task(()=>changeQuickPagePaper({orientation}));};
 function pageOptions(initialPreset){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(effectiveWirelessPaperProject(project).layout?.pageSetup),body=modal('Paper & print');
- body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. For wireless drawings, choose Optimize APs for paper below to use available side space and prioritize readable AP details, or preserve the complete existing arrangement.','hint'));
+ body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Paper layout below decides how the drawings use the sheet; Optimize for paper arranges and sizes every page to print as large and readable as the sheet allows.','hint'));
  body.append(el('p','The preview shows the visible drawing page, not a separate Print/PDF sheet. Print-paper settings can differ without changing this preview; check Print/PDF before printing. Use Preview page to inspect other affected sheets.','hint'));
  const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
  const groupRow=el('div'),pageRow=el('div');body.append(groupRow,pageRow);
@@ -736,13 +767,16 @@ function pageOptions(initialPreset){
  for(const input of [width,height]){input.type='number';input.min=148;input.max=1500;input.step=.1;}
  const lockRow=el('label','','check-option'),paperLock=el('input');paperLock.type='checkbox';paperLock.setAttribute('aria-label','Lock physical page size');lockRow.append(paperLock,document.createTextNode('Lock physical page size'));body.append(lockRow);
  const preview=el('p','','page-size-preview');body.append(preview);
- const visible=setup.visible,fitMode=field(body,'Content fit mode',visible.fitMode||'optimize',[['optimize','Auto-fit and optimize content'],['preserve','Preserve existing layout']]);
- const wirelessFit=field(body,'Wireless paper layout',visible.wirelessFit,[['adaptive','Optimize APs for paper (readable)'],['layout','Keep complete layout (proportional fit)'],['readable','Continue on sheets (AP details at least 8 pt)']]);
- wirelessFit.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});
+ // One Paper layout choice drives every page family: the content fit mode
+ // (network packing, port-map fitting, report sheets) and the wireless plan.
+ const visible=setup.visible,paperLayouts={optimize:['optimize','adaptive'],continue:['optimize','readable'],'keep-wireless':['optimize','layout'],preserve:['preserve','layout']};
+ const currentLayout=visible.fitMode==='preserve'?'preserve':visible.wirelessFit==='readable'?'continue':visible.wirelessFit==='layout'?'keep-wireless':'optimize';
+ const paperLayout=field(body,'Paper layout',currentLayout,[['optimize','Optimize for paper (everything as large and readable as the sheet allows)'],['continue','Optimize for paper, continuing wireless sheets to keep AP text at least 8 pt'],['keep-wireless','Optimize for paper, but keep wireless arrangements as drawn'],['preserve','Keep the existing layout (change only the page boundary)']]);
+ paperLayout.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});
  const wirelessStack=field(body,'Wireless stack view',visible.wirelessStack||'whole',[['whole','Whole stack (unless text would print over 30% smaller)'],['members','Only stack members with AP links (larger text)']]);
  const pageMargin=field(body,'Page margin (mm)',Number.isFinite(visible.marginMm)?visible.marginMm:'');pageMargin.type='number';pageMargin.min=0;pageMargin.max=50;pageMargin.step=.5;pageMargin.placeholder='Automatic';
- body.append(el('p','Optimize APs for paper keeps every access point on its switch\'s sheet and places the APs above, below and beside the stack, whichever prints largest at the actual paper size. Continue on sheets instead splits a switch\'s APs across sheets to keep AP details at 8 pt. Keep complete layout preserves the existing arrangement. Saved manual geometry is retained. Page margin is the blank border around every drawing page; leave it empty for the automatic margin.','hint'));
- body.append(el('p','Auto-fit uses the available page area, and network diagrams may choose better arrangements. Manually positioned devices and labels retain their saved positions. Preserve layout changes the page boundary without resizing or repacking content. A locked physical page keeps its dimensions and saved presentation scale; you can still move and resize content beyond its edges. Off-page content stays editable, but print/PDF and page-sized exports may clip it. Choosing a paper size does not enable the lock.','hint'));
+ body.append(el('p','Optimize for paper uses the whole sheet on every page: network pages choose the arrangement that suits the sheet, port maps grow their jacks to fill it, and every access point stays on its switch\'s sheet with the APs placed above, below or beside the stack, wherever they print largest. Continuing wireless sheets instead splits a switch\'s APs across sheets to keep AP details at 8 pt. Keeping wireless arrangements fits them to the paper as drawn. Manually positioned devices and labels retain their saved positions. Page margin is the blank border around every drawing page; leave it empty for the automatic margin.','hint'));
+ body.append(el('p','Keep the existing layout changes the page boundary without resizing or repacking content. A locked physical page keeps its dimensions and saved presentation scale; you can still move and resize content beyond its edges. Off-page content stays editable, but print/PDF and page-sized exports may clip it. Choosing a paper size does not enable the lock.','hint'));
  let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';
  const lookup=()=>selectedScope==='all'?visible.default:selectedScope==='group'?visible.groups[selectedGroup]:visible.pages[selectedPage];
  function store(){
@@ -756,7 +790,7 @@ function pageOptions(initialPreset){
   paperLock.disabled=inherited||preset.value==='dynamic';custom.hidden=preset.value!=='custom';orientation.disabled=inherited||preset.value==='dynamic';
   const paper=inherited?(selectedScope==='page'?visible.groups[familyOf(pages[Number(page.value)])]||visible.default:visible.default):cleanPaper({preset:preset.value,locked:paperLock.checked,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
   const shape=paperDimensions(paper);
-  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm '+(paperLock.checked?'locked size':'proportions')+' ('+paper.orientation+'). The Wireless paper layout choice below controls automatic AP arrangement and readable continuation.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
+  preview.textContent=shape?'Visible page: '+shape.widthMm.toFixed(1)+' x '+shape.heightMm.toFixed(1)+' mm '+(paperLock.checked?'locked size':'proportions')+' ('+paper.orientation+'). The Paper layout choice below controls how the drawings use it.':'Dynamic / Fit all: keep the visible page tightly fitted around the complete drawing.';
  }
  function load(){
   groupRow.hidden=selectedScope!=='group';pageRow.hidden=selectedScope!=='page';
@@ -797,7 +831,7 @@ function pageOptions(initialPreset){
   if(pageMargin.value!==''&&(!Number.isFinite(+pageMargin.value)||+pageMargin.value<0||+pageMargin.value>50))throw Error('Enter a page margin from 0 to 50 mm, or leave it empty for automatic.');
   if(pageMargin.value==='')delete visible.marginMm;else visible.marginMm=+pageMargin.value;
   if(wirelessStack.value==='members')visible.wirelessStack='members';else delete visible.wirelessStack;
-  store();visible.fitMode=fitMode.value;visible.wirelessFit=wirelessFit.value;visible.lockFrames={};visible.editFrames={};
+  store();[visible.fitMode,visible.wirelessFit]=paperLayouts[paperLayout.value];visible.lockFrames={};visible.editFrames={};
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   return {...project.layout,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
  };
@@ -1319,7 +1353,7 @@ function editDrawingObject(key){
  const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);const inputs={};
  const property=(where,name,value,opts)=>{if(!hasPicker)return field(where,name,value,opts);const cell=el('div','','compact-field');where.append(cell);return field(cell,name,value,opts);};
  for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
- if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,item.type==='arttext'?'Font size (% of panel width)':'Font size',item.type==='arttext'?item.size*100:item.size);inputs.size.type='number';inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
+ if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,'Font size (pt)',String(roundPt(drawingPt(item))));inputs.size.dataset.shown=inputs.size.value;inputs.size.type='number';inputs.size.min=1;inputs.size.max=360;inputs.size.step='any';inputs.size.title=printedNote(item);inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
  const labelRotation=item.labelRole&&item.relatedCableKey?field(body,'Connection label rotation',project.layout?.drawingEdits?.[item.editKey]?.rotationMode==='fixed'?String(Math.round((project.layout.drawingEdits[item.editKey].angle||0)*180/Math.PI)):'auto',[['auto','Follow cable automatically'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]):null;
  const initialWeight=linkedSwatch?item.sampleWeight??item.h:item.weight||1;
@@ -1336,7 +1370,7 @@ function editDrawingObject(key){
  if(item.type==='path'){const bar=actions(body);button(bar,'Edit bend points',()=>editCablePoints(item));if(item.sourceLink)button(bar,'Connect endpoints',()=>connectSelectedCable(item));}
  const scaleObject=item.type!=='path'&&!linkedSwatch?field(body,'Scale this object (%)',100):null;if(scaleObject){scaleObject.type='number';scaleObject.min=10;scaleObject.max=400;}
  const bar=actions(body);button(bar,'Save object',()=>{
-  const change={};for(const [k,input] of Object.entries(inputs)){if(['w','h','size','weight'].includes(k)){const n=(k==='weight'?lineWidthValue(input):Number(input.value))/(normalized&&(['w','h'].includes(k)||item.type==='arttext'&&k==='size')?100:1);if(!Number.isFinite(n)||n<=0)throw Error('Use a valid positive size.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
+  const change={};for(const [k,input] of Object.entries(inputs)){if(['w','h','size','weight'].includes(k)){const n=k==='size'?storedFontSize(item,fontUnitsFromField(input,item)):(k==='weight'?lineWidthValue(input):Number(input.value))/(normalized&&['w','h'].includes(k)?100:1);if(!Number.isFinite(n)||n<=0)throw Error('Use a valid positive size.');change[k]=n;}else if(k==='commands'){try{change.commands=JSON.parse(input.value);}catch{throw Error('Vector commands must be a JSON array.');}}else if(k==='bold')change[k]=input.value==='true';else if(!['fill','stroke','color'].includes(k)||input.value!==item[k])change[k]=input.value;}
   if(labelRotation){change.rotationMode=labelRotation.value==='auto'?'auto':'fixed';if(change.rotationMode==='fixed')change.angle=Number(labelRotation.value)*Math.PI/180;}
   if(picker){change[linkedSwatch?'fill':'color']=picker.value;if(item.type==='path'||linkedSwatch)change.opacity=picker.opacity;}
   if(scaleObject){const factor=Number(scaleObject.value)/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Use an object scale from 10 to 400 percent.');for(const k of ['w','h','size'])if(Number.isFinite(change[k]))change[k]*=factor;if(item.type==='vector'&&Array.isArray(change.commands)){const bounds=drawingBounds(item),x=(bounds.x-item.parent.x)/item.parent.w,y=(bounds.y-item.parent.y)/item.parent.h;change.commands=change.commands.map(c=>c.length===3?[c[0],x+(c[1]-x)*factor,y+(c[2]-y)*factor]:c);}}
