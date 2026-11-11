@@ -47,7 +47,7 @@ try{
  await page.locator('#drawing-snap-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Snap options');await page.locator('#close').click();
  // Organize connections can put every parallel line on one even spacing.
  const beforeSpacing=await scene();await page.locator('#drawing-organize').click();await page.getByLabel('Compact device positions').uncheck();await page.getByLabel('Even line spacing').check();
- assert.equal(await page.getByLabel('Spacing between lines').isEnabled(),true);await page.getByLabel('Spacing between lines').fill('26');
+ assert.equal(await page.getByLabel('Spacing between lines',{exact:true}).isEnabled(),true);await page.getByLabel('Spacing between lines',{exact:true}).fill('26');
  await page.getByRole('button',{name:'Analyze connections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.organize-results').hidden,null,{timeout:60000});
  await page.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>/evenly spaced/i.test(document.querySelector('#feedback').textContent));result.spacing=await page.locator('#feedback').textContent();
  await page.locator('#drawing-undo').click();assert.equal(await scene(),beforeSpacing,'Undo restores the previous spacing in one step');await page.locator('#drawing-redo').click();

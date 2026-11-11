@@ -56,6 +56,14 @@ Tests:
 - New: core-port-numbers.test.mjs.
 - The full node suite passes (736).
 
+Editor layout (style.css screen layer, index.html):
+- The stage toolbar starts with the Edit drawing switch right after the page title, so it sits in the same place at every width; groups are quiet segmented clusters with visually hidden labels.
+- The app bar uses quiet buttons with Export… as the only filled one.
+- The edit bar is one flowing row of compact chips (#drawing-tools is display:contents), with icons for Undo/Redo, Snap settings… and the Place beside directions. At 1366 px it takes three short rows instead of four.
+- Device rows keep Up/Down/Delete as small icon buttons on the same line.
+- No IDs, texts or accessible names changed.
+- Three browser suites that CI does not run had gone stale and now pass again: wan-placement (selection handles share their object's key), core-arrangement (an exact label after the clear buttons arrived) and organize-connections (legend keys carry editor-only keyboard attributes). All 25 browser suites pass locally.
+
 # Preview.55: faster rebuilds and instant Undo/Redo
 
 Baseline: published preview.54. Owner report: the app is slow to load any change. Every speedup leaves output unchanged. Every page's SVG for eleven fictional projects hashes identically before and after: the two-stack site (dynamic, MAC, Letter, bundle jumps with a text style), the sample, the MDF lookalike, the modular chassis, two AP labs, parallel uplinks and tall captions.
