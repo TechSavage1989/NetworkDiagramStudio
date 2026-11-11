@@ -28,5 +28,22 @@ export function cachedDraftPages(cache,family,project,build){
  const groupingEdits=family==='ports'||family==='logical'?Object.keys(layout.drawingEdits||{}).filter(documentationGroupingEdit):[];
  const signature=JSON.stringify([input,groupingEdits]),previous=cache.get(family);
  if(previous?.signature===signature)return structuredClone(previous.pages);
- const pages=build();cache.set(family,{signature,pages:structuredClone(pages)});return pages;
+ // Undo, Redo and returning to an earlier setting reuse a recent build of
+ // this family instead of planning it again. The current entry stays at
+ // cache.get(family); a few earlier ones are kept within a size budget.
+ const older=recent(cache,family),index=older.findIndex(entry=>entry.signature===signature);
+ if(index>=0){const [entry]=older.splice(index,1);remember(older,previous);cache.set(family,entry);return structuredClone(entry.pages);}
+ const pages=build();remember(older,previous);cache.set(family,{signature,pages:structuredClone(pages)});return pages;
+}
+// Two earlier builds cover edit, Undo and Redo; projects with large embedded
+// artwork (long signatures) keep fewer.
+const histories=new WeakMap(),RECENT=2,RECENT_CHARS=24e6;
+function recent(cache,family){
+ // A cleared cache (new project or reload) starts a fresh history.
+ let history=histories.get(cache);if(!history||!cache.size&&history.size)histories.set(cache,history=new Map());
+ if(!history.has(family))history.set(family,[]);return history.get(family);
+}
+function remember(list,entry){
+ if(!entry)return;list.unshift(entry);
+ let chars=0;for(let i=0;i<list.length;i++){chars+=list[i].signature.length;if(i>=RECENT||chars>RECENT_CHARS){list.length=i;break;}}
 }

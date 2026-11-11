@@ -188,8 +188,24 @@ function buildFaceplate(device,options={}){
 // every probe, measurement and page. Keep a bounded memo and hand out copies,
 // because callers attach page-specific edit data to the result.
 const faceplateMemo=new Map();
+// A tree of plain objects and dense arrays with no shared references copies
+// exactly by walking it, several times faster than structuredClone. Each memo
+// entry is checked once; anything else keeps structuredClone.
+function plainTree(value,seen=new Set()){
+ if(value===null||typeof value!=='object')return typeof value!=='function'&&typeof value!=='symbol';
+ if(seen.has(value))return false;seen.add(value);
+ if(Array.isArray(value)){for(let i=0;i<value.length;i++)if(!(i in value)||!plainTree(value[i],seen))return false;return true;}
+ // Null-prototype maps copy to ordinary objects, exactly as structuredClone does.
+ const proto=Object.getPrototypeOf(value);if(proto!==Object.prototype&&proto!==null)return false;
+ for(const key in value)if(!plainTree(value[key],seen))return false;return true;
+}
+function plainCopy(value){
+ if(value===null||typeof value!=='object')return value;
+ if(Array.isArray(value)){const out=new Array(value.length);for(let i=0;i<value.length;i++)out[i]=plainCopy(value[i]);return out;}
+ const out={};for(const key in value)out[key]=plainCopy(value[key]);return out;
+}
 export function deviceFaceplate(device,options={}){
  let key;try{key=JSON.stringify([device,options]);}catch{return consistentSockets(buildFaceplate(device,options));}
- if(!faceplateMemo.has(key)){faceplateMemo.set(key,consistentSockets(buildFaceplate(device,options)));if(faceplateMemo.size>400)faceplateMemo.delete(faceplateMemo.keys().next().value);}
- const value=faceplateMemo.get(key);return value&&structuredClone(value);
+ if(!faceplateMemo.has(key)){const value=consistentSockets(buildFaceplate(device,options));faceplateMemo.set(key,{value,plain:plainTree(value)});if(faceplateMemo.size>400)faceplateMemo.delete(faceplateMemo.keys().next().value);}
+ const {value,plain}=faceplateMemo.get(key);return value&&(plain?plainCopy(value):structuredClone(value));
 }

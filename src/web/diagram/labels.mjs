@@ -1,7 +1,11 @@
 import {devicePoint,deviceBounds} from './device-geometry.mjs';
 // Deterministic placement against actual text boxes and every cable segment.
+// Per-character advance (in ems) for ASCII, matching the original class order:
+// wide letters, then narrow marks, capitals and digits; everything else .56.
+const advance=new Float64Array(128).fill(.56);
+for(const [chars,value] of [['0123456789',.57],['ABCDEFGHIJKLMNOPQRSTUVWXYZ',.72],["ilI1.,:;!|' ",.29],['MW@%#',.94]])for(const c of chars)advance[c.charCodeAt(0)]=value;
 export function textWidth(value,size=12,bold=false){
- let w=0;for(const c of String(value)){w+=/[MW@%#]/.test(c)?.94:/[ilI1.,:;!|' ]/.test(c)?.29:/[A-Z]/.test(c)?.72:/[0-9]/.test(c)?.57:.56;}return Math.ceil(w*size*(bold?1.06:1)+6);
+ let w=0;for(const c of String(value)){const code=c.length===1?c.charCodeAt(0):128;w+=code<128?advance[code]:.56;}return Math.ceil(w*size*(bold?1.06:1)+6);
 }
 export function textFootprint(box){
  if(!box.angle)return box;

@@ -30,7 +30,7 @@ const clean=points=>collapseSpikes(simplifyRoute(points));
 export const ROUTE_STYLE=Object.freeze({clearance:24,gap:6,pitch:18,rowPitch:20,titleReserve:34,detailReserve:26,modulePitch:10});
 const separation=(a,b)=>(a+b)/2+ROUTE_STYLE.gap;
 function segments(points){return points.slice(1).map((b,i)=>({a:points[i],b,h:points[i][1]===b[1]})).filter(s=>s.a[0]!==s.b[0]||s.a[1]!==s.b[1]);}
-import {crossesText} from './labels.mjs';
+import {crossesText,textFootprint} from './labels.mjs';
 function crossesPanel(route,node){
  // An empty bay is open faceplate: the host's own leads may pass through it.
  // Once a cable has left its socket, its rows and rail stay outside a modular
@@ -57,7 +57,12 @@ function crossesPanel(route,node){
 const routeGeometry=new WeakMap();
 function geometry(route){
  let value=routeGeometry.get(route);
- if(!value||value.points!==route.points){const lines=segments(route.points);value={points:route.points,lines:lines.map(line=>({...line,route,weight:route.weight||4})),length:lines.reduce((n,s)=>n+Math.abs(s.b[0]-s.a[0])+Math.abs(s.b[1]-s.a[1]),0),bends:Math.max(0,route.points.length-2)};routeGeometry.set(route,value);}
+ if(!value||value.points!==route.points){
+  const lines=segments(route.points),xs=route.points.map(p=>p[0]),ys=route.points.map(p=>p[1]);
+  // Line and route extents let scoring skip far-away segments and captions.
+  value={points:route.points,lines:lines.map(line=>({...line,route,weight:route.weight||4,x0:Math.min(line.a[0],line.b[0]),x1:Math.max(line.a[0],line.b[0]),y0:Math.min(line.a[1],line.b[1]),y1:Math.max(line.a[1],line.b[1])})),length:lines.reduce((n,s)=>n+Math.abs(s.b[0]-s.a[0])+Math.abs(s.b[1]-s.a[1]),0),bends:Math.max(0,route.points.length-2),box:{x0:Math.min(...xs),x1:Math.max(...xs),y0:Math.min(...ys),y1:Math.max(...ys)}};
+  routeGeometry.set(route,value);
+ }
  return value;
 }
 function exteriorLane(line,nodes){
@@ -79,16 +84,24 @@ function hugs(s,r,nodes){
  return count;
 }
 function routeScore(r,nodes,obstacles,seen,minX,maxX,railGap=6){
- const {lines,length,bends}=geometry(r);let blocked=r.points.some(([x])=>x<minX||x>maxX)?1:0,shared=0,crossed=0,tight=0;
+ const {lines,length,bends,box:rb}=geometry(r);let blocked=r.points.some(([x])=>x<minX||x>maxX)?1:0,shared=0,crossed=0,tight=0;
  for(const node of nodes.values())if(crossesPanel(r,node))blocked++;
+ // Exact crossesText test, with each caption box padded once and only the
+ // boxes this cable's extent can reach checked against its segments.
+ const weight=r.weight||4,pad=weight/2,near=[],others=[];
+ for(const box of obstacles){const f=textFootprint(box),x0=f.x-pad,y0=f.y-pad,x1=x0+(f.w+pad*2),y1=y0+(f.h+pad*2);if(rb.x1>x0&&rb.x0<x1&&rb.y1>y0&&rb.y0<y1)near.push(x0,y0,x1,y1);}
+ // Only segments within the largest counted distance of this cable's extent
+ // can be shared, tight or crossing.
+ for(const t of seen){if(t.route===r)continue;const reach=Math.max(separation(weight,t.weight),railGap);if(t.x0-reach>rb.x1||t.x1+reach<rb.x0||t.y0-reach>rb.y1||t.y1+reach<rb.y0)continue;others.push(t);}
  for(const s of lines){
   const {a,b,h}=s;
-  for(const box of obstacles)if(crossesText([a,b],box,(r.weight||4)/2))blocked++;
+  for(let i=0;i<near.length;i+=4){const x0=near[i],y0=near[i+1],x1=near[i+2],y1=near[i+3];if(h?a[1]>y0&&a[1]<y1&&Math.max(a[0],b[0])>x0&&Math.min(a[0],b[0])<x1:a[0]>x0&&a[0]<x1&&Math.max(a[1],b[1])>y0&&Math.min(a[1],b[1])<y1)blocked++;}
   tight+=hugs(s,r,nodes);
-  for(const t of seen){
-   if(t.route===r)continue;
+  for(const t of others){
    if(h===t.h){
-    const distance=Math.abs(a[h?1:0]-t.a[h?1:0]),parallel=overlap(a[h?0:1],b[h?0:1],t.a[h?0:1],t.b[h?0:1])>.01;
+    // Farther apart than both the visible gap and the rail gap: neither shared nor tight.
+    const distance=Math.abs(a[h?1:0]-t.a[h?1:0]);if(distance>=separation(r.weight||4,t.weight)-.001&&distance>=railGap-.001)continue;
+    const parallel=overlap(a[h?0:1],b[h?0:1],t.a[h?0:1],t.b[h?0:1])>.01;
     const clearance=Math.max(((r.weight||4)+t.weight)/2+.25,!h&&exteriorLane(s,nodes)&&exteriorLane(t,nodes)?railGap:0);
     if(parallel&&distance<clearance-.001)shared++;
     else if(parallel&&distance<separation(r.weight||4,t.weight)-.001)tight++;
@@ -435,7 +448,24 @@ function layout1d(group,pitch,minPitch){
 }
 function neatChannels(routes,ends,nodes,obstacles,{minX,maxX,railPitch,uniform=0,directionNeutralLevels=false}){
  // Only the moved cables need rescoring against the rest of the page.
- const local=list=>{const total=[0,0,0];for(const r of list){const others=[];for(const o of routes)if(o!==r)others.push(...geometry(o).lines);const v=routeScore(r,nodes,obstacles,others,minX,maxX,railPitch);total[0]+=v[0];total[1]+=v[1];total[2]+=v[3];}return total;};
+ // A route's score depends only on the current points of every route (each
+ // change assigns a new points array, and restore puts the old ones back), so
+ // repeated checks of an unchanged page reuse their earlier result.
+ let state=null,stateLines=null;const scores=new Map();
+ const current=()=>{
+  if(!state||routes.some((r,i)=>state[i]!==r.points)){state=routes.map(r=>r.points);stateLines=routes.flatMap(o=>geometry(o).lines);}
+  return state;
+ };
+ const local=list=>{
+  const total=[0,0,0],now=current();
+  for(const r of list){
+   let hit=scores.get(r);
+   if(!hit||hit.state!==now&&hit.state.some((points,i)=>points!==now[i])){hit={state:now,v:routeScore(r,nodes,obstacles,stateLines,minX,maxX,railPitch)};scores.set(r,hit);}
+   else hit.state=now;
+   total[0]+=hit.v[0];total[1]+=hit.v[1];total[2]+=hit.v[3];
+  }
+  return total;
+ };
  const snapshot=list=>list.map(r=>[r,r.points,r.rail,r.a,r.b,r.v,r.x]);
  const restore=saved=>{for(const [r,points,rail,a,b,v,x] of saved){r.points=points;r.rail=rail;r.a=a;r.b=b;r.v=v;r.x=x;}};
  // Apply a set of new coordinates; keep it only when it adds no obstruction,

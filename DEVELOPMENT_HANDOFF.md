@@ -1,3 +1,39 @@
+# Preview.55: faster rebuilds and instant Undo/Redo
+
+Baseline: published preview.54. Owner report: the app is slow to load any change. Every speedup leaves output unchanged. Every page's SVG for eleven fictional projects hashes identically before and after: the two-stack site (dynamic, MAC, Letter, bundle jumps with a text style), the sample, the MDF lookalike, the modular chassis, two AP labs, parallel uplinks and tall captions.
+
+- **Route scoring (routing.mjs routeScore):**
+  - Line and route extents are cached in geometry().
+  - Each call pads caption boxes once and keeps only the boxes the route's extent can reach. The test is crossesText's exact strict comparison, computed without per-segment arrays.
+  - Other cables' segments farther than the largest counted distance (max(separation, railGap)) from the route's extent are skipped before the pairwise loop.
+  - Parallel pairs farther than both the visible gap and the rail gap skip the shared/tight checks.
+  - All counts are unchanged. On the two-stack text-style rebuild, this removes about 30M segment-pair and 23M caption checks.
+- **neatChannels local():** a route's score is reused while every route's points array is unchanged. Each change assigns a new array, and restore puts the old ones back.
+- **Faceplate memo (faceplate.mjs):**
+  - Each memo entry is checked once for a plain tree: plain or null-prototype objects, dense arrays, no shared references.
+  - Plain entries are copied by walking the tree, about 5.5x faster than structuredClone and identical. A null-prototype `ports` map becomes an ordinary object, as structuredClone does.
+  - Anything else keeps structuredClone.
+- **textWidth (labels.mjs):** an ASCII advance table replaces four regex tests per character. Fuzzed and tested against the original classes, astral characters included.
+- **Page cache (page-cache.mjs):**
+  - Each family keeps two earlier builds (a 24M-character signature budget) in a WeakMap beside the cache. cache.get(family) still holds the current entry.
+  - Undo, Redo and returning to an earlier setting restore a remembered build: two-stack text style edit 1.8 s, then Undo or Redo in 0.16 s.
+  - A cleared cache (new project) starts a fresh history.
+
+Timings on the fictional two-stack site (this container):
+
+| Action | Before | After |
+|---|---|---|
+| Cold open | 3.9 s | 1.9 s |
+| Letter plan | 8.1 s | 3.3 s |
+| MDF rename | 0.62 s | 0.42 s |
+| AP rename, dynamic paper | 2.9 s | 1.6 s |
+| AP rename, Letter | 5.5 s | 2.1 s |
+| Text style or line jumps | 3.7–4.0 s | 1.5–1.9 s |
+
+Built editor in Chromium, same site: open 3.7 s → 1.8 s, Letter 5.5 s → 2.1 s, Undo/Redo 0.6 s → 0.2 s.
+
+Tests: tests/rebuild-speed.test.mjs covers Undo/Redo reuse matching a cold build, independent faceplate copies and table text widths.
+
 # Preview.54: organized editor controls
 
 Baseline: published preview.53. Owner request: clean up the UI, remove redundancies, and make it organized, intuitive and sensible, with clearer buttons and names.
