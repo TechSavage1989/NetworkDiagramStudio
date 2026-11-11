@@ -47,16 +47,16 @@ test('booklet jacks carry native fills, tagged dots, voice diamonds and LAG outl
 
 test('port inventory tables follow the switchport builder and keep every record',()=>{
  const site=lab();site.layout={portMap:{presentation:'separate'}};const pages=maps(site),inventory=pages.filter(page=>page.portMap.bookletRole==='inventory');
- assert.deepEqual(inventory.map(page=>page.portMap.device),['access','stack']);
+ assert.deepEqual([...new Set(inventory.flatMap(page=>page.portMap.devices))],['access','stack'],'tables follow one another, sharing a sheet when they fit');
  for(const page of inventory){
   const text=page.items.filter(i=>i.type==='text').map(i=>i.value);
   for(const heading of ['Description','Mode','Native','Tagged VLANs','LAG','Voice','Link','Connected to'])assert.ok(text.includes(heading),heading);
   assert.ok(text.some(value=>value.endsWith('/  Port inventory')));
   const cells=page.items.filter(i=>i.tableContent&&i.type==='text');for(const a of cells)for(const b of cells)if(a!==b)assert.ok(!intersects(a,b),a.value+' / '+b.value);
  }
- const access=inventory[0],ports=access.items.filter(i=>i.portTableRole==='interface').map(i=>i.value);
+ const access=inventory[0],own=i=>String(i.editKey).includes('Port Inventory|access|'),ports=access.items.filter(i=>i.portTableRole==='interface'&&own(i)).map(i=>i.value);
  assert.deepEqual(ports,['1-20 (20)','21-24 (4)','25','26','27-28 (2)'],'Consecutive identical ports share a row with their count');
- const details=access.items.filter(i=>i.portTableRole==='detail').map(i=>i.value);
+ const details=access.items.filter(i=>i.portTableRole==='detail'&&own(i)).map(i=>i.value);
  for(const value of ['Core uplink','Tagged/mixed','Untagged','LAB-STACK / 1/49','1 up, 1 down','7','20'])assert.ok(details.some(v=>v.includes(value)),value);
  assert.equal(new Set(inventory.flatMap(page=>page.portMap.portRecords.map(r=>r.device+'/'+r.name))).size,33);
 });

@@ -59,7 +59,7 @@ test('large deliberate saved transforms survive locks and reopen without automat
 test('near-fit inventory pages reclaim outside whitespace without lowering readable text',async()=>{
  const {sampleSite}=await import('../src/web/sample.mjs'),{buildPages}=await import('../src/web/diagram/index.mjs');
  const p=sampleSite();p.layout={pageSetup:{visible:{default:{preset:'letter'}}}};
- const pages=buildPages(p).filter(page=>page.title==='Port Inventory');assert.equal(pages.length,2);
+ const pages=buildPages(p).filter(page=>page.title==='Port Inventory');assert.equal(pages.length,1,'both switch tables share one sheet');
  for(const page of pages){assert.equal(page.pageOverflow,false);assert.ok(page.paperReadability.actualPt>=8-1e-6);}
  p.layout.pageSetup.visible.editFrames=Object.fromEntries(pages.map(page=>[page.name,page.presentationFrame]));
  for(const page of buildPages(JSON.parse(JSON.stringify(p))).filter(page=>page.title==='Port Inventory')){assert.equal(page.pageOverflow,false);assert.ok(page.paperReadability.actualPt>=8-1e-6);}

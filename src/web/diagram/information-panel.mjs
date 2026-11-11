@@ -23,8 +23,13 @@ export function informationPanel(page,project){
   rows=rows.map((row,index)=>{const rowKey=typeof row==='string'?index:row.key,patch=project.layout?.drawingEdits?.[scope+'|info-panel|'+key+'|'+rowKey];return {key:rowKey,text:typeof patch?.value==='string'?patch.value:typeof row==='string'?row:row.text};}).filter(row=>row.text.trim());
   if(!rows.length)return;
   label(panel,38,y,options.width,25*options.textScale*config.textScale,title,16*options.textScale*config.textScale,true,C.teal);panel.at(-1).editKey=scope+'|info-panel|'+key+'|heading';panel.at(-1)._textFactor=config.textScale;y+=34*options.textScale*config.textScale;
-  rows.forEach((row,index)=>{const text=typeof row==='string'?row:row.text,rowKey=typeof row==='string'?index:row.key;const size=12*options.textScale*config.textScale,lines=wrapPortText(text,options.width,size),height=lines.length*size*1.3;
-   label(panel,38,y,options.width,height,text,size,false,C.ink);panel.at(-1).editKey=scope+'|info-panel|'+key+'|'+rowKey;panel.at(-1)._textFactor=config.textScale;y+=height+8*options.textScale;
+  rows.forEach((row,index)=>{const text=typeof row==='string'?row:row.text,rowKey=typeof row==='string'?index:row.key;const size=12*options.textScale*config.textScale,base=scope+'|info-panel|'+key+'|'+rowKey;
+   // A multi-line row (notes, custom text) draws one item per line so a
+   // tall panel can flow into columns; editing any line saves the whole row.
+   const parts=text.split(/\r?\n/).filter(part=>part.trim()),split=parts.length>1;
+   (split?parts:[text]).forEach((part,line)=>{const lines=wrapPortText(part,options.width,size),height=lines.length*size*1.3;
+    label(panel,38,y,options.width,height,part,size,false,C.ink);Object.assign(panel.at(-1),{editKey:base+(line?'~'+line:''),_textFactor:config.textScale},split?{_rowText:{key:base,lines:parts,index:line}}:{});y+=height+(split&&line<parts.length-1?2:8)*options.textScale;
+   });
   });y+=18*options.textScale;
  };
  const auto=automaticPanelContent(project,devices,options),labels=new Map(panelFields),custom=new Map(options.customSections.map(item=>[item.id,item.title]));
@@ -64,7 +69,7 @@ export function informationPanel(page,project){
  const top=options.position==='top'?-(height+40)*factor:options.position==='free'?options.y:147;
  const tx=x-38*factor,ty=top-147*factor;
  for(const item of panel){
-  const patch=project.layout?.drawingEdits?.[item.editKey];if(patch&&item.editKey.includes('|info-panel|'))Object.assign(item,patch);
+  const patch=project.layout?.drawingEdits?.[item.editKey];if(patch&&item.editKey.includes('|info-panel|')){const {value,...rest}=patch;Object.assign(item,item._rowText?rest:patch);}
   item.panelGroup=true;item._panelTransform={scale:factor,x:tx,y:ty};
   item.x=item.x*factor+tx;item.y=item.y*factor+ty;item.w*=factor;item.h*=factor;
   if(item.type==='text')item.size*=factor;

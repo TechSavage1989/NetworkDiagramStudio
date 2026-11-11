@@ -40,7 +40,7 @@ import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
 import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
 import {quickPagePaperLayout} from './quick-page-paper.mjs';
-import {visiblePagePaper,cleanPageNumbers,pageNumber,cleanPageSetup,newPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles,paperDimensions,printGeometry} from './page-options.mjs';
+import {visiblePagePaper,cleanPageNumbers,pageNumber,cleanPageSetup,newPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles,paperDimensions,printGeometry,DEFAULT_PAGE_MARGIN_MM} from './page-options.mjs';
 import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
 import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
@@ -48,6 +48,7 @@ import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
 import {relatedConnectionItems,nearestOnCable,positionOnCable,describeCableEnds,labelPositionRelativeToCable} from './connection-selection.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog,findDeviceIdentity} from './imports/index.mjs';
+import {portMapTarget,portMapDetailsDraft,applyPortMapDetails,PORT_MAP_DETAIL_LIMITS} from './port-map-details.mjs';
 import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
 import {buildPages,exportVisio,exportStencil} from './diagram/index.mjs';
@@ -357,6 +358,8 @@ function legendFields(body,type){
 }
 function editableText(item){return item.legendFullText!=null&&project.layout?.drawingEdits?.[item.editKey]?.value==null?item.legendFullText:item.value;}
 function saveTextEdit(item,value,color){
+ // One line of a multi-line panel row saves the complete row text.
+ if(item._rowText){const lines=[...item._rowText.lines];lines[item._rowText.index]=value;setDrawingEdits({...project.layout?.drawingEdits,[item._rowText.key]:{...project.layout?.drawingEdits?.[item._rowText.key],value:lines.join('\n'),...(item._rowText.index===0&&color?{color}:{})}});revealSelectedText();return;}
  const patch={...project.layout?.drawingEdits?.[item.editKey],color};if(!item.legendEntry)patch.value=value;
  if(item.legendEntry&&item.linkType&&value!==editableText(item)){delete patch.value;setLinkStyle(item.linkType,{[item.legendDescription?'description':'title']:value},{[item.editKey]:patch});}
  else setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:patch});
@@ -366,6 +369,9 @@ function saveTextEdit(item,value,color){
 }
 function editOnDoubleClick(key){
  const item=pages[active]&&drawingObjects(pages[active]).find(i=>i.editKey===key);if(!item)return;
+ // A device on a port map page opens its port map details.
+ const mapTarget=portMapTarget(pages[active],item);
+ if(mapTarget&&project.devices.some(device=>device.id===mapTarget.device)){if(!commitInlineEdit())return;task(()=>editPortMapDetails({...mapTarget,key}));return;}
  if(!commitInlineEdit())return;viewport.preserve();editDrawing=true;$('edit-drawing').setAttribute('aria-pressed','true');$('canvas').classList.add('editing');selectDrawingItem(key);
  if(['text','arttext'].includes(item.type)){
   const box=drawingBounds(item),svg=$('canvas').querySelector('svg'),size=item.type==='arttext'&&item.normalized?item.size*item.parent.w:item.size;
@@ -631,9 +637,10 @@ function portMapOptions(){
  const style=field(body,'Port map style',current.mapStyle==='faceplate'?'faceplate':'switchport',[['switchport','Switchport builder sheet in device colors - fits Letter'],['faceplate','Realistic device faceplate artwork']]);
  const format=field(body,'Report layout',current.presentation||(current.repeatFaceplate?'combined':'auto'),[['auto','Automatic - combine where readable'],['separate','Separate port maps and inventory'],['combined','Combined map and inventory']]);
  const density=field(body,'Port table layout',current.density||'compact',[['compact','Compact - fewer pages'],['expanded','Expanded - more space per record']]),repeat=field(body,'Faceplate on continued pages',current.repeatFaceplate?'repeat':'first',[['first','First page only'],['repeat','Repeat on every page']]);
- const showRepeat=()=>{repeat.hidden=repeat.previousElementSibling.hidden=format.value!=='combined';};format.onchange=showRepeat;showRepeat();
+ const stencils=field(body,'Devices with an imported stencil',current.stencilSheets===false?'builder':'stencil',[['stencil','Port map on the device\'s own stencil artwork'],['builder','Switchport builder sheet like other devices']]);
+ const showRepeat=()=>{repeat.hidden=repeat.previousElementSibling.hidden=format.value!=='combined';stencils.hidden=stencils.previousElementSibling.hidden=style.value==='faceplate';};format.onchange=showRepeat;style.onchange=showRepeat;showRepeat();
  body.append(el('p','Compact grouped tables combine switches in an assignment matrix. Expanded tables show more space per record. Assignment details include a peer, description, role, VLAN configuration, LAG or IP address. A port number, capacity or up/down state alone does not count. The faceplate retains every physical port.','hint'));
- button(actions(body),'Apply port map options',()=>{project.layout.portMap={...(style.value==='faceplate'?{mapStyle:'faceplate'}:{}),presentation:format.value,density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
+ button(actions(body),'Apply port map options',()=>{project.layout.portMap={...(style.value==='faceplate'?{mapStyle:'faceplate'}:{}),...(stencils.value==='builder'?{stencilSheets:false}:{}),presentation:format.value,density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
 }
 $('port-map-options').onclick=()=>task(portMapOptions);
 function linkCaptionFields(body,type,{collapsible=false}={}){
@@ -777,7 +784,7 @@ function pageOptions(initialPreset){
  const paperLayout=field(body,'Paper layout',currentLayout,[['optimize','Optimize for paper (everything as large and readable as the sheet allows)'],['continue','Optimize for paper, continuing wireless sheets to keep AP text at least 8 pt'],['keep-wireless','Optimize for paper, but keep wireless arrangements as drawn'],['preserve','Keep the existing layout (change only the page boundary)']]);
  paperLayout.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});
  const wirelessStack=field(body,'Wireless stack view',visible.wirelessStack||'whole',[['whole','Whole stack (unless text would print over 30% smaller)'],['members','Only stack members with AP links (larger text)']]);
- const pageMargin=field(body,'Page margin (mm)',Number.isFinite(visible.marginMm)?visible.marginMm:'');pageMargin.type='number';pageMargin.min=0;pageMargin.max=50;pageMargin.step=.5;pageMargin.placeholder='Automatic';
+ const pageMargin=field(body,'Page margin (mm)',Number.isFinite(visible.marginMm)?visible.marginMm:'');pageMargin.type='number';pageMargin.min=0;pageMargin.max=50;pageMargin.step=.5;pageMargin.placeholder=DEFAULT_PAGE_MARGIN_MM+' (default)';
  body.append(el('p','Optimize for paper uses the whole sheet on every page: network pages choose the arrangement that suits the sheet, port maps grow their jacks to fill it, and every access point stays on its switch\'s sheet with the APs placed above, below or beside the stack, wherever they print largest. Continuing wireless sheets instead splits a switch\'s APs across sheets to keep AP details at 8 pt. Keeping wireless arrangements fits them to the paper as drawn. Manually positioned devices and labels retain their saved positions. Page margin is the blank border around every drawing page; leave it empty for the automatic margin.','hint'));
  body.append(el('p','Keep the existing layout changes the page boundary without resizing or repacking content. A locked physical page keeps its dimensions and saved presentation scale; you can still move and resize content beyond its edges. Off-page content stays editable, but print/PDF and page-sized exports may clip it. Choosing a paper size does not enable the lock.','hint'));
  let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';
@@ -1144,12 +1151,44 @@ function devicePortFields(parent,device){
 function configureDeviceStack(device){
  editDeviceStack(project,device,{el,field,button,actions,modal,close,save:layout=>{const before=project.layout;try{project.layout=layout;const prepared=validateDrawing();perform('devices',prepared);say('Device stack saved. Select Undo to restore.');}catch(error){project.layout=before;throw error;}}});
 }
+// Model and SKU suggestions from the hardware database (built-in faceplates,
+// the Switchport builder catalog and endpoint families).
+function hardwareModelList(){
+ const models=el('datalist');models.id='known-hardware-models';const suggestions=new Map([...hardwareCatalog,...switchportCatalog.models.map(entry=>({sku:entry.sku,model:entry.name,vendor:entry.os})),...switchportCatalog.additionalModels.map(entry=>({sku:entry.sku,model:entry.name,vendor:entry.os})),...switchportCatalog.modules.map(entry=>({sku:entry.sku,model:entry.name,vendor:''})),...endpointHardwareCatalog.flatMap(entry=>entry.aliases.map(model=>({model,vendor:entry.vendor})))].map(entry=>[entry.sku||entry.model,entry]));for(const p of suggestions.values()){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}
+ return models;
+}
+// Double-clicking a device on a port map page edits the details its port map
+// shows: the Switchport builder's identity fields for that switch, stack
+// member or module, with the device name, model, IP and MAC. One Undo step.
+function editPortMapDetails(target){
+ const current=project.devices.find(device=>device.id===target.device);if(!current)throw Error('This port map no longer matches a device in the project.');
+ const draft=portMapDetailsDraft(current,target),identity=draft.identity,body=modal('Port map details');body.classList.add('port-map-details');
+ body.append(el('p',current.name+' / '+identity.label+'. These details appear in the port map headings, inventory tables and exports.','hint'));
+ const models=hardwareModelList();body.append(models);
+ const grid=(title)=>{const box=el('fieldset','','port-map-detail-group');box.append(el('legend',title));const fields=el('div','','compact-fields');box.append(fields);body.append(box);return (label,value,opts)=>{const cell=el('div','','compact-field'+(opts==='multiline'?' wide':''));fields.append(cell);return field(cell,label,value,opts);};};
+ const device=grid('Device');
+ const name=device('Device name',draft.name),model=device('Model',draft.model),ip=device('Management IP',draft.ip),mac=device('MAC address(es)',draft.mac);model.setAttribute('list',models.id);
+ const part=grid(identity.label);
+ const hardware=identity.kind==='device'?null:part(identity.kind==='module'?'Module model':'Member model',draft.hardwareModel);hardware?.setAttribute('list',models.id);
+ const displayName=part(identity.kind==='module'?'Module name':'Display name',draft.displayName),serial=part('Serial number',draft.serialNumber),asset=part('Asset tag',draft.assetTag),notes=part('Notes',draft.notes,'multiline');
+ displayName.maxLength=PORT_MAP_DETAIL_LIMITS.name;serial.maxLength=PORT_MAP_DETAIL_LIMITS.serialNumber;asset.maxLength=PORT_MAP_DETAIL_LIMITS.assetTag;notes.maxLength=PORT_MAP_DETAIL_LIMITS.notes;notes.rows=3;
+ const a=actions(body);
+ button(a,'Save details',()=>{
+  const next=applyPortMapDetails(current,target,{name:name.value,model:model.value,ip:ip.value,mac:mac.value,hardwareModel:hardware?.value,displayName:displayName.value,serialNumber:serial.value,assetTag:asset.value,notes:notes.value},{nameTaken:value=>project.devices.some(old=>old!==current&&deviceId(old.name)===deviceId(value))});
+  const known=matchEndpointHardware(next.model,next.vendor);if(known){next.hardwareFamily=known.id;next.family=known.family;}
+  const before=project.devices;
+  try{project.devices=project.devices.map(old=>old===current?next:old);const prepared=validateDrawing();perform('devices',prepared);close();say('Port map details saved.');}
+  catch(error){project.devices=before;throw error;}
+ },'primary');
+ button(a,'All device settings…',()=>{close();editDevice(current);});
+ if(target.key)button(a,'Drawing properties…',()=>editDrawingObject(target.key));
+}
 function editDevice(current,afterSave){
  const d=current||{name:'',kind:'switch',vendor:'',model:'',ip:'',ports:[],vlans:[],routes:[]},body=modal(current?'Device details':'Add device');
  const name=field(body,'Device name',d.name);const kind=field(body,'Device type',d.kind,deviceKindOptions),vendor=field(body,'Vendor',d.vendor),model=field(body,'Model',d.model),ip=field(body,'Management IP',d.ip),addresses=deviceMacs(d);
  let addressFields=body;if(addresses.length>1){addressFields=el('details');addressFields.append(el('summary','MAC addresses ('+addresses.length+')'));body.append(addressFields);addressFields.append(el('p','The diagram shows a count for multiple addresses. Review or edit the full list here.','hint'));}
  const mac=field(addressFields,'MAC address(es)',addresses.join(addresses.length>1?'\n':', '),addresses.length>1?'multiline':null);if(addresses.length>1)mac.rows=5;
- const models=el('datalist');models.id='known-hardware-models';const suggestions=new Map([...hardwareCatalog,...switchportCatalog.models.map(entry=>({sku:entry.sku,model:entry.name,vendor:entry.os})),...switchportCatalog.additionalModels.map(entry=>({sku:entry.sku,model:entry.name,vendor:entry.os})),...switchportCatalog.modules.map(entry=>({sku:entry.sku,model:entry.name,vendor:''})),...endpointHardwareCatalog.flatMap(entry=>entry.aliases.map(model=>({model,vendor:entry.vendor})))].map(entry=>[entry.sku||entry.model,entry]));for(const p of suggestions.values()){const o=el('option');o.value=p.sku||p.model;o.label=p.vendor+' '+p.model;models.append(o);}body.append(models);model.setAttribute('list',models.id);
+ const models=hardwareModelList();body.append(models);model.setAttribute('list',models.id);
  const platform=field(body,'Platform / technology',d.technology||''),platforms=el('datalist');platforms.id='known-device-platforms';for(const technology of [...new Set(endpointHardwareCatalog.map(entry=>entry.technology).filter(value=>value!=='Physical server'))]){const option=el('option');option.value=technology;platforms.append(option);}body.append(platforms);platform.setAttribute('list',platforms.id);
  const knowledge=el('p','','hint');body.insertBefore(knowledge,ip.previousElementSibling);let kindEdited=false;kind.onchange=()=>kindEdited=true;
  function hardwareKnowledge(fill=false){const known=matchEndpointHardware(model.value,vendor.value);const inferred=d.hardwareEvidence?.model===model.value.trim()?d.hardwareEvidence:null;knowledge.hidden=!known&&!inferred;knowledge.textContent=known?known.family+'. '+known.moduleGuidance:inferred?'Shared family layout: '+inferred.basis+'. Exact SKU is unconfirmed. Select the model from its hardware label when available.':'';if(known&&fill){if(!kindEdited&&(!current||kind.value==='unknown'))kind.value=known.kind;if(!vendor.value.trim())vendor.value=known.vendor;if(!platform.value.trim())platform.value=known.technology;}}
@@ -1358,6 +1397,8 @@ function editDrawingObject(key){
  const page=pages[active];if(!page)return;const objects=drawingObjects(page),item=objects.find(i=>i.editKey===key)||objects[0];if(!item)return;
  const linkedSwatch=item.legendEntry&&item.type==='rect',hasPicker=['path','text','arttext'].includes(item.type)||linkedSwatch,body=modal('Edit drawing object',hasPicker?'compact-color-dialog':''),options=objects.map((i,n)=>[i.editKey,(i.parent?'Panel detail: ':'')+(i.value||i.name||i.type+' '+(n+1)).slice(0,100)]);
  const select=field(body,'Drawing object',item.editKey,options);select.onchange=()=>editDrawingObject(select.value);
+ // A port map device also offers its port map details (name, serial, asset tag...).
+ const mapTarget=portMapTarget(page,item);if(mapTarget&&project.devices.some(device=>device.id===mapTarget.device)){const row=el('div','','actions');body.append(row);button(row,'Port map details…',()=>editPortMapDetails({...mapTarget,key:item.editKey}));}
  const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);const inputs={};
  const property=(where,name,value,opts)=>{if(!hasPicker)return field(where,name,value,opts);const cell=el('div','','compact-field');where.append(cell);return field(cell,name,value,opts);};
  for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}

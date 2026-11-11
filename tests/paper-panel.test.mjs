@@ -18,10 +18,18 @@ test('information panel uses physical readable text on Letter, A4 and A3, locked
   if(locked){p.layout.pageSetup.visible.lockFrames={[page.name]:page.pageLockFrame};assert.equal(core(p).svg,page.svg);}
  }
 });
-test('dense panel preserves readable letters and warns instead of silently compressing',()=>{
- const p=make('letter',true);p.layout.presentation.defaults.panel={sections:['notes'],notes:Array.from({length:80},(_,i)=>`Fictional note ${i}: complete reference data`).join('\n')};
- const page=core(p);assert.equal(page.pageOverflow,true);
- assert.ok(Math.min(...page.items.filter(i=>i.panelGroup&&i.type==='text').map(i=>i.size))>=10.66);
+test('a tall panel flows into columns and stays on the sheet',()=>{
+ for(const [lines,readable] of [[30,true],[80,false]]){
+  const p=make('letter',true);p.layout.presentation.defaults.panel={sections:['connections','vlans','notes'],notes:Array.from({length:lines},(_,i)=>`Fictional note ${i}: complete reference data`).join('\n')};
+  const page=core(p),unit=page.width/printGeometry(page).width,text=page.items.filter(i=>i.panelGroup&&i.type==='text'),notes=text.filter(i=>i.editKey.includes('|info-panel|notes|')&&!i.editKey.endsWith('|heading'));
+  assert.equal(page.pageOverflow,false,lines+' lines fit');
+  assert.equal(notes.length,lines,'one item per note line');for(const [index,item] of notes.entries())assert.equal(item._rowText.index,index);
+  assert.ok(new Set(notes.map(i=>Math.round(i.x))).size>=2,'the notes continue in another column');
+  const panel=contentBounds({items:page.items.filter(i=>i.panelGroup)});assert.ok(panel.y+panel.h<=page.height+.5&&panel.x>=0,'inside the sheet');
+  assert.ok(Math.min(...text.map(i=>i.size/unit))>=5*4/3-.01,'never below 5 pt');
+  if(readable)assert.ok(Math.min(...notes.map(i=>i.size/unit))>=10.66,'moderate content keeps 8 pt notes');
+  const body=contentBounds({items:page.items.filter(i=>!i.panelGroup&&!i.pageFrame&&!i.pageHeading)});assert.ok(panel.x+panel.w<body.x,'the diagram stays beside the panel');
+ }
 });
 test('explicit panel geometry round-trips without rewriting saved edits',()=>{
  const p=make(),page=core(p),item=page.items.find(i=>i.panelGroup&&i.type==='text');

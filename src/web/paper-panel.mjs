@@ -2,6 +2,7 @@ import {textLayout} from './diagram/scene.mjs';
 import {textWidth} from './diagram/labels.mjs';
 import {contentBounds} from './page-content-fit.mjs';
 import {presentation} from './presentation.mjs';
+import {drawingBounds} from './drawing-edits.mjs';
 
 // A docked information rail belongs to the paper, not to the model's fit.
 // Keep its own measured geometry (including symbols and wrapped rows) together.
@@ -30,13 +31,72 @@ export function paperPanel(page,project,body,unit){
  // A custom width is literal; tall content overflows instead of shrinking.
  const floor=Math.min(desired,Math.max(readable,10.67*unit*options.textScale*config.textScale/minSize));
  const horizontal=options.position==='top',availableW=horizontal?body.w:body.w*(options.paperWidth?options.paperWidth/100:.36);
- const scale=options.paperWidth?desired:Math.max(floor,Math.min(desired,availableW/bounds.w,body.h/bounds.h));
+ let scale=options.paperWidth?desired:Math.max(floor,Math.min(desired,availableW/bounds.w,body.h/bounds.h)),columns=1,belowFloor=false;
+ // A side panel taller than the sheet flows into columns (whole rows, each
+ // heading with its first row) before its text would drop below the readable
+ // floor; only when that cannot fit does it shrink, never below 5 pt.
+ if(!options.paperWidth&&!horizontal&&bounds.h*scale>body.h+1e-6){
+  const flowed=flowPanel(items,bounds,body,{desired,floor,hardFloor:Math.min(floor,5*4/3*unit*options.textScale*config.textScale/minSize),gap:18*unit/desired});
+  if(flowed){scale=flowed.scale;columns=flowed.columns;belowFloor=flowed.scale<floor-1e-9;bounds=contentBounds({items});}
+ }
  const w=(requestedWidth?Math.max(bounds.w,requestedWidth):bounds.w)*scale,h=bounds.h*scale,gap=12*unit;
  const x=options.position==='right'?body.x+body.w-w:body.x,y=body.y;
  const area=horizontal?{...body,y:body.y+h+gap,h:Math.max(unit,body.h-h-gap)}:
   {...body,x:options.position==='left'?body.x+w+gap:body.x,w:Math.max(unit,body.w-w-gap)};
  const divider=horizontal?{x:body.x,y:area.y-gap/2,w:body.w,h:unit}:{x:options.position==='right'?area.x+area.w+gap/2:area.x-gap/2,y:body.y,w:unit,h:body.h};
- return {items:new Set(items),scale,x:x-bounds.x*scale,y:y-bounds.y*scale,body:area,divider,overflow:h>body.h+1e-6||w>body.w+1e-6};
+ return {items:new Set(items),scale,x:x-bounds.x*scale,y:y-bounds.y*scale,body:area,divider,columns,belowFloor,overflow:h>body.h+1e-6||w>body.w+1e-6};
+}
+
+// Rows of a panel in reading order. Items that overlap vertically (a swatch
+// and its caption, an icon and its text) form one row; a heading stays with
+// the row after it so a column never starts or ends on a bare heading.
+function panelRowsOf(items){
+ const boxes=items.map(item=>({item,box:drawingBounds(item)})).filter(({box})=>box&&[box.x,box.y,box.w,box.h].every(Number.isFinite)).sort((a,b)=>a.box.y-b.box.y||a.box.x-b.box.x);
+ const rows=[];
+ for(const entry of boxes){const last=rows.at(-1);if(last&&entry.box.y<last.bottom-.5){last.entries.push(entry);last.bottom=Math.max(last.bottom,entry.box.y+entry.box.h);last.right=Math.max(last.right,entry.box.x+entry.box.w);}else rows.push({entries:[entry],top:entry.box.y,bottom:entry.box.y+entry.box.h,right:entry.box.x+entry.box.w});}
+ const units=[];let pending=null;
+ for(const row of rows){const heading=row.entries.every(({item})=>/\|heading$|\|title$/.test(item.editKey||'')&&item.type==='text');
+  if(pending){pending.entries.push(...row.entries);pending.bottom=row.bottom;pending.right=Math.max(pending.right,row.right);if(!heading){units.push(pending);pending=null;}continue;}
+  if(heading){pending={...row,entries:[...row.entries]};continue;}units.push(row);}
+ if(pending)units.push(pending);
+ return units;
+}
+// Fewest columns (up to six, at most 60% of the sheet) that hold the panel at
+// readable size; the columns are balanced by height and keep reading order.
+function flowPanel(items,bounds,body,{desired,floor,hardFloor,gap}){
+ const units=panelRowsOf(items);if(units.length<2)return null;
+ const spacing=units.slice(1).map((unit,i)=>Math.max(0,unit.top-units[i].bottom)),columnWidth=Math.max(...units.map(unit=>unit.right))-bounds.x;
+ const pack=(count,limit)=>{
+  const columns=[[]];let height=0;
+  for(const [i,unit] of units.entries()){
+   const h=unit.bottom-unit.top;let column=columns.at(-1),space=column.length?spacing[i-1]:0;
+   if(column.length&&height+space+h>limit+1e-6){if(columns.length===count)return null;column=[];columns.push(column);height=0;space=0;}
+   column.push({unit,offset:column.length?height+space:0});height+=space+h;
+  }
+  return columns;
+ };
+ const tallest=columns=>Math.max(...columns.map(column=>column.length?column.at(-1).offset+column.at(-1).unit.bottom-column.at(-1).unit.top:0));
+ let best=null;
+ for(let count=2;count<=6;count++){
+  // Smallest column height that still uses at most `count` columns.
+  let lo=Math.max(...units.map(unit=>unit.bottom-unit.top)),hi=bounds.h;if(!pack(count,hi))continue;
+  for(let i=0;i<30;i++){const mid=(lo+hi)/2;if(pack(count,mid))hi=mid;else lo=mid;}
+  const columns=pack(count,hi).filter(column=>column.length),w=columns.length*columnWidth+(columns.length-1)*gap,h=tallest(columns),scale=Math.min(desired,body.w*.6/w,body.h/h);
+  if(!best||scale>best.scale+1e-9)best={columns,scale,w,h};
+  if(scale>=floor-1e-9)break;
+ }
+ if(!best||best.scale<hardFloor-1e-9)return null;
+ best.columns.forEach((column,index)=>{for(const {unit,offset} of column){const dx=index*(columnWidth+gap),dy=bounds.y+offset-unit.top;if(!dx&&!dy)continue;for(const {item} of unit.entries)shiftPanelItem(item,dx,dy);}});
+ return {scale:best.scale,columns:best.columns.length};
+}
+// Move a panel item and keep its inverse presentation, so an edit made on a
+// flowed panel is saved in the panel's own coordinates.
+function shiftPanelItem(item,dx,dy){
+ item.x+=dx;item.y+=dy;
+ if(item.points)item.points=item.points.map(([x,y])=>[x+dx,y+dy]);
+ if(item.commands)item.commands=item.commands.map(([op,...v])=>op==='Z'?[op]:[op,...v.map((n,i)=>n+(i%2?dy:dx))]);
+ for(const key of ['from','to'])if(item[key])item[key]={...item[key],x:item[key].x+dx,y:item[key].y+dy};
+ if(item.presentation)item.presentation={...item.presentation,x:(item.presentation.x||0)+dx,y:(item.presentation.y||0)+dy};
 }
 
 // The default wireless key is a horizontal legend, not a sidebar. Pack its

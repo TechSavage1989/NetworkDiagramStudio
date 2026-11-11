@@ -17,7 +17,11 @@ export function cleanPaper(raw){const p=raw&&typeof raw==='object'?raw:{},preset
 export function newPageSetup(){return cleanPageSetup({visible:{wirelessFit:'adaptive',groups:{ports:{preset:'letter',orientation:'landscape'}}}});}
 // Optional outside page margin in millimetres (0-50); absent keeps the
 // established automatic margins (12 units, 24 on a locked physical sheet).
-export function pageMarginPx(project){const mm=project?.layout?.pageSetup?.visible?.marginMm;return Number.isFinite(mm)&&mm>=0&&mm<=50?mm*96/25.4:null;}
+// Every drawing page keeps a blank border, 5 mm unless Paper & print sets
+// another margin (0-50 mm).
+export const DEFAULT_PAGE_MARGIN_MM=5;
+export function pageMarginMm(project){const mm=project?.layout?.pageSetup?.visible?.marginMm;return Number.isFinite(mm)&&mm>=0&&mm<=50?mm:DEFAULT_PAGE_MARGIN_MM;}
+export function pageMarginPx(project){return pageMarginMm(project)*96/25.4;}
 export function cleanPageSetup(raw){
  const p=raw&&typeof raw==='object'?raw:{},visible=p.visible&&typeof p.visible==='object'?p.visible:{},groups=visible.groups&&typeof visible.groups==='object'?visible.groups:{},individual=visible.pages&&typeof visible.pages==='object'?visible.pages:{};
  const wirelessFrames=Object.entries(visible.lockFrames||{}).filter(([name])=>/^Wireless Connections(?: \d+)?$/.test(name)).map(([,frame])=>frame);
@@ -146,7 +150,8 @@ export function fitVisiblePage(page,project){
     }
     readability.body=body;
     dx=body.x+Math.max(0,body.w-measured.w*factor)/2-measured.x*factor;
-    dy=body.y+Math.max(0,body.h-measured.h*factor)/2-measured.y*factor;
+    // Tables read from the top of the sheet; drawings are centered.
+    dy=body.y+(page.portMap?.bookletRole==='inventory'?0:Math.max(0,body.h-measured.h*factor)/2)-measured.y*factor;
    }
   }
   if(frozen){factor=frozen.scale;dx=frozen.x;dy=frozen.y;
