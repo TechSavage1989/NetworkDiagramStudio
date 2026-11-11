@@ -32,6 +32,8 @@ Timings on the fictional two-stack site (this container):
 
 Built editor in Chromium, same site: open 3.7 s → 1.8 s, Letter 5.5 s → 2.1 s, Undo/Redo 0.6 s → 0.2 s.
 
+Welcome screen polish (style.css): the empty zoom percentage (#zoom-level:empty) no longer reserves a gap, so the stage toolbar fits one row at 1366 px before a drawing exists. The welcome card is 480 px wide so Import files, Open project and Open sample site share one row.
+
 Tests: tests/rebuild-speed.test.mjs covers Undo/Redo reuse matching a cold build, independent faceplate copies and table text widths.
 
 # Preview.54: organized editor controls
