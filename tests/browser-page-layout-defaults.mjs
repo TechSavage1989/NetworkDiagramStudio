@@ -34,7 +34,7 @@ const options=async()=>{
  return {dialog,footer:dialog.getByLabel('Show footer',{exact:true}),numbers:dialog.getByLabel('Show page numbers',{exact:true})};
 };
 const close=async dialog=>{await dialog.locator('#close').click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
-const apply=async dialog=>{await dialog.getByRole('button',{name:'Save page options'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
+const apply=async dialog=>{await dialog.getByRole('button',{name:'Apply paper settings'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
 const order=async()=>{
  const names=await page.locator('#page-select option').allTextContents(),maps=names.map((name,i)=>/Port map/i.test(name)&&!/Inventory/i.test(name)?i:-1).filter(i=>i>=0),inventories=names.map((name,i)=>/Port Inventory/i.test(name)?i:-1).filter(i=>i>=0);
  assert.ok(maps.length>=2,'both switches have map sheets');assert.ok(inventories.length>=2,'both switches have inventory sheets');

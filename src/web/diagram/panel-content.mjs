@@ -64,5 +64,5 @@ export function panelRows(id,auto,options){
  else content=rows(auto[id]||[]);
  if(!content.length)return options.emptySections==='explain-opt-in'?[panelEmptyMessages[id]||'No custom content entered.']:[];
  const limit=options.rowLimit||80;
- return content.length>limit?[...content.slice(0,limit),`${content.length-limit} more items. Increase Rows per section in Pages & layout to show more.`]:content;
+ return content.length>limit?[...content.slice(0,limit),`${content.length-limit} more items. Increase Rows per section in Layout & content to show more.`]:content;
 }

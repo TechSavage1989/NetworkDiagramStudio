@@ -146,7 +146,7 @@ try{
  await open(fixture(rotationProject()));const unlocked=await save('before-page-lock.nds.json');
  const pageFrame=()=>page.locator('#canvas svg').evaluate(svg=>{const b=svg.viewBox.baseVal;return {x:b.x,y:b.y,w:b.width,h:b.height};});
  const paperDialog=async()=>{await page.locator('#page-options').click();await field('Visible page proportions').waitFor();};
- const applyPaper=async()=>{await dialog.getByRole('button',{name:'Save page options',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
+ const applyPaper=async()=>{await dialog.getByRole('button',{name:'Apply paper settings',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);};
  await paperDialog();await field('Visible page proportions').selectOption('a4');assert.equal(await field('Lock physical page size').isChecked(),false);await close();assert.deepEqual((await save('cancelled-page-lock.nds.json')).project,unlocked.project);
  await paperDialog();await field('Visible page proportions').selectOption('a4');await field('Page orientation').selectOption('landscape');await field('Lock physical page size').check();await applyPaper();
  const lockedFrame=await pageFrame(),lockedBodies=await geometry();near(lockedFrame.w,297*96/25.4,'Locked A4 width');near(lockedFrame.h,210*96/25.4,'Locked A4 height');assertGlue(lockedBodies);

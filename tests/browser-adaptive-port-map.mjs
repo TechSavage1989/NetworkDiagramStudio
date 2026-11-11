@@ -30,7 +30,7 @@ try{
   await page.locator('#page-options').click();const dialog=page.locator('#dialog');
   await dialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');
   await dialog.getByLabel('Page orientation',{exact:true}).selectOption('landscape');
-  await dialog.getByRole('button',{name:'Save page options'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+  await dialog.getByRole('button',{name:'Apply paper settings'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
   const letter=await dimensions();assert.ok(Math.abs(letter[0]/letter[1]-11/8.5)<1e-6);assert.notDeepEqual(letter,original);
   await page.screenshot({path:resolve(output,'adaptive-'+members+'-letter.png')});
   // Native browser undo restores the accepted paper, and redo reapplies it.
@@ -39,7 +39,7 @@ try{
   // Locking fixes the sheet, not a second blank border around a measured map.
   await page.locator('#page-options').click();
   await dialog.getByLabel('Lock physical page size',{exact:true}).check();
-  await dialog.getByRole('button',{name:'Save page options'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+  await dialog.getByRole('button',{name:'Apply paper settings'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
   const edgeHeader=await page.locator('#canvas svg').evaluate(svg=>{
    const b=svg.viewBox.baseVal;
    return [...svg.querySelectorAll('rect')].some(r=>Math.abs(+r.getAttribute('x')-b.x)<.01&&Math.abs(+r.getAttribute('y')-b.y)<.01&&Math.abs(+r.getAttribute('width')-b.width)<.01&&r.getAttribute('fill')==='#203746');

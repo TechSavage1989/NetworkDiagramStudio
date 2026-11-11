@@ -308,3 +308,21 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
    page scrolls. */
 #page-overflow-notice{max-height:4.5em;overflow-y:auto}
 @media(max-width:620px){#canvas{min-height:min(320px,55vh)}}
+/* Context-only edit tools appear when they apply. */
+#drawing-snap-label:disabled{display:none}
+/* Edit toolbar: one compact, grouped row that wraps only when the window is narrow. */
+.drawing-tools{row-gap:4px}
+.drawing-tools span.tool-sep{width:1px;min-width:1px;max-width:1px;height:20px;padding:0;border:0;flex:none;background:#c4d4d9;margin:0 3px}
+.drawing-tools label{display:inline-flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap}
+.drawing-tools select{height:26px;min-height:26px;padding:2px 22px 2px 6px;font-size:11px;width:auto;max-width:180px}
+.drawing-tools .control-field{display:inline-flex}
+/* Project panel toggle (wide windows only). */
+.stage-title{gap:10px;align-items:center}
+.panel-toggle{font-size:11px;padding:3px 8px}
+@media(max-width:1100px){.panel-toggle{display:none}}
+@media(min-width:1101px){
+ main.project-collapsed>.project-sidebar{display:none}
+ main.project-collapsed:has(> .pages-sidebar:not([hidden])){grid-template-columns:210px minmax(0,1fr)}
+ main.project-collapsed:not(:has(> .pages-sidebar:not([hidden]))){grid-template-columns:minmax(0,1fr)}
+}
+.welcome-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}

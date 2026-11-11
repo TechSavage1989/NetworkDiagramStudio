@@ -260,7 +260,7 @@ function handleEditorContextMenu(event){
  const tab=target.closest('#page-families button[data-page]');
  if(tab){
   const page=pages.find(page=>page.name===tab.dataset.page);
-  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Page options',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Pages & layout',()=>layoutOptions(page.name)]]);
+  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Paper & print',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Layout & content',()=>layoutOptions(page.name)]]);
   return;
  }
  if(!target.closest('#canvas'))return;
@@ -298,7 +298,7 @@ function handleEditorContextMenu(event){
   if(d)actions.push(['Edit device and port details',()=>editDevice(d)]);
  }
  if(!item&&!socket)actions.push(['Page',null]);
- actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Page options',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Pages & layout',()=>layoutOptions(page.name)]);
+ actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Paper & print',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Layout & content',()=>layoutOptions(page.name)]);
  showEditorContextMenu(event,actions);
 }
 function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...unpresentPatch(item,{points})}});}
@@ -449,7 +449,7 @@ $('drawing-smaller').onclick=()=>task(()=>resizeSelection(.9));$('drawing-larger
 $('drawing-size').onclick=()=>task(()=>{
  const body=modal('Resize items'),scope=field(body,'Resize',drawingSelection.size?'selected':'page',[['selected','Selected items'],['page','Everything on this page'],['drawing','Everything on all pages']]),percent=field(body,'Size (% of current size)',100);percent.type='number';percent.min=10;percent.max=400;
  const bar=actions(body);button(bar,'Smaller −10%',()=>percent.value=Math.max(10,Math.round(+percent.value*.9)));button(bar,'Larger +10%',()=>percent.value=Math.min(400,Math.round(+percent.value*1.1)));
- body.append(el('p','Selected items use the Size changes setting: model size keeps positions, layout spacing keeps sizes. Page and drawing resize scale everything. Connections stay attached. Use Undo to restore.','hint'));
+ body.append(el('p','Selected items use the Resize setting: Objects changes their size and keeps positions; Spacing between them changes the gaps and keeps sizes. Page and drawing resize scale everything. Connections stay attached. Use Undo to restore.','hint'));
  button(actions(body),'Apply size',()=>{const factor=+percent.value/100;if(!Number.isFinite(factor)||factor<.1||factor>4)throw Error('Choose a size from 10 to 400 percent.');
   if(scope.value==='selected'){if(!drawingSelection.size)throw Error('Select an item first.');resizeSelection(factor);}
   else {const before=project.layout,next=structuredClone(before||{}),config=cleanPresentation(next.presentation),targets=scope.value==='page'?[config.pages[pages[active].name]={...config.pages[pages[active].name],drawingScale:presentation(project,pages[active]).drawingScale}]:[config.defaults,...Object.values(config.pages).filter(p=>Number.isFinite(p.drawingScale))];
@@ -705,7 +705,7 @@ function syncQuickPagePaper(){
  select.value=paper.preset;orientation.value=paper.orientation;
  select.disabled=working||!page||!drawingReady;orientation.disabled=select.disabled||paper.preset==='dynamic';
  status.textContent=page?(paper.locked?'Locked':'Unlocked')+' · '+(fit==='preserve'?'Preserve layout':'Auto-fit'):'';
- status.title='Applies to this page only. Paper size changes retain the shown lock and fit behavior. Use Page options to change them or apply to more pages.';
+ status.title='Applies to this page only. Paper size changes retain the shown lock and fit behavior. Use Paper & print to change them or apply to more pages.';
 }
 function changeQuickPagePaper(patch){
  if(!commitInlineEdit()){syncQuickPagePaper();return;}
@@ -717,12 +717,12 @@ function changeQuickPagePaper(patch){
  if(updated?.pageLockFrame)project.layout.pageSetup.visible.lockFrames[page.name]=updated.pageLockFrame;
  if(updated)active=prepared.indexOf(updated);
  perform('page-options',prepared);viewport.fit();
- say('Paper updated for '+(page.displayName||page.name)+' only. Use Page options for custom dimensions, locking or other pages.');
+ say('Paper updated for '+(page.displayName||page.name)+' only. Use Paper & print for custom dimensions, locking or other pages.');
 }
 $('active-page-paper').onchange=()=>{const preset=$('active-page-paper').value;task(()=>changeQuickPagePaper({preset}));};
 $('active-page-orientation').onchange=()=>{const orientation=$('active-page-orientation').value;task(()=>changeQuickPagePaper({orientation}));};
 function pageOptions(initialPreset){
- const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(effectiveWirelessPaperProject(project).layout?.pageSetup),body=modal('Page options');
+ const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(effectiveWirelessPaperProject(project).layout?.pageSetup),body=modal('Paper & print');
  body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. For wireless drawings, choose Optimize APs for paper below to use available side space and prioritize readable AP details, or preserve the complete existing arrangement.','hint'));
  body.append(el('p','The preview shows the visible drawing page, not a separate Print/PDF sheet. Print-paper settings can differ without changing this preview; check Print/PDF before printing. Use Preview page to inspect other affected sheets.','hint'));
  const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
@@ -802,7 +802,7 @@ function pageOptions(initialPreset){
   return {...project.layout,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
  };
  const pageActions=actions(body);
- button(pageActions,'Save page options',()=>{
+ button(pageActions,'Apply paper settings',()=>{
   const before=project.layout;project.layout=collectPageLayout();
   let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;throw error;}
   for(const page of prepared)if(page.pageLockFrame)project.layout.pageSetup.visible.lockFrames[page.name]=page.pageLockFrame;
@@ -963,7 +963,7 @@ function pageNavigation(){
    item.type='button';item.dataset.page=page.name;
    if(index===active)item.setAttribute('aria-current','page');
    item.classList.toggle('active',index===active);
-   item.title='Double-click to rename this page. Use Pages & layout for additional settings.';
+   item.title='Double-click to rename this page. Use Layout & content for additional settings.';
    item.ondblclick=event=>{event.preventDefault();clearTimeout(pageTabClickTimer);renamePageTab(page,item);};
    item.onclick=event=>{if(event.target.matches('.page-tab-rename')||event.detail>1)return;if(!commitInlineEdit())return;clearTimeout(pageTabClickTimer);if(index===active)return;pageTabClickTimer=setTimeout(()=>{active=index;draw(pages);},230);};
    list.append(item);
@@ -998,7 +998,7 @@ function draw(prepared){
  pageNavigation();
  if(pages.length){const svg=new DOMParser().parseFromString(pages[active].svg,'image/svg+xml').documentElement;
   if(svg.localName!=='svg'){canvas.replaceChildren(el('p','Preview could not be rendered.'));}else viewport.show(pages[active].name,document.importNode(svg,true),{...pages[active],actualSizePaper:actualSizePaper(project,pages[active])});}
- else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device files or open the editable sample.'));button(welcome,'Open sample site',sample);canvas.replaceChildren(welcome);}
+ else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device configurations, Auvik reports or show-command captures, open a saved project, or explore the editable sample.'));const start=el('div','','welcome-actions');welcome.append(start);button(start,'Import files',()=>$('import').click(),'primary');button(start,'Open project',()=>$('open').click());button(start,'Open sample site',sample);canvas.replaceChildren(welcome);}
  for(const id of ['export','export-menu','print','svg'])$(id).disabled=!pages.length||working;
  typeHighlights.show(canvas.querySelector('svg'));
  $('port-map-options').hidden=!pages[active]?.portMap;syncDrawingSelection();
@@ -1352,7 +1352,7 @@ function editDrawingObject(key){
  if(item.type==='device'){const device=project.devices.find(d=>d.id===item.sourceId);if(device){button(bar,'Device details',()=>editDevice(device));button(bar,'Find stencil',()=>deviceStencil(device));if(item.asset)button(bar,'Map ports',()=>editAnchors(project.stencils[device.stencilId]));}if(item.asset)body.append(el('p',item.asset.native?'Vector details remain independently editable in the Visio export.':'This stencil contains a picture. Its image can be replaced and resized; map its ports under Map ports.','hint'));}
  button(bar,'Reset page edits',()=>{const next={...project.layout?.drawingEdits},prefix=page.name+'|',scope=(page.editScope||page.name)+'|';for(const k of Object.keys(next))if(k.startsWith(prefix)||k.startsWith(scope))delete next[k];for(const o of objects)if(o.legacyEditKey)delete next[o.legacyEditKey];setDrawingEdits(next);close();});
 }
-$('edit-drawing').onclick=()=>{cancelBesidePick();editDrawing=!editDrawing;$('edit-drawing').setAttribute('aria-pressed',String(editDrawing));$('canvas').classList.toggle('editing',editDrawing);syncDrawingSelection();say(editDrawing?'Drag items to move. Move near a cable to highlight it, then click to select. Use Organize connections to preview a tidier layout. Shift-click selects multiple items. Double-click or Edit selected to change text and style. Alt-drag a panel detail to move it independently. Hold Space to pan.':'Click a device to find its stencil. Drag to pan; scroll to zoom.');};
+$('edit-drawing').onclick=()=>{cancelBesidePick();editDrawing=!editDrawing;$('edit-drawing').setAttribute('aria-pressed',String(editDrawing));$('canvas').classList.toggle('editing',editDrawing);syncDrawingSelection();say(editDrawing?'Drag items to move. Move near a cable to highlight it, then click to select. Use Organize connections to preview a tidier layout. Shift-click selects multiple items. Double-click or Properties… to change text and style. Alt-drag a panel detail to move it independently. Hold Space to pan.':'Click a device to find its stencil. Drag to pan; scroll to zoom.');};
 function hardware(){stencilDevice=null;
  const body=modal('Hardware library');body.append(el('p','Import Visio stencils, drawing or template masters, images, or a hardware pack. Folder import searches every subfolder. Legacy picture masters open locally; other legacy artwork can use installed desktop Visio in the Windows app.','hint'));
  const bar=actions(body);button(bar,'Import shapes',()=>$('art-file').click(),'primary');button(bar,'Import stencil folder',()=>$('art-folder').click());if(discoveredStencils.length)button(bar,'Browse found stencils ('+discoveredStencils.length+')',browseStencils);button(bar,'Save hardware pack',()=>download(JSON.stringify({format:'NDS-hardware',schema:1,stencils:Object.values(project.stencils),optics:project.optics}),'NetworkDiagramStudio-hardware.json'));
@@ -1396,8 +1396,11 @@ $('filter').oninput=deviceList;$('close').onclick=close;
 $('matches').onclick=()=>{if(!$('filter').value.trim()){say('Enter a device name or model filter first.');return;}for(const d of project.devices){d.scopeOverride=matchName(d);d.hidden=!d.scopeOverride;}perform();};
 $('all').onclick=()=>{for(const d of project.devices){d.scopeOverride=true;d.hidden=false;}perform();};
 $('new').onclick=newProject;$('auto-scope').onclick=()=>{for(const d of project.devices)delete d.scopeOverride;initialScope();perform();};
+// Collapse the project panel to give the drawing more room (wide windows);
+// the choice is a local view preference, never project data.
+{const toggle=$('toggle-project'),apply=collapsed=>{document.querySelector('main').classList.toggle('project-collapsed',collapsed);toggle.setAttribute('aria-pressed',String(collapsed));toggle.textContent=collapsed?'Show project':'Hide project';};let saved=false;try{saved=localStorage.getItem('nds-project-panel')==='collapsed';}catch{}apply(saved);toggle.onclick=()=>{const collapsed=!document.querySelector('main').classList.contains('project-collapsed');apply(collapsed);try{localStorage.setItem('nds-project-panel',collapsed?'collapsed':'open');}catch{}};}
 $('switchport-reports').onclick=()=>task(reports.options);$('export-menu').onclick=()=>task(reports.exportMenu);
-$('sample').onclick=sample;$('hardware').onclick=hardware;$('review-links').onclick=reviewLinks;
+$('sample').onclick=sample;$('welcome-import').onclick=()=>$('import').click();$('welcome-open').onclick=()=>$('open').click();$('hardware').onclick=hardware;$('review-links').onclick=reviewLinks;
 $('arrange').onclick=arrange;$('evidence').onclick=evidence;
 $('add-link').onclick=()=>editLink();$('add-device').onclick=()=>editDevice();
 $('warnings').onclick=()=>{const b=modal('Import review');const ul=el('ul');for(const w of project.warnings)ul.append(el('li',warningText(w)));b.append(ul);};

@@ -13,7 +13,7 @@ page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>
 try{
  await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);
  await page.getByRole('button',{name:'Open sample site',exact:true}).click();await page.waitForSelector('#page-families .page-group summary');
- for(const name of ['View','Styles','Page','Output']) assert.equal(await page.locator('.workspace-action-group').filter({has:page.locator('.workspace-group-label',{hasText:new RegExp('^'+name+'$')})}).count(),1,'workspace commands have visible purpose groups');
+ for(const name of ['View','Styles','Page','Quick export']) assert.equal(await page.locator('.workspace-action-group').filter({has:page.locator('.workspace-group-label',{hasText:new RegExp('^'+name+'$')})}).count(),1,'workspace commands have visible purpose groups');
  assert.equal(await page.locator('.workspace-actions #edit-drawing').count(),1,'direct editing stays one click away');
  // Paper changes are available without opening a dialog and belong only to this page.
  const quickPaper=page.locator('#active-page-paper'),quickOrientation=page.locator('#active-page-orientation');
@@ -110,7 +110,7 @@ try{
  await page.locator('#dialog details').filter({hasText:'Printing'}).locator('summary').click();
  await page.locator('#dialog').getByLabel('Print paper',{exact:true}).selectOption('a4');
  await page.locator('#dialog').getByLabel('Print orientation',{exact:true}).selectOption('portrait');
- await page.locator('#dialog').getByRole('button',{name:'Save page options'}).click();
+ await page.locator('#dialog').getByRole('button',{name:'Apply paper settings'}).click();
  await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  assert.equal(await page.locator('#canvas svg').getAttribute('viewBox'),before,'printing paper must not change drawing dimensions');
  await page.screenshot({path:resolve(output,'print-paper-options.png')});
@@ -121,7 +121,7 @@ try{
  assert.equal(await scope.inputValue(),'page','individual-page controls are restored');
  assert.ok(await dialog.getByLabel('Individual page',{exact:true}).count());
  await size.selectOption('a4');await orientation.selectOption('portrait');
- await dialog.getByRole('button',{name:'Save page options'}).click();
+ await dialog.getByRole('button',{name:'Apply paper settings'}).click();
  await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  const visible=await page.locator('#canvas svg').getAttribute('viewBox');
  assert.notEqual(visible,before,'visible paper must change the actual drawing page');
@@ -135,7 +135,7 @@ try{
  await size.selectOption('a3');await orientation.selectOption('landscape');
  await scope.selectOption('page');
  assert.equal(await size.inputValue(),'a4','switching scopes retains the unsaved group choice and individual override');
- await dialog.getByRole('button',{name:'Save page options'}).click();
+ await dialog.getByRole('button',{name:'Apply paper settings'}).click();
  await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  await page.locator('#page-options').click();
  await scope.selectOption('group');

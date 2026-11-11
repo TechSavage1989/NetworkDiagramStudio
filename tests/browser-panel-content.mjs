@@ -78,7 +78,7 @@ try{
  await open({name:'fictional-legacy-paper.nds.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:paper}))});
  assert.match(await page.locator('#page-overflow-notice').textContent(),/earlier layout/);
  await page.locator('#page-overflow-notice').click();
- await page.locator('#dialog').getByRole('button',{name:'Save page options',exact:true}).click();
+ await page.locator('#dialog').getByRole('button',{name:'Apply paper settings',exact:true}).click();
  await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  assert.equal(await page.locator('#page-overflow-notice').isVisible(),false);
 }finally{await browser.close();}

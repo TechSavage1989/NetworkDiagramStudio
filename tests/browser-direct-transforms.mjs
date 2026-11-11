@@ -108,8 +108,8 @@ try{
  for(const value of ['Do not keep this','Temporary draft to cancel']){
   await panToText(switchTitle);await doubleClickText(switchTitle);const editor=page.locator('[data-inline-editor] textarea');assert.equal(await editor.inputValue(),'SW-1');await editor.fill(value);await editor.press('Escape');await page.locator('[data-inline-editor]').waitFor({state:'detached'});assert.ok((await page.locator(switchTitle).textContent()).includes('SW-1'));
  }
- await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Page options');await page.locator('#close').click();
- await panToText(edgeTitle);await doubleClickText(edgeTitle);await page.locator('[data-inline-editor]').evaluate(node=>node.remove());await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Page options');await page.locator('#close').click();
+ await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Paper & print');await page.locator('#close').click();
+ await panToText(edgeTitle);await doubleClickText(edgeTitle);await page.locator('[data-inline-editor]').evaluate(node=>node.remove());await page.locator('#page-options').click();assert.equal(await page.locator('#dialog-title').textContent(),'Paper & print');await page.locator('#close').click();
  assert.deepEqual(errors,[]);await page.screenshot({path:resolve(output,'inline-title-recovery.png')});
  console.log('Direct controls, transform geometry, repeated real title double-clicks, Escape, detached-session recovery and persistence passed.');
 }catch(error){await page.screenshot({path:resolve(output,'failure.png')});throw error;}finally{await browser.close();}
