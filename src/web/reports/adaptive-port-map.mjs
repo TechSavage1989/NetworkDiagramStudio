@@ -67,7 +67,7 @@ export function adaptivePortMap(item,palette,request,identity){
  // Page lock fixes the paper boundary, not the printable artwork size.
  // Leave only enough room for the chassis frame stroke; saved frames are
  // preserved by the presentation layer rather than shrinking new layouts.
- const legacy=sheet?.legacyAdaptive===true,margin=legacy?(sheet?.locked?24:12):4;
+ const legacy=sheet?.legacyAdaptive===true,margin=legacy?(sheet?.locked?24:12):Number.isFinite(request.margin)?request.margin:4;
  if(!sheet||!(sheet.width>0&&sheet.height>0))throw new ReportCapacityError('Adaptive port maps require measured paper dimensions.');
  const make=()=>{
   const p=P.page(request,item.id+'|adaptive',P.displayName(inv),[P.modelLabel(inv),inv.ports.length+' interfaces'].filter(Boolean).join(' | '),identity.role,[item.id],sheet.width,sheet.height,true);

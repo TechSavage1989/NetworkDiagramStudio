@@ -162,12 +162,14 @@ function faceBoxes(g,entries,limit=2.6){
  }
  return result;
 }
-function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null,format=null,unconfiguredFill=null}={}){
+function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null,format=null,unconfiguredFill=null,upright=false}={}){
  const firstItem=items.length;
  const size=10*(fontScale??1),minimum=8*(fontScale??1),formatting=format?{format}:{};
  let layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,measureRequired:false,...formatting});
- if(!layout.readable)layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,vertical:true,...formatting});
- if(!layout.readable){const alternatives=[false,true].map(vertical=>portLabelLayout(g,ports,{fontSize:minimum,minFontSize:minimum,minWidth:0,vertical})),required=alternatives.map(v=>v.requiredWidth).filter(Number.isFinite);throw Object.assign(Error('This port map needs a wider device to keep the port numbers readable. Use a wider page or the Switchport report layout.'),{code:'PORT_LABEL_CAPACITY',requiredWidth:required.length?Math.min(...required):null,sourceId:g.sourceId});}
+ // Upright callers (wireless paper sheets) never rotate numbers; they widen
+ // the hardware until horizontal numbers fit.
+ if(!layout.readable&&!upright)layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,vertical:true,...formatting});
+ if(!layout.readable){const alternatives=(upright?[false]:[false,true]).map(vertical=>portLabelLayout(g,ports,{fontSize:minimum,minFontSize:minimum,minWidth:0,vertical})),required=alternatives.map(v=>v.requiredWidth).filter(Number.isFinite);throw Object.assign(Error('This port map needs a wider device to keep the port numbers readable. Use a wider page or the Switchport report layout.'),{code:'PORT_LABEL_CAPACITY',requiredWidth:required.length?Math.min(...required):null,sourceId:g.sourceId});}
  // Port maps with VLAN marks give every jack face on the plate the builder's shape.
  const faces=marks?faceBoxes(g,layout.entries):null;
  for(const entry of layout.entries){

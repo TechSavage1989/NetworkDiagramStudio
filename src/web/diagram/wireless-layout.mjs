@@ -1,6 +1,6 @@
 import {deviceBounds} from './device-geometry.mjs';
 import {deviceScale,presentation} from '../presentation.mjs';
-import {pageGeometry,targetPageAspect,visibleFitMode,visiblePagePaper,cleanPageSetup,paperDimensions} from '../page-options.mjs';
+import {pageGeometry,targetPageAspect,visibleFitMode,visiblePagePaper,cleanPageSetup,paperDimensions,pageMarginPx} from '../page-options.mjs';
 import {applyDrawingEdits} from '../drawing-edits.mjs';
 import {applyLinkStyles,linkWeight} from '../link-styles.mjs';
 import {deviceModel,macCaption} from '../device-details.mjs';
@@ -103,7 +103,7 @@ function paperBody(project,device,edges){
  const W=dims.widthMm*96/25.4,H=dims.heightMm*96/25.4,local={...project,_pageGeometry:{...project._pageGeometry,wireless:{width:W,height:H}}},probe=fresh('Wireless Connections','Wireless Connections',nameOf(device)+'  ·  access-point uplinks and physical switch ports',local);
  probe.items.push(...edges.map(e=>({type:'path',editKey:pathKey(project,e),color:mediaInfo(e.media,true).color,weight:pathWeight(project,e),linkType:mediaInfo(e.media,true).name,sourceLink:e,points:[[0,0],[1,0]]})));
  applyLinkStyles(probe,project.layout?.linkStyles,project.layout?.drawingEdits);linkLegend(probe);
- const furniture=paperFurniture(probe,project,W,H,1,plan.paper.locked?24:12),keyed=paperLinkKey(probe,project,furniture.body,1),body=keyed?.body||furniture.body;
+ const furniture=paperFurniture(probe,project,W,H,1,pageMarginPx(project)??(plan.paper.locked?24:12)),keyed=paperLinkKey(probe,project,furniture.body,1),body=keyed?.body||furniture.body;
  cache.set(key,body);return body;
 }
 // AP banks are measured from their real captions and real socket positions.
@@ -152,7 +152,8 @@ function bankLayout(project,db,device,edges,width,spacing,geometry){
  }
  choices.push(...sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,ends,apSize,pitch).map(choice=>body?{...choice,fit:Math.min(4,body.w/Math.max(1,choice.W-72),body.h/Math.max(1,choice.H-choice.start-36)),planKey:'paper-'+choice.planKey}:choice));
  const retained=wirelessFrame(project)?.wirelessPlan;
- // An explicit "Use side space" choice keeps paper plans beside the stack.
+ // An explicit "Use side space" choice puts APs beside the stack on paper
+ // plans, but they may also use the rows above and below (surround layouts).
  const sideOnly=body&&wirelessSettings(project).wirelessApPlacement==='sides'&&choices.some(choice=>choice.placements)?choices.filter(choice=>choice.placements):choices;
  return (retained?sideOnly.filter(choice=>choice.planKey===retained):sideOnly).sort((a,b)=>body?b.fit-a.fit||a.score-b.score:a.score-b.score||a.col-b.col);
 }
@@ -169,10 +170,10 @@ function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,
  if(project._wirelessPaperPlan){if(edges.length<4||frozen&&!retained)return [];}
  else if((wirelessSettings(project).wirelessApPlacement!=='sides'&&!project._wirelessAdaptive&&!retained)||!geometry.dynamic||project._wirelessLegacyPaper||edges.length<8||(frozen&&!retained)||(!retained&&Object.entries(edits).some(([key,value])=>key.includes('Wireless Connections')&&['x','y','w','h','angle','points'].some(k=>value[k]!=null))))return [];
  const result=[],ordered=ends.slice().sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y||a.e.idx-b.e.idx),left=new Set(ordered.slice(0,Math.ceil(ends.length/2)).map(v=>v.e.idx));
- for(const col of (project._wirelessAdaptive?[116,120,132,180,245]:[132,180,245]).map(w=>w*apScale(project)))for(const fraction of [1,.5])for(const columns of project._wirelessAdaptive&&fraction===1&&edges.length>=16?[1,2]:[1]){
+ for(const col of (project._wirelessAdaptive?[116,120,132,180,245]:[132,180,245]).map(w=>w*apScale(project)))for(const fraction of project._wirelessPaperPlan?[1,.75,.5,.25]:[1,.5])for(const columns of project._wirelessAdaptive&&fraction===1&&edges.length>=16?[1,2]:[1]){
   const sides={left:[],right:[]};
   const horizontal={top:[],bottom:[]};
-  const sideIds=fraction===1?new Set(ends.map(v=>v.e.idx)):new Set([...ordered.slice(0,Math.ceil(ends.length/4)),...ordered.slice(-Math.floor(ends.length/4))].map(v=>v.e.idx));
+  const sideCount=Math.round(ends.length*fraction/2),sideIds=fraction===1?new Set(ends.map(v=>v.e.idx)):new Set([...ordered.slice(0,Math.ceil(ends.length*fraction/2)),...ordered.slice(ends.length-sideCount)].map(v=>v.e.idx));
   const middle=ends.filter(v=>!sideIds.has(v.e.idx)).sort((a,b)=>a.anchor.y-b.anchor.y||a.anchor.x-b.anchor.x),topIds=new Set(middle.slice(0,Math.ceil(middle.length/2)).map(v=>v.e.idx));
   for(const v of ends){const item={...v,caption:captions(project,db,v.e,col)};if(sideIds.has(v.e.idx))sides[left.has(v.e.idx)?'left':'right'].push(item);else horizontal[topIds.has(v.e.idx)?'top':'bottom'].push(item);}
   for(const entries of Object.values(horizontal))entries.sort((a,b)=>a.anchor.x-b.anchor.x||a.anchor.y-b.anchor.y);
@@ -206,7 +207,7 @@ function sideLayoutChoices(project,db,device,edges,width,spacing,geometry,panel,
   // Match the existing area/long-axis objective; physical source text is never
   // reduced to win this candidate. Routing still validates every placement.
   const score=Math.max(W,H)**2+.15*W*H;
-  result.push({wraps:placements.reduce((n,v)=>n+v.caption.wraps,0),planKey:(columns===2?'columns':fraction===1?'sides':'surround')+':'+Math.round(col/apScale(project)),kind:columns===2?'columns':fraction===1?'sides':'surround',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:columns===2?'columns':fraction===1?'sides':'surround',placements});
+  result.push({wraps:placements.reduce((n,v)=>n+v.caption.wraps,0),planKey:(columns===2?'columns':fraction===1?'sides':'surround')+':'+Math.round(col/apScale(project))+(fraction===1||fraction===.5?'':':'+Math.round(fraction*100)),kind:columns===2?'columns':fraction===1?'sides':'surround',W,H,start,switchX,switchY,width,...spacing,apSize,pitch,panel,col,score,rowCount:columns===2?'columns':fraction===1?'sides':'surround',placements});
  }
  return result;
 }
@@ -238,7 +239,7 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
   const gap=start.escapeRange?'gap/'+start.escapeRange.map(v=>v.toFixed(3)).join('/'):'edge/'+start.side;
   addEnd(edge,'a',sw,start,'switch/'+gap);addEnd(edge,'b',dest,end,'ap/'+side+'/'+rowIndex);
  }
- portNumbers(page.items,sw,physicalPorts(device),{selected:new Set(edges.map(e=>e.sp.toLowerCase())),fontScale:wirelessNumberScale(project)});
+ portNumbers(page.items,sw,physicalPorts(device),{selected:new Set(edges.map(e=>e.sp.toLowerCase())),fontScale:wirelessNumberScale(project),upright:!!project._wirelessPaperPlan});
  applyDrawingEdits(page,project);
  if([...nodes.values()].some(n=>n.angle)){const bodies=[...nodes.values()].map(deviceBounds);if(page.items.some(i=>i.wirelessCaption&&bodies.some(b=>intersects(i,b,2))))throw Object.assign(Error('This rotated wireless equipment needs more space around its captions. Move the devices apart or adjust the rotation.'),{code:'CORE_LAYOUT_CAPACITY'});}
  const numberBoxes=wirelessNumberLeads(page,sw,endData,project),obstacles=[...numberBoxes.obstacles,...page.items.filter(i=>i.type==='text'&&!i.portNumberRole&&(i.wirelessCaption||!i.deviceTextOwner))],planned=coreRoutes(routed,[],endData,banks,nodes,{left:sw.x,right:sw.x+sw.w,minX:36,maxX:layout.W-36,pitch:layout.pitch,railPitch:layout.pitch,topClearance:12,bottomClearance:12,obstacles,uniform:lineSpacing(project,page.name),directionNeutralLevels:true,peerFacingGapLanes:!!layout.placements});
@@ -270,7 +271,7 @@ function pageBatches(project,db,device,edges,width,geometry){
 // prints AP details at the target size. Never split a sheet unless that is
 // what reaches the target or makes the text larger.
 function readableWidth(project,device,portNumbers,fallback){
- for(const width of [560,600,640,680,720,760,820,900,998]){const probe=addDevice({items:[]},project,device,[0,0,width,1],'inspect',{fitWidth:true,padding:equipmentPadding});try{portNumbers([],probe,physicalPorts(device),{fontScale:wirelessNumberScale(project)});return width;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;}}
+ for(const width of [560,600,640,680,720,760,820,900,998]){const probe=addDevice({items:[]},project,device,[0,0,width,1],'inspect',{fitWidth:true,padding:equipmentPadding});try{portNumbers([],probe,physicalPorts(device),{fontScale:wirelessNumberScale(project),upright:true});return width;}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;}}
  return fallback;
 }
 // Equal sheets in port order; a cut moves to a nearby stack-member boundary
@@ -285,6 +286,13 @@ function balancedBatches(edges,count){
   if(cut>cuts.at(-1)&&cut<edges.length)cuts.push(cut);
  }
  cuts.push(edges.length);return cuts.slice(1).map((end,i)=>edges.slice(cuts[i],end)).filter(batch=>batch.length);
+}
+// Chosen whole-switch plans (view, plan key, width) keyed by every input that
+// shapes the choice; the page itself is always re-rendered from current data.
+const wholePlans=new Map();
+function wholePlanKey(project,db,source,sorted,first){
+ const layout=project.layout||{},wireless=([key])=>/Wireless Connections/.test(key),visible=layout.pageSetup?.visible||{};
+ return JSON.stringify([first,project._reportPrefix||'',project._wirelessPaperPlan,source,sorted.map(e=>[e.idx,e.sp,e.apId,e.apPort,e.media,e.speed,e.status,db.devices.get(e.apId)]),layout.presentation,layout.textStyles,layout.linkStyles,layout.hopStyle,layout.lineSpacing,layout.labelBacking,layout.cableCaptions,Object.entries(layout.drawingEdits||{}).filter(wireless),Object.entries({...visible.lockFrames,...visible.editFrames}).filter(wireless),visible.wirelessFit,visible.fitMode,visible.wirelessStack,visible.marginMm]);
 }
 function paperPlanPages(project,db,source,sorted,{portNumbers,first,fallbackWidth}){
  // Compare the complete stack (tall: room for AP columns beside it) with only
@@ -301,15 +309,37 @@ function paperPlanPages(project,db,source,sorted,{portNumbers,first,fallbackWidt
  // only for a saved preview.51 split plan with authored edits, or a switch
  // whose cables cannot route on one sheet at all.
  if(!project._wirelessPaperSplit){
-  const views=[...new Set([reduced?subsetFor(sorted):null,source].filter(Boolean))],whole=[];
+  // A saved frame (lock or manual edit) reopens exactly its plan: the same
+  // stack view, arrangement and width, so authored edits keep their identity.
+  const frameName=(project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections '+(first+1),visible=project.layout?.pageSetup?.visible||{},saved=visible.lockFrames?.[frameName]||visible.editFrames?.[frameName];
+  if(saved?.wirelessPaperPlan===2&&saved.wirelessPlan&&Number.isFinite(saved.wirelessPlanWidth)){
+   const view=saved.wirelessSubset===1&&reduced?subsetFor(sorted):source,plan=planPaperView(project,db,()=>view,sorted,{portNumbers,first,fallbackWidth,whole:true,only:{planKey:saved.wirelessPlan,width:saved.wirelessPlanWidth}});
+   if(plan){for(const page of plan.pages)page.wirelessLayout.wholeSwitch=true;return plan.pages;}
+  }
+  // A rebuild with the same inputs renders the remembered choice once
+  // (validated like any candidate) instead of searching again.
+  const key=wholePlanKey(project,db,source,sorted,first),remembered=wholePlans.get(key);
+  if(remembered){
+   const view=remembered.complete?source:subsetFor(sorted),plan=planPaperView(project,db,()=>view,sorted,{portNumbers,first,fallbackWidth,whole:true,only:remembered});
+   if(plan&&!plan.compromise){for(const page of plan.pages)page.wirelessLayout.wholeSwitch=true;return plan.pages;}
+  }
+  // Page options → Wireless stack view: the whole stack (default) or only the
+  // members whose ports carry these APs (larger print).
+  const membersOnly=cleanPageSetup(project.layout?.pageSetup).visible.wirelessStack==='members';
+  const views=[...new Set([reduced?subsetFor(sorted):null,...(membersOnly&&reduced?[]:[source])].filter(Boolean))],whole=[];
   for(const view of views){
-   // The narrowest-stack estimate is optimistic (narrow stacks often cannot
-   // route), so plan another view only when it could print clearly larger.
-   if(whole.length&&planUpperBound(project,db,view,sorted,portNumbers,fallbackWidth)<whole[0].fit*1.05)continue;
-   const plan=planPaperView(project,db,()=>view,sorted,{portNumbers,first,fallbackWidth,whole:true});if(plan)whole.push(plan);
+   // The same member hardware cannot route narrower than the view already
+   // planned, so the complete stack starts its width search there.
+   const minWidth=whole.length?whole[0].pages[0].wirelessLayout.planWidth||0:0;
+   const plan=planPaperView(project,db,()=>view,sorted,{portNumbers,first,fallbackWidth,whole:true,minWidth});if(plan)whole.push(plan);
   }
   if(whole.length){
-   whole.sort((a,b)=>(a.compromise?1:0)-(b.compromise?1:0)||(Math.abs(a.fit-b.fit)>.05*Math.max(a.fit,b.fit)?b.fit-a.fit:0)||crossings(a)-crossings(b)||b.complete-a.complete);
+   // Show the whole stack unless it prints more than 30% smaller than the
+   // members-only view or cannot route cleanly; otherwise the larger print wins.
+   const best=Math.max(...whole.filter(plan=>!plan.compromise).map(plan=>plan.fit),0),wholeStack=plan=>plan.complete&&!plan.compromise&&plan.fit>=.7*best;
+   whole.sort((a,b)=>(a.compromise?1:0)-(b.compromise?1:0)||wholeStack(b)-wholeStack(a)||(Math.abs(a.fit-b.fit)>.05*Math.max(a.fit,b.fit)?b.fit-a.fit:0)||crossings(a)-crossings(b)||b.complete-a.complete);
+   const chosen=whole[0].pages[0].wirelessLayout;
+   if(!whole[0].compromise){if(wholePlans.size>=200)wholePlans.delete(wholePlans.keys().next().value);wholePlans.set(key,{complete:!!whole[0].complete,planKey:chosen.planKey,width:chosen.planWidth});}
    for(const page of whole[0].pages)page.wirelessLayout.wholeSwitch=true;
    return whole[0].pages;
   }
@@ -329,23 +359,30 @@ function planUpperBound(project,db,view,sorted,portNumbers,fallbackWidth){
  const geometry={...pageGeometry(project,'wireless'),dynamic:true},width=readableWidth(project,view,portNumbers,fallbackWidth),choices=bankLayout(project,db,view,sorted,width,stackSpacing(project,view,sorted,width),geometry);
  return Math.max(0,...choices.map(choice=>choice.fit/(1+.015*choice.wraps/Math.max(1,sorted.length))));
 }
-function planPaperView(project,db,viewFor,sorted,{portNumbers,first,fallbackWidth,counts=null,beat=0,optional=false,whole=false}){
+function planPaperView(project,db,viewFor,sorted,{portNumbers,first,fallbackWidth,counts=null,beat=0,optional=false,whole=false,minWidth=0,only=null}){
  const geometry={...pageGeometry(project,'wireless'),dynamic:true},narrow=new Map(),narrowestFor=view=>{const key=equipmentScope(view);if(!narrow.has(key))narrow.set(key,readableWidth(project,view,portNumbers,fallbackWidth));return narrow.get(key);};
  // Wider stacks give adjacent leads room beside their port numbers but shrink
  // the printed scale, so start narrow and widen only when routing needs it.
- const widthsFor=view=>[...new Set(Array.from({length:11},(_,i)=>Math.min(998,Math.round(narrowestFor(view)*(1+.06*i)))))];
+ const widthsFor=view=>{if(only)return [only.width];const all=[...new Set(Array.from({length:11},(_,i)=>Math.min(998,Math.round(narrowestFor(view)*(1+.06*i)))))],from=all.filter(w=>w>=minWidth-.5);return from.length?from:all.slice(-1);};
  // The final paper fit may use outside whitespace, so a plan predicted within
  // 3% of the target prints at it; the post-build check verifies real points.
  const target=project._wirelessPaperPlan.minimumFit*.97,limit=Math.max(1,project._wirelessBatchLimit||sorted.length);
  // A whole-switch sheet rarely reaches the target, so rank by printed scale
  // discounted for wrapped caption lines: a name broken mid-word or a 7-line
  // card reads worse than slightly smaller text on whole lines.
+ // Whole-switch sheets compare arrangements, not only near-equal sizes: the
+ // best two of each kind (rows, side columns, sides, surround) within 75% of
+ // the largest, largest first.
+ const wholeCandidates=(choices,top)=>{const seen=new Map();return choices.filter(choice=>legible(choice)>=top*.75&&(seen.set(choice.kind,(seen.get(choice.kind)||0)+1).get(choice.kind)<=2));};
  const legible=choice=>whole?choice.fit/(1+.015*choice.wraps/Math.max(1,sorted.length)):choice.fit;
  const pageProjectFor=index=>{const numberedName=(project._reportPrefix?project._reportPrefix+'|':'')+'Wireless Connections '+(first+index+1);return {...project,_wirelessFrameName:numberedName,_wirelessAdaptiveFactor:1,...(project.layout?.presentation?.pages?.[numberedName]?{_wirelessPresentationName:numberedName}:{})};};
  // A clean sheet has no obstructed or merged route and no cable through any
  // AP caption (outer-row cables must pass between inner-row cards).
  const clean=page=>{const v=page.wirelessLayout;if(v.routingCost[0]||v.routingCost[1])return false;if(v.captionClear==null){const captions=page.items.filter(i=>i.wirelessCaption);const copy={...page,items:page.items.map(item=>item.type==='path'?{...item,hops:undefined}:item)};bridge(copy,{style:hopStyle(project)});v.captionClear=!copy.items.some(path=>path.type==='path'&&captions.some(text=>pathCrossesText(path,text,0)));}return v.captionClear;};
- const better=(page,current)=>{if(!current)return true;const a=page.wirelessLayout,b=current.wirelessLayout;if(clean(page)!==clean(current))return clean(page);if(a.meetsTarget!==b.meetsTarget)return a.meetsTarget;if(a.meetsTarget&&a.captionWraps!==b.captionWraps)return a.captionWraps<b.captionWraps;if(Math.abs(a.legibleFit-b.legibleFit)>.05*Math.max(a.legibleFit,b.legibleFit))return a.legibleFit>b.legibleFit;if(whole&&a.captionWraps!==b.captionWraps)return a.captionWraps<b.captionWraps;return a.routingCost[3]*55+a.routingCost[4]*8+a.routingCost[2]<b.routingCost[3]*55+b.routingCost[4]*8+b.routingCost[2];};
+ // On a whole-switch sheet a tangle costs readability too: discount the
+ // printed size by its crossings per AP (7% per crossing per AP, at most 35%).
+ const effective=page=>{const v=page.wirelessLayout;return whole?v.legibleFit*Math.max(.65,1-.07*v.routingCost[3]/Math.max(1,v.links.length)):v.legibleFit;};
+ const better=(page,current)=>{if(!current)return true;const a=page.wirelessLayout,b=current.wirelessLayout;if(clean(page)!==clean(current))return clean(page);if(a.meetsTarget!==b.meetsTarget)return a.meetsTarget;if(a.meetsTarget&&a.captionWraps!==b.captionWraps)return a.captionWraps<b.captionWraps;{const x=effective(page),y=effective(current);if(Math.abs(x-y)>.05*Math.max(x,y))return x>y;}if(whole&&a.captionWraps!==b.captionWraps)return a.captionWraps<b.captionWraps;return a.routingCost[3]*55+a.routingCost[4]*8+a.routingCost[2]<b.routingCost[3]*55+b.routingCost[4]*8+b.routingCost[2];};
  // The best clean sheet for one batch: largest printed scale first, fewer
  // crossings on near ties; a wider stack only when narrower ones cannot route.
  const sheet=(batch,index)=>{
@@ -353,20 +390,24 @@ function planPaperView(project,db,viewFor,sorted,{portNumbers,first,fallbackWidt
   // The least compromised sheet, kept only when a switch must stay whole.
   const roughCost=page=>{const v=page.wirelessLayout;return [v.routingCost[0]+v.routingCost[1],clean(page)?0:1,-v.legibleFit,v.routingCost[3]];},rougher=(a,b)=>{const x=roughCost(a),y=roughCost(b);for(let i=0;i<x.length;i++)if(x[i]!==y[i])return x[i]>y[i];return false;};
   for(const width of widthsFor(view)){
-   const choices=bankLayout(pageProject,db,view,batch,width,stackSpacing(pageProject,view,batch,width),geometry).sort((a,b)=>legible(b)-legible(a)),top=choices[0]?legible(choices[0]):0;
+   const choices=bankLayout(pageProject,db,view,batch,width,stackSpacing(pageProject,view,batch,width),geometry).filter(choice=>!only||choice.planKey===only.planKey).sort((a,b)=>legible(b)-legible(a)),top=choices[0]?legible(choices[0]):0;
    if(selected&&clean(selected)&&top<selected.wirelessLayout.legibleFit*.98)break;
    // Among arrangements that print at the target size, keep names and details
    // on whole lines; otherwise take the largest printed scale available.
-   const meeting=choices.filter(choice=>choice.fit>=target).sort((a,b)=>a.wraps-b.wraps||b.fit-a.fit),ranked=meeting.length?meeting:choices.filter(choice=>legible(choice)>=top*.9);
+   const meeting=choices.filter(choice=>choice.fit>=target).sort((a,b)=>a.wraps-b.wraps||b.fit-a.fit),ranked=meeting.length?meeting:whole?wholeCandidates(choices,top):choices.filter(choice=>legible(choice)>=top*.9);
+   let numberRoom=0;
    for(const choice of ranked.slice(0,whole?8:4)){
+    // Port-number room depends on the stack width, not the AP arrangement:
+    // after two such failures at one width, try the next width.
+    if(numberRoom>=2&&!selected)break;
     // A clean sheet already found prints within 5% of anything smaller here.
-    if(whole&&selected&&clean(selected)&&legible(choice)<selected.wirelessLayout.legibleFit*.95)break;
-    try{const page=renderBankPage(pageProject,db,view,batch,choice,index,portNumbers);Object.assign(page.wirelessLayout,{paperPlan:true,predictedFit:choice.fit,legibleFit:legible(choice),captionWraps:choice.wraps,meetsTarget:choice.fit>=target,memberSubset:!!view.stackContinuation});if(whole&&(!rough||rougher(rough,page)))rough=page;if(better(page,selected))selected=page;}
-    catch(e){if(e.code!=='CORE_LAYOUT_CAPACITY')throw e;error=e;}
+    if(whole&&selected&&clean(selected)&&legible(choice)<effective(selected)*.95)break;
+    try{const page=renderBankPage(pageProject,db,view,batch,choice,index,portNumbers);Object.assign(page.wirelessLayout,{paperPlan:true,planWidth:width,predictedFit:choice.fit,legibleFit:legible(choice),captionWraps:choice.wraps,meetsTarget:choice.fit>=target,memberSubset:!!view.stackContinuation});if(whole&&(!rough||rougher(rough,page)))rough=page;if(better(page,selected))selected=page;}
+    catch(e){if(e.code!=='CORE_LAYOUT_CAPACITY')throw e;error=e;if(/around its number/.test(e.message))numberRoom++;}
     if(selected&&clean(selected)&&!selected.wirelessLayout.routingCost[3])break;
    }
    // One wider stack may untangle crossings at nearly the same printed size.
-   if(selected&&clean(selected)&&(!selected.wirelessLayout.routingCost[3]||++extra>1))break;
+   if(selected&&clean(selected)&&(whole||!selected.wirelessLayout.routingCost[3]||++extra>1))break;
   }
   return {page:selected&&clean(selected)?selected:null,rough,error};
  };

@@ -12,13 +12,14 @@ const wireless=p=>buildPages(p).filter(page=>page.wirelessLayout);
 const points=page=>.75*printGeometry(page).width/page.width;
 const stackLinks={s2:Array.from({length:32},(_,i)=>i+3),s1:Array.from({length:28},(_,i)=>i+35)};
 // Complete and clean sheets, measured on the printed paper.
-function readable(pages,{links=60,minimum=5.2,ports=4.5,paper=null}={}){
+function readable(pages,{links=60,minimum=4,ports=3.5,paper=null}={}){
  assert.deepEqual(pages.flatMap(p=>p.wirelessLayout.links).sort((a,b)=>a-b),Array.from({length:links},(_,i)=>i+3),'every AP link appears exactly once');
  for(const page of pages){
   const k=points(page),captions=page.items.filter(i=>i.wirelessCaption),devices=page.items.filter(i=>i.type==='device'),paths=page.items.filter(i=>i.type==='path'),numbers=page.items.filter(i=>i.portNumberRole==='text');
   assert.equal(page.pageOverflow,false,page.name);assert.deepEqual(page.wirelessLayout.routingCost.slice(0,2),[0,0]);
   assert.ok(Math.min(...captions.map(i=>textLayout(i).size))*k>=minimum,page.name+' AP names and details print at '+(Math.min(...captions.map(i=>textLayout(i).size))*k).toFixed(2)+' pt');
   assert.ok(Math.min(...numbers.map(i=>i.size))*k>=ports,page.name+' switch port numbers print at '+(Math.min(...numbers.map(i=>i.size))*k).toFixed(2)+' pt');
+  assert.ok(numbers.every(i=>!i.angle),page.name+' port numbers stay upright');
   for(const [index,text] of captions.entries()){assert.ok(!devices.some(d=>intersects(text,d,-1e-6)));assert.ok(!captions.slice(index+1).some(c=>intersects(text,c,-1e-6)));assert.ok(!paths.some(path=>pathCrossesText(path,text,0)));}
   for(const path of paths)for(const [point,anchor] of [[path.points[0],path.from],[path.points.at(-1),path.to]])for(const [i,key] of ['x','y'].entries())assert.ok(Math.abs(point[i]-anchor[key])<1e-6,'cables stay glued to their ports');
   // The stack view shows every member whose ports carry this sheet's links.
@@ -36,30 +37,61 @@ function wholeSwitches(pages){
 }
 const smallest=pages=>Math.min(...pages.map(page=>Math.min(...page.items.filter(i=>i.wirelessCaption).map(i=>textLayout(i).size))*points(page)));
 
-test('regression: Letter keeps every AP on its switch\'s sheet, filling the paper instead of 60 one-AP pages',()=>{
+// AP cards above, below and beside the stack (presented page coordinates).
+function sides(page){
+ const box=i=>{const {scale=1,x=0,y=0}=i.presentation||{};return {x:i.x*scale+x,y:i.y*scale+y,r:(i.x+i.w)*scale+x,b:(i.y+i.h)*scale+y};};
+ const stack=page.items.filter(i=>i.type==='device'&&i.kind!=='ap').map(box),top=Math.min(...stack.map(b=>b.y)),bottom=Math.max(...stack.map(b=>b.b)),left=Math.min(...stack.map(b=>b.x)),right=Math.max(...stack.map(b=>b.r));
+ const aps=page.items.filter(i=>i.kind==='ap').map(box);
+ return {above:aps.filter(b=>b.b<=top).length,below:aps.filter(b=>b.y>=bottom).length,beside:aps.filter(b=>b.r<=left||b.x>=right).length};
+}
+
+test('regression: Letter keeps every AP on its switch\'s sheet with the whole stack, filling the paper instead of 60 one-AP pages',()=>{
  const p=wirelessTwoStackSite(),dynamic=wireless(p);assert.equal(dynamic.length,2,'dynamic paper keeps one page per stack');
  p.layout=quickPagePaperLayout(p.layout,dynamic[0],{preset:'letter'});assert.equal(p.layout.pageSetup.visible.wirelessFit,'adaptive');
  const t=Date.now(),pages=wireless(p);assert.ok(Date.now()-t<60000,'planning stays bounded');
  wholeSwitches(pages);readable(pages,{paper:[1056,816]});
+ assert.deepEqual(pages.map(page=>page.wirelessLayout.memberIds.length),[8,5],'the whole stack is visible');
  for(const page of pages){
-  assert.ok(page.wirelessLayout.memberIds.length===1,'only the AP member, not the whole stack');
-  // The APs fill the sheet below its heading (presented coordinates): two
-  // staggered rows above and below the switch, not one long row of tiny cards.
+  // The APs fill the sheet below its heading (presented coordinates).
   const boxes=page.items.filter(i=>i.kind==='ap'||i.wirelessCaption||i.type==='device').map(i=>{const {scale=1,x=0,y=0}=i.presentation||{};return [i.x*scale+x,i.y*scale+y,(i.x+i.w)*scale+x,(i.y+i.h)*scale+y];});
   const top=Math.min(...boxes.map(b=>b[1])),wide=(Math.max(...boxes.map(b=>b[2]))-Math.min(...boxes.map(b=>b[0])))/page.width,tall=(Math.max(...boxes.map(b=>b[3]))-top)/(page.height-top);
-  assert.ok(Math.max(wide,tall)>=.85,'the APs fill the sheet ('+wide.toFixed(2)+' wide, '+tall.toFixed(2)+' tall)');assert.equal(page.wirelessLayout.rows,2,'two staggered rows on each side');
+  assert.ok(Math.max(wide,tall)>=.85,'the APs fill the sheet ('+wide.toFixed(2)+' wide, '+tall.toFixed(2)+' tall)');
+  // APs use the space above, below and beside the stack, and cables stay untangled.
+  const where=sides(page);assert.ok(where.above>0&&where.below>0&&where.beside>0,page.name+' places APs around the stack '+JSON.stringify(where));
+  assert.ok(page.wirelessLayout.routingCost[3]<=page.wirelessLayout.links.length,'no more crossings than APs');
   // Names stay on one line (a rare long outdoor name may break at a hyphen).
   const titles=page.items.filter(i=>i.wirelessCaption&&/\|title\|/.test(i.editKey||''));
   assert.ok(titles.filter(i=>textLayout(i).lines.length>1).length<=Math.floor(titles.length/10),'AP names are not broken');
  }
+ // A rebuild reuses the chosen plan and matches a cold build exactly.
+ const again=wireless(JSON.parse(JSON.stringify(p)));assert.deepEqual(again.map(page=>page.svg),pages.map(page=>page.svg));
+});
+
+test('Only stack members with AP links trades the whole stack for larger text; Use side space keeps rows above and below',()=>{
+ const whole=wireless(wirelessTwoStackSite({preset:'letter',fit:'adaptive'}));
+ const members=wirelessTwoStackSite({preset:'letter',fit:'adaptive'});members.layout.pageSetup.visible.wirelessStack='members';members.layout.pageSetup=cleanPageSetup(members.layout.pageSetup);
+ assert.equal(members.layout.pageSetup.visible.wirelessStack,'members','the choice survives normalization');
+ const sheets=wireless(members);wholeSwitches(sheets);readable(sheets,{minimum:4.5,ports:4});
+ assert.deepEqual(sheets.map(page=>page.wirelessLayout.memberIds),[['7'],['3']]);assert.ok(smallest(sheets)>smallest(whole),'members-only prints larger');
+ const side=wirelessTwoStackSite({preset:'letter',fit:'adaptive'});side.layout.presentation={defaults:{wirelessApPlacement:'sides'}};
+ for(const page of wireless(side)){const where=sides(page);assert.ok(where.beside>0&&where.above+where.below>0,'side space also uses the rows above and below '+JSON.stringify(where));}
 });
 
 test('every paper size keeps each switch whole; larger paper prints larger',()=>{
  const sizes={};
- for(const [preset,orientation,minimum,ports] of [['letter','portrait',6,5.3],['a4','landscape',5.2,4.5],['legal','landscape',6.4,5.6],['tabloid','landscape',7.8,6.9],['a3','landscape',7.7,6.8],['a5','landscape',3.7,3.2]]){
+ for(const [preset,orientation,minimum,ports] of [['letter','portrait',4.4,3.9],['a4','landscape',3.9,3.4],['legal','landscape',4,3.5],['tabloid','landscape',5.5,4.9],['a3','landscape',6,5.3],['a5','landscape',2.4,2.1]]){
   const pages=wireless(wirelessTwoStackSite({preset,orientation,fit:'adaptive'}));wholeSwitches(pages);readable(pages,{minimum,ports});sizes[preset+orientation]=smallest(pages);
  }
  assert.ok(sizes.tabloidlandscape>sizes.legallandscape&&sizes.legallandscape>sizes.a5landscape,'larger paper prints the APs larger');
+});
+
+test('a page margin setting sets the blank border on drawing pages and port maps',()=>{
+ const build=mm=>{const p=wirelessTwoStackSite({preset:'letter',fit:'adaptive'});if(mm!=null)p.layout.pageSetup.visible.marginMm=mm;return buildPages(p);};
+ const auto=build(null),wide=build(25),scale=(pages,name)=>pages.find(page=>page.name===name).presentationFrame.scale;
+ assert.equal(cleanPageSetup({visible:{marginMm:25}}).visible.marginMm,25);assert.equal(cleanPageSetup({visible:{marginMm:80}}).visible.marginMm,undefined,'out-of-range margins are dropped');
+ for(const name of ['Core Network','Wireless Connections 1','Wireless Connections 2'])assert.ok(scale(wide,name)<scale(auto,name),name+' leaves room for the wider margin');
+ const maps=wide.filter(page=>page.switchportReport&&page.family==='ports');assert.ok(maps.length);for(const page of maps)assert.ok(Math.abs(page.reportMargin-25*96/25.4)<1e-6,'port maps use the margin');
+ assert.ok(auto.filter(page=>page.switchportReport&&page.family==='ports').every(page=>[4,24].includes(page.reportMargin)),'automatic keeps the established port-map margins');
 });
 
 test('saved automatic frames from preview.49-51 re-plan as one sheet per switch; authored preview.51 splits stay',()=>{

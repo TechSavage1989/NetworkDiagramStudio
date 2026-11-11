@@ -739,7 +739,9 @@ function pageOptions(initialPreset){
  const visible=setup.visible,fitMode=field(body,'Content fit mode',visible.fitMode||'optimize',[['optimize','Auto-fit and optimize content'],['preserve','Preserve existing layout']]);
  const wirelessFit=field(body,'Wireless paper layout',visible.wirelessFit,[['adaptive','Optimize APs for paper (readable)'],['layout','Keep complete layout (proportional fit)'],['readable','Continue on sheets (AP details at least 8 pt)']]);
  wirelessFit.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});
- body.append(el('p','Optimize APs for paper uses side space and larger AP cards, measured at the actual paper size. It keeps the complete drawing on one sheet when AP details reach the readable target (at least 8 pt); otherwise it continues across sheets with the switch repeated. Saved manual geometry is retained. Keep complete layout preserves the existing arrangement and can make text small. Continue on sheets uses the earlier member-continuation layout.','hint'));
+ const wirelessStack=field(body,'Wireless stack view',visible.wirelessStack||'whole',[['whole','Whole stack (unless text would print over 30% smaller)'],['members','Only stack members with AP links (larger text)']]);
+ const pageMargin=field(body,'Page margin (mm)',Number.isFinite(visible.marginMm)?visible.marginMm:'');pageMargin.type='number';pageMargin.min=0;pageMargin.max=50;pageMargin.step=.5;pageMargin.placeholder='Automatic';
+ body.append(el('p','Optimize APs for paper keeps every access point on its switch\'s sheet and places the APs above, below and beside the stack, whichever prints largest at the actual paper size. Continue on sheets instead splits a switch\'s APs across sheets to keep AP details at 8 pt. Keep complete layout preserves the existing arrangement. Saved manual geometry is retained. Page margin is the blank border around every drawing page; leave it empty for the automatic margin.','hint'));
  body.append(el('p','Auto-fit uses the available page area, and network diagrams may choose better arrangements. Manually positioned devices and labels retain their saved positions. Preserve layout changes the page boundary without resizing or repacking content. A locked physical page keeps its dimensions and saved presentation scale; you can still move and resize content beyond its edges. Off-page content stays editable, but print/PDF and page-sized exports may clip it. Choosing a paper size does not enable the lock.','hint'));
  let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';
  const lookup=()=>selectedScope==='all'?visible.default:selectedScope==='group'?visible.groups[selectedGroup]:visible.pages[selectedPage];
@@ -792,6 +794,9 @@ function pageOptions(initialPreset){
   if(printSize.value==='custom'&&[printWidth,printHeight].some(input=>!input.value||!Number.isFinite(+input.value)||+input.value<148||+input.value>1500))throw Error('Enter print dimensions from 148 to 1500 mm.');
   if(first.value===''||!Number.isInteger(+first.value)||+first.value<0||+first.value>9999)throw Error('Use a first page number from 0 to 9999.');
   if(show.checked&&!format.value.trim())throw Error('Enter a page number format.');
+  if(pageMargin.value!==''&&(!Number.isFinite(+pageMargin.value)||+pageMargin.value<0||+pageMargin.value>50))throw Error('Enter a page margin from 0 to 50 mm, or leave it empty for automatic.');
+  if(pageMargin.value==='')delete visible.marginMm;else visible.marginMm=+pageMargin.value;
+  if(wirelessStack.value==='members')visible.wirelessStack='members';else delete visible.wirelessStack;
   store();visible.fitMode=fitMode.value;visible.wirelessFit=wirelessFit.value;visible.lockFrames={};visible.editFrames={};
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   return {...project.layout,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};

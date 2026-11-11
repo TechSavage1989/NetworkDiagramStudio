@@ -2,7 +2,7 @@ import {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReport
 import {sharedReportPalette} from './palette.mjs';
 import {reportDiagram,workspaceDiagrams,inventoryPages,blockedReport,validateReportScene,ReportCapacityError,numberReportPages,standardPortMapWidth} from './scene.mjs';
 import {reportPageLabel,reportFileStem} from './paper.mjs';
-import {cleanPageSetup,cleanPageNumbers,targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions} from '../page-options.mjs';
+import {cleanPageSetup,cleanPageNumbers,targetPageAspect,visibleFitMode,visiblePagePaper,paperDimensions,pageMarginPx} from '../page-options.mjs';
 import {adaptivePortMap} from './adaptive-port-map.mjs';
 export {cleanSwitchportSettings,reportRequest,inventoryForDevice,normalizeReportInventory,validateInventory,inventoryCsv,technicianSummary,reportFolder,reportModelChoice} from './model.mjs';
 export {sharedReportPalette,aggregateKey,validateVlanColor,nativeFill,markerVlans,vlanIds,colorDifference} from './palette.mjs';
@@ -75,7 +75,7 @@ export function portMapSheets(project,devices,paper,artwork=new Map()){
  const standardWidths=[];for(const item of items.filter(item=>item.validation.ok))try{standardWidths.push(standardPortMapWidth(item.inventory));}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;item.validation.ok=false;item.validation.errors.push(error.message);}
  const standardWidth=Math.max(30,...standardWidths);
  for(const item of items)item.standardPortWidth=standardWidth;
- const request={...prepared.request,pageFooter:cleanPageNumbers(project.layout?.pageNumbers),paper,fill:!!paper?.fill,dynamicCanvas:true,targetAspect:targetPageAspect(project,{name:'MDF Port Map',family:'ports'})};
+ const request={...prepared.request,...(pageMarginPx(project)!=null?{margin:pageMarginPx(project)}:{}),pageFooter:cleanPageNumbers(project.layout?.pageNumbers),paper,fill:!!paper?.fill,dynamicCanvas:true,targetAspect:targetPageAspect(project,{name:'MDF Port Map',family:'ports'})};
  for(const item of items){
   if(!item.validation.ok)continue;
   // Port maps paint the builder sheet in the device's core-diagram colors.
