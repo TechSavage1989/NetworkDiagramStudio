@@ -8,7 +8,7 @@ import {reportPageGeometry,reportPageLabel} from './paper.mjs';
 
 export const reportPaper=reportPageGeometry();
 const ink='#16364a',muted='#536779',rule='#cedce0',navy='#203746',pale='#eef4f6',MARGIN=24,bodyFont=10;
-// The drawing set may request its page margin (Page options → Page margin);
+// The drawing set may request its page margin (Paper & print → Page margin);
 // standalone Switchport report outputs keep the 24-unit default.
 const marginOf=request=>Number.isFinite(request?.margin)&&request.margin>=0?request.margin:MARGIN;
 const normalStyle={scale:1,numberFont:10,groupFont:11,markerRadius:2.1,compact:false};

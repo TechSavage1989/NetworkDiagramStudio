@@ -40,7 +40,7 @@ export function createActualSizeView({button,calibrate,status,getPage,setScale,i
  function refresh(){
   const page=getPage(),supported=actualSizeScale(page,1)!==null,valid=calibrationMatches(calibration,signature());
   button.disabled=!supported;
-  button.title=supported?'Show the selected physical paper at calibrated real-life size':'Choose a physical paper size in Page options first';
+  button.title=supported?'Show the selected physical paper at calibrated real-life size':'Choose a physical paper size in Paper & print first';
   if(isActive()&&(!valid||!supported))leave();
   button.setAttribute('aria-pressed',String(isActive()&&valid));
   status.textContent=calibration&&!valid?'Screen scale changed. Recalibrate before using Actual size.':isActive()?'Actual size 1:1 · Pan to inspect. Verify with paper on this screen.' :'';

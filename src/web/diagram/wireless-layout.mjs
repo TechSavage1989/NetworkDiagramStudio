@@ -323,7 +323,7 @@ function paperPlanPages(project,db,source,sorted,{portNumbers,first,fallbackWidt
    const view=remembered.complete?source:subsetFor(sorted),plan=planPaperView(project,db,()=>view,sorted,{portNumbers,first,fallbackWidth,whole:true,only:remembered});
    if(plan&&!plan.compromise){for(const page of plan.pages)page.wirelessLayout.wholeSwitch=true;return plan.pages;}
   }
-  // Page options → Wireless stack view: the whole stack (default) or only the
+  // Paper & print → Wireless stack view: the whole stack (default) or only the
   // members whose ports carry these APs (larger print).
   const membersOnly=cleanPageSetup(project.layout?.pageSetup).visible.wirelessStack==='members';
   const views=[...new Set([reduced?subsetFor(sorted):null,...(membersOnly&&reduced?[]:[source])].filter(Boolean))],whole=[];

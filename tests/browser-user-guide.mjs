@@ -13,7 +13,7 @@ try{
  const guide=page.locator('#user-guide'),dialog=page.locator('#dialog');
  await guide.click();await page.getByRole('heading',{name:'User guide',exact:true}).waitFor();
  await dialog.getByRole('button',{name:'Information panel: size and contents',exact:true}).click();
- assert.equal(await dialog.locator('#guide-panel').getByRole('button',{name:'Open Pages & layout',exact:true}).isDisabled(),true,'help works before a project without enabling drawing actions');
+ assert.equal(await dialog.locator('#guide-panel').getByRole('button',{name:'Open Layout & content',exact:true}).isDisabled(),true,'help works before a project without enabling drawing actions');
  await dialog.getByLabel('Search the guide',{exact:true}).fill('nothing-matches');assert.match(await dialog.locator('.guide-result-count').textContent(),/No matching topics/);
  await dialog.getByLabel('Search the guide',{exact:true}).fill('calibration');assert.ok(await dialog.locator('#guide-calibration').count());
  // One Escape must dismiss even with a nonempty search, not merely clear it.
@@ -26,8 +26,8 @@ try{
  await guide.click();await dialog.getByRole('button',{name:'Actual size and screen calibration',exact:true}).click();
  await page.screenshot({path:resolve(output,'user-guide.png')});
  await dialog.getByLabel('Close dialog',{exact:true}).click();assert.equal(await page.locator('#canvas').innerHTML(),before,'reading and closing help preserves the drawing');
- await guide.click();await dialog.getByRole('button',{name:'Information panel: size and contents',exact:true}).click();await dialog.locator('#guide-panel').getByRole('button',{name:'Open Pages & layout',exact:true}).click();
- await page.getByRole('heading',{name:'Pages & layout',exact:true}).waitFor();await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await page.locator('#canvas').innerHTML(),before,'opening then canceling settings from guide does not alter drawing');
+ await guide.click();await dialog.getByRole('button',{name:'Information panel: size and contents',exact:true}).click();await dialog.locator('#guide-panel').getByRole('button',{name:'Open Layout & content',exact:true}).click();
+ await page.getByRole('heading',{name:'Layout & content',exact:true}).waitFor();await dialog.getByRole('button',{name:'Cancel',exact:true}).click();assert.equal(await page.locator('#canvas').innerHTML(),before,'opening then canceling settings from guide does not alter drawing');
  await page.setViewportSize({width:620,height:800});await guide.click();await dialog.getByLabel('Search the guide',{exact:true}).fill('panel');
  assert.equal(await dialog.evaluate(e=>e.scrollWidth<=e.clientWidth+2),true,'guide does not overflow narrow dialog horizontally');
  await page.screenshot({path:resolve(output,'user-guide-narrow.png')});await page.keyboard.press('Escape');

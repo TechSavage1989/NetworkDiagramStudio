@@ -16,7 +16,7 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   return list;
  };
  function render(){
-  const body=modal('Pages & layout','page-layout-dialog'),page=entries().find(p=>p.name===key),global=key==='*',config=presentation({layout},key),own=layout.presentation.pages[key]||{};
+  const body=modal('Layout & content','page-layout-dialog'),page=entries().find(p=>p.name===key),global=key==='*',config=presentation({layout},key),own=layout.presentation.pages[key]||{};
   body.append(el('p','Choose a page to rename it, select its devices, or customize its layout. Drawing defaults apply wherever a page has no override.','hint'));
   const navigation=el('nav','','layout-sections');navigation.setAttribute('aria-label','Layout sections');body.append(navigation);
   const target=field(body,'Edit page',key,[['*','Drawing defaults — all pages'],...entries().map(p=>[p.name,displayPageName({layout},p)])]);

@@ -1,5 +1,5 @@
 // Real-browser coverage for the network page Arrange control: one undoable
-// action, saved order kept, and the Pages & layout default.
+// action, saved order kept, and the Layout & content default.
 // Use the same browser/output environment variables as browser-cable-proximity.
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
@@ -51,7 +51,7 @@ try{
  await page.getByRole('button',{name:'Analyze connections',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.organize-results').hidden,null,{timeout:60000});
  await page.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>/evenly spaced/i.test(document.querySelector('#feedback').textContent));result.spacing=await page.locator('#feedback').textContent();
  await page.locator('#drawing-undo').click();assert.equal(await scene(),beforeSpacing,'Undo restores the previous spacing in one step');await page.locator('#drawing-redo').click();
- // The drawing default is also available in Pages & layout.
+ // The drawing default is also available in Layout & content.
  await page.locator('#page-layout').click();await page.locator('#dialog select').first().selectOption('*');
  const field=page.getByLabel('Network page arrangement',{exact:true});assert.equal(await field.inputValue(),'vertical');await field.selectOption('columns-2');
  await page.getByRole('button',{name:'Apply layout',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);

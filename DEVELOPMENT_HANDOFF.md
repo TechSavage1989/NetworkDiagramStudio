@@ -1,3 +1,22 @@
+# Preview.54: organized editor controls
+
+Baseline: published preview.53. Owner request: clean up the UI, remove redundancies, and make it organized, intuitive and sensible, with clearer buttons and names.
+
+Changes (index.html, app.mjs, style.css, user-guide.mjs, notices; every control ID is unchanged):
+- **Header:** a single Export… entry point. The header Visio button (#export) moved into the stage Quick export group with Print / PDF (#print) and Page SVG (#svg); the native harness still clicks them by ID. Labels: Add connection (#add-link), Switchport reports (#switchport-reports).
+- **Dialog names:**
+  - Page options becomes Paper & print (#page-options; dialog title and the native title check updated; save button Apply paper settings).
+  - Pages & layout becomes Layout & content (#page-layout).
+  - The renames were applied with sed across notices, hints, the guide (actionLabels: Open Paper & print / Open Layout & content), docs and tests.
+- **Edit toolbar:**
+  - DOM order is regrouped with `.tool-sep` separators: count | Undo Redo Undo all | Properties… Deselect (Snap label to line, hidden while disabled) | Align & space Group Ungroup | Resize [Objects / Spacing between them] Smaller Larger Set size… Set spacing… | Snapping Snap settings… | Move to page… Arrange Organize connections | contextual text and rotation spans.
+  - Compact selects and labels. The dialog title Snap options and the Snapping: on/off text are unchanged (tests assert them).
+- **Hide project (#toggle-project):** on windows over 1100 px, `main.project-collapsed` hides `.project-sidebar` and the grid becomes 210px + 1fr. The choice is stored in localStorage `nds-project-panel` (try/catch). At 1366×768 the canvas grows from 906 to 1156 px wide and the stage toolbar fits one row.
+- **Welcome card:** Import files (#welcome-import) and Open project (#welcome-open) are added beside #sample, both in the static markup and in the reset recreation.
+- **Sidebar:** Add device. The edit help status is shortened.
+
+Verification: all browser suites were run locally on the UI build. Only core-arrangement, organize-connections and wan-placement fail, and those fail identically on main locally. page-navigation expects the Quick export group.
+
 # Preview.53: whole stack, APs all around it, upright numbers, page margin, faster rebuilds
 
 Baseline: published preview.52 (main cbc1c2f). Owner feedback, with screenshots of their real project (not in the repository):

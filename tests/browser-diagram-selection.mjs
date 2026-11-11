@@ -16,7 +16,7 @@ export async function checkDiagramSelection(page,output,open){
  await page.locator('#page-options').click();let paperDialog=page.locator('#dialog');
  await paperDialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');
  assert.equal(await paperDialog.getByLabel('Lock physical page size',{exact:true}).isChecked(),false);
- await paperDialog.getByRole('button',{name:'Save page options',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ await paperDialog.getByRole('button',{name:'Apply paper settings',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
  const original=await save('selection-before'),scene=buildPages(original)[0],expected=[...diagramContentKeys(scene)].sort();
  assert.ok(scene.items.some(i=>i.panelGroup),'Fixture must contain panel content');
  await selectAll('Control');assert.equal(await page.locator('#drawing-selection').textContent(),expected.length+' selected');
