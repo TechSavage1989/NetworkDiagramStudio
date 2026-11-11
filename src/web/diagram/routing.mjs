@@ -28,6 +28,19 @@ const clean=points=>collapseSpikes(simplifyRoute(points));
 // white gap, cable rails keep clear of every device body, and finished routes
 // are redistributed onto evenly pitched tracks inside each open channel.
 export const ROUTE_STYLE=Object.freeze({clearance:24,gap:6,pitch:18,rowPitch:20,titleReserve:34,detailReserve:26,modulePitch:10});
+// Leads in one stack gap turn toward their rails. When every lead turning left
+// leaves from a socket left of every lead turning right, their horizontal runs
+// never overlap, so the k-th innermost lead of each side shares level k
+// (level 0 is farthest from the sockets): an inner lead's run then passes
+// beyond the risers of the outer sockets instead of crossing them. Otherwise
+// each lead keeps its own level. Entries carry {x, side ('left'|'right'),
+// thickness}; returns levels as lists of entries, farthest first.
+export function shareGapLevels(entries,separation=6){
+ const left=entries.filter(v=>v.side==='left').sort((a,b)=>b.x-a.x),right=entries.filter(v=>v.side==='right').sort((a,b)=>a.x-b.x);
+ if(left.length&&right.length&&left.length+right.length===entries.length&&left[0].x+separation<right[0].x)
+  return Array.from({length:Math.max(left.length,right.length)},(_,k)=>[left[k],right[k]].filter(Boolean));
+ return entries.map(v=>[v]);
+}
 const separation=(a,b)=>(a+b)/2+ROUTE_STYLE.gap;
 function segments(points){return points.slice(1).map((b,i)=>({a:points[i],b,h:points[i][1]===b[1]})).filter(s=>s.a[0]!==s.b[0]||s.a[1]!==s.b[1]);}
 import {crossesText,textFootprint} from './labels.mjs';
@@ -50,6 +63,9 @@ function crossesPanel(route,node){
   if(route.hosts.includes(node.key)){
    while(first<last&&inside(route.points[first]))first++;
    while(last>first&&inside(route.points[last]))last--;
+   // A stack member's socket leaves through the gap above or below it, never
+   // sideways across its own faceplate between the socket rows.
+   if(region.memberId){const p=route.points,sideways=(i,j)=>i>=0&&j<p.length&&inside(p[i])!==inside(p[j])&&Math.abs(p[i][1]-p[j][1])<.01&&Math.abs(p[i][0]-p[j][0])>.01;if(sideways(first-1,first)||sideways(last,last+1))return true;}
   }
   return crossesText(route.points.slice(first,last+1),box,(route.weight||4)/2-.01);
  });
@@ -756,8 +772,16 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
     let escapeX=escapeChoices.get(v),x=escapeX,ay=v.anchor.escapeY??v.anchor.edge+(v.anchor.side==='top'?-1:1)*(v.anchor.side==='top'?topClearance+pitch*rank:bottomClearance+pitch*rank)*scale;
     if(v.anchor.escapeRange){
      const matching=sorted.filter(o=>o.anchor.escapeRange&&near(o.anchor.escapeRange[0],v.anchor.escapeRange[0])&&near(o.anchor.escapeRange[1],v.anchor.escapeRange[1])),[lo,hi]=v.anchor.escapeRange,index=matching.indexOf(v),widths=matching.map(o=>o.anchor.weight||4),required=widths.reduce((sum,width)=>sum+width,0)+.25*(matching.length+1);
-     if(hi-lo<required)throw Object.assign(Error('This stack gap is too narrow for the selected cable widths. Enlarge the device or reduce the cable width.'),{code:'CORE_LAYOUT_CAPACITY',owner:v.node.sourceId});
-     const gap=(hi-lo-widths.reduce((sum,width)=>sum+width,0))/(matching.length+1);ay=lo+widths.slice(0,index).reduce((sum,width)=>sum+width,0)+weight/2+gap*(index+1);
+     // Wireless leads leaving one side of a gap toward opposite rails share
+     // levels when their runs cannot overlap (outermost lead farthest out).
+     const levels=directionNeutralLevels&&matching.every(o=>o.anchor.side===v.anchor.side)?shareGapLevels(matching.map(o=>({o,x:o.anchor.x,side:sides.get(o.e.idx)||'left',thickness:o.anchor.weight||4}))):null,levelWidths=levels?.map(level=>Math.max(...level.map(item=>item.thickness))),shared=levels&&levels.length<matching.length&&hi-lo>=levelWidths.reduce((sum,width)=>sum+width,0)+.25*(levels.length+1);
+     if(shared){
+      const k=levels.findIndex(level=>level.some(item=>item.o===v)),total=levelWidths.reduce((sum,width)=>sum+width,0),gap=(hi-lo-total)/(levels.length+1),offset=levelWidths.slice(0,k).reduce((sum,width)=>sum+width,0)+levelWidths[k]/2+gap*(k+1);
+      ay=v.anchor.side==='bottom'?hi-offset:lo+offset;
+     }else{
+      if(hi-lo<required)throw Object.assign(Error('This stack gap is too narrow for the selected cable widths. Enlarge the device or reduce the cable width.'),{code:'CORE_LAYOUT_CAPACITY',owner:v.node.sourceId});
+      const gap=(hi-lo-widths.reduce((sum,width)=>sum+width,0))/(matching.length+1);ay=lo+widths.slice(0,index).reduce((sum,width)=>sum+width,0)+weight/2+gap*(index+1);
+     }
     }
     // Text explicitly positioned by the user remains an obstacle. Automatic
     // device titles are fitted after routing instead of forcing cable doglegs.

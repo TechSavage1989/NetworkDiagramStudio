@@ -24,7 +24,7 @@ function checkPages(pages){
    assert.equal(textLayout(caption).size,caption.size,'complete captions retain their measured font');
    assert.ok(caption.size*points>=8,'printed AP details stay at least 8pt');
    assert.ok(!bodies.some(body=>intersects(caption,body)),'caption does not cover hardware');
-   assert.ok(!captions.slice(index+1).some(other=>intersects(caption,other)),'captions do not overlap');
+   assert.ok(!captions.slice(index+1).some(other=>intersects(caption,other,-1e-6)),'captions do not overlap (lines of one card touch)');
    assert.ok(!paths.some(path=>pathCrossesText(path,caption,1)),'cables do not cross captions');
   }
   for(const path of paths){

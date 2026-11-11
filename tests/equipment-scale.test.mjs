@@ -40,7 +40,9 @@ test('wireless pages keep whole dynamic stacks at a shared width with real endpo
  for(const [i,[id,port]] of [['stack5','1/41'],['stack5','5/41'],['stack8','8/41'],['single','1/41']].entries()){const ap={id:'ap'+i,name:'LAB-AP-'+i,kind:'ap',model:'AP-515',ports:[{name:'eth0'}]};site.devices.push(ap);site.links.push({a:id,ap:port,b:ap.id,bp:'eth0',media:'copper',speed:'1 Gbps'});}
  // An LLDP-only interface still belongs to its declared physical member.
  site.devices.find(d=>d.id==='stack5').ports=site.devices.find(d=>d.id==='stack5').ports.filter(p=>p.name!=='5/41');
- const pages=buildPages(site),wireless=pages.filter(p=>p.title==='Wireless Connections'),panels=bodies(wireless);assert.equal(panels.length,3);assert.equal(new Set(panels.map(p=>p.w)).size,1);
+ // Each switch is planned on its own sheet (its readable width); every panel
+ // keeps its native ratio, members and real endpoint ownership.
+ const pages=buildPages(site),wireless=pages.filter(p=>p.title==='Wireless Connections'),panels=bodies(wireless);assert.equal(panels.length,3);
  for(const panel of panels){const device=site.devices.find(d=>d.id===panel.sourceId),ratio=deviceFaceplate(device,{padding:equipmentPadding,memberGaps:panel.memberGaps}).ratio;assert.ok(Math.abs(panel.w/panel.h-ratio)<1e-8);assert.equal(new Set(panel.panelRegions?.map(r=>r.memberId).filter(Boolean)).size,device.stackMembers?.length||0);}
  for(const p of wireless)for(const cable of p.items.filter(i=>i.type==='path')){const panel=p.items.find(i=>i.key===cable.from.device);assert.ok(panel.ports[cable.from.port]);assert.ok(Math.abs(cable.points[0][0]-panel.x-panel.ports[cable.from.port][0]*panel.w)<1e-7);}
  const parts=await unzip(await exportVisio(site,pages).arrayBuffer());assert.ok(parts.has('visio/pages/page1.xml'));

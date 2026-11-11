@@ -70,7 +70,8 @@ import {adaptiveProject} from './fixtures/adaptive-port-maps.mjs';
 test('normal and stacked port maps retain centered port numbers in dynamic and paper builder layouts',()=>{
  for(const members of [1,3])for(const preset of ['dynamic','letter']){
   const project=adaptiveProject(preset,'landscape',members);
-  const pages=buildPages(project),numbers=pages.flatMap(p=>p.items.filter(i=>i.portNumberRole==='text'||i.reportPortRole==='number'));
+  // Port map numbers (core pages also number their uncabled sockets).
+  const pages=buildPages(project),numbers=pages.filter(p=>!p.coreDeviceIds).flatMap(p=>p.items.filter(i=>i.portNumberRole==='text'||i.reportPortRole==='number'));
   assert.equal(numbers.length,members*52);
   assert.ok(numbers.every(i=>i.align==='center'));
   const first=numbers[0];project.layout.drawingEdits={[first.editKey]:{align:'right'}};

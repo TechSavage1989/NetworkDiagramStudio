@@ -6,7 +6,7 @@ import {presentation,deviceScale,scaleText} from '../presentation.mjs';
 import {fitDynamicPage} from './dynamic-page.mjs';
 import {pageGeometry,targetPageAspect} from '../page-options.mjs';
 import {deviceDetails} from '../device-details.mjs';
-import {coreLinkKey as linkKey,coreArrangement,lineSpacing,cableCaptions,hopStyle} from '../layout.mjs';
+import {coreLinkKey as linkKey,coreArrangement,lineSpacing,cableCaptions,hopStyle,corePortNumbers} from '../layout.mjs';
 import {coreSidebar} from './sidebar.mjs';
 import {coreRoutes,ROUTE_STYLE} from './routing.mjs';
 import {placeCableLabels,placeDeviceTitles,embeddedTextBoxes,textWidth} from './labels.mjs';
@@ -213,7 +213,7 @@ function moduleLegend(page,project){
   label(target.items,38,y+top+8*iconScale,detail.w,detail.h,detail.value,detail.size,detail.bold,C.muted);Object.assign(target.items.at(-1),{editKey:portsKey,moduleLegend:true,full:true});y+=height;
  }if(Object.keys(inherited).length)for(const target of [page,...extra])applyDrawingEdits(target,project);return extra;
 }
-export function corePages(project,inventory){
+export function corePages(project,inventory,{portNumbers}={}){
  const geometry=pageGeometry(project,'core'),{width:baseW,height:baseH,dynamic}=geometry,BOTTOM=baseH-74;
  const db=handoffs(inventory,project.layout?.suppressedHandoffs),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];
  const explicit=new Set(custom.flatMap(p=>p.devices));
@@ -354,8 +354,21 @@ export function corePages(project,inventory){
    const data={e,id,which,node,anchor,info},key=id+'/'+anchor.side;
    if(!banks.has(key))banks.set(key,[]);banks.get(key).push(data);endData.set(e.idx+'/'+which,data);
   }
+  // Port numbers on switch and firewall faceplates, as on wireless pages,
+  // upright and a step smaller where sockets are narrow. A socket with a
+  // cable on this page is already named by its port label, so it carries no
+  // number and its lead leaves exactly as before. Hardware too narrow for
+  // readable numbers stays plain.
+  if(portNumbers&&corePortNumbers(pageProject))for(const [id,node] of nodes){
+   const d=db.devices.get(id);if(!d||!['switch','firewall'].includes(d.kind)||node.angle||node.offPage||!node.children?.some(c=>c.socketPart===0))continue;
+   const cabled=new Set(used.flatMap(e=>[e.a===id?e.ap:null,e.b===id?e.bp:null]).filter(Boolean).map(port=>String(port).toLowerCase()));
+   const ports=physicalPorts(d).filter(port=>!cabled.has(String(port.name).toLowerCase()));if(!ports.length)continue;
+   for(const fontScale of [1,.85,.7]){const temp={name:page.name,items:[]};try{portNumbers(temp.items,node,ports,{selected:new Set(),upright:true,fontScale});}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;continue;}
+    // page.items (not the earlier items alias, replaced by applyDrawingEdits).
+    applyDrawingEdits(temp,pageProject);page.items.push(...temp.items);break;}
+  }
   const pinnedTitles=new Set(items.filter(i=>i.titleOwner&&(Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.x)||Number.isFinite(pageProject.layout?.drawingEdits?.[i.editKey]?.y))).map(i=>i.titleOwner));
-  const obstacles=[...items.filter(i=>i.type==='text'&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>{const owner=deviceBounds(b.owner);return b.x<owner.x||b.y<owner.y||b.x+b.w>owner.x+owner.w||b.y+b.h>owner.y+owner.h;})];
+  const obstacles=[...items.filter(i=>i.type==='text'&&!i.portNumberRole&&!i.deviceTextOwner&&(!i.titleOwner||pinnedTitles.has(i.titleOwner))),...embeddedTextBoxes(page).filter(b=>{const owner=deviceBounds(b.owner);return b.x<owner.x||b.y<owner.y||b.x+b.w>owner.x+owner.w||b.y+b.h>owner.y+owner.h;})];
   const stack=[...nodes.values()].filter(n=>n.kind!=='handoff').map(n=>({...n,...deviceBounds(n)}));
   const routingBounds=stack.length?{left:Math.min(...stack.map(n=>n.x)),right:Math.max(...stack.map(n=>n.x+n.w))}:{left:sidebar.bodyLeft,right:sidebar.bodyLeft+width};
   let planned;

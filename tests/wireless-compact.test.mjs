@@ -37,8 +37,9 @@ test('five and eight member stacks retain every AP on one dynamic page with clea
  for(const members of [5,8]){const site=wirelessLab(members),saved=JSON.stringify(site),pages=wireless(site);assert.equal(pages.length,1);const page=pages[0];assert.equal(page.items.filter(i=>i.type==='path').length,28);assert.equal(page.items.filter(i=>i.kind==='ap').length,28);assert.equal(page.wirelessLayout.memberIds.length,members);assert.equal(new Set(page.wirelessDeviceIds).size,29);assertClear(page);assert.equal(JSON.stringify(site),saved);assert.equal(wireless(JSON.parse(saved))[0].svg,page.svg);}
 });
 test('a busy middle member grows only its real adjacent gaps while every chassis keeps its scale',()=>{
- const site=wirelessLab(5,28,true),page=wireless(site)[0],body=page.items.find(i=>i.kind==='switch'),base=addDevice({items:[]},site,site.devices[0],[0,0,998,1],'probe',{fitWidth:true,padding:equipmentPadding});
- assert.equal(body.w,base.w);assert.deepEqual(Object.keys(body.memberGaps).sort(),['2/3','3/4']);assert.ok(body.memberGaps['2/3']>.035);assert.ok(body.memberGaps['3/4']>.035);
+ // The sheet plans its own readable stack width; only the busy gaps grow.
+ const site=wirelessLab(5,28,true),page=wireless(site)[0],body=page.items.find(i=>i.kind==='switch');
+ assert.deepEqual(Object.keys(body.memberGaps).sort(),['2/3','3/4']);assert.ok(body.memberGaps['2/3']>.035);assert.ok(body.memberGaps['3/4']>.035);
  for(const member of site.devices[0].stackMembers){const region=body.panelRegions.find(r=>r.memberId===member.id),single=deviceFaceplate({...site.devices[0],stackMembers:[member],stackContinuation:true},{padding:equipmentPadding});assert.ok(Math.abs(region.h*body.h-body.w/single.ratio)<1e-6);}
  assertClear(page);
 });

@@ -82,7 +82,7 @@ let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0
 let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=false,drawingReady=false,displayedProject=null;
 const pageCache=new Map(),buildDrawing=(source=scoped(),options={})=>buildPages(source,{...options,cache:pageCache});
 const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
-let modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null,settingsPreviewSession=null;
+let siteRename=null,modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null,settingsPreviewSession=null;
 let cablePoint=-1,snapLabelPick=null,contextMenu=null;
 const snapshot=()=>JSON.parse(JSON.stringify({devices:project.devices,links:project.links,warnings:project.warnings}));
 const modelKinds=deviceKinds;
@@ -987,7 +987,8 @@ function pageNavigation(){
 }
 function draw(prepared){
  cancelBesidePick();
- $('site').value=project.name;$('heading').textContent=project.name;deviceList();
+ // A rename still being typed stays in the field until it is committed.
+ if(siteRename===null){$('site').value=project.name;$('heading').textContent=project.name;}deviceList();
  const subset=scoped();const live=subset.devices.length>0;
  $('link-count').textContent='('+project.links.length+')';$('stats').textContent=subset.devices.length+' of '+project.devices.length+' devices   /   '+subset.links.length+' links';
  $('art-count').textContent=Object.keys(project.stencils).length+' local hardware shapes';$('hardware').title='Local stencil library: '+$('art-count').textContent;
@@ -1391,7 +1392,13 @@ async function importArt(files){
  }
  const target=project.devices.find(d=>d.id===stencilDevice);perform();const added=Object.keys(project.stencils).length-before;if(stencilResults.length>errorsBefore&&!added)importResults();else if(target)await deviceStencil(target);else hardware();say(added+' hardware shapes added.'+(stencilResults.length>errorsBefore?' Review the import results.':''));
 }
-$('site').oninput=()=>{project.name=$('site').value;perform();};
+// The site name appears on every page, so a rename rebuilds the whole drawing
+// set. Show it in the heading at once and commit it once typing pauses, on
+// Enter or when the field loses focus: one rebuild and one Undo step per rename.
+const commitSiteName=()=>{clearTimeout(siteRename);siteRename=null;const name=$('site').value;if(name===project.name)return;project.name=name;perform();};
+$('site').oninput=()=>{$('heading').textContent=$('site').value;clearTimeout(siteRename);siteRename=setTimeout(commitSiteName,800);};
+$('site').onchange=commitSiteName;
+$('site').addEventListener('keydown',event=>{if(event.key==='Enter')commitSiteName();});
 $('filter').oninput=deviceList;$('close').onclick=close;
 $('matches').onclick=()=>{if(!$('filter').value.trim()){say('Enter a device name or model filter first.');return;}for(const d of project.devices){d.scopeOverride=matchName(d);d.hidden=!d.scopeOverride;}perform();};
 $('all').onclick=()=>{for(const d of project.devices){d.scopeOverride=true;d.hidden=false;}perform();};
