@@ -135,3 +135,14 @@ test('explicit keep-layout, explicit continuation and dynamic paper keep their o
  const sheets=wireless(continued);assert.ok(sheets.length>2,'Continue on sheets still splits for larger text');assert.ok(smallest(sheets)>=7.95);
  assert.ok(wireless(wirelessTwoStackSite()).every(page=>!page.wirelessLayout.paperPlan&&page.wirelessLayout.memberIds.length>=5));
 });
+
+test('editing another device reuses drafted wireless sheets and matches a cold build',()=>{
+ const p=wirelessTwoStackSite({preset:'letter',fit:'adaptive'}),first=wireless(p);
+ const renamed={...p,devices:p.devices.map(d=>d.id==='mdf'?{...d,name:'LAB-SW01-MDF-RENAMED'}:d)};
+ const t=Date.now(),warm=wireless(renamed),elapsed=Date.now()-t;
+ assert.deepEqual(warm.map(page=>page.svg),first.map(page=>page.svg),'an unrelated rename leaves wireless sheets unchanged');
+ // A renamed AP re-plans only its own switch and shows the new name.
+ const ap={...renamed,devices:renamed.devices.map(d=>d.id==='ap1-5'?{...d,name:'LAB-AP-1-5-RENAMED'}:d)},changed=wireless(ap);
+ assert.equal(changed[0].svg,warm[0].svg,'the other switch is reused');assert.match(changed[1].svg,/LAB-AP-1-5-RENAMED/);
+ assert.ok(elapsed<20000,'reuse is bounded ('+elapsed+' ms)');
+});

@@ -19,6 +19,15 @@ Changes (wireless-layout.mjs, diagram/index.mjs portNumbers, page-options.mjs, r
   - wholePlans memoizes {view, planKey, width} per switch over every input that shapes the choice. A rebuild renders that one candidate.
   - Two-stack site on Letter: cold about 6–8 s, warm about 1.5 s for the whole build, and the warm SVG is identical to cold.
   - Frames record wirelessPlanWidth and wirelessSubset, and a saved whole-switch frame re-renders exactly its plan. Without this, a manual AP move on a locked sheet could switch views and lose its edit key.
+- **Draft reuse:** switchDrafts caches each switch's drafted wireless sheets, keyed on the whole project except other devices, links and non-wireless drawing edits. The key includes the switch, its APs, their links with global indices, the sheet position and the common width. Editor-like profile (two-stack site, dynamic paper, page cache):
+
+  | Change | Before | After |
+  | --- | --- | --- |
+  | Rename MDF | 3.5 s | 0.58 s |
+  | Rename one AP | 3.8 s | 2.6 s (its switch only) |
+  | Text or line-jump style | about 3.5 s | unchanged (every sheet re-plans) |
+
+  The ports family (about 0.4 s) and core (about 0.1 s) are the remainder.
 - **Page margin:** `visible.marginMm` (0–50, empty = automatic), read through pageMarginPx in fitVisiblePage, the wireless paperBody, builder port-map sheets (`request.margin`, report-scene MARGIN default 24) and adaptive maps (default 4). Standalone Switchport reports are unchanged.
 
 - **Margin bug found during render checks:** the near-fit reclaim widened the body into outside whitespace down to 2 px, so content ignored a 25 mm margin. An explicit margin is now never reclaimed. Rendered core and wireless Letter pages with 25 mm were inspected.

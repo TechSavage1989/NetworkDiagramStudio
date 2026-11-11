@@ -498,6 +498,22 @@ export function buildWirelessPages(project,db,{portNumbers,tablePages,empty}){
  }
  return render(project);
 }
+// Drafted sheets per switch, keyed by the whole project except other devices,
+// links and non-wireless drawing edits: the switch, its APs, their links (with
+// their global indices), the sheet position and every setting stay in the key.
+// Long strings (stencil artwork) are keyed by identity, not re-serialized.
+const switchDrafts=new Map(),longStrings=new Map();
+function switchDraftKey(project,db,sw,records,first,width){
+ const {devices,links,evidence,warnings,layout={},...rest}=project,wireless=key=>/Wireless Connections/.test(key);
+ const drafting={...layout,drawingEdits:Object.fromEntries(Object.entries(layout.drawingEdits||{}).filter(([key])=>wireless(key)))};
+ const apIds=[...new Set(records.map(e=>e.apId))].sort();
+ return JSON.stringify([first,width,rest,drafting,db.devices.get(sw),apIds.map(id=>db.devices.get(id)),records.map(e=>[e.idx,e.sw,e.sp,e.apId,e.apPort,e.media,e.speed,e.status,e.a,e.ap,e.b,e.bp])],(key,value)=>{
+  if(typeof value!=='string'||value.length<4096)return value;
+  if(!longStrings.has(value)){if(longStrings.size>500)longStrings.clear();longStrings.set(value,'#long'+longStrings.size+':'+value.length);}
+  return longStrings.get(value);
+ });
+}
+function rememberDrafts(key,pages){if(switchDrafts.size>=100)switchDrafts.delete(switchDrafts.keys().next().value);switchDrafts.set(key,structuredClone(pages));}
 function wirelessPages(project,db,{portNumbers,tablePages,empty}){
  let geometry=pageGeometry(project,'wireless'),width=geometry.width-202;
  const apIds=new Set([...db.devices.keys()].filter(id=>db.devices.get(id).kind==='ap')),linked=new Set(),groups=new Map();
@@ -512,7 +528,12 @@ function wirelessPages(project,db,{portNumbers,tablePages,empty}){
  if(!geometry.dynamic&&width>geometry.width-92)throw capacityError('This wireless sheet needs a wider page for readable ports and cables.');
  const out=[];
  for(const [sw,records] of groups){
-  if(project._wirelessPaperPlan){const source=db.devices.get(sw),sorted=records.slice().sort((a,b)=>cmp(a.sp,b.sp)||cmp(a.apId,b.apId));out.push(...paperPlanPages(project,db,source,sorted,{portNumbers,first:out.length,fallbackWidth:width}));continue;}
+  // A switch whose own inputs are unchanged reuses its drafted sheets: edits to
+  // other devices, links or pages never re-plan it.
+  const draftKey=switchDraftKey(project,db,sw,records,out.length,width),drafted=switchDrafts.get(draftKey);
+  if(drafted){out.push(...structuredClone(drafted));continue;}
+  const before=out.length;
+  if(project._wirelessPaperPlan){const source=db.devices.get(sw),sorted=records.slice().sort((a,b)=>cmp(a.sp,b.sp)||cmp(a.apId,b.apId));out.push(...paperPlanPages(project,db,source,sorted,{portNumbers,first:out.length,fallbackWidth:width}));rememberDrafts(draftKey,out.slice(before));continue;}
   const source=db.devices.get(sw),sorted=records.slice().sort((a,b)=>cmp(a.sp,b.sp)||cmp(a.apId,b.apId)),whole=geometry.dynamic?[]:bankLayout(project,db,source,sorted,width,stackSpacing(project,source,sorted,width),geometry);
   // Keep complete dynamic stacks. Fixed paper tries the whole stack before a
   // physical member continuation, and never slices an imported faceplate.
@@ -559,6 +580,7 @@ function wirelessPages(project,db,{portNumbers,tablePages,empty}){
     Object.assign(selected.wirelessLayout,{attempts,totalRouteCandidates:candidates});out.push(selected);
    }
   }
+  rememberDrafts(draftKey,out.slice(before));
  }
  const unseen=[...apIds].filter(id=>!linked.has(id)).map(id=>db.devices.get(id));if(unseen.length)out.push(...tablePages(project,'Wireless Connections','Access points with no mapped switch uplink',[['Access point',390],['Model',370],['IP / MAC address',368]],unseen.map(d=>Object.assign([nameOf(d),deviceModel(d),[d.ip,macCaption(d)].filter(Boolean).join(' | ')],{sourceDeviceId:d.id})),''));
  if(!out.length){const layout=project.layout||{},pattern=/(?:^|\|)Wireless Connections(?:\b|\|)/,retained=project._reportPrefix||layout.documentation==='full'||layout.pageSetup?.overrides?.wireless||Object.keys(layout.drawingEdits||{}).some(key=>pattern.test(key))||Object.keys(layout.presentation?.pages||{}).some(key=>pattern.test(key));if(retained){const p=fresh('Wireless Connections','Wireless Connections','Access-point uplinks',project);empty(p,'No access points or switch-to-AP links were supplied.');out.push(p);}}
