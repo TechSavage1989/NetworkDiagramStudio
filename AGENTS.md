@@ -300,7 +300,9 @@ Network-page device names and details stay next to their device. layout.deviceCa
 content on the drawing defaults and on every network page, stored only when not
 the default name above-left / details below-left, device-captions.mjs), with
 per-device overrides in deviceCaptions.devices[id] (device editor and the Edit
-drawing toolbar's Name/Details selects for a selected network-page device;
+drawing toolbar's compact Name & details menu for a selected network-page device,
+a closed details popover so selecting a device never adds a toolbar row and moves
+the drawing under the pointer;
 choosing a corner clears that caption's dragged x/y so it follows, as one
 history action; unknown ids are cleaned), sets the preferred corner for core creation, placeDeviceTitles
 and the paper pass: the chosen corner first, sliding along the same edge (past a

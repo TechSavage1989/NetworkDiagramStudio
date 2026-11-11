@@ -5,7 +5,8 @@ Baseline: published preview.57. The owner asked about placing device names at sp
 - **Discoverable placement:** Layout & content shows Device name position and Device details position on every network page as well as the drawing defaults (the dialog opens on the current page; preview.57 showed them only under Drawing defaults).
 - **Per device:** layout.deviceCaptions.devices[id] = {name?, info?}.
   - Set in the device editor ("Name position / Details position (network pages)") or in Edit drawing.
-  - In Edit drawing, a selected network-page device shows Name and Details selects (#device-name-corner, #device-info-corner) next to Rotation.
+  - In Edit drawing, a selected network-page device shows a compact Name & details menu (a details popover holding #device-name-corner and #device-info-corner) next to Rotation.
+  - The first version showed both selects inline. That added a toolbar row on selection and moved the drawing, so the native Shift multi-selection check clicked the wrong place. As a menu the bar stays the same height (asserted in browser-page-layout-defaults).
   - Choosing a corner clears that caption's dragged x/y so it follows the corner. One history action, validated.
   - core.mjs, placeDeviceTitles and the paper pass read deviceCaptionPlacement(project, id).
 - **Port numbers:** core numbering no longer requires switch/firewall kinds. Every device that draws real sockets is numbered from its port inventory (routers such as the Juniper SRX300, patch panels and so on). Handoff cards and generic symbols without sockets stay plain.

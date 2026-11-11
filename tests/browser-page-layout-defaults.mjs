@@ -157,8 +157,9 @@ try{
  const sceneBox=key=>page.locator('#canvas svg').evaluate((svg,key)=>{const n=[...svg.querySelectorAll('[data-drawing-key="'+key+'"]')].find(n=>!n.closest('.transform-controls'));const b=n.getBBox(),m=svg.getCTM().inverse().multiply(n.getCTM());return {x:m.a*b.x+m.e,y:m.d*b.y+m.f,w:b.width*m.a,h:b.height*m.d};},key);
  const bodyKey='Core Network|device|sw-1|body',titleKey='Core Network|title|sw-1';
  const titleBefore=await sceneBox(titleKey),bodyBefore=await sceneBox(bodyKey);assert.ok(titleBefore.y+titleBefore.h<=bodyBefore.y+1,'the name starts above its device');
- await page.locator('#edit-drawing').click();await page.locator('#canvas svg [data-drawing-key="'+bodyKey+'"]').first().click({position:{x:8,y:8}});
- await page.locator('#device-name-corner').waitFor();assert.equal(await page.locator('#device-name-corner').inputValue(),'');
+ await page.locator('#edit-drawing').click();const barBefore=await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height);await page.locator('#canvas svg [data-drawing-key="'+bodyKey+'"]').first().click({position:{x:8,y:8}});
+ await page.locator('#device-caption-tools').waitFor();assert.ok(await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height)<=barBefore+4,'selecting a device does not add a toolbar row, so the drawing does not move');
+ await page.locator('#device-caption-tools summary').click();await page.locator('#device-name-corner').waitFor();assert.equal(await page.locator('#device-name-corner').inputValue(),'');
  await page.locator('#device-name-corner').selectOption('below-right');await page.waitForFunction(()=>/Name position saved/.test(document.querySelector('#feedback').textContent));
  const titleAfter=await sceneBox(titleKey),bodyAfter=await sceneBox(bodyKey);assert.ok(titleAfter.y>=bodyAfter.y+bodyAfter.h-1,'the chosen device name moves below its device');
  assert.ok(bodyAfter.x+bodyAfter.w-(titleAfter.x+titleAfter.w)<bodyAfter.w/2,'toward the right edge');
