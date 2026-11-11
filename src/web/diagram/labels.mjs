@@ -41,7 +41,6 @@ function visibleOffsets(origin,direction,step,limit,lo,hi){
  return out;
 }
 export function placeDeviceTitles(page,project,nodes){
- const corners=deviceCaptionPlacement(project);
  const minX=page.dynamic?(page.originX||0)+36:page.legendLayout==='sidebar'?(page.sidebar?.titleLeft??318):38,minY=page.dynamic?(page.originY||0)+36:151,maxX=(page.originX||0)+(page.width||1200)-38,maxY=page.dynamic?Infinity:(page.originY||0)+(page.height||975)-69;
  const edits=project.layout?.drawingEdits||{},titles=page.items.filter(i=>i.titleOwner),paths=page.items.filter(i=>i.type==='path'),bodies=[...nodes.values()].map(g=>({...g,...deviceBounds(g),angle:0})),occupied=[...page.items.filter(i=>i.type==='text'&&!i.titleOwner).map(i=>({...i})),...embeddedTextBoxes(page)];
  for(const node of bodies)for(const slot of ['title','detail']){
@@ -54,7 +53,7 @@ export function placeDeviceTitles(page,project,nodes){
   // The chosen corner comes first (name above and details below on the left
   // by default), sliding along the device edge, then the other side of the
   // same device, and only then beside it.
-  const corner=captionCorner(node,slot==='detail'?corners.info:corners.name,w,h);
+  const corners=deviceCaptionPlacement(project,node.sourceId),corner=captionCorner(node,slot==='detail'?corners.info:corners.name,w,h);
   const xs=(corner.right?visibleOffsets(node.x+node.w-w,-1,8,Math.max(0,node.w-w),minX,maxX-w):visibleOffsets(node.x,1,8,Math.max(0,node.w-w),minX,maxX-w)).map(p=>p.x);
   const above=()=>{for(const gap of [5,9,14,20,28,38,50,64])for(const x of xs)candidates.push({x,y:node.y-h-gap,w,h});},below=()=>{for(const gap of [5,7,12,18,26,36,48,64])for(const x of xs)candidates.push({x,y:node.y+node.h+gap,w,h});};
   if(corner.above){above();below();}else{below();above();}

@@ -52,3 +52,20 @@ test('moving a device or a caption keeps its readable paper size',()=>{
  const dropped=core(site({drawingEdits:{[title.editKey]:{...source(title),y:source(title).y-40}}})),own=captions(dropped).find(t=>t.editKey===title.editKey);
  assert.ok(own.size>=title.size*.95,'a moved name does not shrink ('+own.size.toFixed(1)+' vs '+title.size.toFixed(1)+')');
 });
+
+test('one device can take its own corners; a dragged caption follows them',async()=>{
+ const {setDeviceCaptionCorners,deviceCaptionPlacement}=await import('../src/web/device-captions.mjs');
+ const base=site({deviceCaptions:{info:'above-left'}}),page=core({...base,layout:{...base.layout,deviceCaptions:{info:'above-left',devices:{s1:{name:'below-right'}}}}});
+ for(const text of captions(page)){
+  const body=bodyOf(page,text.titleOwner);
+  if(text.titleOwner==='s1'&&!text.titleSlot){assert.ok(text.y>=body.y+body.h,'s1 name below its device');assert.ok(body.x+body.w-(text.x+text.w)<body.w/2,'toward the right');}
+  else if(!text.titleSlot)assert.ok(text.y+text.h<=body.y,text.editKey+' keeps the drawing corner (above)');
+  else assert.ok(text.y+text.h<=body.y,text.editKey+' details follow the drawing corner (above)');
+ }
+ assert.deepEqual(deviceCaptionPlacement({layout:{deviceCaptions:{name:'below-left',devices:{a:{info:'above-right'}}}}},'a'),{name:'below-left',info:'above-right'});
+ assert.deepEqual(cleanLayout({deviceCaptions:{devices:{s1:{name:'below-right',info:'nowhere'},gone:{name:'above-right'}}}},['s1']).deviceCaptions,{devices:{s1:{name:'below-right'}}},'only known devices and real corners are kept');
+ const layout={drawingEdits:{'Core Network|title|s1':{x:10,y:20,size:14},'Core Network|detail|s1':{x:5,y:6},'Core Network|title|s2':{x:1,y:2}}};
+ setDeviceCaptionCorners(layout,'s1',{name:'below-right'});
+ assert.deepEqual(layout.drawingEdits,{'Core Network|title|s1':{size:14},'Core Network|detail|s1':{x:5,y:6},'Core Network|title|s2':{x:1,y:2}},'only the moved name loses its dragged position');
+ setDeviceCaptionCorners(layout,'s1',{});assert.equal(layout.deviceCaptions.devices,undefined,'choosing Default clears the device');
+});

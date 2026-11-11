@@ -297,8 +297,14 @@ placed without a collision.
 
 Network-page device names and details stay next to their device. layout.deviceCaptions
 ({name,info}, each above-left, above-right, below-left or below-right; Layout &
-content, stored only when not the default name above-left / details below-left,
-device-captions.mjs) sets the preferred corner for core creation, placeDeviceTitles
+content on the drawing defaults and on every network page, stored only when not
+the default name above-left / details below-left, device-captions.mjs), with
+per-device overrides in deviceCaptions.devices[id] (device editor and the Edit
+drawing toolbar's compact Name & details menu for a selected network-page device,
+a closed details popover so selecting a device never adds a toolbar row and moves
+the drawing under the pointer;
+choosing a corner clears that caption's dragged x/y so it follows, as one
+history action; unknown ids are cleaned), sets the preferred corner for core creation, placeDeviceTitles
 and the paper pass: the chosen corner first, sliding along the same edge (past a
 cable rising into a corner socket), then the other side of the device, and only
 then beside it. Dynamic pages may place captions below the last device because the
@@ -318,7 +324,7 @@ Dynamic wireless pages, and the implicit Keep complete layout used once wireless
 
 Leads leaving one stack gap toward opposite sides share levels (shareGapLevels in routing.mjs): when every left-turning lead leaves from a socket left of every right-turning one, the k-th innermost lead of each side shares level k, level 0 farthest from the sockets, so inner runs pass beyond outer risers. Wireless bank choices size each busy gap from those shared levels (shareChoiceGaps, choiceSides using planned AP positions and any saved AP position) and move the content below the shorter stack up; the router assigns the same levels from its actual sides and keeps one level per lead when they cannot share. A stack member's socket leaves through the gap above or below it, never sideways across its own faceplate (crossesPanel).
 
-Network (core) pages number every uncabled socket of switch and firewall faceplates with the shared upright portNumbers (stepping to .85 and .7 scale where sockets are narrow; hardware without room stays plain). A socket with a cable on the page is named by its port label instead, so cable routes are identical with numbers on or off (layout.corePortNumbers:false, Layout & content → Show port numbers on network pages; on by default and not stored).
+Network (core) pages number every uncabled socket of every device faceplate that draws real sockets (switches, firewalls, routers, patch panels and any other recognized hardware; not handoff cards or generic symbols) with the shared upright portNumbers (stepping to .85 and .7 scale where sockets are narrow; hardware without room stays plain). A socket with a cable on the page is named by its port label instead, so cable routes are identical with numbers on or off (layout.corePortNumbers:false, Layout & content → Show port numbers on network pages; on by default and not stored).
 
 The site name updates the heading while typing and commits (one rebuild, one Undo step) after a pause, on Enter or on blur; draw() leaves a rename being typed in the field.
 

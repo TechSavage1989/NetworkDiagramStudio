@@ -301,7 +301,6 @@ export function corePages(project,inventory,{portNumbers}={}){
   // device sideways while the user is moving one selected device.
   if(dynamic)sidebar.bodyLeft+=leftReserve;
   if(W<1200)sidebar.bodyLeft=Math.max(sidebar.contentLeft+38,Math.min(sidebar.bodyLeft,W-738));
-  const captionCorners=deviceCaptionPlacement(pageProject);
   const page=fresh(sheet.name,sheet.name,'Site handoffs, firewalls and switch uplinks',pageProject),items=page.items,nodes=new Map(),members=new Set(sheet.ids);page.legendLayout='sidebar';page.sidebar=sidebar;page.coreDeviceIds=sheet.ids.filter(id=>project.devices.some(d=>d.id===id));page.automaticCore=!sheet.custom;page.corePageId=sheet.corePageId;
   page.connectionLayout={railPitch,expansion,padding:fit.padding,spreadHandoffs:!!sheet.spreadHandoffs,columnOnly:!!sheet.columnOnly,arrangement,columns:sheet.packedColumns};page.coreArrangement=arrangement;page.arrangementFallback=!!sheet.fallback;
   const headerRule=items.findIndex(i=>i.type==='rect'&&i.y===138);if(headerRule>=0)items.splice(headerRule,1);
@@ -321,11 +320,11 @@ export function corePages(project,inventory,{portNumbers}={}){
    const d=viewDevice(sheet,id),m=pageSizes.get(id),position=packing?.positions.get(id),b=bounds(d,(position?TOP+position.y:row)+m.top*scale,width,sidebar.bodyLeft+(position?position.x-(width-bounds(d,0,width)[2])/2:0));b[3]=m.body*scale;
    const node=addDevice(page,pageProject,d,b,'core-'+i,{fitWidth:d.kind!=='handoff',...m.equipment});nodes.set(id,node);
    if(d.kind!=='handoff'){
-    const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleAt=captionCorner(node,captionCorners.name,titleWidth,titleHeight);
+    const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleAt=captionCorner(node,deviceCaptionPlacement(pageProject,id).name,titleWidth,titleHeight);
     label(items,titleAt.x,titleAt.y,titleWidth,titleHeight,titleValue,titleSize,titlePatch.bold??true,C.ink,titleAt.align);Object.assign(items.at(-1),{full:true,titleOwner:id,editKey:titleKey});
     const detail=deviceDetails(d,project);
     const detailKey=page.name+'|detail|'+id,detailPatch=pageProject.layout?.drawingEdits?.[detailKey]||{},detailValue=detailPatch.value??detail,detailSize=detailPatch.size||12,detailWidth=detailPatch.w||Math.min(node.w,textWidth(detailValue,detailSize,detailPatch.bold)),detailHeight=Math.max(detailPatch.h||18,wrapPortText(detailValue,detailWidth,detailSize,detailPatch.bold).length*detailSize*1.2);
-    const detailAt=captionCorner(node,captionCorners.info,detailWidth,detailHeight);
+    const detailAt=captionCorner(node,deviceCaptionPlacement(pageProject,id).info,detailWidth,detailHeight);
     label(items,detailAt.x,detailAt.y,detailWidth,detailHeight,detailValue,detailSize,detailPatch.bold??false,C.muted,detailAt.align);Object.assign(items.at(-1),{full:true,titleOwner:id,titleSlot:'detail',editKey:detailKey});
    }
    if(d.kind==='handoff'){label(items,node.x+8,node.y,node.w-16,node.h,d.name,12,true,C.ink,'center');items.at(-1).deviceTextOwner=id;if(d.ip)label(items,node.x-20,node.y-19,node.w+40,14,d.ip,10,false,C.muted,'center');}
@@ -363,7 +362,7 @@ export function corePages(project,inventory,{portNumbers}={}){
   // number and its lead leaves exactly as before. Hardware too narrow for
   // readable numbers stays plain.
   if(portNumbers&&corePortNumbers(pageProject))for(const [id,node] of nodes){
-   const d=db.devices.get(id);if(!d||!['switch','firewall'].includes(d.kind)||node.angle||node.offPage||!node.children?.some(c=>c.socketPart===0))continue;
+   const d=db.devices.get(id);if(!d||d.kind==='handoff'||node.angle||node.offPage||!node.children?.some(c=>c.socketPart===0))continue;
    const cabled=new Set(used.flatMap(e=>[e.a===id?e.ap:null,e.b===id?e.bp:null]).filter(Boolean).map(port=>String(port).toLowerCase()));
    const ports=physicalPorts(d).filter(port=>!cabled.has(String(port.name).toLowerCase()));if(!ports.length)continue;
    // Numbers depend only on the faceplate, its position and the uncabled
