@@ -7,6 +7,8 @@ import {deviceCaptionPlacement,captionCorner} from './device-captions.mjs';
 // Paper labels are not hardware. A small chassis must not force its name and
 // model to the same tiny scale. Place measured automatic captions in nearby
 // clear space after fitting hardware; never move sockets, cables or user text.
+// Drawing units per paper pixel at which caption text is measured.
+const MEASURE_UNIT=2.5;
 export function readableDeviceLabels(page,project,unit=1){
  const settings=presentation(project,page),minimum=settings.minimumTextPt*(settings.textScale||1);
  if(!minimum||!Number.isFinite(unit)||unit<=0)return;
@@ -33,13 +35,20 @@ export function readableDeviceLabels(page,project,unit=1){
  // details): the largest, up to the readable target, at which every one of
  // them still finds clear space next to its own device. Captions are never
  // left at mixed sizes because some had room and others did not.
+ // Text is measured at one scale per paper unit, so a sheet drawn in paper
+ // units (locked) and the same sheet in its own drawing units (unlocked)
+ // choose identical sizes and places: the fixed padding of text measurement
+ // would otherwise count for more on one than the other. Each placed box gets
+ // back the full padding the renderer measures with, so wrapping is unchanged.
+ const k=MEASURE_UNIT/unit,pad=Math.max(0,textWidth('',1)-textWidth('',1)/k);
+ const measureWidth=(value,size,bold)=>textWidth(value,size*k,bold)/k,layoutAt=(item,w,h,size)=>textLayout({...item,w:w*k,h:h*k,size:size*k});
  const place=(item,size,taken)=>{
   const body=bodies.find(b=>b.sourceId===item.titleOwner);if(!body)return null;
-  const natural=textWidth(item.value,size,item.bold),widths=[Math.min(natural,Math.max(body.w,160*unit)),Math.min(natural,Math.max(body.w,240*unit)),Math.min(natural,320*unit)].filter((v,i,a)=>v>0&&a.indexOf(v)===i),candidates=[];
+  const natural=measureWidth(item.value,size,item.bold),widths=[Math.min(natural,Math.max(body.w,160*unit)),Math.min(natural,Math.max(body.w,240*unit)),Math.min(natural,320*unit)].filter((v,i,a)=>v>0&&a.indexOf(v)===i),candidates=[];
   for(const w of widths){
    // textLayout and the exporters share wrapping. Give the full point size
    // enough height, rather than letting the text fitter reduce it.
-   const measured=textLayout({...item,w,h:page.height,size}),h=measured.lines.length*size*1.2;
+   const measured=layoutAt(item,w,page.height,size),h=measured.lines.length*size*1.2;
    // The chosen corner first (name above and details below on the left by
    // default), sliding along that edge, then the other side of the device,
    // and only then beside it. Closer gaps win within a tier.
@@ -60,7 +69,9 @@ export function readableDeviceLabels(page,project,unit=1){
   if(group.every(i=>textLayout(i).size>=target-.001)&&Math.max(...group.map(i=>i.size))-smallest<.01)continue;
   let placed=trial(group,target),size=target;
   if(!placed&&smallest<target){let lo=smallest,hi=target;placed=trial(group,lo);if(placed){size=lo;for(let n=0;n<5;n++){const mid=(lo+hi)/2,at=trial(group,mid);if(at){lo=mid;placed=at;size=mid;}else hi=mid;}}}
-  if(placed){for(const [item,box] of placed){const {body,...geometry}=box,ownAlign=Object.hasOwn(edits[item.editKey]||{},'align');Object.assign(item,geometry);if(!ownAlign&&item.align!=='center')item.align=box.x>body.x+.5&&box.x+box.w>=body.x+body.w-.5?'right':'left';item.paperDeviceLabel=true;}}
+  if(placed){for(const [item,box] of placed){const {body,...geometry}=box,ownAlign=Object.hasOwn(edits[item.editKey]||{},'align');Object.assign(item,geometry);if(!ownAlign&&item.align!=='center')item.align=box.x>body.x+.5&&box.x+box.w>=body.x+body.w-.5?'right':'left';
+   // The renderer's own padding: right-aligned text keeps its right edge.
+   if(pad){item.w+=pad;if(item.align==='right')item.x-=pad;}item.paperDeviceLabel=true;}}
   // No common clear size: every caption of the kind keeps the smallest one,
   // where it is, so they still match.
   else for(const item of group)if(item.size>smallest){const factor=smallest/item.size;Object.assign(item,{w:item.w*factor,h:item.h*factor,size:smallest,paperDeviceLabel:true});}
