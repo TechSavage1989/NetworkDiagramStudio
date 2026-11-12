@@ -228,11 +228,13 @@ main:not(:has(>.pages-sidebar:not([hidden]))){grid-template-columns:250px minmax
 }
 @media screen and (min-width:621px) and (max-width:999px){
  body{height:auto;min-height:100vh}
- body>main,main:not(:has(>.pages-sidebar:not([hidden]))){flex:none;height:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:260px minmax(520px,calc(100vh - 340px))}
+ body>main,main:not(:has(>.pages-sidebar:not([hidden]))){flex:none;height:auto;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:260px minmax(620px,calc(100vh - 340px))}
  .project-sidebar{grid-column:1;grid-row:1;border-bottom:1px solid var(--rule)}
  .pages-sidebar.page-navigation{grid-column:2;grid-row:1;border-bottom:1px solid var(--rule)}
  main:not(:has(>.pages-sidebar:not([hidden])))>.project-sidebar{grid-column:1 / -1}
  main>.stage{grid-column:1 / -1;grid-row:2}
+ /* The stage (scrolled to on these widths) keeps room for the Edit drawing
+    bars and a page notice above a usable canvas. */
 }
 @media screen and (max-width:620px){
  .pages-sidebar.page-navigation{height:230px;max-height:35vh;flex:none;border-bottom:1px solid var(--rule)}
