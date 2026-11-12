@@ -577,7 +577,9 @@ function nameInventoryPages(pages){namePagesByDevices(pages,'Port Inventory',pag
 // sourceDeviceIds (access points only when nothing else is on the sheet), so
 // pages added later get the same names. Stable page names stay for settings.
 function pageDevices(page,db){
- if(page.logicalSections?.length)return page.logicalSections.map(section=>({name:section.name}));
+ // A shared section (records common to several devices) counts as "Shared",
+ // not its whole device list, so the sheet name stays short.
+ if(page.logicalSections?.length)return page.logicalSections.map(section=>({name:section.shared?'Shared':section.name}));
  const ids=page.portMap?.devices||(page.wirelessLayout?page.sourceDeviceIds?.slice(0,1):null)||page.coreDeviceIds||page.sourceDeviceIds||[];
  const devices=ids.map(id=>db.devices.get(id)).filter(Boolean),main=devices.filter(d=>!['ap','handoff'].includes(d.kind));
  return (main.length?main:devices).map(d=>({name:value(d.name)||d.id}));

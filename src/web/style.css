@@ -155,6 +155,8 @@ select:hover:not(:disabled){border-color:#6595a1;background-color:#f7fbfb}select
 #page-families .page-group summary:focus-visible{outline:3px solid #35a5b6;outline-offset:0}
 #page-families .page-group-menu{padding:4px 0 4px 12px}
 #page-families .page-group-menu button{display:block;width:100%;padding:7px 8px;margin:2px 0;border:0;border-left:3px solid transparent;border-radius:3px;text-align:left;white-space:normal;overflow-wrap:anywhere;background:#fff;color:#183544;font-size:12px;font-weight:500}
+/* Every page entry is at most two lines; the full name is in its tooltip. */
+#page-families .page-group-menu button{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
 #page-families .page-group-menu button:hover,#page-families .page-group-menu button:focus-visible{background:#edf4f6}
 #page-families .page-group-menu button.active{background:#e0eff1;color:#095d6c;font-weight:700;border-left-color:#197485}
 .pagebar{flex-wrap:wrap}.pagebar .page-picker{margin-left:auto}

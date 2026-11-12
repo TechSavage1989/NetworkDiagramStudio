@@ -1109,7 +1109,7 @@ function pageNavigation(){
    item.type='button';item.dataset.page=page.name;
    if(index===active)item.setAttribute('aria-current','page');
    item.classList.toggle('active',index===active);
-   item.title='Double-click to rename this page. Use Layout & content for additional settings.';
+   item.title=(page.displayName||page.name)+'\nDouble-click to rename this page. Use Layout & content for additional settings.';
    item.ondblclick=event=>{event.preventDefault();clearTimeout(pageTabClickTimer);renamePageTab(page,item);};
    item.onclick=event=>{if(event.target.matches('.page-tab-rename')||event.detail>1)return;if(!commitInlineEdit())return;clearTimeout(pageTabClickTimer);if(index===active)return;pageTabClickTimer=setTimeout(()=>{active=index;draw(pages);},230);};
    list.append(item);
