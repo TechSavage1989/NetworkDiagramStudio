@@ -14,6 +14,11 @@ What changed (interactive-html.mjs):
 - The zoom readout is written only when it changes.
 - Tests: browser-interactive-html.mjs checks the layer during and after a pan and the notch and touchpad zoom steps; interactive-html.test.mjs checks the layer is only for panning.
 
+Publishing (release intent revision 2): the first merge's publish run failed in the native "Shift drag axis" check, the same failure as preview.58's first publish run.
+- Root cause: selecting a device can add an edit-toolbar row, which moves the canvas down 33 px. The viewport's ResizeObserver put the drawing back only in the next rendering step, so a script or press immediately after the click saw the device 33 px low. The native check pressed there, missed the device and box-selected instead.
+- Fix: viewport.settle() applies the same compensation at once (only when the canvas rectangle changed since the last apply). syncDrawingSelection calls it after updating the tools, and the observer still calls it, forced, before paint.
+- Test: browser-page-layout-defaults measures the device inside the click event at window widths where selection adds a row; it fails on the old build (616.9 -> 649.9) and passes now.
+
 # Preview.64: port map marks and spacing, connection key, lock-stable text, caption closeness
 
 Baseline: published preview.63. The owner asked for:

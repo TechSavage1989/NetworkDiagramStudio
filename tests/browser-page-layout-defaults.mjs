@@ -166,7 +166,26 @@ try{
  assert.ok(bodyAfter.x+bodyAfter.w-(titleAfter.x+titleAfter.w)<bodyAfter.w/2,'toward the right edge');
  await page.keyboard.press('Control+z');await page.waitForFunction(key=>{const n=document.querySelector('#canvas svg [data-drawing-key="'+key+'"]');return !!n;},titleKey);
  const titleUndo=await sceneBox(titleKey);assert.ok(Math.abs(titleUndo.y-titleBefore.y)<1,'one Undo restores the name');
+ // On a narrower window, selecting a device adds a toolbar row above the
+ // canvas. The drawing must be put back in the same step, not one frame
+ // later: a pointer press or script right after the click (the native Shift
+ // drag check) has to find the device where it is drawn. Measure inside the
+ // click event, before the browser's next rendering step.
+ const priorSize=page.viewportSize(),checked=[],deselect=async()=>{if(await page.locator('#drawing-clear').isEnabled())await page.locator('#drawing-clear').click();};let rowAdded=0;
+ for(const width of [1028,960,1100,900,1180]){
+  await page.setViewportSize({width,height:749});await deselect();await page.locator('#zoom-fit').click();await page.waitForTimeout(200);
+  // A point on the device body itself (not its text or a port), as the native check picks.
+  const start=await page.evaluate(key=>{const group=[...document.querySelectorAll('#canvas svg [data-drawing-key="'+key+'"]')].find(n=>!n.closest('.transform-controls')),b=group.getBoundingClientRect();for(const fx of [.12,.2,.35,.65,.8,.9])for(const fy of [.15,.35,.5,.7,.85]){const x=b.x+b.width*fx,y=b.y+b.height*fy,target=document.elementFromPoint(x,y);if(target&&group.contains(target)&&!target.closest('text,[data-port-name],.transform-controls,.cable-controls'))return {x,y,top:b.y,canvas:document.getElementById('canvas').getBoundingClientRect().y};}return null;},bodyKey);
+  if(!start)continue;
+  await page.evaluate(key=>{window.__inClick=null;addEventListener('click',()=>{const n=[...document.querySelectorAll('#canvas svg [data-drawing-key="'+key+'"]')].find(n=>!n.closest('.transform-controls'));window.__inClick={y:n.getBoundingClientRect().y,canvas:document.getElementById('canvas').getBoundingClientRect().y};},{once:true});},bodyKey);
+  await page.mouse.click(start.x,start.y);const inClick=await page.evaluate(()=>window.__inClick),before={y:start.top},canvasBefore=start.canvas;
+  await page.waitForFunction(()=>document.querySelector('#drawing-selection').textContent==='1 selected');
+  checked.push(width);if(Math.abs(inClick.canvas-canvasBefore)>1)rowAdded++;
+  assert.ok(Math.abs(inClick.y-before.y)<.5,'at '+width+' px the device stays put while the toolbar changes: '+before.y+' -> '+inClick.y+' (canvas '+canvasBefore+' -> '+inClick.canvas+')');
+ }
+ assert.ok(rowAdded>0,'at least one window width adds a toolbar row on selection, so the check is exercised (checked '+checked.join(', ')+')');console.log('Selection toolbar check: widths',checked.join(', '),'with a new row at',rowAdded);
+ await deselect();await page.setViewportSize(priorSize);
  if(await page.locator('#edit-drawing').getAttribute('aria-pressed')==='true')await page.locator('#edit-drawing').click();
  assert.deepEqual(errors,[]);
- await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','side-space AP placement and save/reopen','explicit readable continuation','device caption corners on the network page and per device','adaptive side cards at actual8.3pt and reopen','wireless fit Undo/redo and save/reopen'],names},null,2));
+ await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','side-space AP placement and save/reopen','explicit readable continuation','device caption corners on the network page and per device','drawing stays put when selection changes the toolbar','adaptive side cards at actual8.3pt and reopen','wireless fit Undo/redo and save/reopen'],names},null,2));
 }catch(error){await page.screenshot({path:resolve(output,'failure.png')});console.error('Browser errors:',errors);throw error;}finally{await browser.close();}
