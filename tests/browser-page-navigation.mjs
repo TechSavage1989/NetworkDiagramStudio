@@ -103,6 +103,16 @@ try{
  const values=await page.locator('#page-select option').evaluateAll(options=>options.map(option=>option.value));
  await page.locator('#page-select').selectOption(values[0]);await page.locator('#page-select').selectOption(values.at(-1));
  assert.ok(await nav.evaluate(e=>{const row=e.querySelector('[aria-current="page"]').getBoundingClientRect(),bounds=e.getBoundingClientRect();return row.top>=bounds.top-1&&row.bottom<=bounds.bottom+1;}),'page selector reveals the selected sidebar entry');
+ // The closed page picker shows its value on one line: a long page name ends
+ // in an ellipsis before the arrow instead of wrapping into a clipped second line.
+ const longest=await page.locator('#page-select option').evaluateAll(options=>options.reduce((a,b)=>b.textContent.length>a.textContent.length?b:a).value);
+ await page.locator('#page-select').selectOption(longest);
+ const picker=await page.locator('#page-select').evaluate(select=>{const box=select.getBoundingClientRect(),shown=select.querySelector('selectedcontent');if(!shown)return {box:box.height,customizable:CSS.supports('appearance','base-select')};const inner=shown.getBoundingClientRect(),style=getComputedStyle(shown);return {box:box.height,customizable:true,text:shown.textContent,selected:select.selectedOptions[0].textContent,lines:inner.height/parseFloat(style.lineHeight||'16'),right:box.right-inner.right,overflow:shown.scrollWidth>shown.clientWidth,ellipsis:style.textOverflow,tooltip:select.querySelector('button')?.title};});
+ assert.ok(picker.box<=32,'page picker stays one line high: '+JSON.stringify(picker));
+ if(picker.customizable){
+  assert.equal(picker.text,picker.selected,'the picker shows the selected page');assert.ok(picker.lines<1.6,'one line of text: '+JSON.stringify(picker));
+  assert.ok(picker.right>=12,'the arrow keeps its room: '+JSON.stringify(picker));assert.equal(picker.ellipsis,'ellipsis');assert.equal(picker.tooltip,picker.selected,'the full name is in the tooltip');
+ }
  // Restore the renamed port map for the paper-option regression below.
  const renamedValue=await page.locator('#page-select option').evaluateAll(options=>options.find(option=>option.textContent==='Fictional renamed map').value);
  await page.locator('#page-select').selectOption(renamedValue);

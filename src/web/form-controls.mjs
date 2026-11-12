@@ -87,7 +87,23 @@ export function installFormControls(doc=document){
   }
   const list=input.getAttribute('list');if(list)suggestions(record,list);
  }
- function scan(node){if(node.nodeType!==1&&node!==doc)return;if(node.nodeType===1&&node.matches('input,textarea'))enhance(node);for(const input of node.querySelectorAll('input,textarea'))enhance(input);}
+ // A customizable (base-select) dropdown shows its value through an author
+ // button holding <selectedcontent>, so a long value ends in an ellipsis on
+ // one line instead of wrapping inside the closed control. Older engines keep
+ // their native control; options and the select's value API are untouched.
+ const customizable=!!win.CSS?.supports?.('appearance','base-select');
+ function valueButton(select){
+  if(!customizable||select.multiple||select.size>1)return;
+  let button=select.firstElementChild;
+  if(button?.localName!=='button'||!button.classList.contains('nds-select-value')){button=doc.createElement('button');button.type='button';button.className='nds-select-value';button.tabIndex=-1;select.prepend(button);}
+  // The shown value follows selection changes; rebuild it when the options
+  // were replaced under it.
+  const content=button.querySelector('selectedcontent'),text=select.selectedOptions[0]?.textContent??'';
+  if(!content||content.textContent!==text){content?.remove();button.append(doc.createElement('selectedcontent'));}
+  // The whole value on hover, unless the control has its own tooltip.
+  if(!select.title&&button.title!==text)button.title=text;
+ }
+ function scan(node){if(node.nodeType!==1&&node!==doc)return;if(node.nodeType===1&&node.matches('input,textarea'))enhance(node);if(node.nodeType===1&&node.localName==='select')valueButton(node);for(const input of node.querySelectorAll('input,textarea'))enhance(input);for(const select of node.querySelectorAll('select'))valueButton(select);}
  function refresh(){
   frame=0;
   for(const [input,record] of records){
@@ -106,9 +122,12 @@ export function installFormControls(doc=document){
   }
   if(active){if(!active.input.isConnected||active.input.hidden||active.input.matches(':disabled')||active.input.readOnly)dismiss();else placePopup(active);}
  }
- const observer=new win.MutationObserver(changes=>{for(const change of changes){if(change.type==='childList')for(const node of change.addedNodes)scan(node);else if(change.target.matches?.('input,textarea'))enhance(change.target);}schedule();});
+ const observer=new win.MutationObserver(changes=>{for(const change of changes){if(change.type==='childList'){for(const node of change.addedNodes)scan(node);if(change.target.localName==='select')valueButton(change.target);}else if(change.target.matches?.('input,textarea'))enhance(change.target);}schedule();});
  observer.observe(doc.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['type','list','disabled','readonly','hidden','value','id','aria-label']});
  for(const event of ['input','change','focusin','pointerup'])on(doc,event,schedule);
+ // The engine keeps <selectedcontent> in step with the selection; a change
+ // also refreshes the tooltip and rebuilds the value if options were edited.
+ on(doc,'change',event=>{if(event.target?.localName==='select')valueButton(event.target);},true);
  on(doc,'pointerdown',event=>{if(active&&event.target!==active.input&&event.target!==active.clear&&event.target!==active.toggle&&!active.popup.contains(event.target))dismiss();},true);
  on(doc,'focusin',event=>{if(active&&event.target!==active.input&&event.target!==active.clear&&!active.popup.contains(event.target))dismiss();});
  on(doc,'scroll',()=>{if(active)placePopup(active);},true);on(win,'resize',schedule);on(doc,'close',dismiss,true);
