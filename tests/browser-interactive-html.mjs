@@ -5,6 +5,8 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {rotationProject} from './fixtures/device-rotation.mjs';
 import {exportInteractiveHtml} from '../src/web/interactive-html.mjs';
+import {buildPages} from '../src/web/diagram/index.mjs';
+import {fictionalCampus} from './fixtures/site-map-campus.mjs';
 const require=createRequire(import.meta.url),{chromium}=require(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
 const output=resolve(process.env.NDS_QA_OUTPUT||'.artifacts/interactive-html');await mkdir(output,{recursive:true});
 const fixture=resolve(output,'fictional.nds.json');await writeFile(fixture,JSON.stringify({format:'NetworkDiagramStudio',schema:1,project:rotationProject()}));
@@ -48,5 +50,29 @@ try{
  assert.notEqual(metrics.after,metrics.before,'The odd zoom burst must change the transform');assert.equal(metrics.transformWrites,1,'A burst of 101 wheel events must produce one transform write, not 101');console.log('Large viewer interaction metrics:',JSON.stringify(metrics));
  for(let i=0;i<3;i++){await viewer.locator('#pages button').nth(1).click();await settle();assert.equal(await viewer.locator('#drawing [data-inspect]').count(),0);await viewer.locator('#pages button').first().click();await settle();}
  await viewer.locator('#drawing [data-device-id]').first().focus();await viewer.keyboard.press('Enter');assert.equal(await viewer.locator('.viewer-active').count(),1);await viewer.keyboard.press('Escape');assert.equal(await viewer.locator('.viewer-active').count(),0);
- assert.deepEqual(requests,[]);assert.deepEqual(errors,[]);console.log('Downloaded offline HTML: pages, search, zoom, pan, responsive rendering, safe SVG, embedded image and zero network requests passed.');
+ // Engineer review: device details, connections, jumps, Back, path to the
+ // edge, connection types, deep links and page keys on a fictional campus.
+ const campus=resolve(output,'campus-viewer.html');await writeFile(campus,exportInteractiveHtml(buildPages(fictionalCampus()),{title:'Fictional campus'}));
+ await viewer.setViewportSize({width:1500,height:950});await viewer.goto(pathToFileURL(campus).href);await viewer.locator('#drawing svg').waitFor();await settle();
+ assert.match(await viewer.locator('#details').textContent(),/devices · \d+ connections on this page/);
+ await viewer.locator('#pages button',{hasText:'Site Map'}).click();await settle();
+ await viewer.locator('#drawing text[data-owner="core1"]').first().click();await settle();
+ assert.equal(await viewer.locator('#details h2').textContent(),'CORE-1');
+ const panel=await viewer.locator('#details').textContent();assert.match(panel,/Connections \(\d+\)/);assert.match(panel,/IDF-03-ACCESS/);assert.match(panel,/SR fiber · 10 Gbps/);assert.match(panel,/Core Network/);
+ assert.equal(await viewer.locator('#drawing svg').evaluate(svg=>svg.classList.contains('viewer-dim')),true,'unrelated items are dimmed');
+ await viewer.locator('#dim').uncheck();assert.equal(await viewer.locator('#drawing svg').evaluate(svg=>svg.classList.contains('viewer-dim')),false);await viewer.locator('#dim').check();
+ await viewer.getByRole('button',{name:'Path to the network edge',exact:true}).click();await settle();
+ assert.match(await viewer.locator('#details').textContent(),/Path to the edge: CORE-1 → CAMPUS-FW-A/);assert.ok(await viewer.locator('#drawing .diagram-cable.viewer-path').count()>=1);
+ await viewer.locator('#details button.link',{hasText:'NAS-01'}).first().click();await settle();assert.equal(await viewer.locator('#details h2').textContent(),'NAS-01');
+ await viewer.locator('#back').click();await settle();assert.equal(await viewer.locator('#details h2').textContent(),'CORE-1');assert.match(await viewer.evaluate(()=>location.hash),/page=2&device=core1/);
+ await viewer.locator('#details button.link',{hasText:'1. Core Network'}).click();await settle();assert.match(await viewer.locator('#page-name').textContent(),/^1 \/ \d+ · Core Network/);assert.equal(await viewer.locator('#details h2').textContent(),'CORE-1');assert.equal(await viewer.locator('#drawing [data-device-id="core1"].viewer-active').count(),1);
+ await viewer.locator('#stage').press('Escape');await viewer.locator('#pages button',{hasText:'Site Map'}).click();await settle();
+ await viewer.locator('#drawing .connection-legend-text',{hasText:'SR fiber'}).first().click();await settle();assert.equal(await viewer.locator('#details h2').textContent(),'SR fiber');assert.ok(await viewer.locator('#drawing .diagram-cable.viewer-related').count()>=10);
+ await viewer.locator('#stage').press('Escape');await viewer.keyboard.press(']');await settle();assert.match(await viewer.locator('#page-name').textContent(),/^3 \//);await viewer.keyboard.press('[');await settle();assert.match(await viewer.locator('#page-name').textContent(),/^2 \//);
+ await viewer.locator('#search').fill('srv-host');assert.ok((await viewer.locator('#results button.result-device').allTextContents()).some(t=>/SRV-HOST-02/.test(t)));
+ await viewer.locator('#results button.result-device',{hasText:'SRV-HOST-02'}).click();await settle();assert.equal(await viewer.locator('#details h2').textContent(),'SRV-HOST-02');
+ await viewer.screenshot({path:resolve(output,'interactive-html-review.png')});
+ await viewer.goto(pathToFileURL(campus).href+'#page=1&device=nas');await viewer.locator('#drawing svg').waitFor();await settle();assert.equal(await viewer.locator('#details h2').textContent(),'NAS-01');assert.match(await viewer.locator('#page-name').textContent(),/Core Network/);
+ await viewer.setViewportSize({width:390,height:844});await settle();assert.ok(await viewer.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ assert.deepEqual(requests,[]);assert.deepEqual(errors,[]);console.log('Downloaded offline HTML: pages, search, zoom, pan, responsive rendering, safe SVG, embedded image, engineer review (details, jumps, Back, path to edge, connection types, deep links) and zero network requests passed.');
 }finally{await browser.close();}

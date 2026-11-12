@@ -404,7 +404,7 @@ export function corePages(project,inventory,{portNumbers}={}){
    const {r,destination}=t,{e,v,which:local}=r,remote=local==='a'?e.b:e.a,port=local==='a'?e.bp:e.ap,ref=t.page,stub={id:'continuation-'+pi+'-'+e.idx,name:t.device+' on '+ref,kind:'handoff',ports:[{name:'handoff'}]},box=tagPlan.boxes.get(t);
    // A white tag at the cable end: teal edge toward the page border, the far
    // device and port in bold, then the page where the cable continues.
-   const n=addDevice(page,project,stub,[r.x-tagPlan.width,box.top,tagPlan.width,box.height],'reference-'+e.idx,{fillBounds:true});n.ports.handoff=[1,(r.y-box.top)/box.height];n.offPage=true;
+   const n=addDevice(page,project,stub,[r.x-tagPlan.width,box.top,tagPlan.width,box.height],'reference-'+e.idx,{fillBounds:true});n.ports.handoff=[1,(r.y-box.top)/box.height];n.offPage=true;n.offPageRemote=remote;n.offPageDestination=destination;
    n.children=[];const across=x=>x/tagPlan.width,down=y=>y/box.height;
    rect(n.children,0,0,1,1,'#FFFFFF',C.teal,1);rect(n.children,0,0,across(TAG.bar),1,C.teal);
    if(box.single){

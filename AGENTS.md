@@ -25,6 +25,8 @@ Read this file, the current development handoff, and the shared standards before
 | src/web/connection-edit.mjs, src/web/point-tools.mjs, src/web/color-picker.mjs, src/web/port-table.mjs | Port selection/conflicts, normalized box/group movement, solid-color formats/palettes and port table rules. |
 | src/web/hardware-composition.mjs | Validated user confirmation of stack members and installed chassis/rear/uplink modules. |
 | src/web/port-map-details.mjs | Port map device details (Switchport builder identity fields, model, IP, MAC) opened by double-clicking a port map device. |
+| src/web/diagram/site-map.mjs, src/web/site-map-settings.mjs | Site map page: hardware hierarchy and connections without port detail, and its options (layout.siteMap). |
+| src/web/interactive-html.mjs | Offline read-only HTML viewer: page snapshots, search, details panel, cross-page links, path to the edge. |
 | src/web/assets/app-icon.svg, desktop/Assets/app.ico | Authored editable vector icon and its multi-size Windows build resource. |
 | desktop | Windows Forms/WebView2 host, release policy, verified download and rollback helper. |
 | desktop/SwitchportReports | Pinned SwitchPort Diagram Builder engine, normalized-inventory bridge, local fonts/catalog, native report export and dependency notices. |
@@ -367,4 +369,51 @@ Port Inventory interface pages (logical.mjs typography 'inventory') use the same
 The quick Size box and object Properties show what the selected text prints at on the open page (printedNote, #quick-text-printed). Sizes in the editor are full drawing sizes; page warnings report printed sizes after fitting to paper.
 
 Device order follows the network hierarchy while it was never changed by hand (device-hierarchy.mjs: firewalls/routers, then switches by distance from the edge, endpoints after their uplink switch in port order, stacks together). rebuildEvidence applies it while layout.orderAuto is true; a manual move clears orderAuto. Device order offers Sort by network hierarchy.
+
+## Preview.62: site map, engineer review in the HTML viewer
+
+The Site Map page (family `sitemap`, page name "Site Map", built right after the network pages through the page cache) draws one card per device, explicit stack (layout.deviceStacks) or group, in levels:
+- level 0: WAN handoffs (siteHandoffs, the core handoffs) and cloud services;
+- then firewalls, routers and switches by breadth-first distance from the edge (one component at a time);
+- then everything else one level below the device it connects to.
+
+Cards and connections:
+- A card connected to a single device above it (access point groups, single-homed hosts) is a leaf: it sits with that parent. Leaves stand in columns below the parent, fed by spines, or in one column beside it when the parent also has devices further down.
+- Access points of one switch share a card by default; other endpoints may be grouped by type and switch, or either may be left out.
+- One orthogonal line per pair of cards carries every link between them. It is coloured by the most common connection type and captioned with count, speed and LAG, or port names. Its width is the shared style width, or the line's own saved width (`Site Map|line|<pair>`).
+- Card names, detail lines and captions are text with stable keys (`Site Map|node|<id>|name`, `|detail|<field>`, `Site Map|link|<pair>`). Saved wording, sizes and positions are honoured when cards are measured, and Global text styles map them to device names, device details and link labels.
+- A moved card keeps its spot and its lines become direct elbows; untouched cards keep the automatic layout.
+
+Layout:
+- Rows wrap the longest level toward the page shape.
+- Bands between rows hold ordered tracks (pins inside another run's span decide which is above). Runs pass between cards of the rows in between.
+- Direction is automatic (left to right only when it is clearly closer to the page shape on a dynamic page), top to bottom, or left to right.
+- A fixed drawing page tries both directions, with the connection key above or in a left column, and keeps the largest scale that fits (text never below 8 units; line widths scale with the map). Only when nothing fits does the whole map shrink to the page, and the readability notice then reports the printed size.
+
+Site map options (#site-map-options, shown on the site map) store only non-default values in layout.siteMap:
+- `details`: role, model, platform, ip, ports, vlans, serial, mac, notes;
+- `accessPoints`: grouped, each or hidden;
+- `endpoints`: each, grouped or hidden;
+- `linkLabels`: speed, ports or none;
+- `direction`: auto, down or right;
+- `wan`;
+- `unconnected`.
+
+cleanLayout keeps these settings. The page cache keeps textStyles and siteMap only for the site map family. Cards are native Visio groups with glued connectors and per-size masters. Leaf lines carry siteMapLeaf.
+
+The SVG adds scene-derived data for the viewer:
+- data-device-kind, and data-device-members on group and stack cards;
+- data-owner on device captions (titleOwner, deviceTextOwner or deviceOwner);
+- data-speed and data-link-count on cables;
+- data-offpage-device and data-offpage-page on off-page tags.
+
+The interactive HTML export carries each page's display name, stable `key` and SVG, nothing else. The viewer adds:
+- a details panel (#details): device captions, connections with ports, type and speed, the far device, and the pages showing it; cable ends; connection-type lists; off-page continuations;
+- dimming of unrelated items (#dim);
+- Path to the network edge (shortest cable path on the page to a firewall, router, WAN handoff or cloud service);
+- Back (#back, Alt+Left) and page keys `[` `]`, with `/` focusing search;
+- device results first in search;
+- `#page=N&device=ID` links, followed on load and on hash change.
+
+#inspection stays the one-line status that existing checks read. The panel never resizes the stage. tests/browser-interactive-html.mjs and tests/browser-site-map.mjs cover these in CI.
 

@@ -180,7 +180,7 @@ export function siteMapPages(project,db){
  for(const node of [...nodes.values()]){
   const mode=groupable(node);if(!mode||mode==='each')continue;
   if(mode==='hidden'){nodes.delete(node.id);continue;}
-  const parent=level.has(node.id)?parentOf(node.id):null,key=(node.kind==='ap'?'aps':'kind:'+node.kind)+'|'+(parent||'none');
+  const parent=level.has(node.id)?parentOf(node.id):null,key=(node.kind==='ap'?'aps':'kind:'+node.kind)+'/'+(parent||'none');
   if(!groups.has(key))groups.set(key,{parent,kind:node.kind,members:[]});groups.get(key).members.push(node);
  }
  for(const [key,group] of groups){
@@ -435,13 +435,13 @@ export function siteMapPages(project,db){
   children.push({type:'rect',x:0,y:0,w:stacked?w-5:w,h:stacked?h-5:h,fill:C.white,stroke:border,weight:1.2,radius,name:'Card'});
   children.push({type:'rect',x:PAD,y:PAD,w:TILE,h:TILE,fill:colorOf(n.kind),stroke:'none',weight:0,radius:radius*.85,name:deviceKindLabel(n.kind)+' icon'});
   children.push(...glyph(n.kind,PAD,PAD,TILE));
-  const card={type:'device',key:keyOf(n),editKey:keyOf(n),sourceId:n.sourceId??undefined,siteMapNode:n.id,name:n.name,kind:n.kind,model:'',x:n.x,y:n.y,w,h,asset:null,fallback:false,ports:Object.create(null),
+  const card={type:'device',key:keyOf(n),editKey:keyOf(n),sourceId:n.sourceId??undefined,...(n.sourceId?{}:{memberIds:n.devices.map(d=>d.id)}),siteMapNode:n.id,name:n.name,kind:n.kind,model:'',x:n.x,y:n.y,w,h,asset:null,fallback:false,ports:Object.create(null),
    children:children.map((c,i)=>({...c,x:c.x/w,y:c.y/h,w:c.w/w,h:c.h/h,editSlot:i})),masterKey:''};
   cards.set(n.id,card);items.push(card);
   let ty=n.y+PAD-1;const tx=n.x+PAD*2+TILE,room=span(n,w),nameLines=wrap(n.name,room,sizes.name,true);
-  label(items,tx,ty,room,nameLines.length*sizes.name*1.25,n.name,sizes.name,true,C.ink);Object.assign(items.at(-1),{editKey:keyOf(n,'name'),siteMapSlot:'name',siteMapOwner:n.id,full:true});
+  label(items,tx,ty,room,nameLines.length*sizes.name*1.25,n.name,sizes.name,true,C.ink);Object.assign(items.at(-1),{editKey:keyOf(n,'name'),siteMapSlot:'name',siteMapOwner:n.id,...(n.sourceId?{deviceOwner:n.sourceId}:{}),full:true});
   ty+=nameLines.length*sizes.name*1.25+2;
-  for(const [key,value] of n.lines){const lines=wrap(value,room,sizes.detail,false);label(items,tx,ty,room,lines.length*sizes.detail*1.3,value,sizes.detail,false,C.muted);Object.assign(items.at(-1),{editKey:keyOf(n,'detail|'+key),siteMapSlot:'detail',siteMapOwner:n.id,full:true});ty+=lines.length*sizes.detail*1.3;}
+  for(const [key,value] of n.lines){const lines=wrap(value,room,sizes.detail,false);label(items,tx,ty,room,lines.length*sizes.detail*1.3,value,sizes.detail,false,C.muted);Object.assign(items.at(-1),{editKey:keyOf(n,'detail|'+key),siteMapSlot:'detail',siteMapOwner:n.id,...(n.sourceId?{deviceOwner:n.sourceId}:{}),full:true});ty+=lines.length*sizes.detail*1.3;}
  }
  // Connections.
  const paths=[];
