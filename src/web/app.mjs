@@ -53,6 +53,7 @@ import {hierarchyOrder,applyAutomaticOrder} from './device-hierarchy.mjs';
 import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
 import {buildPages,exportVisio,exportStencil} from './diagram/index.mjs';
+import {textLayout} from './diagram/scene.mjs';
 import {openVisioCatalog,loadImageStencil} from './stencils.mjs';
 import {stencilFiles,visioFile,filePath,droppedFiles} from './stencil-files.mjs';
 import {cleanNativeArt} from './native-art.mjs';
@@ -175,20 +176,27 @@ const textFontScale=item=>{const p=item?.presentation;return p?(p.fontScale||(it
 const presentedFontUnits=item=>item.type==='arttext'&&item.parent?item.size*item.parent.w:item.size;
 const storedFontSize=(item,units)=>item.type==='arttext'&&item.parent?units/item.parent.w:units;
 const drawingPt=item=>presentedFontUnits(item)/textFontScale(item)*.75;
-const printedPt=(item,page=pages[active])=>presentedFontUnits(item)*.75*(page?printGeometry(page).width/page.width:1);
+const printRatio=(page=pages[active])=>page?printGeometry(page).width/page.width:1;
+// The size a text prints at on the open page: its rendered size (a label may
+// shrink to fit its box) times the page's fit to its paper. The readability
+// notice measures the same thing.
+const printedPt=(item,page=pages[active])=>{let units=presentedFontUnits(item);if(item.type==='text')try{units=textLayout(item).size;}catch{/* keep the set size */}return units*.75*printRatio(page);};
 const roundPt=v=>Math.round(v*10)/10;
 // Font sizes are at full drawing size; a page fitted to its paper prints them
 // smaller, which is what the readability notice and Text styles report.
-function printedNote(item){const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'Prints at this size.':'Prints at '+roundPt(printed)+' pt: this page is fitted to its paper at '+Math.round(printed/drawn*100)+'% of full drawing size.';}
-const printedBadge=item=>{const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'':'prints '+roundPt(printed)+' pt';};
+// Sizes are shown and entered as printed on the open page's paper, the same
+// points the readability notice reports; the full drawing size is noted.
+function printedNote(item){const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'Size as printed on this page.':'Size as printed on this page ('+Math.round(printed/drawn*100)+'% of full drawing size, where it is '+roundPt(drawn)+' pt).';}
+const printedBadge=item=>{const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'':'printed · full size '+roundPt(drawn)+' pt';};
 function fontUnitsFromField(input,item){
  if(input.value===input.dataset.shown)return presentedFontUnits(item);
  const pt=Number(input.value);if(!input.value||!Number.isFinite(pt)||pt<1||pt>360)throw Error('Font size must be between 1 and 360 pt.');
- return pt/.75*textFontScale(item);
+ // The entered size is printed points on this page.
+ return pt/.75/printRatio();
 }
 function syncQuickText(item){
  const bar=$('quick-text-tools');bar.hidden=!editDrawing||!['text','arttext'].includes(item?.type);if(bar.hidden)return;
- const size=$('quick-text-size');size.value=size.dataset.shown=String(roundPt(drawingPt(item)));size.title='Font size in points at full drawing size. '+printedNote(item);
+ const size=$('quick-text-size');size.value=size.dataset.shown=String(roundPt(printedPt(item)));size.title='Font size in points. '+printedNote(item);
  $('quick-text-printed').textContent=printedBadge(item);$('quick-text-printed').title=printedNote(item);
  $('quick-text-bold').checked=!!item.bold;$('quick-text-align').value=item.align||'left';
  $('quick-text-color').value=/^#[0-9a-f]{6}$/i.test(item.color||'')?item.color:'#17364a';
@@ -1080,8 +1088,31 @@ function pageNavigation(){
  picker.onchange=()=>{if(!commitInlineEdit()){picker.value=String(active);return;}active=Number(picker.value);draw(pages);};
  syncQuickPagePaper();
  $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
- let overflow=$('page-overflow-notice');if(!overflow){overflow=el('button','','warning');overflow.id='page-overflow-notice';overflow.onclick=()=>task(pageOptions);$('feedback').after(overflow);}
+ let overflow=$('page-overflow-notice');if(!overflow){overflow=el('button','','warning');overflow.id='page-overflow-notice';overflow.onclick=()=>task(()=>smallText().length?showSmallText(0):pageOptions());$('feedback').after(overflow);}
  const notice=pageLayoutNotice(pages[active]);overflow.hidden=!notice;overflow.textContent=notice;
+ // A readability notice leads to the text it is about: the smallest first,
+ // then Previous / Next through every item below the target.
+ let nav=$('page-notice-nav');if(!nav){nav=el('span','','notice-nav');nav.id='page-notice-nav';nav.setAttribute('role','group');nav.setAttribute('aria-label','Small text on this page');for(const [id,text,step,title] of [['notice-prev','‹',-1,'Previous small text'],['notice-show','Show smallest text',0,'Select and show the smallest text on this page'],['notice-next','›',1,'Next small text']]){const b=el('button',text);b.type='button';b.id=id;b.title=title;b.setAttribute('aria-label',title);b.onclick=()=>task(()=>showSmallText(step));nav.append(b);}const paper=el('button','Paper & print…');paper.type='button';paper.onclick=()=>task(pageOptions);nav.append(paper);overflow.after(nav);}
+ const small=notice?smallText():[];if(noticePage!==pages[active]?.name){noticePage=pages[active]?.name;noticeIndex=-1;}
+ nav.hidden=!small.length;if(small.length){overflow.title='Show the text this is about';$('notice-show').textContent=noticeIndex<0?'Show smallest text ('+small.length+')':(Math.min(noticeIndex,small.length-1)+1)+' of '+small.length;}
+}
+// Text printing below the page's readable minimum, smallest first (the
+// readability notice reports the first one).
+let noticeIndex=-1,noticePage=null;
+function smallText(page=pages[active]){
+ const target=page?.paperReadability?.minimumPt;if(!page||!target)return [];
+ const ratio=printRatio(page),out=[];
+ for(const item of page.items)if(item.type==='text'&&!item.hidden&&!item.compactTable&&!item.pageFrame&&!item.pageHeading&&item.editKey&&String(item.value||'').trim()){let size=item.size;try{size=textLayout(item).size;}catch{/* keep the set size */}const pt=size*.75*ratio;if(pt<target-.05)out.push({item,pt});}
+ return out.sort((a,b)=>a.pt-b.pt);
+}
+function showSmallText(step){
+ const list=smallText();if(!list.length){pageOptions();return;}
+ noticeIndex=noticeIndex<0||step===0&&noticeIndex<0?0:(noticeIndex+step+list.length)%list.length;
+ const {item,pt}=list[noticeIndex];
+ if(!editDrawing)$('edit-drawing').click();
+ selectDrawingItem(item.editKey);requestAnimationFrame(()=>viewport.focus(drawingBounds(item)));
+ $('notice-show').textContent=(noticeIndex+1)+' of '+list.length;
+ say('Text '+(noticeIndex+1)+' of '+list.length+' below '+pages[active].paperReadability.minimumPt+' pt prints at '+roundPt(pt)+' pt: '+String(item.value).slice(0,60));
 }
 function draw(prepared){
  cancelBesidePick();
@@ -1456,7 +1487,7 @@ function editDrawingObject(key){
  const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);const inputs={};
  const property=(where,name,value,opts)=>{if(!hasPicker)return field(where,name,value,opts);const cell=el('div','','compact-field');where.append(cell);return field(cell,name,value,opts);};
  for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
- if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,'Font size (pt)',String(roundPt(drawingPt(item))));inputs.size.dataset.shown=inputs.size.value;inputs.size.type='number';inputs.size.min=1;inputs.size.max=360;inputs.size.step='any';inputs.size.title=printedNote(item);inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);if(printedBadge(item))body.append(el('p','Font size is at full drawing size. '+printedNote(item),'hint printed-size-note'));}
+ if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,'Font size (pt)',String(roundPt(printedPt(item))));inputs.size.dataset.shown=inputs.size.value;inputs.size.type='number';inputs.size.min=1;inputs.size.max=360;inputs.size.step='any';inputs.size.title=printedNote(item);inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);if(printedBadge(item))body.append(el('p','Font size is as printed on this page. '+printedNote(item),'hint printed-size-note'));}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
  const labelRotation=item.labelRole&&item.relatedCableKey?field(body,'Connection label rotation',project.layout?.drawingEdits?.[item.editKey]?.rotationMode==='fixed'?String(Math.round((project.layout.drawingEdits[item.editKey].angle||0)*180/Math.PI)):'auto',[['auto','Follow cable automatically'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]):null;
  const initialWeight=linkedSwatch?item.sampleWeight??item.h:item.weight||1;
