@@ -1,3 +1,45 @@
+# Preview.60: global settings rule, paper lock, VLAN pages, access points on network pages
+
+Baseline: published preview.59. The owner asked for:
+- the window to remember its size and position;
+- the port map key no longer covered by the safety note;
+- smaller Port Inventory text, with each page named after its devices;
+- VLANs and Routing to keep devices whole and avoid continuations;
+- access points on the main network page as an option;
+- a quick lock toggle and an All pages box beside the paper options. A global change replaces page settings; a later page change overrides it, everywhere;
+- Global text styles to show what each category styles;
+- Paper layout wording less focused on wireless.
+
+What changed:
+- **Key overlap** (reports/scene.mjs):
+  - The footer band sits just inside the bottom margin (finish, footerGain, footerSpace).
+  - The adaptive maps' bottom-anchored symbol key used the bare margin and collided with the note on 19 fictional sheets.
+  - port-map-sheet-details.test checks the note never overlaps, with or without the footer and at a 25 mm margin.
+- **Port Inventory:**
+  - 8.6 px compact table text, marked compactTable and left out of paperTextMetrics (and so out of the 8 pt diagram minimum).
+  - nameInventoryPages gives each sheet a displayName and title such as "Port Inventory - A, B". The stable name stays "Port Inventory N".
+  - Long titles wrap within the sheet.
+  - The two-stack fixture needs 2 sheets (was 3).
+- **VLANs and Routing** (logical.mjs):
+  - Sections are prepared first, then placed. A section that doesn't fit the room left starts the next page whole, unless a later section fits that room.
+  - Compact typography is tighter, and its cells and column headers are compactTable.
+  - The fictional 12-switch campus prints 7 pages with no continued sections (was 8 pages with 7).
+- **Window placement:** desktop/WindowPlacement.cs (window.json beside release-cache.json), wired in Studio's constructor under #if !NDS_TEST_HOST. window-placement.test.mjs checks the wiring. CI compiles it.
+- **Global rule:**
+  - quickPagePaperLayout(..., {all}) for the page bar;
+  - applyGlobalPaper in Paper & print;
+  - globalOverrides in page-layout-ui.mjs;
+  - caption corners;
+  - globalTextOverrides in global-text-styles.mjs.
+
+  The page bar has #active-page-lock and #active-page-all.
+- **Paper layout:** Optimize or Keep. A Wireless pages details section holds Wireless layout and Wireless stack view. The notice and guide wording are updated.
+- **Text style highlight:** settingsPreview(...).highlight(match, label). Opening or focusing a category section highlights its text.
+- **Access points on network pages:** Layout & content checkbox for layout.includeAPs. captionRoom lets small devices' captions use up to 180 units.
+- **Tests:**
+  - New: browser-paper-controls (in the CI browser job), quick-page-paper All pages, global-overrides, global text overrides, logical-pages whole devices, core-access-points, window-placement.
+  - Updated: inventory and equipment-scale expectations.
+
 # Preview.59: 5 mm page margin, information panel always fits, port map details, fewer inventory pages
 
 Baseline: published preview.58. The owner sent a Letter network page whose information panel ran off the bottom of the sheet and asked for:

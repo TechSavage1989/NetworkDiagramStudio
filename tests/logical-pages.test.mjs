@@ -28,3 +28,14 @@ test('logical text edits survive reordering and native Visio exports device head
  const pages=buildPages(JSON.parse(JSON.stringify(p))),item=pages.flatMap(p=>p.items).find(i=>i.editKey===original.editKey);assert.equal(item.value,'Office users');assert.equal(item.color,'#2255AA');
  const parts=await unzip(await exportVisio(p,pages).arrayBuffer()),xml=[...parts].filter(([k])=>/^visio\/pages\/page\d+\.xml$/.test(k)).map(([,v])=>new TextDecoder().decode(v)).join('');assert.ok(xml.includes('LAB-SWITCH-A'));assert.ok(xml.includes('Office users'));
 });
+
+test('VLANs and Routing keeps each device whole and fills pages with the devices that fit',async()=>{
+ const {buildPages}=await import('../src/web/diagram/index.mjs');
+ // A fictional campus: twelve switches with different VLAN and route counts.
+ const project={name:'Fictional campus',links:[],layout:{pageSetup:{visible:{default:{preset:'letter'}}}},devices:Array.from({length:12},(_,d)=>({id:'sw'+d,name:'LAB-SW-'+(d+1),kind:'switch',vendor:'Aruba',model:'JL256A',ip:'10.0.'+d+'.1',ports:Array.from({length:8},(_,i)=>({name:String(i+1),state:'up',native:10})),vlans:Array.from({length:4+(d*7)%23},(_,v)=>({id:10+v,name:'Lab VLAN '+(10+v),ip:'10.'+d+'.'+v+'.1/24'})),routes:Array.from({length:d%4},()=>({destination:'0.0.0.0/0',gateway:'10.'+d+'.0.254'}))}))};
+ const pages=buildPages(project).filter(page=>/^VLANs and Routing/.test(page.name)),sections=pages.flatMap(page=>page.logicalSections||[]);
+ assert.equal(sections.filter(section=>section.continued).length,0,'no device continues onto another page');
+ assert.deepEqual(sections.map(section=>section.name).sort(),project.devices.map(device=>device.name).sort(),'every device appears once');
+ assert.ok(pages.length<=7,'pages are filled with the devices that fit ('+pages.length+')');
+ for(const page of pages)assert.equal(page.pageOverflow,false);
+});

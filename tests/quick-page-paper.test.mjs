@@ -30,3 +30,21 @@ test('quick paper refuses missing page or invalid choices',()=>{
  assert.throws(()=>quickPagePaperLayout(fixture(),{name:'Core Network'},{preset:'unknown'}));
  assert.throws(()=>quickPagePaperLayout(fixture(),{name:'Core Network'},{orientation:'upside-down'}));
 });
+test('All pages makes a change global: it replaces that setting everywhere, and a later page change overrides it again',()=>{
+ const page={name:'Core Network'},other={name:'Other'},wireless={name:'Wireless Connections',title:'Wireless Connections'};
+ const global=quickPagePaperLayout(fixture(),page,{orientation:'landscape'},{all:true}),visible=global.pageSetup.visible;
+ assert.equal(visible.default.orientation,'landscape');
+ for(const p of [page,other,wireless])assert.equal(visiblePagePaper({layout:global},p).orientation,'landscape','every page takes the global orientation');
+ assert.equal(visiblePagePaper({layout:global},other).preset,'legal','a page keeps its other own settings');
+ assert.deepEqual(visible.lockFrames,{},'frames are re-planned for the new sheet');
+ const local=quickPagePaperLayout(global,other,{orientation:'portrait'});
+ assert.equal(visiblePagePaper({layout:local},other).orientation,'portrait','a later page change overrides the global one');
+ assert.equal(visiblePagePaper({layout:local},page).orientation,'landscape');
+ const again=quickPagePaperLayout(local,page,{orientation:'landscape'},{all:true});
+ assert.equal(visiblePagePaper({layout:again},other).orientation,'landscape','the next global change replaces it');
+ const unlocked=quickPagePaperLayout(again,page,{locked:false},{all:true});
+ for(const p of [page,other,wireless])assert.equal(visiblePagePaper({layout:unlocked},p).locked,false,'lock applies to every page too');
+ const locked=quickPagePaperLayout(unlocked,page,{locked:true});
+ assert.equal(visiblePagePaper({layout:locked},page).locked,true);assert.equal(visiblePagePaper({layout:locked},other).locked,false);
+ assert.throws(()=>quickPagePaperLayout(fixture(),page,{locked:'yes'}));
+});

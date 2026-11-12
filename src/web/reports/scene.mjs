@@ -47,11 +47,13 @@ function page(request,name,title,subtitle,role,ids,width=paperOf(request).width,
 export const CABLE_MOVE_NOTE='Confirm live link, LLDP/CDP, and MAC address table before moving production cables.';
 const MAP_ROLES=new Set(['onePage','wall','workspace']);
 function finish(p,request,palette,inventory,index=1,count=1){const margin=p.reportMargin??MARGIN;
- const a=p.items,y=p.height-47,footer=request.pageFooter?.footer!==false,room=p.width-margin*2-(request.pageFooter?.show?252:100),separate='Configured settings and observed state remain separate.';
+ // The footer band sits just inside the bottom page margin (47 units up on
+ // the builder's 24-unit margin), so a margin setting moves it with the map.
+ const a=p.items,footer=request.pageFooter?.footer!==false,y=footer?p.height-margin-23:p.height-margin-15,room=p.width-margin*2-(request.pageFooter?.show?252:100),separate='Configured settings and observed state remain separate.';
  if(footer)rect(a,margin,y,p.width-margin*2,1,rule);
  const note=MAP_ROLES.has(p.role)?(footer&&textWidth(CABLE_MOVE_NOTE+'  '+separate,9)<=room?CABLE_MOVE_NOTE+'  '+separate:CABLE_MOVE_NOTE):footer?separate:'';
- if(note)text(a,margin,y+8,room,note,9,false,muted,'left',{editKey:p.name+'|footer-note',reportFooterRole:MAP_ROLES.has(p.role)?'safety':'note'});
- if(request.pageFooter?.show!==false)text(a,p.width-margin-95,y+8,95,index+' / '+count,9,false,muted,'right',{reportFooterRole:'page'});
+ if(note)text(a,margin,y+(footer?8:4),room,note,9,false,muted,'left',{editKey:p.name+'|footer-note',reportFooterRole:MAP_ROLES.has(p.role)?'safety':'note'});
+ if(request.pageFooter?.show!==false)text(a,p.width-margin-95,y+(footer?8:4),95,index+' / '+count,9,false,muted,'right',{reportFooterRole:'page'});
  for(const [n,item] of a.entries())item.editKey??=p.name+'|item|'+n;
  p.reportPalette=palette;p.reportInventory=inventory?.hostname;p.reportSourceVersion='1.18.5';return p;
 }
@@ -139,7 +141,7 @@ function drawDescriptions(p,y,inventory,limit){
  p.reportDescriptions=layout.entries.length;return y+4;
 }
 // The lowest point content may reach above the footer band and safety note.
-const contentLimit=p=>p.height-51;
+const contentLimit=p=>p.height-(p.reportMargin??MARGIN)-27;
 function modelLabel(inv){return inv.reportModel||inv.chassisModel||unique(inv.groups.filter(group=>!group.slot).map(group=>group.product)).join(' / ');}
 function displayName(inv){return unique(inv.devices.filter(detail=>!detail.parentId&&detail.name).map(detail=>detail.name)).join(' / ')||inv.hostname;}
 // A group heading names the member or slot, its model number (for example
@@ -252,7 +254,12 @@ function blockHeight(plan){const inv=plan.item.inventory;return Math.max(16.8,wr
 // out largest (numbers no smaller than 8 px). Near ties keep larger numbers.
 // Without a footer or page number a map reclaims the band except the strip
 // its safety note needs.
-function footerGain(request){return request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?9:0;}
+// Room the footer leaves for content: 9 units more without the footer rule
+// and page number, and the footer band moves with the page margin.
+function footerGain(request){return (request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?9:0)-(marginOf(request)-MARGIN);}
+// Height below the content that the footer band (or the safety note alone)
+// needs on a sheet with this margin.
+export function footerSpace(request,margin){const bare=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show;return bare?margin+16:margin+41;}
 function mapCandidates(item,palette,request,styles,extra=0){const margin=marginOf(request);
  const sheet=paperOf(request),tops=new Map(),contentTop=compact=>{if(!tops.has(compact))tops.set(compact,page(request,item.id+'|measure',displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),'onePage',[item.id],sheet.width,sheet.height,compact).contentTop);return tops.get(compact);};
  const fits=(plan,style)=>plan.width<=sheet.width-margin*2&&contentTop(style.compact)+plan.height+(style.compact?4:12)+legendHeight(item.inventory,palette,sheet.width-margin*2,style.compact,true)+extra+(style.compact?49:59)-footerGain(request)<=sheet.height+.01;
@@ -380,4 +387,4 @@ export function validateReportScene(p){
 
 // Shared measured primitives for the drawing-only adaptive paper planner.
 // Standalone reports keep their established geometry and export behavior.
-export const portMapPrimitives={devicePlan,fillRadius,page,finish,drawBlock,keyRows,keySections,text,ellipse,diamond,symbolKey,symbolKeyHeight,displayName,modelLabel};
+export const portMapPrimitives={devicePlan,fillRadius,page,finish,drawBlock,keyRows,keySections,text,ellipse,diamond,symbolKey,symbolKeyHeight,displayName,modelLabel,footerSpace};

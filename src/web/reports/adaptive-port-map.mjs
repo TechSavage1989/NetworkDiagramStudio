@@ -78,7 +78,7 @@ export function adaptivePortMap(item,palette,request,identity){
   p.name=identity.name;p.displayName=identity.displayName||p.displayName;p.reportMargin=legacy?24:margin;if(!legacy)p.contentTop-=4;return p;
  };
  const sample=make(),top=sample.contentTop,contentWidth=sheet.width-2*margin;
- const footerSpace=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show?margin:65,guideHeight=P.symbolKeyHeight(inv,legacy?sheet.width-48:contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
+ const footerSpace=P.footerSpace(request,legacy?24:margin),guideHeight=P.symbolKeyHeight(inv,legacy?sheet.width-48:contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
  const keys=[{side:false,key:keyPlan(inv,palette,contentWidth)},...[160,190,220,260].filter(width=>width<contentWidth*.4).map(width=>({side:true,key:keyPlan(inv,palette,width)}))];
  const candidates=[];
  for(const style of styles){

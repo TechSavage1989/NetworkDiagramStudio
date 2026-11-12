@@ -4,6 +4,18 @@ import {cleanPresentation,presentation,panelFields,displayPageName} from './pres
 import {CORE_ARRANGEMENT_CHOICES,arrangeCoreLayout} from './core-arrangement.mjs';
 import {deviceCaptionPlacement,CAPTION_CORNERS,CAPTION_CORNER_LABELS} from './device-captions.mjs';
 
+// A drawing-default change is global: each changed setting (and each changed
+// information-panel field) replaces the same setting on every page that had
+// its own; the pages keep their other settings, and a later page change
+// overrides the default again.
+export function globalOverrides(before={},after={},pages={}){
+ const changed=key=>JSON.stringify(before?.[key])!==JSON.stringify(after?.[key]);
+ for(const entry of Object.values(pages||{})){
+  if(!entry||typeof entry!=='object')continue;
+  for(const key of ['drawingScale','textScale','minimumTextPt','wirelessApScale','wirelessApPlacement'])if(changed(key))delete entry[key];
+  if(entry.panel&&typeof entry.panel==='object'&&changed('panel'))for(const key of new Set([...Object.keys(before?.panel||{}),...Object.keys(after?.panel||{})]))if(JSON.stringify(before?.panel?.[key])!==JSON.stringify(after?.panel?.[key]))entry.panel[key]=structuredClone(after.panel[key]);
+ }
+}
 export function pageLayoutEditor({project,pages,selected,modal,field,button,apply,close,preview}){
  let layout=structuredClone(project.layout||{});layout.presentation=cleanPresentation(layout.presentation);layout.corePages||=[];layout.reportPages||=[];
  let key=selected||'*',store=()=>{};const include=new Set();
@@ -28,6 +40,8 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
   const captions=global?check(identity,'Show cable type and speed on connection lines',layout.cableCaptions===true):null;
   if(captions)identity.append(el('p','The connection key already names each cable color, so this text is off unless chosen. A caption you moved or edited stays visible.','hint'));
   const numbers=global?check(identity,'Show port numbers on network pages',layout.corePortNumbers!==false):null;
+  // Access points on the network (core) pages; also in Device order.
+  const accessPoints=global||page?.coreDeviceIds&&!page.reportId?check(identity,'Show wireless access points on network pages',layout.includeAPs===true):null;
   // Device names and details stay next to their device on network pages, at
   // the chosen corner when it is clear (name above and details below, on the
   // left, by default).
@@ -118,8 +132,15 @@ export function pageLayoutEditor({project,pages,selected,modal,field,button,appl
     sectionTitles:Object.fromEntries(sectionControls.filter(c=>c.card.isConnected).map(c=>[c.id,c.heading.value.trim().slice(0,80)]).filter(([,title])=>title)),
     sectionContent:Object.fromEntries(sectionControls.filter(c=>c.card.isConnected&&c.override.value.trim()).map(c=>[c.id,c.override.value.slice(0,16000)])),
     modulesMode:moduleDetails.value,vlanMode:vlanMode.value,addressMode:addressMode.value,portMode:portMode.value,rowLimit:+rowLimit.value,emptySections:emptySections.value,notes:notes.value}});
-   if(namePlace)layout.deviceCaptions={...layout.deviceCaptions,name:namePlace.value,info:infoPlace.value};
-   if(global){layout.labelBacking={mode:backingMode.value,padding:+backingPadding.value};next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;if(numbers.checked)delete layout.corePortNumbers;else layout.corePortNumbers=false;if(hops.value==='bundle')layout.hopStyle='bundle';else delete layout.hopStyle;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
+   if(accessPoints)layout.includeAPs=accessPoints.checked;
+   if(namePlace){
+    // A drawing-wide corner change is global: it replaces that caption's
+    // per-device corner too; a later per-device choice overrides it again.
+    const before=layout.deviceCaptions||{},devices={...before.devices};
+    for(const [slot,input] of [['name',namePlace],['info',infoPlace]])if((before[slot]||(slot==='name'?'above-left':'below-left'))!==input.value)for(const id of Object.keys(devices)){const {[slot]:_,...rest}=devices[id];if(Object.keys(rest).length)devices[id]=rest;else delete devices[id];}
+    layout.deviceCaptions={...before,name:namePlace.value,info:infoPlace.value,...(Object.keys(devices).length?{devices}:{devices:undefined})};
+   }
+   if(global){globalOverrides(previousPresentation.defaults,next,layout.presentation.pages);layout.labelBacking={mode:backingMode.value,padding:+backingPadding.value};next.deviceScale=+equipment.value/100;layout.presentation.defaults=next;layout.documentation=documentation.value;layout.cableCaptions=captions.checked;if(numbers.checked)delete layout.corePortNumbers;else layout.corePortNumbers=false;if(hops.value==='bundle')layout.hopStyle='bundle';else delete layout.hopStyle;}else{if(page?.reportId&&!key.includes('|')&&definition){definition.name=next.name||definition.name;delete next.name;}layout.presentation.pages[key]=next;}
    refitWirelessPresentation(layout,previousPresentation,pages);
    if(deviceChecks.length){const chosen=deviceChecks.filter(([,input])=>input.checked).map(([id])=>id);
     if(!page.reportId)layout.coreExclude=(layout.coreExclude||[]).filter(id=>!chosen.includes(id));
