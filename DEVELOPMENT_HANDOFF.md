@@ -1,3 +1,32 @@
+# Preview.63: dots that fill their jacks, device page names, defaults, printed sizes, connection types
+
+Baseline: published preview.62. The owner asked for:
+- port map dots that fill the room available instead of staying tiny;
+- wireless sheets, and every future page family, named after their devices like the other pages;
+- Letter as the default page size;
+- snapping and Edit drawing on by default;
+- a text size warning that matches what is on the page, that goes to the text when clicked, and steps between matching items;
+- device names and details the same size on every device;
+- WS-C3560E wireless port numbers in line with their sockets;
+- new connection types, and changing chosen connections to another type without changing every connection of the original type.
+
+What changed:
+- **Dots** (reports/scene.mjs): portDots sizes each port's dots to its own face on drawing-set maps; opticalFaces gives cramped optical faces the full row height; standardPortMapWidth is fill-based.
+- **Page names** (diagram/index.mjs): nameNumberedPages and pageDevices name every numbered sheet set after its devices; port map sheets read "<device> / Port map". displayName and headingTitle are presentation only.
+- **Defaults:** new projects use Letter landscape, snapping on, Edit drawing on.
+- **Printed sizes and the notice** (app.mjs, viewport.mjs): the Size box and Properties show and accept printed points. The readability notice lists the small text, smallest first; clicking it or Show selects and reveals the text, and ‹ › step through. Page bar notices are one-line chips, so the canvas no longer jumps after a drag.
+- **Captions** (device-paper-labels.mjs): one common size per caption kind on a page.
+- **Wireless numbers** (wireless-number-leads.mjs, routing.mjs, wireless-layout.mjs): a cable that used to push its whole number row away from the sockets now passes behind its own number. The established placement still decides the stack width, so paper plans are unchanged.
+- **Connection types** (connection-types.mjs, legend-connections.mjs, app.mjs):
+  - layout.connectionTypes;
+  - Link styles → New connection type…;
+  - Edit drawing → Connection type… for the selected cables only;
+  - Properties shows the stored line width.
+- **Tests:**
+  - connection-types-custom.test.mjs;
+  - wireless-number-alignment.test.mjs;
+  - updated port map, naming, Letter default and browser checks for the new defaults.
+
 # Preview.62: site map page and engineer review in the HTML viewer
 
 Baseline: published preview.61. The owner asked for:
