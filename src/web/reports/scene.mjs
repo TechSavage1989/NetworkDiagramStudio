@@ -69,10 +69,14 @@ function finish(p,request,palette,inventory,index=1,count=1){const margin=p.repo
  p.reportPalette=palette;p.reportInventory=inventory?.hostname;p.reportSourceVersion='1.18.5';return p;
 }
 export function numberReportPages(pages){return pages.map((p,index)=>({...p,items:p.items.map(item=>item.reportFooterRole==='page'?{...item,value:(index+1)+' / '+pages.length}:item)}));}
+// '*' marks a trunk whose tagged VLANs come from a policy (all, or all
+// except some); its dots show the VLANs that policy allows.
+const POLICY_KEY='All VLANs allowed (trunk policy)';
 function symbolKeyItems(inventory){
  const titles=['Native VLAN','Tagged VLAN','Voice VLAN','LAG / trunk'];
  if(inventory.ports.some(port=>port.stackLink))titles.push('Stack / VSF');
  if(inventory.ports.some(port=>port.disabled))titles.push('Disabled');
+ if(inventory.ports.some(port=>port.taggedVlanPolicy))titles.push(POLICY_KEY);
  return titles;
 }
 function symbolKeyHeight(inventory,width){
@@ -97,6 +101,7 @@ function symbolKey(p,y,palette,inventory){
  entry('LAG / trunk',(x,y)=>rect(a,x,y+2,12,10,'#ffffff',outline,2,2.5));
  if(inventory.ports.some(port=>port.stackLink))entry('Stack / VSF',(x,y)=>rect(a,x,y+2,12,10,'#000000','none',1,2));
  if(inventory.ports.some(port=>port.disabled))entry('Disabled',(x,y)=>text(a,x+1,y,12,'!',11,true));
+ if(inventory.ports.some(port=>port.taggedVlanPolicy))entry(POLICY_KEY,(x,y)=>{label(a,x+1,y,12,14,'*',13,true,ink,'center');});
  return lineY+17;
 }
 function mergeInventories(items){return {hostname:'Workspace',ports:items.flatMap(item=>item.inventory.ports),vlans:items.flatMap(item=>item.inventory.vlans),groups:items.flatMap(item=>item.inventory.groups)};}
@@ -120,8 +125,10 @@ function keySections(inventory,palette,width,compact=false,dense=false){
  return [{key:'vlans',title:'VLANs',rows:layout(vlans)},{key:'lags',title:'LAGs / trunks',rows:layout(lags)}].filter(section=>section.rows.length);
 }
 function keyRows(inventory,palette,width,compact=false,dense=false){return keySections(inventory,palette,width,compact,dense).flatMap(section=>section.rows);}
-function basisHeight(inventory,width,compact=false){const basis=uplinkBasis(inventory);return basis?(compact?18:23)+wrapPortText(basis.text,width,9.5).length*9.5*1.2+(compact?4:6):0;}
-function legendHeight(inventory,palette,width,compact=false,dense=false){return keySections(inventory,palette,width,compact,dense).reduce((height,section)=>height+(compact?18:23)+section.rows.reduce((sum,row)=>sum+row.height,0)+(compact?2:4),0)+basisHeight(inventory,width,compact)+symbolKeyHeight(inventory,width)+(compact?7:13);}
+// Drawing-set maps keep it to one small muted note (no heading).
+const basisNote=basis=>'Uplink module unconfirmed: '+basis.text;
+function basisHeight(inventory,width,compact=false,dense=false){const basis=uplinkBasis(inventory);if(!basis)return 0;if(dense)return wrapPortText(basisNote(basis),width,9).length*9*1.2+(compact?4:6);return (compact?18:23)+wrapPortText(basis.text,width,9.5).length*9.5*1.2+(compact?4:6);}
+function legendHeight(inventory,palette,width,compact=false,dense=false){return keySections(inventory,palette,width,compact,dense).reduce((height,section)=>height+(compact?18:23)+section.rows.reduce((sum,row)=>sum+row.height,0)+(compact?2:4),0)+basisHeight(inventory,width,compact,dense)+symbolKeyHeight(inventory,width)+(compact?7:13);}
 function legend(p,y,inventory,palette,{continued=false}={}){const margin=p.reportMargin??MARGIN;
  const a=p.items,w=p.width-margin*2;
  for(const section of keySections(inventory,palette,w,p.compact,p.dense)){
@@ -135,7 +142,7 @@ function legend(p,y,inventory,palette,{continued=false}={}){const margin=p.repor
  return symbolKey(p,y+(p.compact?1:5),palette,inventory)+(p.compact?5:8);
 }
 // The builder's uplink note for an unconfirmed module, under its own heading.
-function drawBasis(p,y,inventory,width,x=p.reportMargin??MARGIN){const basis=uplinkBasis(inventory);if(!basis)return y;text(p.items,x,y,width,basis.title,p.compact?11:12,true,ink,'left',{editKey:p.name+'|key-heading|uplinks',reportKeyHeading:'uplinks'});y+=p.compact?18:23;const h=text(p.items,x,y,width,basis.text,9.5,false,muted,'left',{editKey:p.name+'|uplink-basis',reportUplinkBasis:true});return y+h+(p.compact?4:6);}
+function drawBasis(p,y,inventory,width,x=p.reportMargin??MARGIN,dense=p.dense){const basis=uplinkBasis(inventory);if(!basis)return y;if(dense){const h=text(p.items,x,y,width,basisNote(basis),9,false,muted,'left',{editKey:p.name+'|uplink-basis',reportUplinkBasis:true});return y+h+(p.compact?4:6);}text(p.items,x,y,width,basis.title,p.compact?11:12,true,ink,'left',{editKey:p.name+'|key-heading|uplinks',reportKeyHeading:'uplinks'});y+=p.compact?18:23;const h=text(p.items,x,y,width,basis.text,9.5,false,muted,'left',{editKey:p.name+'|uplink-basis',reportUplinkBasis:true});return y+h+(p.compact?4:6);}
 // Port descriptions go under the key when every one of them fits the space
 // left on the sheet; otherwise they stay in the Port Inventory pages.
 function describedPorts(inventory){return (inventory.ports||[]).filter(port=>String(port.description||'').trim()&&String(port.description).trim()!==port.id).map(port=>({id:port.id,text:String(port.description).trim()}));}
@@ -157,7 +164,7 @@ function drawDescriptions(p,y,inventory,limit){
 }
 // The lowest point content may reach above the footer band and safety note.
 const contentLimit=p=>p.height-(p.reportMargin??MARGIN)-27;
-function modelLabel(inv){return inv.reportModel||inv.chassisModel||unique(inv.groups.filter(group=>!group.slot).map(group=>group.product)).join(' / ');}
+function modelLabel(inv){return inv.reportModel||inv.chassisModel||unique(inv.groups.filter(group=>!group.slot).map(group=>group.product).filter(Boolean)).join(' / ');}
 function displayName(inv){return unique(inv.devices.filter(detail=>!detail.parentId&&detail.name).map(detail=>detail.name)).join(' / ')||inv.hostname;}
 // A group heading names the member or slot, its model number (for example
 // JL256A) and its hardware (for example 48 RJ-45 + 4 SFP+), then the device
@@ -184,9 +191,11 @@ export function hardwareSummary(group){
  if(!counts.size){if(group.copper)counts.set('RJ-45',group.copper);if(group.optical)counts.set(group.opticalType||'SFP',group.optical);}
  return [...counts].sort(([a],[b])=>(b==='RJ-45')-(a==='RJ-45')).map(([media,n])=>n+' '+media).join(' + ');
 }
-function groupTitle(inv,group,width=Infinity,font=11){
- const detail=inv.devices.find(detail=>detail.id===(group.slot?group.device+'/'+group.slot:group.device)),members=unique(inv.groups.map(row=>row.device)),identity=group.slot?(members.length>1?'Member '+group.device+' / ':'')+(group.rear?'Rear module ':'Slot ')+group.slot:members.length>1?'Member '+group.device:group.rear?'Rear panel':group.id;
- let title=[identity,group.product,hardwareSummary(group),group.configuredInterfaces?(is3560E48(inv)?'X2 / TwinGig alternatives':'Configured interfaces'):''].filter(Boolean).join(' | ');
+// On drawing-set maps an unconfirmed module's heading is one short line
+// ("Uplink interfaces"); its alternatives are a small note under the key.
+function groupTitle(inv,group,width=Infinity,font=11,fill=false){
+ const short=fill&&group.configuredInterfaces,detail=inv.devices.find(detail=>detail.id===(group.slot?group.device+'/'+group.slot:group.device)),members=unique(inv.groups.map(row=>row.device)),identity=group.slot?(members.length>1?'Member '+group.device+' / ':'')+(group.rear?'Rear module ':'Slot ')+group.slot:members.length>1?'Member '+group.device:group.rear?'Rear panel':short?String(group.id).replace(/\s*-\s*module unconfirmed$/i,''):group.id;
+ let title=[identity,group.product,hardwareSummary(group),group.configuredInterfaces&&!short?(is3560E48(inv)?'X2 / TwinGig alternatives':'Configured interfaces'):''].filter(Boolean).join(' | ');
  for(const part of [detail?.name,detail?.serialNumber?'S/N '+detail.serialNumber:'',detail?.assetTag?'Asset '+detail.assetTag:''].filter(Boolean))if(textWidth(title+' | '+part,font,true)<=width)title+=' | '+part;
  return title;
 }
@@ -196,7 +205,7 @@ function groupTitle(inv,group,width=Infinity,font=11){
 // height where they need it (as opticalFaces draws them).
 export function standardPortMapWidth(inv){
  const specs=inv.groups.flatMap(group=>group.socketLayout.map(socket=>({socket,port:inv.ports.find(port=>port.group===group.id&&port.number===socket.number)}))).filter(row=>row.port&&markerVlans(inv,row.port).length);
- const fits=w=>specs.every(({socket,port})=>{const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?OPTICAL_HEIGHT.tall:23.2/25.2);return largestDot(markerVlans(inv,port).length,dotArea(0,0,w,h,dotReserve(port,optical,normalStyle.numberFont,true)))>=1.5;});
+ const fits=w=>specs.every(({socket,port})=>{const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?OPTICAL_HEIGHT.tall:23.2/25.2);return largestDot(markerVlans(inv,port).length,dotArea(0,0,w,h,dotReserve(port,optical,normalStyle.numberFont,true,true)))>=1.5;});
  let width=16;while(width<=512&&!fits(width))width+=.5;
  if(width>512)throw new ReportCapacityError('VLAN membership exceeds readable marker capacity. Use the complete inventory table for this interface.');
  return width;
@@ -233,7 +242,7 @@ function opticalFaces(inv,portWidth,style){
 // never smaller than the map's common radius or the builder's smallest dot.
 // Dots stay above the latch line unless overlapping it makes them notably larger.
 function portDots(n,sx,sy,w,h,port,optical,plan){
- const cap=Math.min(5,w*.14),floor=Math.max(1.5,plan.markerRadius??1.5),clear=dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont)),over=dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,true));
+ const cap=Math.min(5,w*.14),floor=Math.max(1.5,plan.markerRadius??1.5),beside=!!plan.outsideMarks?.(port),clear=dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,false,beside)),over=dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,true,beside));
  const size=area=>Math.floor(Math.min(cap,largestDot(n,area))*.999*1000)/1000;
  let area=clear,r=size(clear);const overlap=size(over);if(overlap>r*1.15||r<floor){area=over;r=overlap;}
  if(r<floor)return null;const grid=dotLayout(n,area,r);return grid.fits?{r,grid}:null;
@@ -241,8 +250,20 @@ function portDots(n,sx,sy,w,h,port,optical,plan){
 const dotArea=(x,y,w,h,bottom)=>({x:x+1.6,y:y+1.6,w:Math.max(0,w-3.2),h:Math.max(0,h-1.6-bottom)});
 // Dots stay above the jack's latch line when they fit there; a port that
 // needs the room may overlap it (the dots are drawn over the line). A
-// disabled '!' or policy '*' mark keeps its own band at the bottom.
-const dotReserve=(port,optical,numberFont,overlap=false)=>port.disabled||port.taggedVlanPolicy?numberFont*1.2+1:overlap?1.6:optical?2.4:3;
+// disabled '!' or policy '*' mark keeps its own band at the bottom, unless
+// the map draws those marks beside the port number (outside).
+const dotReserve=(port,optical,numberFont,overlap=false,outside=false)=>!outside&&(port.disabled||port.taggedVlanPolicy)?numberFont*1.2+1:overlap?1.6:optical?2.4:3;
+// Drawing-set maps put a port's '*' (trunk VLAN policy) and '!' (disabled)
+// marks beside its number when the pitch leaves room, never inside the jack,
+// so the marks never take room from the dots.
+const MARK_GAP=1.5;
+const portDisplay=(inv,port)=>inv.groups.find(group=>group.id===port.group)?.configuredInterfaces?shortInterface(port.id):String(port.displayNumber||portLabelText(port.id));
+// A port's marks sit beside its own number when they stay clear of the
+// widest neighboring number; otherwise they keep the band inside the jack.
+function marksOutside(inv,portWidth,style){
+ const font=style.numberFont,pitch=portWidth+(style.compact?1:2),glyph=value=>textWidth(value,font,true)-6,widest=Math.max(0,...inv.ports.map(port=>glyph(portDisplay(inv,port))));
+ return port=>!(port.disabled||port.taggedVlanPolicy)||glyph(portDisplay(inv,port))/2+glyph((port.taggedVlanPolicy?'*':'')+(port.disabled?'!':''))+MARK_GAP*2<=pitch-widest/2;
+}
 function largestDot(n,box){let best=0;for(let cols=1;cols<=n;cols++){const rows=Math.ceil(n/cols),r=Math.min(box.w/(2*cols+DOT_GAP*(cols-1)),box.h/(2*rows+DOT_GAP*(rows-1)));if(r>best)best=r;}return best;}
 function dotLayout(n,box,r){
  const gap=r*DOT_GAP,step=r*2+gap,most=Math.max(1,Math.floor((box.w+gap)/step+1e-9)),rows=Math.ceil(n/most),cols=Math.ceil(n/rows),top=box.y+(box.h-(rows*step-gap))/2;
@@ -251,25 +272,25 @@ function dotLayout(n,box,r){
 function fillRadius(inv,plan){
  const specs=inv.groups.flatMap(group=>group.socketLayout.map(socket=>({socket,port:inv.ports.find(port=>port.group===group.id&&port.number===socket.number)}))).filter(row=>row.port),w=plan.portWidth;
  let radius=Math.min(5,w*.14);
- for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?plan.opticalRatio:23.2/25.2);radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,dotReserve(port,optical,plan.style.numberFont,true))));}
+ for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?plan.opticalRatio:23.2/25.2);radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,dotReserve(port,optical,plan.style.numberFont,true,!!plan.outsideMarks?.(port)))));}
  // Never smaller than the builder's own markers; the builder layout keeps those.
  return radius>=plan.style.markerRadius?Math.floor(radius*1000)/1000:null;
 }
-function groupPlan(inv,group,portWidth,style=normalStyle){
+function groupPlan(inv,group,portWidth,style=normalStyle,fill=false){
  const ports=inv.ports.filter(port=>port.group===group.id),pitch=portWidth+(style.compact?1:2),faceHeight=portWidth*23.2/25.2,layout=group.socketLayout,rowsCount=Math.max(...layout.map(socket=>socket.row))+1,numberFont=style.numberFont,rowPitch=faceHeight+(style.compact&&rowsCount<=2?1.4:numberFont*1.2+(style.compact?3:6));
  // A configured-interface panel (an unconfirmed module) measures its heading,
  // which may wrap, before its rows.
- if(group.configuredInterfaces&&!group.socketLayout?.length){const width=Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),header=Math.max(24,wrapPortText(groupTitle(inv,group,width-14,style.groupFont),width-14,style.groupFont,true).length*style.groupFont*1.2+8);return {group,ports,configured:true,width,header,style,height:header+3+Math.max(1,ports.length)*22};}
- const minimum=Math.min(...layout.map(socket=>socket.column)),maximum=Math.max(...layout.map(socket=>socket.column)),width=Math.max(180,(maximum-minimum)*pitch+portWidth+16),header=Math.max(style.compact?14:22,wrapPortText(groupTitle(inv,group,width-14,style.groupFont),width-14,style.groupFont,true).length*style.groupFont*1.2+(style.compact?2:8)),height=header+numberFont*1.2+(style.compact?1.2:4)+faceHeight+Math.max(0,rowsCount-1)*rowPitch+numberFont*1.2+(style.compact?3:8);
+ if(group.configuredInterfaces&&!group.socketLayout?.length){const width=Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),header=Math.max(24,wrapPortText(groupTitle(inv,group,width-14,style.groupFont,fill),width-14,style.groupFont,true).length*style.groupFont*1.2+8);return {group,ports,configured:true,width,header,style,height:header+3+Math.max(1,ports.length)*22};}
+ const minimum=Math.min(...layout.map(socket=>socket.column)),maximum=Math.max(...layout.map(socket=>socket.column)),width=Math.max(180,(maximum-minimum)*pitch+portWidth+16),header=Math.max(style.compact?14:22,wrapPortText(groupTitle(inv,group,width-14,style.groupFont,fill),width-14,style.groupFont,true).length*style.groupFont*1.2+(style.compact?2:8)),height=header+numberFont*1.2+(style.compact?1.2:4)+faceHeight+Math.max(0,rowsCount-1)*rowPitch+numberFont*1.2+(style.compact?3:8);
  return {group,ports,width,height,header,minimum,pitch,faceHeight,rowPitch,portWidth,rowsCount,numberFont,style};
 }
 function devicePlan(item,style=normalStyle,width=null,fill=false){
- const inv=item.inventory,portWidth=width??item.standardPortWidth??markerSize(inv,style),opticalRatio=fill?opticalFaces(inv,portWidth,style):OPTICAL_HEIGHT.builder,plans=inv.groups.map(group=>({...groupPlan(inv,group,portWidth,style),opticalRatio,fill})),bands=[];
+ const inv=item.inventory,portWidth=width??item.standardPortWidth??markerSize(inv,style),opticalRatio=fill?opticalFaces(inv,portWidth,style):OPTICAL_HEIGHT.builder,outsideMarks=fill?marksOutside(inv,portWidth,style):null,plans=inv.groups.map(group=>({...groupPlan(inv,group,portWidth,style,fill),opticalRatio,fill,outsideMarks})),bands=[];
  if(inv.chassisSlots&&inv.groups.every(group=>/^[A-L]$/.test(group.slot))){
   const slotWidth=Math.max(280,...plans.map(plan=>plan.width)),slotHeight=Math.max(80,...plans.map(plan=>plan.height));
   for(let slot=0;slot<inv.chassisSlots;slot+=2){const panels=[0,1].map(column=>({plan:plans.find(plan=>plan.group.slot===String.fromCharCode(65+slot+column)),empty:String.fromCharCode(65+slot+column),x:column*(slotWidth+16)})),height=panels.some(panel=>panel.plan)?slotHeight:24*Math.max(1,Math.min(1.2,style.scale));for(const panel of panels){panel.w=slotWidth;panel.h=height;}bands.push({panels,width:slotWidth*2+16,height});}
  }else for(const plan of plans)bands.push({panels:[{plan,x:0,w:plan.width,h:plan.height}],width:plan.width,height:plan.height});
- return {item,portWidth,opticalRatio,bands,style,gap:style.compact?2:8,width:Math.max(200,...bands.map(band=>band.width)),height:bands.reduce((height,band)=>height+band.height+(style.compact?2:8),0)};
+ return {item,portWidth,opticalRatio,outsideMarks,bands,style,gap:style.compact?2:8,width:Math.max(200,...bands.map(band=>band.width)),height:bands.reduce((height,band)=>height+band.height+(style.compact?2:8),0)};
 }
 // A port map may carry the device's core-diagram artwork colors (item.artwork):
 // slot panels take the plate or module-bay color, a chassis frame shows
@@ -281,7 +302,7 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
  // double-click opens that device's port map details.
  const identity={reportMember:String(group.device||'1'),reportSlot:group.slot||'',reportIdentity:group.slot?group.device+'/'+String(group.slot).toUpperCase():String(group.device||'1')};
  Object.assign(a.at(-1),{editKey:scope+'|body',reportPanel:true,reportGroup:group.id,sourceId:item.id,...identity});rect(a,x,y,width,plan.header||24,navy,'none',1,6);
- text(a,x+7,y+(plan.style?.compact?1:4),width-14,groupTitle(inv,group,plan.width-14,plan.style?.groupFont||11),plan.style?.groupFont||11,true,'#ffffff','left',{editKey:scope+'|title',reportDevice:item.id,...identity});
+ text(a,x+7,y+(plan.style?.compact?1:4),width-14,groupTitle(inv,group,plan.width-14,plan.style?.groupFont||11,plan.fill),plan.style?.groupFont||11,true,'#ffffff','left',{editKey:scope+'|title',reportDevice:item.id,...identity});
  if(plan.configured){let at=y+(plan.header||24)+5;for(const port of plan.ports){text(a,x+8,at,width-16,port.id+' | '+port.media+' | configured alternative',10,false,ink,'left',{reportPort:port.id,editKey:scope+'|configured|'+port.id});at+=22;}return;}
  const sockets=[],portEntries=[];
  for(const spec of group.socketLayout){
@@ -298,16 +319,20 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
   // Drawing-set maps size each port's dots to fill its own face.
   const own=plan.fill&&markerIds.length?portDots(markerIds.length,sx,sy,w,h,port,optical,plan):null;
   if(own)markerIds.forEach((id,index)=>drawMarker(id,own.grid.points[index].cx,own.grid.points[index].cy,own.r));
-  else if(plan.markerRadius!=null&&markerIds.length){let grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont)),radius);if(!grid.fits)grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,true)),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
+  else if(plan.markerRadius!=null&&markerIds.length){const beside=!!plan.outsideMarks?.(port);let grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,false,beside)),radius);if(!grid.fits)grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,true,beside)),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
   else{if(markerIds.length>cols*availableRows)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});
    markerIds.forEach((id,index)=>drawMarker(id,sx+2.6+radius+(index%cols)*step,markerTop+radius+Math.floor(index/cols)*step));}
-  if(port.disabled)text(a,sx+w-9,sy+h-plan.numberFont*1.2,8,'!',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'center',{editKey:socketKey+'|disabled',reportPort:port.id,reportPortRole:'disabled'});
-  if(port.taggedVlanPolicy)text(a,sx+2,sy+h-plan.numberFont*1.2,Math.max(10,w-12),'*',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'left',{editKey:socketKey+'|policy',reportPort:port.id,reportPortRole:'policy'});
-  const name=port.id+(spec.suffix?' ['+spec.suffix+']':'');portEntries.push({name,source:port,display:(group.configuredInterfaces?shortInterface(port.id):port.displayNumber||portLabelText(port.id))+spec.suffix});sockets.push({name,x:sx,y:sy,w,h,form:spec.media});
+  if(port.disabled&&!plan.outsideMarks?.(port))text(a,sx+w-9,sy+h-plan.numberFont*1.2,8,'!',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'center',{editKey:socketKey+'|disabled',reportPort:port.id,reportPortRole:'disabled'});
+  if(port.taggedVlanPolicy&&!plan.outsideMarks?.(port))text(a,sx+2,sy+h-plan.numberFont*1.2,Math.max(10,w-12),'*',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'left',{editKey:socketKey+'|policy',reportPort:port.id,reportPortRole:'policy'});
+  const name=port.id+(spec.suffix?' ['+spec.suffix+']':'');portEntries.push({name,source:port,socketKey,display:(group.configuredInterfaces?shortInterface(port.id):port.displayNumber||portLabelText(port.id))+spec.suffix});sockets.push({name,x:sx,y:sy,w,h,form:spec.media});
  }
  const labelGroup={x,y,w:width,h:height,editKey:scope,sourceId:item.id,ports:Object.fromEntries(sockets.map(socket=>[socket.name,[(socket.x+socket.w/2-x)/width,(socket.y+socket.h/2-y)/height]])),children:sockets.map(socket=>({type:'rect',socketPart:0,socketForm:socket.form,x:(socket.x-x)/width,y:(socket.y-y)/height,w:socket.w/width,h:socket.h/height})),panelRegions:[{x:0,y:0,w:1,h:1}]},numbers=portLabelLayout(labelGroup,portEntries,{fontSize:plan.numberFont,format:(_name,port)=>port.display,measureRequired:false,minWidth:plan.style.compact?0:Math.min(18,plan.portWidth),gap:plan.style.compact?1:2});
  if(!numbers.readable)throw new ReportCapacityError('The port numbers need more room in '+group.id+'.',{deviceId:item.id,group:group.id});
- for(const entry of numbers.entries){const b=entry.number;label(a,b.x,b.y,b.w,b.h,entry.text,b.size,true,colors.text,'center');Object.assign(a.at(-1),{editKey:entry.editKey+'|text',portNumberRole:'text',reportPortRole:'number',reportPort:entry.port.source.id,portName:entry.port.source.id,sourceId:item.id,full:true});}
+ for(const entry of numbers.entries){const b=entry.number;label(a,b.x,b.y,b.w,b.h,entry.text,b.size,true,colors.text,'center');Object.assign(a.at(-1),{editKey:entry.editKey+'|text',portNumberRole:'text',reportPortRole:'number',reportPort:entry.port.source.id,portName:entry.port.source.id,sourceId:item.id,full:true});
+  // The '*' and '!' marks follow the number, outside the jack.
+  if(plan.outsideMarks?.(entry.port.source)){const port=entry.port.source,key=entry.port.socketKey;let at=b.x+b.w/2+(textWidth(entry.text,b.size,true)-6)/2+MARK_GAP;
+   for(const [mark,role] of [[port.taggedVlanPolicy?'*':'','policy'],[port.disabled?'!':'','disabled']]){if(!mark)continue;const mw=textWidth(mark,b.size,true)-6+1;label(a,at,b.y,mw+2,b.h,mark,b.size,true,colors.text,'left');Object.assign(a.at(-1),{editKey:key+'|'+role,reportPort:port.id,reportPortRole:role,sourceId:item.id});at+=mw;}}
+ }
  p.reportSockets??=[];p.reportSockets.push(...sockets.map(socket=>({...socket,deviceId:item.id,group:group.id})));p.reportNumberBoxes??=[];p.reportNumberBoxes.push(...numbers.labelObstacles);
 }
 function drawBand(p,plan,band,x,y,palette){const colors=panelColors(plan.item);for(const panel of band.panels){if(panel.plan)drawPanel(p,plan.item,palette,panel.plan,x+panel.x,y,panel.w,panel.h);else{rect(p.items,x+panel.x,y,panel.w,panel.h,colors.empty,colors.emptyStroke,.7,6);text(p.items,x+panel.x+8,y+Math.min(8,(panel.h-14)/2),panel.w-16,'Slot '+panel.empty+' / Not declared',11,false,colors.muted);}}}
