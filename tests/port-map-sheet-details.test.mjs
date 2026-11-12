@@ -71,3 +71,55 @@ test('Port Inventory sheets are named after their devices and use compact table 
   assert.ok(page.paperReadability.actualPt>=8,'table typography is not held to the diagram minimum');
  }
 });
+
+test('Port Inventory - Interfaces sheets are named after their devices, with plain Native text and compact type',async()=>{
+ const {printGeometry}=await import('../src/web/page-options.mjs'),{textLayout}=await import('../src/web/diagram/scene.mjs');
+ // Fictional switches with routed VLAN interfaces.
+ const project={name:'Fictional campus',links:[],layout:{pageSetup:{visible:{default:{preset:'letter'}}}},devices:Array.from({length:6},(_,d)=>({id:'sw'+d,name:'LAB-SW-'+(d+1),kind:'switch',vendor:'Aruba',model:'JL256A',ip:'10.0.'+d+'.1',ports:[...Array.from({length:8},(_,i)=>({name:String(i+1),state:'up',native:10})),...Array.from({length:6+d*5},(_,v)=>({name:'vlan'+(10+v),state:'up',ip:'10.'+d+'.'+v+'.1/24',description:'Lab VLAN interface '+(10+v)}))],vlans:Array.from({length:6+d*5},(_,v)=>({id:10+v,name:'Lab VLAN '+(10+v),ip:'10.'+d+'.'+v+'.1/24'}))}))};
+ const pages=buildPages(project),interfaces=pages.filter(page=>page.interfaceInventory),inventory=pages.filter(page=>page.portMap?.bookletRole==='inventory');
+ assert.ok(interfaces.length>1);
+ for(const page of interfaces){
+  assert.match(page.displayName,/^Port Inventory - Interfaces - LAB-SW-\d/,page.name);
+  assert.equal(page.items.find(item=>item.pageTitle).value,page.displayName);
+  const names=new Set(page.interfaceSections.map(section=>section.name));for(const name of names)assert.ok(page.displayName.includes(name)||/\+\d+$/.test(page.displayName),name+' is named');
+  const k=.75*printGeometry(page).width/page.width,cells=page.items.filter(item=>item.type==='text'&&item.logicalColumn!=null);
+  const printed=Math.min(...cells.map(item=>textLayout(item).size))*k;assert.ok(printed>=6&&printed<7.5,'the same compact table text as Port Inventory ('+printed.toFixed(2)+')');
+  assert.ok(cells.every(item=>item.compactTable));
+ }
+ // A device on several sheets is counted on each one.
+ const counted=inventory.filter(page=>/\(\d\/\d\)/.test(page.displayName));
+ for(const page of counted)assert.match(page.displayName,/LAB-SW-\d \(\d\/\d\)/);
+ // The Native column is text only.
+ for(const page of inventory)assert.ok(!page.items.some(item=>/\|swatch$/.test(item.editKey||'')),'no color blocks in the inventory rows');
+});
+
+test('tagged-VLAN dots may run over the jack latch line when a port needs the room',()=>{
+ // Twelve tagged VLANs on the SFP+ ports: their dots need the latch band.
+ const dense=Array.from({length:12},(_,i)=>({id:10+i,name:'Lab '+(10+i)})),ports=Array.from({length:52},(_,i)=>({name:String(i+1),state:'up',native:i>=48?null:10+(i%4),tagged:i>=48?dense.map(v=>v.id):[14]}));
+ const page=portMap({name:'Lab',devices:[{id:'idf',name:'LAB-IDF',kind:'switch',vendor:'Aruba',model:'JL256A',vlans:dense,ports}],links:[]}),faces=new Map(page.items.filter(item=>item.reportPortRole==='native').map(face=>[face.reportPort,face]));
+ const dots=page.items.filter(item=>['tagged','voice'].includes(item.reportPortRole)&&item.type!=='text'),byPort=new Map();
+ for(const dot of dots){const list=byPort.get(dot.reportPort)||[];list.push(dot);byPort.set(dot.reportPort,list);}
+ const lowest=port=>Math.max(...byPort.get(port).map(dot=>dot.y+dot.h)),latchTop=port=>{const face=faces.get(port),optical=!/RJ|copper/i.test(face.socketForm);return face.y+face.h-(optical?2.4:3);};
+ const busiest=[...byPort.keys()].sort((a,b)=>byPort.get(b).length-byPort.get(a).length)[0],sparse=[...byPort.keys()].find(port=>byPort.get(port).length===1);
+ assert.ok(lowest(busiest)>latchTop(busiest),'the busiest port uses the latch line for larger dots');
+ assert.ok(lowest(sparse)<=latchTop(sparse)+1e-6,'a port with room keeps its dots above the latch line');
+ for(const [port,list] of byPort)for(const dot of list){const face=faces.get(port);assert.ok(dot.x>=face.x+1&&dot.x+dot.w<=face.x+face.w-1&&dot.y>=face.y+1&&dot.y+dot.h<=face.y+face.h-1,'dots stay inside the jack, clear of its edges');}
+});
+
+test('an unconfirmed module panel keeps its heading clear of its interface rows',async()=>{
+ const {textLayout}=await import('../src/web/diagram/scene.mjs');
+ const ports=[...Array.from({length:48},(_,i)=>({name:'GigabitEthernet0/'+(i+1),state:'up',native:130})),...['GigabitEthernet0/49','GigabitEthernet0/50','TenGigabitEthernet0/1','GigabitEthernet0/51','GigabitEthernet0/52','TenGigabitEthernet0/2'].map(name=>({name,state:'down'}))];
+ for(const members of [1,2]){
+  const device={id:'n130',name:'LAB_NORTH_130_2',kind:'switch',vendor:'Cisco',model:'WS-C3560E-48PD-SF',vlans:[{id:130,name:'Lab'}],ports:members>1?ports.flatMap(port=>[1,2].map(m=>({...port,name:port.name.replace(/0\//,m+'/0/')}))):ports,...(members>1?{stackMembers:[{id:'1',model:'WS-C3560E-48PD-SF'},{id:'2',model:'WS-C3560E-48PD-SF'}]}:{})};
+  for(const page of buildPages({name:'Lab',links:[],devices:[device]}).filter(page=>page.switchportReport)){
+   const headings=page.items.filter(item=>item.type==='text'&&/module unconfirmed/.test(item.value));
+   for(const heading of headings){
+    assert.doesNotMatch(heading.value,/Unspecified/,'no hardware count for unknown media');
+    const bottom=heading.y+textLayout(heading).lines.length*textLayout(heading).size*1.2;
+    const rows=page.items.filter(item=>item.type==='text'&&/configured alternative/.test(item.value)&&item.x>=heading.x-10&&item.x<=heading.x+heading.w&&item.y>heading.y);
+    assert.ok(rows.length,'the panel lists its interfaces');
+    assert.ok(Math.min(...rows.map(row=>row.y))>=bottom-.5,'rows start below the heading');
+   }
+  }
+ }
+});

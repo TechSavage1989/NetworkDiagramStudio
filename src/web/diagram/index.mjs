@@ -515,8 +515,8 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
    rect(a,36,y,W-72,row.height,count%2?'#F3F7FA':C.white);a.at(-1).editKey=rowKey+'|background';rect(a,36,y+row.height-1,W-72,1,'#DCE5E9');a.at(-1).editKey=rowKey+'|rule';
    let cx=36;
    row.lines.forEach((lines,column)=>{
-    const indent=column===3&&!row.part?24:6;
-    if(column===3&&!row.part){rect(a,cx+6,y+5,10,9,row.record.swatch,'#5B6B82',.6);a.at(-1).editKey=rowKey+'|swatch';}
+    // The Native column is plain text; port maps carry the VLAN colors.
+    const indent=6;
     lines.forEach((text,line)=>{label(a,cx+indent,y+type.pad+line*type.line,columns[column][1]-indent-4,type.line,text,type.cell,column===0,column===0?'#1B3A4B':column===1&&row.record.inferred?C.muted:C.ink);Object.assign(a.at(-1),{editKey:rowKey+'|cell:'+column+'|line:'+line,portTableRole:column===0?'interface':'detail',portAssignmentRole:roles[column],full:true});});
     cx+=columns[column][1];
    });
@@ -552,14 +552,19 @@ function bookletHeader(page){
  title.x+=12;title.w-=24;
  page.items.unshift(...banner);
 }
-// "Port Inventory - LAB-SW01, LAB-IDF" names a sheet after its devices (the
-// stable page name stays "Port Inventory N" for settings and frames); a sheet
-// that continues a table says so, and repeated names are numbered.
-function nameInventoryPages(pages){
- const labels=pages.filter(page=>page.inventoryDevices?.length).map(page=>{const names=page.inventoryDevices.map(entry=>entry.name),shown=names.length>3?names.slice(0,3).join(', ')+' +'+(names.length-3):names.join(', ');return [page,'Port Inventory - '+shown+(page.inventoryDevices[0].continued?' (continued)':'')];});
+// "Port Inventory - LAB-SW01, LAB-IDF" names a sheet after the devices whose
+// tables it holds; a device spread over several sheets is counted, as in
+// "LAB-IDF (2/3)". The stable page name stays "Port Inventory N" for settings
+// and frames. More than three devices are shown as +N; repeated names are
+// numbered.
+function namePagesByDevices(pages,prefix,entriesOf){
+ const named=pages.map(page=>[page,[...new Set((entriesOf(page)||[]).map(entry=>entry.name).filter(Boolean))]]).filter(([,names])=>names.length);
+ const counts=new Map(),seen=new Map();for(const [,names] of named)for(const name of names)counts.set(name,(counts.get(name)||0)+1);
+ const labels=named.map(([page,names])=>{const parts=names.map(name=>{const n=(seen.get(name)||0)+1;seen.set(name,n);return counts.get(name)>1?name+' ('+n+'/'+counts.get(name)+')':name;});return [page,prefix+' - '+(parts.length>3?parts.slice(0,3).join(', ')+' +'+(parts.length-3):parts.join(', '))];});
  const totals=new Map();for(const [,label] of labels)totals.set(label,(totals.get(label)||0)+1);
- const seen=new Map();for(const [page,label] of labels){const n=(seen.get(label)||0)+1;seen.set(label,n);page.displayName=totals.get(label)>1?label+' '+n:label;}
+ const repeat=new Map();for(const [page,label] of labels){const n=(repeat.get(label)||0)+1;repeat.set(label,n);page.displayName=totals.get(label)>1?label+' '+n:label;}
 }
+function nameInventoryPages(pages){namePagesByDevices(pages,'Port Inventory',page=>page.inventoryDevices);}
 function namePortInventory(page){
  page.name=page.name.replace(/MDF Port Map$/,'Port Inventory');
  page.title='Port Inventory';
@@ -674,8 +679,10 @@ function artworkColors(project,d){
  return bay?{frame:plate.fill,frameStroke:solidColor(plate.stroke)?plate.stroke:null,body:bay.fill,stroke:solidColor(bay.stroke)?bay.stroke:null}:{body:plate.fill,stroke:solidColor(plate.stroke)?plate.stroke:null};
 }
 function portMaps(project,db){
- const switches=[...db.devices.values()].filter(d=>d.kind==='switch'),interfaces=documentationSections(project,db.devices.values()).filter(section=>section.inventory),extra=interfaces.length?logicalPages(project,interfaces,{name:logicalInventoryName,family:'ports',columns:logicalInventoryColumns,compact:true,omitEmpty:true,subtitle:'Logical and routed interfaces, observed state and configured membership'}):[];
+ const switches=[...db.devices.values()].filter(d=>d.kind==='switch'),interfaces=documentationSections(project,db.devices.values()).filter(section=>section.inventory),extra=interfaces.length?logicalPages(project,interfaces,{name:logicalInventoryName,family:'ports',columns:logicalInventoryColumns,compact:true,typography:'inventory',omitEmpty:true,subtitle:'Logical and routed interfaces, observed state and configured membership'}):[];
  for(const page of extra){page.interfaceInventory=true;page.interfaceSections=page.logicalSections;delete page.logicalSections;page.tableTop=160;for(const item of page.items)if(item.y>=160)item.tableContent=true;bookletHeader(page);}
+ // Interface inventory sheets are named after their devices too.
+ namePagesByDevices(extra,'Port Inventory - Interfaces',page=>page.interfaceSections);
  if(!switches.length)return [...(extra.length&&documentationMode(project)==='concise'?[]:portMapsAtScale(project,db)),...extra];
  const savedKeys=Object.keys(project.layout?.drawingEdits||{}).filter(key=>/(?:^|\|)(?:MDF Port Map|Port Inventory)(?:\b|\|)/.test(key)&&!key.includes(logicalInventoryName)),retention=new WeakMap(),retained=pages=>{if(!savedKeys.length)return 0;if(!retention.has(pages)){const keys=new Set(pages.flatMap(page=>drawingObjects(page).flatMap(item=>[item.editKey,item.legacyEditKey])));retention.set(pages,savedKeys.filter(key=>keys.has(key)).length);}return retention.get(pages);};
  // Port maps use the switchport builder's sheet by default, fitted to US

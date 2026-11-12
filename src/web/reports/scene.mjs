@@ -148,6 +148,8 @@ function displayName(inv){return unique(inv.devices.filter(detail=>!detail.paren
 // JL256A) and its hardware (for example 48 RJ-45 + 4 SFP+), then the device
 // details entered for it while they still fit on the heading's line.
 export function hardwareSummary(group){
+ // Interfaces of an unconfirmed module have no known media to count.
+ if(group.configuredInterfaces)return '';
  const counts=new Map();for(const socket of group.socketLayout||[]){const media=/RJ|copper/i.test(socket.media)?'RJ-45':socket.media||'port';counts.set(media,(counts.get(media)||0)+1);}
  if(!counts.size){if(group.copper)counts.set('RJ-45',group.copper);if(group.optical)counts.set(group.opticalType||'SFP',group.optical);}
  return [...counts].sort(([a],[b])=>(b==='RJ-45')-(a==='RJ-45')).map(([media,n])=>n+' '+media).join(' + ');
@@ -178,7 +180,10 @@ const DOT_GAP=.28;
 // proportions. Fitting paper must never make module optics artificially tall.
 const OPTICAL_HEIGHT={builder:16.2/25.2,map:16.2/25.2};
 const dotArea=(x,y,w,h,bottom)=>({x:x+1.6,y:y+1.6,w:Math.max(0,w-3.2),h:Math.max(0,h-1.6-bottom)});
-const dotReserve=(port,optical,numberFont)=>port.disabled||port.taggedVlanPolicy?numberFont*1.2+1:optical?2.4:3;
+// Dots stay above the jack's latch line when they fit there; a port that
+// needs the room may overlap it (the dots are drawn over the line). A
+// disabled '!' or policy '*' mark keeps its own band at the bottom.
+const dotReserve=(port,optical,numberFont,overlap=false)=>port.disabled||port.taggedVlanPolicy?numberFont*1.2+1:overlap?1.6:optical?2.4:3;
 function largestDot(n,box){let best=0;for(let cols=1;cols<=n;cols++){const rows=Math.ceil(n/cols),r=Math.min(box.w/(2*cols+DOT_GAP*(cols-1)),box.h/(2*rows+DOT_GAP*(rows-1)));if(r>best)best=r;}return best;}
 function dotLayout(n,box,r){
  const gap=r*DOT_GAP,step=r*2+gap,most=Math.max(1,Math.floor((box.w+gap)/step+1e-9)),rows=Math.ceil(n/most),cols=Math.ceil(n/rows),top=box.y+(box.h-(rows*step-gap))/2;
@@ -187,13 +192,15 @@ function dotLayout(n,box,r){
 function fillRadius(inv,plan){
  const specs=inv.groups.flatMap(group=>group.socketLayout.map(socket=>({socket,port:inv.ports.find(port=>port.group===group.id&&port.number===socket.number)}))).filter(row=>row.port),w=plan.portWidth;
  let radius=Math.min(5,w*.14);
- for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?plan.opticalRatio:23.2/25.2);radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,dotReserve(port,optical,plan.style.numberFont))));}
+ for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?plan.opticalRatio:23.2/25.2);radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,dotReserve(port,optical,plan.style.numberFont,true))));}
  // Never smaller than the builder's own markers; the builder layout keeps those.
  return radius>=plan.style.markerRadius?Math.floor(radius*1000)/1000:null;
 }
 function groupPlan(inv,group,portWidth,style=normalStyle){
  const ports=inv.ports.filter(port=>port.group===group.id),pitch=portWidth+(style.compact?1:2),faceHeight=portWidth*23.2/25.2,layout=group.socketLayout,rowsCount=Math.max(...layout.map(socket=>socket.row))+1,numberFont=style.numberFont,rowPitch=faceHeight+(style.compact&&rowsCount<=2?1.4:numberFont*1.2+(style.compact?3:6));
- if(group.configuredInterfaces)return {group,ports,configured:true,width:Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),height:27+Math.max(1,ports.length)*22};
+ // A configured-interface panel (an unconfirmed module) measures its heading,
+ // which may wrap, before its rows.
+ if(group.configuredInterfaces){const width=Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),header=Math.max(24,wrapPortText(groupTitle(inv,group,width-14,style.groupFont),width-14,style.groupFont,true).length*style.groupFont*1.2+8);return {group,ports,configured:true,width,header,style,height:header+3+Math.max(1,ports.length)*22};}
  const minimum=Math.min(...layout.map(socket=>socket.column)),maximum=Math.max(...layout.map(socket=>socket.column)),width=Math.max(180,(maximum-minimum)*pitch+portWidth+16),header=Math.max(style.compact?14:22,wrapPortText(groupTitle(inv,group,width-14,style.groupFont),width-14,style.groupFont,true).length*style.groupFont*1.2+(style.compact?2:8)),height=header+numberFont*1.2+(style.compact?1.2:4)+faceHeight+Math.max(0,rowsCount-1)*rowPitch+numberFont*1.2+(style.compact?3:8);
  return {group,ports,width,height,header,minimum,pitch,faceHeight,rowPitch,portWidth,rowsCount,numberFont,style};
 }
@@ -216,7 +223,7 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
  const identity={reportMember:String(group.device||'1'),reportSlot:group.slot||'',reportIdentity:group.slot?group.device+'/'+String(group.slot).toUpperCase():String(group.device||'1')};
  Object.assign(a.at(-1),{editKey:scope+'|body',reportPanel:true,reportGroup:group.id,sourceId:item.id,...identity});rect(a,x,y,width,plan.header||24,navy);
  text(a,x+7,y+(plan.style?.compact?1:4),width-14,groupTitle(inv,group,plan.width-14,plan.style?.groupFont||11),plan.style?.groupFont||11,true,'#ffffff','left',{editKey:scope+'|title',reportDevice:item.id,...identity});
- if(plan.configured){let at=y+29;for(const port of plan.ports){text(a,x+8,at,width-16,port.id+' | '+port.media+' | configured alternative',10,false,ink,'left',{reportPort:port.id,editKey:scope+'|configured|'+port.id});at+=22;}return;}
+ if(plan.configured){let at=y+(plan.header||24)+5;for(const port of plan.ports){text(a,x+8,at,width-16,port.id+' | '+port.media+' | configured alternative',10,false,ink,'left',{reportPort:port.id,editKey:scope+'|configured|'+port.id});at+=22;}return;}
  const sockets=[],portEntries=[];
  for(const spec of group.socketLayout){
   const port=plan.ports.find(port=>port.number===spec.number);if(!port)throw new ReportCapacityError('A report socket has no matching interface.',{deviceId:item.id,group:group.id});
@@ -229,7 +236,7 @@ function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
   if(!optical)rect(a,sx+w*.32,sy+h-3,w*.36,2,'#4c5c65');else rect(a,sx+3,sy+h-2.1,w-6,.7,'#61727c');
   const markerIds=markerVlans(inv,port),radius=plan.markerRadius??plan.style.markerRadius,step=radius*2+1,cols=Math.max(1,Math.floor((w-4)/step)),bottomReserve=port.disabled||port.taggedVlanPolicy?plan.numberFont*1.2+1:3,availableRows=Math.max(0,Math.floor((h-bottomReserve-radius*2-2.2)/step)+1),markerTop=sy+2.2;
   const drawMarker=(id,cx,cy)=>{const extra={editKey:socketKey+'|vlan|'+id,reportPort:port.id,reportPortRole:voiceVlan(inv,port,id)?'voice':'tagged',vlanId:id,sourceId:item.id,name:'VLAN '+id+(voiceVlan(inv,port,id)?' voice':' tagged')};if(voiceVlan(inv,port,id)){diamond(a,cx-radius-.3,cy-radius-.3,radius*2+.6,'#ffffff','#ffffff',.3);diamond(a,cx-radius,cy-radius,radius*2,palette.vlans[id],'#263c49',.5,extra);}else{ellipse(a,cx-radius-.3,cy-radius-.3,radius*2+.6,radius*2+.6,'#ffffff','#ffffff',.3);ellipse(a,cx-radius,cy-radius,radius*2,radius*2,palette.vlans[id],'#263c49',.5,extra);}};
-  if(plan.markerRadius!=null&&markerIds.length){const grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont)),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
+  if(plan.markerRadius!=null&&markerIds.length){let grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont)),radius);if(!grid.fits)grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,true)),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
   else{if(markerIds.length>cols*availableRows)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});
    markerIds.forEach((id,index)=>drawMarker(id,sx+2.6+radius+(index%cols)*step,markerTop+radius+Math.floor(index/cols)*step));}
   if(port.disabled)text(a,sx+w-9,sy+h-plan.numberFont*1.2,8,'!',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'center',{editKey:socketKey+'|disabled',reportPort:port.id,reportPortRole:'disabled'});

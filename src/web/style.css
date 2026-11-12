@@ -454,3 +454,6 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
 .settings-preview-stage text[data-preview-highlight]{fill:#c2410c!important;stroke:#fde047;stroke-width:4px;stroke-linejoin:round;paint-order:stroke}
 .settings-preview-stage text[data-preview-highlight] tspan{fill:#c2410c!important}
 .settings-preview-highlight{margin:2px 0 6px;font-size:12px;font-weight:600;color:#9a3412}
+/* The printed size of the selected text, beside its drawing-size field. */
+.quick-printed{font-size:11.5px;color:#9a3412;white-space:nowrap;margin-left:2px}
+.quick-printed:empty{display:none}
