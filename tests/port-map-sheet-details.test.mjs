@@ -106,20 +106,19 @@ test('tagged-VLAN dots may run over the jack latch line when a port needs the ro
  for(const [port,list] of byPort)for(const dot of list){const face=faces.get(port);assert.ok(dot.x>=face.x+1&&dot.x+dot.w<=face.x+face.w-1&&dot.y>=face.y+1&&dot.y+dot.h<=face.y+face.h-1,'dots stay inside the jack, clear of its edges');}
 });
 
-test('an unconfirmed module panel keeps its heading clear of its interface rows',async()=>{
+test('an unconfirmed module is drawn as sockets, like the Switchport builder, with its heading clear',async()=>{
  const {textLayout}=await import('../src/web/diagram/scene.mjs');
- const ports=[...Array.from({length:48},(_,i)=>({name:'GigabitEthernet0/'+(i+1),state:'up',native:130})),...['GigabitEthernet0/49','GigabitEthernet0/50','TenGigabitEthernet0/1','GigabitEthernet0/51','GigabitEthernet0/52','TenGigabitEthernet0/2'].map(name=>({name,state:'down'}))];
- for(const members of [1,2]){
-  const device={id:'n130',name:'LAB_NORTH_130_2',kind:'switch',vendor:'Cisco',model:'WS-C3560E-48PD-SF',vlans:[{id:130,name:'Lab'}],ports:members>1?ports.flatMap(port=>[1,2].map(m=>({...port,name:port.name.replace(/0\//,m+'/0/')}))):ports,...(members>1?{stackMembers:[{id:'1',model:'WS-C3560E-48PD-SF'},{id:'2',model:'WS-C3560E-48PD-SF'}]}:{})};
-  for(const page of buildPages({name:'Lab',links:[],devices:[device]}).filter(page=>page.switchportReport)){
-   const headings=page.items.filter(item=>item.type==='text'&&/module unconfirmed/.test(item.value));
-   for(const heading of headings){
-    assert.doesNotMatch(heading.value,/Unspecified/,'no hardware count for unknown media');
-    const bottom=heading.y+textLayout(heading).lines.length*textLayout(heading).size*1.2;
-    const rows=page.items.filter(item=>item.type==='text'&&/configured alternative/.test(item.value)&&item.x>=heading.x-10&&item.x<=heading.x+heading.w&&item.y>heading.y);
-    assert.ok(rows.length,'the panel lists its interfaces');
-    assert.ok(Math.min(...rows.map(row=>row.y))>=bottom-.5,'rows start below the heading');
-   }
-  }
- }
+ const ports=[...Array.from({length:48},(_,i)=>({name:'GigabitEthernet0/'+(i+1),state:'up',native:130})),...['GigabitEthernet0/49','GigabitEthernet0/50','TenGigabitEthernet0/1','GigabitEthernet0/51','GigabitEthernet0/52','TenGigabitEthernet0/2'].map(name=>({name,state:'down',native:130,lag:/49|50|Ten/.test(name)?'Po1':undefined}))];
+ const device={id:'n130',name:'LAB_NORTH_130_2',kind:'switch',vendor:'Cisco',model:'WS-C3560E-48PD-SF',vlans:[{id:130,name:'Lab'}],ports};
+ const page=buildPages({name:'Lab',links:[],devices:[device]}).find(page=>page.switchportReport&&page.role==='onePage');
+ const heading=page.items.find(item=>item.type==='text'&&/module unconfirmed/.test(item.value));
+ assert.match(heading.value,/^Uplink interfaces - module unconfirmed \| X2 \/ TwinGig alternatives$/);
+ const faces=page.items.filter(item=>item.reportPortRole==='native'&&/0\/(49|50|51|52)$|TenGigabitEthernet/.test(item.reportPort));
+ assert.equal(faces.length,6,'each configured interface has a socket');
+ const labels=page.items.filter(item=>item.type==='text'&&/^(Gi|Te)\d+$/.test(item.value)).map(item=>item.value).sort();
+ assert.deepEqual(labels,['Gi49','Gi50','Gi51','Gi52','Te1','Te2'],'short interface labels');
+ const bottom=heading.y+textLayout(heading).lines.length*textLayout(heading).size*1.2;
+ assert.ok(Math.min(...faces.map(face=>face.y))>bottom,'sockets sit below the heading');
+ assert.ok(page.items.some(item=>item.reportUplinkBasis&&/Upper bay: Te1 OR Gi49\/Gi50/.test(item.value)),'the builder\'s uplink note');
+ assert.ok(!page.items.some(item=>/configured alternative/.test(String(item.value))),'no text-only rows');
 });

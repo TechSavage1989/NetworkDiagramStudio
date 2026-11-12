@@ -19,7 +19,9 @@ export const C = {ink:'#16364A',muted:'#536779',teal:'#166574',rule:'#CEDCE0',pa
 export const xml = s => String(s ?? '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\uFFFE\uFFFF]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
 export const round = n => Math.round(n*1e5)/1e5;
 export const cableWeight = defaultLinkWeight;
-export function rect(box,x,y,w,h,fill,stroke='none',weight=1){box.push({type:'rect',x,y,w,h,fill,stroke,weight});}
+// A rect may have rounded corners (radius, in drawing units).
+export function rect(box,x,y,w,h,fill,stroke='none',weight=1,radius=0){box.push({type:'rect',x,y,w,h,fill,stroke,weight,...(radius>0?{radius}:{})});}
+export const cornerRadius=i=>i.radius>0?Math.min(i.radius,Math.abs(i.w)/2,Math.abs(i.h)/2):0;
 export function label(box,x,y,w,h,value,size=15,bold=false,color=C.ink,align='left'){
   box.push({type:'text',x,y,w,h,value:String(value ?? ''),size,bold,color,align});
 }
@@ -445,7 +447,7 @@ export function svgPage(p){
   const geometries=new Map(p.items.filter(i=>i.type==='path').map(i=>[i,svgCableGeometry(i)])),{defs,masks}=svgCableMasks(p,geometries);
   const draw=(i)=>{
     const rotation=i.angle?' transform="rotate('+round(-i.angle*180/Math.PI)+' '+round(i.x+i.w/2)+' '+round(i.y+i.h/2)+')"':'';
-    if(i.type==='rect')return '<rect'+rotation+(i.legendEntry?' class="diagram-legend-line" data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.anchorName?' data-port-name="'+xml(i.anchorName)+'"':'')+' x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></rect>':'/>');
+    if(i.type==='rect')return '<rect'+rotation+(i.legendEntry?' class="diagram-legend-line" data-link-type="'+xml(i.linkType)+'"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.anchorName?' data-port-name="'+xml(i.anchorName)+'"':'')+' x="'+round(i.x)+'" y="'+round(i.y)+'" width="'+round(i.w)+'" height="'+round(i.h)+'"'+(cornerRadius(i)?' rx="'+round(cornerRadius(i))+'" ry="'+round(cornerRadius(i))+'"':'')+' fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></rect>':'/>');
     if(i.type==='ellipse')return '<ellipse'+rotation+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+(i.anchorName?' data-port-name="'+xml(i.anchorName)+'"':'')+' cx="'+round(i.x+i.w/2)+'" cy="'+round(i.y+i.h/2)+'" rx="'+round(i.w/2)+'" ry="'+round(i.h/2)+'" fill="'+i.fill+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+i.stroke+'" stroke-width="'+i.weight+'"'+(i.name?'><title>'+xml(i.name)+'</title></ellipse>':'/>');
     if(i.type==='vector')return '<path'+(i.captionBacking?' pointer-events="none"':'')+(i.editKey?' data-drawing-key="'+xml(i.editKey)+'"':'')+' d="'+i.commands.map(([op,x,y])=>op==='Z'?'Z':op+' '+round(x)+' '+round(y)).join(' ')+'" fill="'+(i.fill||'none')+'" fill-opacity="'+(i.opacity??1)+'" stroke="'+(i.stroke||'none')+'" stroke-width="'+(i.weight||1)+'"'+(i.name?'><title>'+xml(i.name)+'</title></path>':'/>');
     if(i.type==='text')return svgText(i);

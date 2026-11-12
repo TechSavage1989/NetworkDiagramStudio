@@ -507,7 +507,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   let y=host?start.top:150;const barTop=y,tableTop=barTop+bar+8+filterLine;y=tableTop;
   if(sheet===0&&shown<ports.length){label(a,38,barTop+bar+6,W-80,18,shown+' of '+ports.length+' port records in details | '+(ports.length-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
   const tableStart=a.length;if(!host)p.tableTop=tableTop;else p.tableTop??=tableTop;
-  rect(a,36,y,W-72,header,'#E3ECF5','#C4D3E3',.75);a.at(-1).editKey=scope+'|inventory-header';let x=36;
+  rect(a,36,y,W-72,header,'#E3ECF5','#C4D3E3',.75,4);a.at(-1).editKey=scope+'|inventory-header';let x=36;
   columns.forEach(([,w],column)=>{headings[column].forEach((text,line)=>{label(a,x+6,y+3+line*type.headerLine,w-10,type.headerLine,text,type.header,true,'#1B3A4B');Object.assign(a.at(-1),{editKey:scope+'|column|'+column+'|'+line,full:true});});x+=w;});y+=header;
   const members=[];let count=0;
   while(at<rows.length&&y+rows[at].height<=H-124+footerAllowance(project)){
@@ -528,7 +528,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   const first=records.length?sorted.findIndex(port=>port.name===records[0].name)+1:0,last=records.length?sorted.findIndex(port=>port.name===records.at(-1).name)+1:0;
   if(host&&!full)sectionBar(a,36,barTop,W-72,nameOf(device)+'  /  Port inventory  |  '+(records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'),scope+'|section');
   else{
-   rect(a,36,barTop,W-72,barHeight,'#14283D');a.at(-1).editKey=scope+'|bar';
+   rect(a,36,barTop,W-72,barHeight,'#14283D','none',1,6);a.at(-1).editKey=scope+'|bar';
    barTitle.forEach((text,line)=>{label(a,50,barTop+4+line*type.titleLine,W-100,type.titleLine,text,type.title,true,C.white);Object.assign(a.at(-1),{editKey:scope+'|bar-title'+(line?'|'+line:''),full:true});});
    const detail=wrapPortText([deviceDetails(device,project),records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'].filter(Boolean).join('  |  '),W-100,type.cell);
    detail.slice(0,barDetailLines).forEach((text,line)=>{label(a,50,barTop+5+barTitle.length*type.titleLine+line*type.detailLine,W-100,type.detailLine,text,type.cell,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|bar-detail'+(line?'|'+line:''),full:true,compactTable:true});});
@@ -544,7 +544,7 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
 }
 function bookletHeader(page){
  const banner=[];
- rect(banner,36,12,page.width-72,82,C.ink);banner.at(-1).pageFrame='header-background';
+ rect(banner,36,12,page.width-72,82,C.ink,'none',1,8);banner.at(-1).pageFrame='header-background';
  const [projectName,brand,title]=page.items;
  for(const item of [projectName,brand,title])item.color=C.white;
  projectName.x+=12;projectName.y=Math.max(18,projectName.y);projectName.w-=24;

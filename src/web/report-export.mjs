@@ -1,5 +1,5 @@
 import {labelBackingItems} from './diagram/label-backings.mjs';
-import {cableWeight,svgPage,textLayout} from './diagram/scene.mjs';
+import {cableWeight,svgPage,textLayout,cornerRadius} from './diagram/scene.mjs';
 
 // All report exports are local. The PDF uses the same vector scene and embedded
 // font as the printable report; PNGs carry explicit 300-dpi resolution metadata.
@@ -132,7 +132,8 @@ export async function exportPdf(pages,{title='Network documentation'}={}){
    if(i.opacity!=null&&i.opacity<1)pdf.setGState(new pdf.GState({opacity:i.opacity,'stroke-opacity':i.opacity}));
    pdf.setLineWidth((i.weight||(i.type==='path'?cableWeight:1))*scale);pdf.setDrawColor(color(i.stroke||i.color));pdf.setFillColor(color(i.fill,'#ffffff'));
    if(i.type==='rect'){
-    if(paint(i.fill)||paint(i.stroke))pdf.rect(x(i.x),y(i.y),i.w*scale,i.h*scale,paint(i.fill)?paint(i.stroke)?'FD':'F':'S');
+    const style=paint(i.fill)?paint(i.stroke)?'FD':'F':'S',r=cornerRadius(i)*scale;
+    if(paint(i.fill)||paint(i.stroke)){if(r)pdf.roundedRect(x(i.x),y(i.y),i.w*scale,i.h*scale,r,r,style);else pdf.rect(x(i.x),y(i.y),i.w*scale,i.h*scale,style);}
    }else if(i.type==='text'){
     const {lines,size,lineHeight}=textLayout(i),align=i.align==='right'?'right':i.align==='center'?'center':'left';
     pdf.setFont('NDSReport',i.bold?'bold':'normal');pdf.setFontSize(size*scale);pdf.setTextColor(color(i.color));
