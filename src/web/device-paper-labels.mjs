@@ -54,8 +54,15 @@ export function readableDeviceLabels(page,project,unit=1){
    // and only then beside it. Closer gaps win within a tier.
    const corners=deviceCaptionPlacement(project,item.titleOwner),corner=captionCorner(body,item.titleSlot==='detail'?corners.info:corners.name,w,h),anchor=corner.x,span=Math.max(0,body.w-w),step=Math.max(8*unit,span/24);
    const xs=[...new Set([...Array.from({length:Math.floor(span/step)+1},(_,k)=>corner.right?anchor-k*step:anchor+k*step),body.x+span/2,corner.right?body.x:body.x+span])];
-   for(const [tier,above] of [[0,corner.above],[1,!corner.above]])for(const gap of [3,8,16,28,44,64])for(const x of xs)candidates.push({x,y:above?body.y-h-gap*unit:body.y+body.h+gap*unit,w,h,size,rank:tier*1e6+(gap+Math.abs(x-anchor)/(4*unit))*1e3+h*.2});
-   for(const y of [body.y,body.y+(body.h-h)/2,body.y+body.h-h])candidates.push({x:body.x-w-8*unit,y,w,h,size,rank:2e6+Math.abs(y-body.y)},{x:body.x+body.w+8*unit,y,w,h,size,rank:2e6+Math.abs(y-body.y)});
+   // Closeness to the device comes first: the chosen corner wins unless its
+   // nearest clear spot is well out (past cables and labels), when a spot
+   // right against the device on the other side, or beside it, is taken.
+   // Details and a name on the same side stack: the details sit against the
+   // device and the name stays beyond the band they need, counting its
+   // distance from there.
+   const sibling=item.titleSlot==='detail'?null:labels.find(other=>other!==item&&other.titleOwner===item.titleOwner&&other.titleSlot==='detail'),infoAbove=/^above/.test(corners.info||'below-left'),band=above=>sibling&&infoAbove===above?sibling.h/unit+3+4:0;
+   for(const [tier,above] of [[0,corner.above],[1,!corner.above]]){const reserved=band(above);for(const gap of [3,8,16,28,44,64]){if(gap<reserved)continue;for(const x of xs)candidates.push({x,y:above?body.y-h-gap*unit:body.y+body.h+gap*unit,w,h,size,rank:(gap-reserved+tier*20+Math.abs(x-anchor)/(4*unit))*1e3+h*.2});}}
+   for(const y of [body.y,body.y+(body.h-h)/2,body.y+body.h-h])candidates.push({x:body.x-w-8*unit,y,w,h,size,rank:(8+20+Math.abs(y-body.y)/(4*unit))*1e3},{x:body.x+body.w+8*unit,y,w,h,size,rank:(8+20+Math.abs(y-body.y)/(4*unit))*1e3});
   }
   candidates.sort((a,b)=>a.rank-b.rank);
   const clear=b=>b.x>=left&&b.x+b.w<=right&&b.y>=captionTop&&b.y+b.h<=bottom&&!bodies.some(n=>intersects(b,n,2*unit))&&!occupied.some(t=>t!==item&&!taken.has(t)&&intersects(b,t,2*unit))&&![...taken.values()].some(t=>intersects(b,t,2*unit))&&!paths.some(p=>pathCrossesText(p,b,Math.max(2*unit,(p.weight||0)/2+unit)));
