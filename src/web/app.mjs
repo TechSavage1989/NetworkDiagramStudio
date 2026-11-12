@@ -168,6 +168,8 @@ function syncDrawingSelection(){
  if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
  else $('cable-point-info').textContent='Move near a cable to highlight it, then click to select.';
  viewport.syncCableInteraction();
+ // The tools above may have grown or shrunk the bars over the canvas.
+ viewport.settle();
 }
 // Text sizes are shown and entered as actual font sizes in points at full
 // drawing size (1 pt = 4/3 drawing units). A page fitted to paper presents
