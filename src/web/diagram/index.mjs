@@ -204,7 +204,10 @@ function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false
   }
   if(stateKey&&content&&!port.unconfigured){rect(items,content.x,content.y+content.h-Math.min(2,content.h/3),content.w,Math.min(2,content.h/3),portStateFills[state(port.state)]);Object.assign(items.at(-1),{...metadata,editKey:key+'|state',portNumberRole:'state'});}
   const textBox=box.vertical?{x:box.x+(box.w-box.h)/2,y:box.y+(box.h-box.w)/2,w:box.h,h:box.w}:box;
-  label(items,textBox.x,textBox.y,textBox.w,textBox.h,text,box.size,true,readableOn(surfaceAt(g,box.x+box.w/2,box.y+box.h/2)),'center');Object.assign(items.at(-1),{...metadata,editKey:key+'|text',portNumberRole:'text',numberSide:box.side,numberBox:{x:box.x,y:box.y,w:box.w,h:box.h},socketBounds:socket,full:true,...(fontScale!=null?{_textFactor:fontScale}:{}),...(box.vertical?{angle:Math.PI/2}:{})});
+  // The painted surface behind the number: a cable that leaves through its
+  // own number passes behind a backing of this color (wireless sheets).
+  const surface=surfaceAt(g,box.x+box.w/2,box.y+box.h/2)??(g.asset||(g.children||[]).some(c=>c.type==='image')?null:'#FFFFFF');
+  label(items,textBox.x,textBox.y,textBox.w,textBox.h,text,box.size,true,readableOn(surfaceAt(g,box.x+box.w/2,box.y+box.h/2)),'center');Object.assign(items.at(-1),{...metadata,editKey:key+'|text',portNumberRole:'text',...(surface?{surface}:{}),numberSide:box.side,numberBox:{x:box.x,y:box.y,w:box.w,h:box.h},socketBounds:socket,full:true,...(fontScale!=null?{_textFactor:fontScale}:{}),...(box.vertical?{angle:Math.PI/2}:{})});
  }
  if(g.angle)for(const item of items.slice(firstItem)){
   if(item.type==='vector'){item.commands=item.commands.map(([op,x,y])=>op==='Z'?['Z']:[op,...devicePoint(g,(x-g.x)/g.w,(y-g.y)/g.h)]);}
