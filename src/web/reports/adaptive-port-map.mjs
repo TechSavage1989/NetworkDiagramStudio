@@ -27,7 +27,7 @@ function arrange(plan,columns){
 // VLANs and LAGs each have their own heading.
 function keyPlan(inv,palette,width){
  const sections=P.keySections(inv,palette,width,true,true);
- return {width,sections,inv,height:sections.reduce((sum,section)=>sum+22+section.rows.reduce((total,row)=>total+row.height,0)+2,0)+P.basisHeight(inv,width,true)};
+ return {width,sections,inv,height:sections.reduce((sum,section)=>sum+22+section.rows.reduce((total,row)=>total+row.height,0)+2,0)+P.basisHeight(inv,width,true,true)};
 }
 function drawKey(p,plan,x,y){
  const a=p.items;
@@ -49,7 +49,7 @@ function drawKey(p,plan,x,y){
  }
  y+=2;
  }
- P.drawBasis(p,y,plan.inv,plan.width,x);
+ P.drawBasis(p,y,plan.inv,plan.width,x,true);
 }
 function preserveLegacyKeys(page,previous){
  // Repacking changes incidental item indexes. Keep semantic text/header

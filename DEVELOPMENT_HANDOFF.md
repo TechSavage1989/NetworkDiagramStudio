@@ -1,3 +1,31 @@
+# Preview.64: port map marks and spacing, connection key, lock-stable text, caption closeness
+
+Baseline: published preview.63. The owner asked for:
+- full-size dots on crowded port map ports (C9500 port 47, unconfirmed-module Te ports), with the '*' marks no longer taking dot space, and an explanation of '*';
+- a slimmer unconfirmed-module heading, with the module note kept small and out of the way;
+- the same minimal vertical spacing between port rows on every port map;
+- short VLANs and Routing page names, no taller than other sidebar entries;
+- locking a page without any text changing size or place;
+- device names and details as close to their device as possible;
+- adding connection types to the connection key, and adding connections of a type from the key, without drawing first;
+- changing the type of several selected connections (already available: Connection type… with a Shift selection).
+
+What changed:
+- **Port maps** (reports/scene.mjs, adaptive-port-map.mjs):
+  - marks beside the number (marksOutside, dotReserve outside) and a key line for '*';
+  - one-line module heading and a small uplink note;
+  - minimal row gap on drawing-set maps;
+  - the model subtitle skips empty parts.
+- **Connection key** (connection-types.mjs, scene.mjs linkLegend/keyedConnectionTypes, core.mjs, app.mjs): key flag on custom types, Add connection of this type…, own types in Link styles.
+- **Page names** (index.mjs pageDevices, style.css): "Shared" sections; two-line sidebar entries.
+- **Lock** (device-paper-labels.mjs): caption measurement independent of sheet units.
+- **Captions** (device-paper-labels.mjs): ranking by closeness; same-side stacking.
+- **Tests:**
+  - page-lock-text.test.mjs;
+  - page-display-names.test.mjs;
+  - port-map-sheet-details (marks, one-line heading, row gap);
+  - connection-types-custom (keyed types).
+
 # Preview.63: dots that fill their jacks, device page names, defaults, printed sizes, connection types
 
 Baseline: published preview.62. The owner asked for:

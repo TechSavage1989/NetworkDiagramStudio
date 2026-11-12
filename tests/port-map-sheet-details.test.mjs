@@ -108,19 +108,43 @@ test('tagged-VLAN dots may run over the jack latch line when a port needs the ro
  for(const [port,list] of byPort)for(const dot of list){const face=faces.get(port);assert.ok(dot.x>=face.x+1&&dot.x+dot.w<=face.x+face.w-1&&dot.y>=face.y+1&&dot.y+dot.h<=face.y+face.h-1,'dots stay inside the jack, clear of its edges');}
 });
 
-test('an unconfirmed module is drawn as sockets, like the Switchport builder, with its heading clear',async()=>{
+test('an unconfirmed module is drawn as sockets, like the Switchport builder, with a one-line heading and a small note',async()=>{
  const {textLayout}=await import('../src/web/diagram/scene.mjs');
  const ports=[...Array.from({length:48},(_,i)=>({name:'GigabitEthernet0/'+(i+1),state:'up',native:130})),...['GigabitEthernet0/49','GigabitEthernet0/50','TenGigabitEthernet0/1','GigabitEthernet0/51','GigabitEthernet0/52','TenGigabitEthernet0/2'].map(name=>({name,state:'down',native:130,lag:/49|50|Ten/.test(name)?'Po1':undefined}))];
  const device={id:'n130',name:'LAB_NORTH_130_2',kind:'switch',vendor:'Cisco',model:'WS-C3560E-48PD-SF',vlans:[{id:130,name:'Lab'}],ports};
  const page=buildPages({name:'Lab',links:[],devices:[device]}).find(page=>page.switchportReport&&page.role==='onePage');
- const heading=page.items.find(item=>item.type==='text'&&/module unconfirmed/.test(item.value));
- assert.match(heading.value,/^Uplink interfaces - module unconfirmed \| X2 \/ TwinGig alternatives$/);
+ const heading=page.items.find(item=>item.type==='text'&&/\|group\|Uplink interfaces - module unconfirmed\|title$/.test(item.editKey||''));
+ assert.equal(heading.value,'Uplink interfaces','a short heading on drawing-set maps');assert.equal(textLayout(heading).lines.length,1,'one line');
  const faces=page.items.filter(item=>item.reportPortRole==='native'&&/0\/(49|50|51|52)$|TenGigabitEthernet/.test(item.reportPort));
  assert.equal(faces.length,6,'each configured interface has a socket');
  const labels=page.items.filter(item=>item.type==='text'&&/^(Gi|Te)\d+$/.test(item.value)).map(item=>item.value).sort();
  assert.deepEqual(labels,['Gi49','Gi50','Gi51','Gi52','Te1','Te2'],'short interface labels');
  const bottom=heading.y+textLayout(heading).lines.length*textLayout(heading).size*1.2;
  assert.ok(Math.min(...faces.map(face=>face.y))>bottom,'sockets sit below the heading');
- assert.ok(page.items.some(item=>item.reportUplinkBasis&&/Upper bay: Te1 OR Gi49\/Gi50/.test(item.value)),'the builder\'s uplink note');
+ assert.ok(page.items.some(item=>item.reportUplinkBasis&&/^Uplink module unconfirmed: Upper bay: Te1 OR Gi49\/Gi50/.test(item.value)&&item.size<=9),'one small uplink note');assert.ok(!page.items.some(item=>item.reportKeyHeading==='uplinks'),'no separate note heading');
  assert.ok(!page.items.some(item=>/configured alternative/.test(String(item.value))),'no text-only rows');
+});
+
+test('a trunk-policy * or disabled ! mark sits beside the port number and never takes room from the dots',()=>{
+ const vlans=Array.from({length:14},(_,i)=>({id:10+i,name:'Lab '+(10+i)})),build=policy=>{
+  const ports=Array.from({length:48},(_,i)=>({name:'GigabitEthernet0/'+(i+1),state:'up',native:10,...(i===0?{tagged:vlans.map(v=>v.id).slice(1),mode:'trunk',...(policy?{taggedVlanPolicy:'All'}:{})}:{}),...(i===2&&policy?{disabled:true}:{})}));
+  return buildPages({name:'Lab',links:[],devices:[{id:'sw',name:'LAB-SW',kind:'switch',vendor:'Cisco',model:'WS-C3560E-48PD-SF',vlans,ports}]}).find(page=>page.switchportReport&&page.role==='onePage');
+ };
+ const plain=build(false),marked=build(true),radius=page=>Math.max(...page.items.filter(i=>i.reportPortRole==='tagged'&&i.reportPort==='GigabitEthernet0/1').map(i=>i.w/2));
+ assert.ok(Math.abs(radius(marked)-radius(plain))<1e-9,'the mark costs the dots nothing: '+radius(marked)+' vs '+radius(plain));
+ const face=port=>marked.items.find(i=>i.reportPortRole==='native'&&i.reportPort===port),number=port=>marked.items.find(i=>i.portNumberRole==='text'&&i.reportPort===port);
+ for(const [port,role,mark] of [['GigabitEthernet0/1','policy','*'],['GigabitEthernet0/3','disabled','!']]){
+  const item=marked.items.find(i=>i.reportPortRole===role&&i.reportPort===port),f=face(port),n=number(port);
+  assert.equal(item.value,mark);assert.ok(item.y+item.h<=f.y+1e-6||item.y>=f.y+f.h-1e-6,role+' mark outside the jack');
+  assert.ok(Math.abs(item.y-n.y)<1e-6&&item.x>n.x+n.w/2,role+' mark follows the number on its line');
+ }
+ assert.ok(marked.items.some(i=>i.value==='All VLANs allowed (trunk policy)'),'the key explains *');
+});
+
+test('port map rows sit almost touching, numbers above the top row and below the bottom row',()=>{
+ const ports=Array.from({length:48},(_,i)=>({name:'GigabitEthernet0/'+(i+1),state:'up',native:10}));
+ const page=buildPages({name:'Lab',links:[],devices:[{id:'sw',name:'LAB-SW',kind:'switch',vendor:'Cisco',model:'WS-C3560E-48PD-SF',vlans:[{id:10,name:'Lab'}],ports}]}).find(page=>page.switchportReport&&page.role==='onePage');
+ const face=n=>page.items.find(i=>i.reportPortRole==='native'&&i.reportPort==='GigabitEthernet0/'+n),number=n=>page.items.find(i=>i.portNumberRole==='text'&&i.reportPort==='GigabitEthernet0/'+n);
+ const top=face(1),bottom=face(2);assert.ok(bottom.y-(top.y+top.h)<=2,'gap between rows '+(bottom.y-(top.y+top.h)).toFixed(2));
+ assert.ok(number(1).y+number(1).h<=top.y+1e-6,'top number above its jack');assert.ok(number(2).y>=bottom.y+bottom.h-1e-6,'bottom number below its jack');
 });
