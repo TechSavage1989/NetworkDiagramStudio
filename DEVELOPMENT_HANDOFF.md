@@ -14,7 +14,7 @@ What changed:
 - **Dots** (reports/scene.mjs): portDots sizes each port's dots to its own face on drawing-set maps; opticalFaces gives cramped optical faces the full row height; standardPortMapWidth is fill-based.
 - **Page names** (diagram/index.mjs): nameNumberedPages and pageDevices name every numbered sheet set after its devices; port map sheets read "<device> / Port map". displayName and headingTitle are presentation only.
 - **Defaults:** new projects use Letter landscape, snapping on, Edit drawing on.
-- **Printed sizes and the notice** (app.mjs, viewport.mjs): the Size box and Properties show and accept printed points. The readability notice lists the small text, smallest first; clicking it or Show selects and reveals the text, and ‹ › step through. Page bar notices are one-line chips, so the canvas no longer jumps after a drag.
+- **Printed sizes and the notice** (app.mjs, viewport.mjs): the Size box and Properties show and accept printed points. The readability notice lists the small text, smallest first; clicking it or Show selects and reveals the text, and ‹ › step through. The notice keeps its complete wrapping text. Status messages are one-line chips, and a positioned drawing stays in place when the bars above it change during a rebuild, so it no longer jumps after a drag.
 - **Captions** (device-paper-labels.mjs): one common size per caption kind on a page.
 - **Wireless numbers** (wireless-number-leads.mjs, routing.mjs, wireless-layout.mjs): a cable that used to push its whole number row away from the sockets now passes behind its own number. The established placement still decides the stack width, so paper plans are unchanged.
 - **Connection types** (connection-types.mjs, legend-connections.mjs, app.mjs):

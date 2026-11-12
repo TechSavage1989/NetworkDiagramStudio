@@ -10,14 +10,16 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.BR
 const page=await browser.newPage({viewport:{width:1366,height:768}}),errors=[],results={};page.on('pageerror',error=>errors.push(error.message));page.on('dialog',dialog=>dialog.accept());
 const field=name=>page.locator('#dialog').getByLabel(name,{exact:true});
 const ready=()=>page.waitForFunction(()=>!document.querySelector('#dialog').open&&!document.querySelector('#save').disabled);
-const fresh=async()=>{await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);await page.locator('#sample').click();await page.waitForSelector('#canvas svg .diagram-cable',{state:'attached'});await page.locator('#canvas svg').waitFor();};
+// Drawings open in Edit drawing; these checks start from view mode, after the
+// toolbar change has settled, so measured targets stay under the pointer.
+const settle=()=>page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(done,150)))));
+const fresh=async()=>{await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);await page.locator('#sample').click();await page.waitForSelector('#canvas svg .diagram-cable',{state:'attached'});await page.locator('#canvas svg').waitFor();if(await page.locator('#edit-drawing').getAttribute('aria-pressed')==='true')await page.locator('#edit-drawing').click();await page.waitForFunction(()=>document.querySelector('#edit-drawing').getAttribute('aria-pressed')==='false');await settle();};
 const objectField=()=>field('Drawing object');
 const downloadProject=async name=>{const waiting=page.waitForEvent('download');await page.locator('#save').click();const download=await waiting,path=resolve(output,name);await download.saveAs(path);return {path,doc:JSON.parse(await readFile(path,'utf8'))};};
 const pointer=async locator=>{const box=await locator.boundingBox();assert.ok(box);return {x:box.x+box.width/2,y:box.y+box.height/2};};
 try{
  await fresh();await page.screenshot({path:resolve(output,'hero.png')});
  // A legend key highlights and double-clicks even before Edit drawing is on.
- if(await page.locator('#edit-drawing').getAttribute('aria-pressed')==='true'){await page.locator('#edit-drawing').click();await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(done,150)))));}
  const legend=page.locator('#canvas rect.diagram-legend-line[data-link-type="SR fiber"]'),legendKey=await legend.getAttribute('data-drawing-key'),at=await pointer(legend);
  // Key samples are painted at the page's paper scale; the stored width is 4.
  const keyScale=Number(await legend.getAttribute('height'))/4;

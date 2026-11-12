@@ -459,8 +459,10 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
 .quick-printed:empty{display:none}
 .site-map-details{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:0 14px;border:1px solid #cedce0;border-radius:8px;padding:4px 12px 2px;margin:8px 0 12px}.site-map-details legend{font-weight:600;padding:0 4px}.site-map-details .check-option{margin:6px 0}
 .notice-nav{display:inline-flex;gap:4px;align-items:center;margin:2px 0 2px 8px;flex-wrap:wrap}.notice-nav[hidden]{display:none}.notice-nav button{padding:2px 8px;font-size:12px;min-height:24px}
-/* A page notice shares the page bar's row as a one-line chip (full text in
-   its tooltip), so it appears and disappears without moving the drawing. */
+/* Transient status shares the page bar's row as a one-line chip (full text in
+   its tooltip), so it comes and goes without growing the bar. The page notice
+   keeps its complete, wrapping text on its own row, with its small-text
+   buttons beside it; a user-positioned drawing stays put when it appears. */
 #feedback{flex:1 1 0;min-width:4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#page-overflow-notice{flex:1.4 1 0;min-width:6em;width:auto;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:none;overflow-wrap:normal;align-self:center}
 .notice-nav{flex:none;margin:0 4px}
+.pagebar:has(#page-notice-nav:not([hidden])) #page-overflow-notice{flex-basis:calc(100% - 15em)}
