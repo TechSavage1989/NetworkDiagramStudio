@@ -1,3 +1,19 @@
+# Preview.65: smoother panning and zooming in the interactive HTML viewer
+
+Baseline: published preview.64. The owner reported that the exported HTML viewer felt laggy, most of all on the network page and also on wireless pages.
+
+Findings (Chromium traces of fictional MDF and two-stack wireless exports, 6,500 to 11,000 SVG elements per page, at 2x pixel density):
+- Every pan frame repainted and re-rastered the whole drawing, because #drawing was painted into the page's layer: about 270 ms of raster per 40 pan moves on the network page.
+- Every zoom step re-lays out all SVG text (Chrome lays SVG text out at the screen scale, whatever the containment or text-rendering) and re-rasters the page. The 14 to 25 line-jump masks and the text are each about half of that raster. A compositor layer makes zoom costlier, because it rasters beyond the viewport.
+- Hover highlighting costs a few milliseconds per change and was left as it was.
+
+What changed (interactive-html.mjs):
+- Panning (drag and arrow keys) gives #drawing a temporary compositor layer (`.moving`, will-change: transform). It is dropped 200 ms after the pan stops, so the drawing repaints once, crisp, and hover stays cheap. Pan raster fell 3 to 7 times (network 273 → 92 ms, wireless 212 → 38 ms), and main-thread paint during a pan almost disappeared.
+- Zoom, Fit, centering and page changes do not use the layer.
+- Wheel zoom follows the scroll distance (d3-zoom's wheel delta: about 15% per mouse notch, small steps for touchpad scrolling, Ctrl pinch more sensitive, at most 2x per event) instead of 12% per event.
+- The zoom readout is written only when it changes.
+- Tests: browser-interactive-html.mjs checks the layer during and after a pan and the notch and touchpad zoom steps; interactive-html.test.mjs checks the layer is only for panning.
+
 # Preview.64: port map marks and spacing, connection key, lock-stable text, caption closeness
 
 Baseline: published preview.63. The owner asked for:
