@@ -17,8 +17,10 @@ const pointer=async locator=>{const box=await locator.boundingBox();assert.ok(bo
 try{
  await fresh();await page.screenshot({path:resolve(output,'hero.png')});
  // A legend key highlights and double-clicks even before Edit drawing is on.
- if(await page.locator('#edit-drawing').getAttribute('aria-pressed')==='true')await page.locator('#edit-drawing').click();
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')==='true'){await page.locator('#edit-drawing').click();await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(()=>setTimeout(done,150)))));}
  const legend=page.locator('#canvas rect.diagram-legend-line[data-link-type="SR fiber"]'),legendKey=await legend.getAttribute('data-drawing-key'),at=await pointer(legend);
+ // Key samples are painted at the page's paper scale; the stored width is 4.
+ const keyScale=Number(await legend.getAttribute('height'))/4;
  await page.mouse.move(at.x,at.y);await page.waitForFunction(key=>document.querySelector('rect.diagram-legend-line.cable-hover')?.getAttribute('data-drawing-key')===key,legendKey);
  assert.equal(await legend.getAttribute('tabindex'),null);assert.equal(await page.locator('#edit-drawing').getAttribute('aria-pressed'),'false');
  await page.mouse.dblclick(at.x,at.y);await page.waitForFunction(()=>document.querySelector('#dialog').open);assert.equal(await page.locator('#edit-drawing').getAttribute('aria-pressed'),'true');assert.equal(await objectField().inputValue(),legendKey);
@@ -30,13 +32,13 @@ try{
  await page.locator('#dialog .link-caption-fields summary').click();await field('Legend title').fill('Building uplinks');await field('Line title').fill('Uplink');await field('Line description').fill('Lab link');await field('HEX').fill('#815AC0');
  await page.screenshot({path:resolve(output,'legend-connections.png')});
  await page.getByRole('button',{name:'Save object',exact:true}).click();await ready();
- const changed=page.locator('#canvas rect.diagram-legend-line[data-link-type="AOC"]');await changed.waitFor();assert.equal(Number(await changed.getAttribute('height')),7);assert.equal(await changed.getAttribute('fill'),'#815AC0');assert.equal(await changed.locator('title').textContent(),'AOC color key');
+ const changed=page.locator('#canvas rect.diagram-legend-line[data-link-type="AOC"]');await changed.waitFor();assert.ok(Math.abs(Number(await changed.getAttribute('height'))-7*keyScale)<.05);assert.equal(await changed.getAttribute('fill'),'#815AC0');assert.equal(await changed.locator('title').textContent(),'AOC color key');
  const saved=await downloadProject('editor-properties.nds'),connection=saved.doc.project.links.find(link=>link.a==='edge'&&link.b==='sw-1');assert.equal(connection.media,'AOC');assert.equal(connection.speed,'25 Gbps');assert.equal(saved.doc.project.layout.linkStyles.AOC.weight,7);
  assert.ok(await page.locator('#canvas text').filter({hasText:'Uplink'}).count());assert.ok(await page.locator('#canvas text').filter({hasText:'Lab link'}).count());
  results.legend={hover:true,doubleClickEntersEdit:true,actualWidth:true,metadataAndCaptionsSavedTogether:true};
  await page.locator('#drawing-undo').click();await page.waitForSelector('#canvas rect.diagram-legend-line[data-link-type="SR fiber"]');assert.equal(await page.locator('#canvas rect.diagram-legend-line[data-link-type="AOC"]').count(),0);
- await page.locator('#drawing-redo').click();await changed.waitFor();assert.equal(Number(await changed.getAttribute('height')),7);
- await page.locator('#project-file').setInputFiles(saved.path);await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent==='Project opened.');await changed.waitFor();assert.equal(Number(await changed.getAttribute('height')),7);
+ await page.locator('#drawing-redo').click();await changed.waitFor();assert.ok(Math.abs(Number(await changed.getAttribute('height'))-7*keyScale)<.05);
+ await page.locator('#project-file').setInputFiles(saved.path);await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent==='Project opened.');await changed.waitFor();assert.ok(Math.abs(Number(await changed.getAttribute('height'))-7*keyScale)<.05);
  const reopened=await downloadProject('reopened.nds');
  results.undoRedoReopen=true;
  // Reopen the original cable through the displayed path; there is only one

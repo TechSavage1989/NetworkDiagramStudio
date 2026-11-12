@@ -37,7 +37,7 @@ import {globalTextCategories,cleanGlobalTextStyles,globalTextCategory,globalText
 import {deviceCaptionPlacement,setDeviceCaptionCorners,CAPTION_CORNERS,CAPTION_CORNER_LABELS} from './device-captions.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
-import {changeLinkStyle,linkDefaults} from './link-styles.mjs';
+import {changeLinkStyle,linkDefaults,linkWeight} from './link-styles.mjs';
 import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
 import {quickPagePaperLayout} from './quick-page-paper.mjs';
 import {visiblePagePaper,cleanPageNumbers,pageNumber,cleanPageSetup,newPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles,paperDimensions,printGeometry,DEFAULT_PAGE_MARGIN_MM} from './page-options.mjs';
@@ -1089,12 +1089,12 @@ function pageNavigation(){
  syncQuickPagePaper();
  $('page-position').textContent=pages.length?(active+1)+' / '+pages.length:'';
  let overflow=$('page-overflow-notice');if(!overflow){overflow=el('button','','warning');overflow.id='page-overflow-notice';overflow.onclick=()=>task(()=>smallText().length?showSmallText(0):pageOptions());$('feedback').after(overflow);}
- const notice=pageLayoutNotice(pages[active]);overflow.hidden=!notice;overflow.textContent=notice;
+ const notice=pageLayoutNotice(pages[active]);overflow.hidden=!notice;overflow.textContent=notice;overflow.title=notice;
  // A readability notice leads to the text it is about: the smallest first,
  // then Previous / Next through every item below the target.
- let nav=$('page-notice-nav');if(!nav){nav=el('span','','notice-nav');nav.id='page-notice-nav';nav.setAttribute('role','group');nav.setAttribute('aria-label','Small text on this page');for(const [id,text,step,title] of [['notice-prev','‹',-1,'Previous small text'],['notice-show','Show smallest text',0,'Select and show the smallest text on this page'],['notice-next','›',1,'Next small text']]){const b=el('button',text);b.type='button';b.id=id;b.title=title;b.setAttribute('aria-label',title);b.onclick=()=>task(()=>showSmallText(step));nav.append(b);}const paper=el('button','Paper & print…');paper.type='button';paper.onclick=()=>task(pageOptions);nav.append(paper);overflow.after(nav);}
+ let nav=$('page-notice-nav');if(!nav){nav=el('span','','notice-nav');nav.id='page-notice-nav';nav.setAttribute('role','group');nav.setAttribute('aria-label','Small text on this page');for(const [id,text,step,title] of [['notice-prev','‹',-1,'Previous small text'],['notice-show','Show',0,'Select and show the smallest text on this page'],['notice-next','›',1,'Next small text']]){const b=el('button',text);b.type='button';b.id=id;b.title=title;b.setAttribute('aria-label',title);b.onclick=()=>task(()=>showSmallText(step));nav.append(b);}overflow.after(nav);}
  const small=notice?smallText():[];if(noticePage!==pages[active]?.name){noticePage=pages[active]?.name;noticeIndex=-1;}
- nav.hidden=!small.length;if(small.length){overflow.title='Show the text this is about';$('notice-show').textContent=noticeIndex<0?'Show smallest text ('+small.length+')':(Math.min(noticeIndex,small.length-1)+1)+' of '+small.length;}
+ nav.hidden=!small.length;if(small.length){overflow.title=notice+' Click to show the text this is about.';$('notice-show').textContent=noticeIndex<0?'Show ('+small.length+')':(Math.min(noticeIndex,small.length-1)+1)+' of '+small.length;}
 }
 // Text printing below the page's readable minimum, smallest first (the
 // readability notice reports the first one).
@@ -1490,7 +1490,8 @@ function editDrawingObject(key){
  if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,'Font size (pt)',String(roundPt(printedPt(item))));inputs.size.dataset.shown=inputs.size.value;inputs.size.type='number';inputs.size.min=1;inputs.size.max=360;inputs.size.step='any';inputs.size.title=printedNote(item);inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);if(printedBadge(item))body.append(el('p','Font size is as printed on this page. '+printedNote(item),'hint printed-size-note'));}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
  const labelRotation=item.labelRole&&item.relatedCableKey?field(body,'Connection label rotation',project.layout?.drawingEdits?.[item.editKey]?.rotationMode==='fixed'?String(Math.round((project.layout.drawingEdits[item.editKey].angle||0)*180/Math.PI)):'auto',[['auto','Follow cable automatically'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]):null;
- const initialWeight=linkedSwatch?item.sampleWeight??item.h:item.weight||1;
+ // Widths are shown as stored (at the page's drawing scale), not as scaled to fit the paper.
+ const ownWeight=project.layout?.drawingEdits?.[item.editKey]?.weight,initialWeight=item.linkType&&(item.type==='path'||linkedSwatch)?linkWeight(project,item.linkType,ownWeight):Math.round(unpresentPatch(item,{weight:linkedSwatch?item.sampleWeight??item.h:item.weight||1}).weight*(presentation(project,page).drawingScale||1)*1000)/1000;
  if(['rect','path','vector'].includes(item.type)){inputs.weight=property(hasPicker?grid:body,'Line width',initialWeight);inputs.weight.type='number';inputs.weight.step=.1;inputs.weight.min=.1;inputs.weight.max=12000;}
  let picker=null,captions=null,currentType=item.linkType;
  const connection=item.type==='path'&&item.sourceLink?drawingConnection(item):null,details=connection?connectionFields(body,connection,{onMediaChange(media){const info=connectionType({...connection,media});if(info.name===currentType)return;currentType=info.name;captions?.retarget(info.name);if(picker){const style=project.layout?.linkStyles?.[info.name],existing=pages.flatMap(page=>page.items).find(path=>path.type==='path'&&path.linkType===info.name);picker.value=style?.color||existing?.color||info.color;picker.opacity=style?.opacity??existing?.opacity??1;}}}):null;
