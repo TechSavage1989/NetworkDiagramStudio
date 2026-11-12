@@ -20,7 +20,7 @@ try{
  await dialog.getByLabel('Stack member number',{exact:true}).nth(0).fill('2');await dialog.getByRole('button',{name:'Save stack',exact:true}).click();await dialog.waitFor({state:'hidden'});
  assert.ok(await page.locator('#canvas').getByText('Fictional lab stack · member 2',{exact:false}).count());
  await page.locator('#undo-devices').click();assert.equal(await page.locator('#devices').getByText('Fictional lab stack · member 2',{exact:true}).count(),0);
- await page.locator('#edit-drawing').click();await page.locator('#drawing-redo').click(); // Global history restores the entire association atomically.
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();await page.locator('#drawing-redo').click(); // Global history restores the entire association atomically.
  const saved=await saveFile('saved.nds.json');assert.deepEqual(saved.project.layout.deviceStacks[0].members,[{deviceId:'b',number:1},{deviceId:'a',number:2}]);assert.deepEqual(saved.project.devices,source.devices);assert.deepEqual(saved.project.links,source.links);
  await page.locator('#project-file').setInputFiles(saved.file);await open();assert.equal(await dialog.getByLabel('Stack device',{exact:true}).nth(0).inputValue(),'b');
  await page.screenshot({path:resolve(output,'device-stacks.png')});await dialog.getByRole('button',{name:'Remove member',exact:true}).nth(0).click();await dialog.getByRole('button',{name:'Save stack',exact:true}).click();

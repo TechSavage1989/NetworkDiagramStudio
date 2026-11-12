@@ -4,6 +4,9 @@ import {buildPages} from '../src/web/diagram/index.mjs';
 import {cleanPageSetup,printGeometry} from '../src/web/page-options.mjs';
 import {textLayout} from '../src/web/diagram/scene.mjs';
 import {intersects,pathCrossesText} from '../src/web/diagram/labels.mjs';
+// A port number its own cable passes behind: background-filled, on that cable,
+// and painted after it.
+const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!!number.background;
 
 // Same geometry as a busy eight-member stack with all 32 AP uplinks on one
 // member; fictional names, addresses and evidence only. Each AP has two leads.
@@ -28,7 +31,7 @@ function checkPages(pages){
    assert.ok(!paths.some(path=>pathCrossesText(path,caption,1)),'cables do not cross captions');
   }
   for(const path of paths){
-   for(const number of page.items.filter(i=>i.portNumberRole==='text'))assert.ok(!pathCrossesText(path,number,1));
+   for(const number of page.items.filter(i=>i.portNumberRole==='text'))assert.ok(throughOwn(number,path)||!pathCrossesText(path,number,1));
    for(const [anchor,point] of [[path.from,path.points[0]],[path.to,path.points.at(-1)]]){assert.ok(Math.abs(point[0]-anchor.x)<1e-6);assert.ok(Math.abs(point[1]-anchor.y)<1e-6);}
    for(let i=1;i<path.points.length;i++)assert.ok(path.points[i][0]===path.points[i-1][0]||path.points[i][1]===path.points[i-1][1]);
   }

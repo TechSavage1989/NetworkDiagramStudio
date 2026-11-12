@@ -7,11 +7,13 @@ import {sampleSite} from '../src/web/sample.mjs';
 import {adaptiveStack} from './fixtures/adaptive-port-maps.mjs';
 const mapPaper=project=>visiblePagePaper(project,{name:'MDF Port Map',family:'ports'});
 
-test('creation defaults set Letter landscape only for port maps',()=>{
+test('new projects default every page family to Letter landscape',()=>{
  const project={layout:{pageSetup:newPageSetup()}};
  assert.equal(mapPaper(project).preset,'letter');assert.equal(mapPaper(project).orientation,'landscape');
  assert.equal(mapPaper(project).locked,false);
- for(const family of ['core','wireless','logical','trunk','switchports'])assert.equal(visiblePagePaper(project,{family}).preset,'dynamic');
+ for(const family of ['core','sitemap','wireless','logical','trunk','switchports']){const paper=visiblePagePaper(project,{family});assert.equal(paper.preset,'letter');assert.equal(paper.orientation,'landscape');assert.equal(paper.locked,false);}
+ // Saved projects keep their own choice; only a project without one is Dynamic.
+ assert.equal(visiblePagePaper({layout:{}},{family:'core'}).preset,'dynamic');
  const other=newPageSetup();project.layout.pageSetup.visible.groups.ports.preset='a3';assert.equal(other.visible.groups.ports.preset,'letter');
 });
 test('existing implicit Dynamic and explicit paper settings are not migrated on load',()=>{

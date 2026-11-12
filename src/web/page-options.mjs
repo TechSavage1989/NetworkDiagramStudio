@@ -14,7 +14,7 @@ export const pageFamilies=[['core','Core network'],['sitemap','Site map'],['port
 export function cleanPaper(raw){const p=raw&&typeof raw==='object'?raw:{},preset=p.preset==='dynamic'||paperSizes.some(v=>v[0]===p.preset)?p.preset:'dynamic';return {preset,locked:p.locked===true,orientation:p.orientation==='portrait'?'portrait':'landscape',widthMm:Number.isFinite(+p.widthMm)&&+p.widthMm>=148&&+p.widthMm<=1500?+p.widthMm:297,heightMm:Number.isFinite(+p.heightMm)&&+p.heightMm>=148&&+p.heightMm<=1500?+p.heightMm:420};}
 // Creation defaults are separate from cleaning: reopening an older project must
 // never silently change its paper or saved drawing coordinates.
-export function newPageSetup(){return cleanPageSetup({visible:{wirelessFit:'adaptive',groups:{ports:{preset:'letter',orientation:'landscape'}}}});}
+export function newPageSetup(){return cleanPageSetup({visible:{wirelessFit:'adaptive',default:{preset:'letter',orientation:'landscape'},groups:{ports:{preset:'letter',orientation:'landscape'}}}});}
 // Optional outside page margin in millimetres (0-50); absent keeps the
 // established automatic margins (12 units, 24 on a locked physical sheet).
 // Every drawing page keeps a blank border, 5 mm unless Paper & print sets

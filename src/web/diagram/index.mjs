@@ -17,6 +17,7 @@ import {logicalPages} from './logical.mjs';
 import {documentationMode,documentationSections,includeTrunkReference,interfaceAddresses,savedReportLayout,logicalInventoryColumns,logicalInventoryName} from './documentation.mjs';
 import {corePages} from './core.mjs';
 import {siteMapPages} from './site-map.mjs';
+import {setCustomConnectionTypes} from '../connection-types.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
 import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
 import {cleanPageNumbers,footerAllowance,pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage,printGeometry} from '../page-options.mjs';
@@ -203,7 +204,10 @@ function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false
   }
   if(stateKey&&content&&!port.unconfigured){rect(items,content.x,content.y+content.h-Math.min(2,content.h/3),content.w,Math.min(2,content.h/3),portStateFills[state(port.state)]);Object.assign(items.at(-1),{...metadata,editKey:key+'|state',portNumberRole:'state'});}
   const textBox=box.vertical?{x:box.x+(box.w-box.h)/2,y:box.y+(box.h-box.w)/2,w:box.h,h:box.w}:box;
-  label(items,textBox.x,textBox.y,textBox.w,textBox.h,text,box.size,true,readableOn(surfaceAt(g,box.x+box.w/2,box.y+box.h/2)),'center');Object.assign(items.at(-1),{...metadata,editKey:key+'|text',portNumberRole:'text',numberSide:box.side,numberBox:{x:box.x,y:box.y,w:box.w,h:box.h},socketBounds:socket,full:true,...(fontScale!=null?{_textFactor:fontScale}:{}),...(box.vertical?{angle:Math.PI/2}:{})});
+  // The painted surface behind the number: a cable that leaves through its
+  // own number passes behind a backing of this color (wireless sheets).
+  const surface=surfaceAt(g,box.x+box.w/2,box.y+box.h/2)??(g.asset||(g.children||[]).some(c=>c.type==='image')?null:'#FFFFFF');
+  label(items,textBox.x,textBox.y,textBox.w,textBox.h,text,box.size,true,readableOn(surfaceAt(g,box.x+box.w/2,box.y+box.h/2)),'center');Object.assign(items.at(-1),{...metadata,editKey:key+'|text',portNumberRole:'text',...(surface?{surface}:{}),numberSide:box.side,numberBox:{x:box.x,y:box.y,w:box.w,h:box.h},socketBounds:socket,full:true,...(fontScale!=null?{_textFactor:fontScale}:{}),...(box.vertical?{angle:Math.PI/2}:{})});
  }
  if(g.angle)for(const item of items.slice(firstItem)){
   if(item.type==='vector'){item.commands=item.commands.map(([op,x,y])=>op==='Z'?['Z']:[op,...devicePoint(g,(x-g.x)/g.w,(y-g.y)/g.h)]);}
@@ -558,14 +562,34 @@ function bookletHeader(page){
 // "LAB-IDF (2/3)". The stable page name stays "Port Inventory N" for settings
 // and frames. More than three devices are shown as +N; repeated names are
 // numbered.
-function namePagesByDevices(pages,prefix,entriesOf){
+function namePagesByDevices(pages,prefix,entriesOf,format=(prefix,list)=>prefix+' - '+list){
  const named=pages.map(page=>[page,[...new Set((entriesOf(page)||[]).map(entry=>entry.name).filter(Boolean))]]).filter(([,names])=>names.length);
  const counts=new Map(),seen=new Map();for(const [,names] of named)for(const name of names)counts.set(name,(counts.get(name)||0)+1);
- const labels=named.map(([page,names])=>{const parts=names.map(name=>{const n=(seen.get(name)||0)+1;seen.set(name,n);return counts.get(name)>1?name+' ('+n+'/'+counts.get(name)+')':name;});return [page,prefix+' - '+(parts.length>3?parts.slice(0,3).join(', ')+' +'+(parts.length-3):parts.join(', '))];});
+ const labels=named.map(([page,names])=>{const parts=names.map(name=>{const n=(seen.get(name)||0)+1;seen.set(name,n);return counts.get(name)>1?name+' ('+n+'/'+counts.get(name)+')':name;});return [page,format(prefix,parts.length>3?parts.slice(0,3).join(', ')+' +'+(parts.length-3):parts.join(', '))];});
  const totals=new Map();for(const [,label] of labels)totals.set(label,(totals.get(label)||0)+1);
  const repeat=new Map();for(const [page,label] of labels){const n=(repeat.get(label)||0)+1;repeat.set(label,n);page.displayName=totals.get(label)>1?label+' '+n:label;}
 }
 function nameInventoryPages(pages){namePagesByDevices(pages,'Port Inventory',page=>page.inventoryDevices);}
+// Every numbered set of sheets ("Wireless Connections 3", "VLANs and Routing
+// 2", a continued network page) is named after the devices each sheet shows,
+// the same way: "Wireless Connections - LAB-IDF-STACK". A page family names
+// its devices through logicalSections, portMap.devices, coreDeviceIds or
+// sourceDeviceIds (access points only when nothing else is on the sheet), so
+// pages added later get the same names. Stable page names stay for settings.
+function pageDevices(page,db){
+ if(page.logicalSections?.length)return page.logicalSections.map(section=>({name:section.name}));
+ const ids=page.portMap?.devices||(page.wirelessLayout?page.sourceDeviceIds?.slice(0,1):null)||page.coreDeviceIds||page.sourceDeviceIds||[];
+ const devices=ids.map(id=>db.devices.get(id)).filter(Boolean),main=devices.filter(d=>!['ap','handoff'].includes(d.kind));
+ return (main.length?main:devices).map(d=>({name:value(d.name)||d.id}));
+}
+function nameNumberedPages(pages,db){
+ const groups=new Map();
+ for(const page of pages){if(page.displayName||page.reportId||page.switchportReport)continue;const match=/^([^|]+) (\d+)$/.exec(page.name);if(!match)continue;if(!groups.has(match[1]))groups.set(match[1],[]);groups.get(match[1]).push(page);}
+ // Port map sheets read "<device> / Port map", like the builder sheets.
+ // The sheet keeps its planned heading (its subtitle or sections name the
+ // devices); the page list, exports and links use the device name.
+ for(const [base,list] of groups)if(list.length>1){namePagesByDevices(list,base,page=>pageDevices(page,db),base==='MDF Port Map'?(prefix,names)=>names+' / Port map':undefined);for(const page of list)if(page.displayName)page.headingTitle=page.title||base;}
+}
 function namePortInventory(page){
  page.name=page.name.replace(/MDF Port Map$/,'Port Inventory');
  page.title='Port Inventory';
@@ -748,7 +772,9 @@ function portMaps(project,db){
    if(!id||!sheets.has(id)||page.portMap.bookletRole==='inventory'){out.push(page);continue;}
    if(placed.has(id))continue;placed.add(id);
    const d=switches.find(d=>d.id===id),ports=physicalPorts(d);
-   out.push(...sheets.get(id).map((sheet,i)=>Object.assign(sheet,{family:'ports',title:'MDF Port Map',portMap:{device:id,devices:[id],shown:ports.length,total:ports.length,rowNames:[],portRecords:[],density:'compact',overview:true,bookletRole:i?'key':'map',presentation:'separate',switchportSheet:true}})));
+   // Every port map sheet in the page list reads "<device> / Port map".
+   const count=sheets.get(id).length,label=(value(d.name)||id)+' / Port map';
+   out.push(...sheets.get(id).map((sheet,i)=>Object.assign(sheet,{displayName:count>1?label+' ('+(i+1)+'/'+count+')':label,family:'ports',title:'MDF Port Map',portMap:{device:id,devices:[id],shown:ports.length,total:ports.length,rowNames:[],portRecords:[],density:'compact',overview:true,bookletRole:i?'key':'map',presentation:'separate',switchportSheet:true}})));
   }
   best=out;
  }
@@ -893,6 +919,8 @@ function logical(project,db,options={}){
 }
 export function buildPages(project={},options={}){
   project=effectiveWirelessPaperProject(project);
+  // The project's own connection types name and color its links in every page.
+  setCustomConnectionTypes(project.layout?.connectionTypes);
   // Drafts shared with the cache are copied only when their page has to be
   // finished again; an unchanged page reuses its finished copy.
   const memo=finishedPageMemo(options.cache),sources=new Map();
@@ -909,6 +937,7 @@ export function buildPages(project={},options={}){
     const n=(seen.get(p.name)||0)+1;seen.set(p.name,n);
     if(totals.get(p.name)>1)p.name+=' '+n;
   });
+  nameNumberedPages(pages,db);
   let visible=pages.filter(p=>!presentation(project,p).hidden);
   // A finished page depends on its draft, its name and position, the layout
   // settings and its own family's drawing edits.
@@ -920,9 +949,9 @@ export function buildPages(project={},options={}){
     const p=pages[i],src=sources.get(p);if(!src)continue;
     // A page drafted by one family can carry another family's name (port maps
     // drawn as Switchport report sheets), so both families' edits count.
-    const named=pageFamily(p.name.split('|')[0]),key=src.token+'|'+p.name+'|'+(position.get(p)??-1)+'|'+visible.length,edits=named===src.family?editsFor(src.family):editsFor(src.family)+'\n'+editsFor(named),hit=memo.get(key);
+    const named=pageFamily(p.name.split('|')[0]),key=src.token+'|'+p.name+'|'+(p.displayName||'')+'|'+(position.get(p)??-1)+'|'+visible.length,edits=named===src.family?editsFor(src.family):editsFor(src.family)+'\n'+editsFor(named),hit=memo.get(key);
     if(hit&&hit.rest===rest&&hit.edits===edits){pages[i]=structuredClone(hit.page);reused.add(pages[i]);rememberFinished(memo,key,hit,pages.length);continue;}
-    if(src.shared){pages[i]=structuredClone(src.shared);pages[i].name=p.name;}
+    if(src.shared){pages[i]=structuredClone(src.shared);pages[i].name=p.name;for(const key of ['displayName','headingTitle'])if(p[key]!==undefined)pages[i][key]=p[key];}
     store.set(pages[i],{key,rest,edits});
    }
    visible=pages.filter(p=>!presentation(project,p).hidden);
@@ -930,7 +959,7 @@ export function buildPages(project={},options={}){
   pages.forEach(p=>{
     if(reused.has(p))return;
     p.labelBacking=cleanLabelBacking(project.layout?.labelBacking);
-    applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??p.displayName;
+    applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??(presentation(project,p).name||p.headingTitle||p.displayName);
      // A long title (an inventory sheet naming its devices) wraps within the sheet.
      const room=Math.max(item.w,(p.width||1200)-item.x-36);item.w=Math.min(room,Math.max(item.w,textWidth(item.value,item.size,true)));const lines=wrapPortText(item.value,item.w,item.size,true).length;if(lines>1)item.h=Math.max(item.h,lines*item.size*1.2);}
     // Switchport sheets already reserve measured headers, keys and footers.

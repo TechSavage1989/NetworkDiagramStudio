@@ -162,13 +162,16 @@ test('faceplate captions grow to a readable size without pushing a dense chassis
  for(const c of plate.children.filter(c=>c.type==='text'&&c.size>5)){const box={x:plate.x+c.x*plate.w,y:plate.y+c.y*plate.h+(c.h*plate.h-c.size*1.2)/2,w:c.w*plate.w,h:c.size*1.2};assert.ok(!blocked.some(b=>intersects(box,b,0)),c.value+' stays clear of numbers and faces');}
 });
 
-test('builder port maps grow tagged dots to fill the most filled jack, centered, one size per map',()=>{
+test('builder port maps size each jack\'s tagged dots to fill it, centered, never below the map size',()=>{
  const vlans=Array.from({length:30},(_,i)=>({id:10+i,name:'Lab VLAN '+(10+i)})),ids=vlans.map(v=>v.id);
  const chassis=(id,max)=>({id,name:'LAB-'+id,kind:'switch',vendor:'HPE Aruba',model:'J9850A',modules:[{slot:'A',model:'J9993A'},{slot:'C',model:'J9986A'}],vlans,
   ports:[...Array.from({length:8},(_,i)=>({name:'A'+(i+1),state:'up',native:ids[0],tagged:ids.slice(6,6+(i%max)+1)})),...Array.from({length:24},(_,i)=>({name:'C'+(i+1),state:'up',native:ids[i%6],tagged:ids.slice(6,6+(i%max)+1)}))]});
  const pages=buildAllPages({name:'Fill lab',devices:[chassis('sparse',3),chassis('dense',14)],links:[],layout:{pageNumbers:{footer:true}}}).filter(page=>page.portMap?.switchportSheet),sheet=id=>pages.find(page=>page.portMap.device===id);
  const dots=page=>page.items.filter(i=>(i.reportPortRole==='tagged'&&i.type==='ellipse')),sizes=page=>new Set(dots(page).map(i=>i.w.toFixed(3)));
- for(const page of pages){assert.equal(sizes(page).size,1,'one dot size per map');assert.ok(Math.abs([...sizes(page)][0]/2-page.reportMarkerFit)<1e-3,'the map draws its fill size');}
+ // Each port's dots are as large as its own face allows (up to the map cap);
+ // the busiest port draws the map's common size and no port goes below it.
+ for(const page of pages){const radii=[...sizes(page)].map(Number).map(w=>w/2);assert.ok(Math.min(...radii)>=page.reportMarkerFit-1e-3,'no port below the map size');assert.ok(Math.abs(Math.min(...radii)-page.reportMarkerFit)<.05,'the busiest port draws at the map size');}
+ assert.ok(Math.max(...[...sizes(sheet('dense'))].map(Number))>Math.min(...[...sizes(sheet('dense'))].map(Number)),'sparse ports on a dense map draw larger dots');
  assert.ok(sheet('sparse').reportMarkerFit>sheet('dense').reportMarkerFit,'a sparser map takes larger dots');assert.ok(sheet('dense').reportMarkerFit>2.1,'the dense map grows past the builder radius');
  for(const page of pages){
   const faces=new Map(page.items.filter(i=>i.reportPortRole==='native'&&/\|face$/.test(i.editKey||'')).map(i=>[i.reportPort,i])),byPort=new Map();

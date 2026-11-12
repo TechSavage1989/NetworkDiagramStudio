@@ -39,7 +39,7 @@ try{
  await page.keyboard.press('Control+z');await page.waitForFunction(()=>![...document.querySelectorAll('#canvas svg g[data-drawing-key^="Site Map|node|device:ap"]')].length);
  assert.equal(await apCards(),grouped);assert.ok(await page.locator('#canvas svg text[data-drawing-key$="|detail|ip"]').count()>0);
  // Edit drawing: a card moves with arrow nudges, and its connections follow.
- await page.locator('#edit-drawing').click();const core=page.locator('#canvas svg g[data-drawing-key="Site Map|node|device:nas"]');
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();const core=page.locator('#canvas svg g[data-drawing-key="Site Map|node|device:nas"]');
  const before=await core.boundingBox();await page.mouse.click(before.x+4,before.y+before.height-4);
  for(let i=0;i<4;i++)await page.keyboard.press('Shift+ArrowRight');
  await page.waitForFunction(x=>{const n=document.querySelector('#canvas svg g[data-drawing-key="Site Map|node|device:nas"]');return n&&n.getBoundingClientRect().x>x+2;},before.x);

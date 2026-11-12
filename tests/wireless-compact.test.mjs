@@ -6,6 +6,9 @@ import {deviceFaceplate} from '../src/web/diagram/faceplate.mjs';
 import {equipmentGapPlan,equipmentPadding} from '../src/web/diagram/equipment-layout.mjs';
 import {crossesText,intersects,pathCrossesText,textFootprint} from '../src/web/diagram/labels.mjs';
 import {sampleSite} from '../src/web/sample.mjs';
+// A port number its own cable passes behind: background-filled, on that cable,
+// and painted after it.
+const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!!number.background;
 
 function wirelessLab(members,count=28,center=false,preset='dynamic'){
  const ports=Array.from({length:count},(_,i)=>({name:(center?3:i%members+1)+'/'+(center?i+1:Math.floor(i/members)*2+1)})),sw={id:'sw',name:'LAB-STACK-'+members,kind:'switch',model:'JL558A',stackMembers:Array.from({length:members},(_,i)=>({id:String(i+1),model:'JL558A'})),ports};
@@ -25,7 +28,7 @@ function assertClear(page){
   assert.ok(!paths.some(path=>pathCrossesText(path,text,1)),'caption intersects cable');
  }
  for(const path of paths){
-  for(const number of page.items.filter(i=>i.portNumberRole==='text'))assert.ok(!pathCrossesText(path,number,1),'cable crosses a port number');
+  for(const number of page.items.filter(i=>i.portNumberRole==='text'))assert.ok(throughOwn(number,path)||!pathCrossesText(path,number,1),'cable crosses a port number');
   for(const [anchor,point] of [[path.from,path.points[0]],[path.to,path.points.at(-1)]]){const body=bodies.find(b=>b.key===anchor.device),port=body?.ports[anchor.port];assert.ok(port);assert.ok(Math.abs(point[0]-body.x-port[0]*body.w)<1e-6);assert.ok(Math.abs(point[1]-body.y-port[1]*body.h)<1e-6);}
   for(let i=1;i<path.points.length;i++){const a=path.points[i-1],b=path.points[i];assert.ok(a[0]===b[0]||a[1]===b[1]);lines.push({path,a,b,h:a[1]===b[1]});}
   for(const body of bodies)for(const region of body.panelRegions||[]){const box={x:body.x+(region.x||0)*body.w,y:body.y+region.y*body.h,w:(region.w||1)*body.w,h:region.h*body.h};const inside=([x,y])=>x>=box.x&&x<=box.x+box.w&&y>=box.y&&y<=box.y+box.h;let first=0,last=path.points.length-1;if(body.key===path.from.device)while(first<last&&inside(path.points[first]))first++;if(body.key===path.to.device)while(last>first&&inside(path.points[last]))last--;assert.ok(!crossesText(path.points.slice(first,last+1),box,(path.weight||4)/2-.01),'cable crosses another member');}
@@ -82,7 +85,7 @@ test('small hardware and thick wireless leads retain clear, aligned numbers at t
    for(const [index,number] of numbers.entries()){
     const box=textFootprint(number),anchor=body.ports[number.portName];assert.ok(Math.abs(box.x+box.w/2-body.x-anchor[0]*body.w)<1e-6);assert.ok(number.size>=8*textScale);assert.equal(textLayout(number).size,number.size);
     assert.ok(!numbers.slice(index+1).some(other=>intersects(box,textFootprint(other))),'scaled port numbers overlap');
-    assert.ok(!page.items.some(path=>path.type==='path'&&pathCrossesText(path,number,1)),'thick cable crosses a scaled number');
+    assert.ok(!page.items.some(path=>path.type==='path'&&!throughOwn(number,path)&&pathCrossesText(path,number,1)),'thick cable crosses a scaled number');
    }
    if(textScale===1)assertClear(page);
   }

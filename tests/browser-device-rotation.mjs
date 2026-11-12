@@ -13,7 +13,7 @@ const device=()=>page.locator('#canvas g[data-device-id="a"][data-drawing-key$="
 const settle=()=>page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
 const open=async input=>{const previous=await page.$('#canvas svg');await page.locator('#project-file').setInputFiles(input);if(previous){await page.waitForFunction(node=>!node.isConnected,previous);await previous.dispose();}await page.waitForFunction(()=>document.querySelector('#feedback')?.textContent==='Project opened.');await device().waitFor();};
 try{
- await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);await open(fixture);await page.locator('#edit-drawing').click();await page.locator('#zoom-fit').click();await settle();
+ await page.goto(process.env.NDS_BROWSER_URL||pathToFileURL(resolve('dist/NetworkDiagramStudio.html')).href);await open(fixture);if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();await page.locator('#zoom-fit').click();await settle();
  // Filled native artwork must be clickable inside its body, not only on a
  // hairline border. Keep this point away from text, sockets and handles.
  const at=await device().evaluate(g=>{const artwork=g.querySelector('path'),b=artwork.getBoundingClientRect(),x=b.x+b.width*.1,y=b.y+b.height*.8,target=document.elementFromPoint(x,y);if(getComputedStyle(artwork).pointerEvents.toLowerCase()!=='visiblepainted'||target!==artwork)throw Error('Filled device interior is not reachable: '+JSON.stringify({pointerEvents:getComputedStyle(artwork).pointerEvents,target:target?.localName,key:target?.getAttribute('data-drawing-key')}));return {x,y};});await page.mouse.click(at.x,at.y);

@@ -21,6 +21,13 @@ export function diagramViewport(canvas,{out,inside,fit,percent,actual,calibrate,
   const dx=offset(left,width,canvas.clientWidth),dy=offset(top,height,canvas.clientHeight);
   if(dx||dy){current.x+=dx;current.y+=dy;current.userSized=true;apply();}
  }
+ // Bring one object into view at a readable zoom: at least `minimum` screen
+ // pixels tall, centered in the canvas (a notice's "show me" target).
+ function focus(bounds,minimum=18){
+  if(!bounds||!svg||!current)return;
+  if(bounds.h>0&&bounds.h*current.scale<minimum){current.scale=clamp(minimum/bounds.h);current.actualSize=false;}
+  const origin=svg.viewBox.baseVal;current.x=canvas.clientWidth/2-(bounds.x+bounds.w/2-origin.x)*current.scale;current.y=canvas.clientHeight/2-(bounds.y+bounds.h/2-origin.y)*current.scale;current.userSized=true;apply();
+ }
  function zoom(factor,x=canvas.clientWidth/2,y=canvas.clientHeight/2){if(!current)return;const before=current.scale,scale=clamp(before*factor);current.x=x-(x-current.x)*scale/before;current.y=y-(y-current.y)*scale/before;current.scale=scale;current.actualSize=false;current.userSized=true;apply();}
  if(out)out.onclick=()=>zoom(1/1.25);if(inside)inside.onclick=()=>zoom(1.25);if(fit)fit.onclick=fitPage;
  canvas.tabIndex=0;canvas.setAttribute('aria-label','Diagram viewport. Scroll to zoom. In Edit drawing, drag a box to select; hold Space or use the middle button to pan.');
@@ -48,5 +55,9 @@ export function diagramViewport(canvas,{out,inside,fit,percent,actual,calibrate,
  canvas.addEventListener('focusin',e=>cables.focus(e.target));canvas.addEventListener('focusout',()=>cables.clear());
  canvas.addEventListener('keyup',e=>{if(e.key===' ')space=false;});canvas.addEventListener('blur',()=>{space=false;cables.clear();});
  const observer=new ResizeObserver(()=>{if(!svg||!current)return;if(!current.userSized)fitPage();else{const box=canvas.getBoundingClientRect();if(lastBox){current.x+=lastBox.left-box.left;current.y+=lastBox.top-box.top;}apply();}});observer.observe(canvas);
- return {show(key,element,page){paper=page;clearTimeout(clickTimer);clickTarget=null;cables.reset();svg=element;svg.style.width=svg.viewBox.baseVal.width+'px';svg.style.height=svg.viewBox.baseVal.height+'px';canvas.classList.add('diagram-view');let fresh=false;if(!views.has(key)){views.set(key,{x:0,y:0,scale:1});fresh=true;}current=views.get(key);const origin=svg.viewBox.baseVal;if(!fresh){current.x+=(origin.x-(current.originX||0))*current.scale;current.y+=(origin.y-(current.originY||0))*current.scale;}current.originX=origin.x;current.originY=origin.y;canvas.replaceChildren(element);rulers.show(element,paper);cables.show(element);actualView?.refresh();if(current.actualSize)actualView?.activate({preserve:true});else if(fresh)fitPage();else apply();},clear(){clearTimeout(clickTimer);clickTarget=null;cables.reset();rulers.clear();svg=null;current=null;paper=null;actualView?.refresh();canvas.classList.remove('diagram-view');if(percent)percent.textContent='';},reset(){views.clear();cables.clear();},preserve(){if(current)current.userSized=true;},syncCableInteraction(){cables.sync();},reveal,fit:fitPage};
+ return {show(key,element,page){paper=page;clearTimeout(clickTimer);clickTarget=null;cables.reset();svg=element;svg.style.width=svg.viewBox.baseVal.width+'px';svg.style.height=svg.viewBox.baseVal.height+'px';canvas.classList.add('diagram-view');let fresh=false;if(!views.has(key)){views.set(key,{x:0,y:0,scale:1});fresh=true;}const same=current===views.get(key);current=views.get(key);const origin=svg.viewBox.baseVal;if(!fresh){current.x+=(origin.x-(current.originX||0))*current.scale;current.y+=(origin.y-(current.originY||0))*current.scale;}
+  // A rebuild of the same page can also change the bars above the canvas (a
+  // page notice appearing after a drag). A positioned drawing stays where it
+  // was on screen; a fitted one is fitted again by the resize observer.
+  if(same&&current.userSized&&lastBox){const box=canvas.getBoundingClientRect();current.x+=lastBox.left-box.left;current.y+=lastBox.top-box.top;}current.originX=origin.x;current.originY=origin.y;canvas.replaceChildren(element);rulers.show(element,paper);cables.show(element);actualView?.refresh();if(current.actualSize)actualView?.activate({preserve:true});else if(fresh)fitPage();else apply();},clear(){clearTimeout(clickTimer);clickTarget=null;cables.reset();rulers.clear();svg=null;current=null;paper=null;actualView?.refresh();canvas.classList.remove('diagram-view');if(percent)percent.textContent='';},reset(){views.clear();cables.clear();},preserve(){if(current)current.userSized=true;},syncCableInteraction(){cables.sync();},reveal,focus,fit:fitPage};
 }

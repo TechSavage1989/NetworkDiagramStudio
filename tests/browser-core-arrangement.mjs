@@ -23,7 +23,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.BR
 const scene=()=>page.locator('#canvas svg').evaluate(svg=>{const clone=svg.cloneNode(true);clone.removeAttribute('style');for(const node of clone.querySelectorAll('[data-editor-only],.diagram-selection,.cable-controls'))node.remove();return clone.outerHTML;});
 const columns=()=>page.locator('#canvas svg').evaluate(svg=>{const xs=[...svg.querySelectorAll('[data-drawing-key$="|body"]')].filter(n=>/\|device\|(?:core|idf1|idf2|fw)\|/.test(n.dataset.drawingKey)).map(n=>Math.round(n.getBBox().x));return new Set(xs).size;});
 try{
- await page.goto(url);await page.locator('#project-file').setInputFiles(fixture);await page.waitForSelector('#canvas svg');await page.locator('#edit-drawing').click();
+ await page.goto(url);await page.locator('#project-file').setInputFiles(fixture);await page.waitForSelector('#canvas svg');if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();
  const arrange=page.locator('#drawing-arrange');assert.equal(await arrange.isVisible(),true);assert.equal(await arrange.isEnabled(),true);assert.equal(await arrange.inputValue(),'compact');
  const baseline=await scene();result.compactColumns=await columns();assert.ok(result.compactColumns>1,'Compact packs the default page into several columns');assert.equal(await page.locator('#drawing-undo').isDisabled(),true);
  await page.screenshot({path:resolve(output,'compact.png')});

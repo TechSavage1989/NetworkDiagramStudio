@@ -17,21 +17,23 @@ try{
  assert.equal(await page.locator('.workspace-actions #edit-drawing').count(),1,'direct editing stays one click away');
  // Paper changes are available without opening a dialog and belong only to this page.
  const quickPaper=page.locator('#active-page-paper'),quickOrientation=page.locator('#active-page-orientation');
- await quickPaper.selectOption('letter');
- assert.equal(await page.locator('#dialog').evaluate(d=>d.open),false);
+ // New projects start on Letter; choose A4 to record a change.
  assert.equal(await quickPaper.inputValue(),'letter');
+ await quickPaper.selectOption('a4');
+ assert.equal(await page.locator('#dialog').evaluate(d=>d.open),false);
+ assert.equal(await quickPaper.inputValue(),'a4');
  await quickOrientation.selectOption('portrait');
  assert.equal(await quickOrientation.inputValue(),'portrait');
  assert.match(await page.locator('#active-page-paper-status').textContent(),/Auto-fit/);assert.equal((await page.locator('#active-page-lock').textContent()).trim(),'Unlocked');assert.equal(await page.locator('#active-page-lock').getAttribute('aria-pressed'),'false');
  await page.locator('#canvas').click({position:{x:10,y:10}});await page.keyboard.press('Control+z');
  await page.waitForFunction(()=>document.getElementById('active-page-orientation').value==='landscape');
  await page.keyboard.press('Control+z');
- await page.waitForFunction(()=>document.getElementById('active-page-paper').value==='dynamic');
+ await page.waitForFunction(()=>document.getElementById('active-page-paper').value==='letter');
  await quickPaper.selectOption('custom');
  assert.equal(await page.locator('#dialog').evaluate(d=>d.open),true);
  assert.equal(await page.getByLabel('Visible page proportions',{exact:true}).inputValue(),'custom');
- await page.getByRole('button',{name:'Cancel',exact:true}).click();
- assert.equal(await quickPaper.inputValue(),'dynamic','cancelling custom paper leaves current page unchanged');
+ await page.locator('#dialog').getByRole('button',{name:'Cancel',exact:true}).click();
+ assert.equal(await quickPaper.inputValue(),'letter','cancelling custom paper leaves current page unchanged');
  const groups=page.locator('#page-families .page-group'),portGroup=groups.filter({hasText:'Port maps'});
  assert.ok(await groups.count()>=3,'sample has multiple page groups');
  assert.equal(await portGroup.count(),1);

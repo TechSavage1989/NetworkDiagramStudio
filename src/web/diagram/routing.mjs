@@ -105,7 +105,7 @@ function routeScore(r,nodes,obstacles,seen,minX,maxX,railGap=6){
  // Exact crossesText test, with each caption box padded once and only the
  // boxes this cable's extent can reach checked against its segments.
  const weight=r.weight||4,pad=weight/2,near=[],others=[];
- for(const box of obstacles){const f=textFootprint(box),x0=f.x-pad,y0=f.y-pad,x1=x0+(f.w+pad*2),y1=y0+(f.h+pad*2);if(rb.x1>x0&&rb.x0<x1&&rb.y1>y0&&rb.y0<y1)near.push(x0,y0,x1,y1);}
+ for(const box of obstacles){if(box.leadThrough!=null&&box.leadThrough===r.e?.idx)continue;const f=textFootprint(box),x0=f.x-pad,y0=f.y-pad,x1=x0+(f.w+pad*2),y1=y0+(f.h+pad*2);if(rb.x1>x0&&rb.x0<x1&&rb.y1>y0&&rb.y0<y1)near.push(x0,y0,x1,y1);}
  // Only segments within the largest counted distance of this cable's extent
  // can be shared, tight or crossing.
  for(const t of seen){if(t.route===r)continue;const reach=Math.max(separation(weight,t.weight),railGap);if(t.x0-reach>rb.x1||t.x1+reach<rb.x0||t.y0-reach>rb.y1||t.y1+reach<rb.y0)continue;others.push(t);}
@@ -785,7 +785,7 @@ export function coreRoutes(internal,external,endData,banks,nodes,{left,right,pit
     }
     // Text explicitly positioned by the user remains an obstacle. Automatic
     // device titles are fitted after routing instead of forcing cable doglegs.
-    let detour=false;for(const box of obstacles)if(!moduleEscape&&crossesText([[x,v.anchor.y],[x,ay]],box,3)){x=dir>0?Math.max(x,box.x+box.w+7):Math.min(x,box.x-7);detour=true;}
+    let detour=false;for(const box of obstacles)if(!moduleEscape&&box.leadThrough!==v.e.idx&&crossesText([[x,v.anchor.y],[x,ay]],box,3)){x=dir>0?Math.max(x,box.x+box.w+7):Math.min(x,box.x-7);detour=true;}
     if(detour)escapeX=x;
     ends.set(v.e.idx+'/'+v.which,{...v,rank,escapeX,exitX:x,ay,moduleEscape});
    });

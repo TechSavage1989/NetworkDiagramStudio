@@ -21,7 +21,7 @@ const body=key=>page.locator(`#canvas svg [data-drawing-key="${key}"]`);
 const key=id=>'Core Network|device|'+id+'|body',firewall=key('fw'),cards=['handoff:fw/port1','handoff:fw/port11'].map(key),reference=key('mdf');
 const feedback=pattern=>page.waitForFunction(source=>new RegExp(source,'i').test(document.querySelector('#feedback').textContent),pattern.source);
 try{
- await page.goto(url);await page.locator('#project-file').setInputFiles(fixture);await page.waitForSelector('#canvas svg');await page.locator('#edit-drawing').click();
+ await page.goto(url);await page.locator('#project-file').setInputFiles(fixture);await page.waitForSelector('#canvas svg');if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();
  let before=await boxes();for(const card of cards){assert.ok(before[card],card);assert.ok(before[card].y+before[card].h<=before[firewall].y+.5,card+' starts above the firewall');}
  // A selected WAN card enables Place beside and lands left of its firewall.
  await body(cards[0]).click({position:{x:12,y:8}});assert.equal(await page.locator('#drawing-beside [data-place="left"]').isEnabled(),true);

@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildPages} from '../src/web/diagram/index.mjs';
 import {pathCrossesText} from '../src/web/diagram/labels.mjs';
+// A port number its own cable passes behind: background-filled, on that cable,
+// and painted after it.
+const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!!number.background;
 
 // Fictional eight-member stack, with 32 APs on member seven. The original
 // planner left 34 crossings: 23 on the left, 11 in the right return bundle.
@@ -33,7 +36,7 @@ test('right AP return lanes untangle without disturbing paired switch departure 
  for(const path of paths){
   for(const [anchor,point] of [[path.from,path.points[0]],[path.to,path.points.at(-1)]]){assert.equal(point[0],anchor.x);assert.equal(point[1],anchor.y);}
   for(let i=1;i<path.points.length;i++)assert.ok(path.points[i][0]===path.points[i-1][0]||path.points[i][1]===path.points[i-1][1]);
-  for(const text of page.items.filter(i=>i.wirelessCaption||i.portNumberRole==='text'))assert.ok(!pathCrossesText(path,text,1));
+  for(const text of page.items.filter(i=>i.wirelessCaption||i.portNumberRole==='text'))assert.ok(throughOwn(text,path)||!pathCrossesText(path,text,1));
  }
  assert.equal(JSON.stringify(site),saved);assert.equal(buildPages(JSON.parse(saved)).find(p=>p.wirelessLayout).svg,page.svg);
 });
@@ -62,7 +65,7 @@ test('upper middle-member AP fan nests in its gap instead of crossing the return
  for(const path of paths){
   for(const [anchor,point] of [[path.from,path.points[0]],[path.to,path.points.at(-1)]])assert.deepEqual(point,[anchor.x,anchor.y]);
   for(let i=1;i<path.points.length;i++)assert.ok(path.points[i][0]===path.points[i-1][0]||path.points[i][1]===path.points[i-1][1]);
-  for(const text of page.items.filter(i=>i.wirelessCaption||i.portNumberRole==='text'))assert.ok(!pathCrossesText(path,text,1));
+  for(const text of page.items.filter(i=>i.wirelessCaption||i.portNumberRole==='text'))assert.ok(throughOwn(text,path)||!pathCrossesText(path,text,1));
  }
  assert.equal(JSON.stringify(site),saved);
  assert.equal(buildPages(JSON.parse(saved)).find(p=>p.wirelessLayout).svg,page.svg);

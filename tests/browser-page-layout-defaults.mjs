@@ -157,7 +157,7 @@ try{
  const sceneBox=key=>page.locator('#canvas svg').evaluate((svg,key)=>{const n=[...svg.querySelectorAll('[data-drawing-key="'+key+'"]')].find(n=>!n.closest('.transform-controls'));const b=n.getBBox(),m=svg.getCTM().inverse().multiply(n.getCTM());return {x:m.a*b.x+m.e,y:m.d*b.y+m.f,w:b.width*m.a,h:b.height*m.d};},key);
  const bodyKey='Core Network|device|sw-1|body',titleKey='Core Network|title|sw-1';
  const titleBefore=await sceneBox(titleKey),bodyBefore=await sceneBox(bodyKey);assert.ok(titleBefore.y+titleBefore.h<=bodyBefore.y+1,'the name starts above its device');
- await page.locator('#edit-drawing').click();const barBefore=await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height);await page.locator('#canvas svg [data-drawing-key="'+bodyKey+'"]').first().click({position:{x:8,y:8}});
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();const barBefore=await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height);await page.locator('#canvas svg [data-drawing-key="'+bodyKey+'"]').first().click({position:{x:8,y:8}});
  await page.waitForFunction(()=>document.querySelector('#drawing-selection').textContent==='1 selected');assert.ok(await page.locator('.edit-bars').evaluate(n=>n.getBoundingClientRect().height)<=barBefore+4,'selecting a device does not add a toolbar row, so the drawing does not move');
  await page.locator('#drawing-properties').click();const props=page.locator('#dialog'),namePosition=props.getByLabel('Name position (network pages)',{exact:true});
  assert.equal(await namePosition.inputValue(),'');assert.match(await namePosition.locator('option').first().textContent(),/Drawing default \(Above, left\)/);
@@ -166,7 +166,7 @@ try{
  assert.ok(bodyAfter.x+bodyAfter.w-(titleAfter.x+titleAfter.w)<bodyAfter.w/2,'toward the right edge');
  await page.keyboard.press('Control+z');await page.waitForFunction(key=>{const n=document.querySelector('#canvas svg [data-drawing-key="'+key+'"]');return !!n;},titleKey);
  const titleUndo=await sceneBox(titleKey);assert.ok(Math.abs(titleUndo.y-titleBefore.y)<1,'one Undo restores the name');
- await page.locator('#edit-drawing').click();
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')==='true')await page.locator('#edit-drawing').click();
  assert.deepEqual(errors,[]);
  await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['default decorations off','independent toggles','Undo/redo','save/reopen enabled and disabled','consecutive port pages','tight/transparent label backing','backing Undo/redo and save/reopen','backing cancel','whole wireless Letter fit','side-space AP placement and save/reopen','explicit readable continuation','device caption corners on the network page and per device','adaptive side cards at actual8.3pt and reopen','wireless fit Undo/redo and save/reopen'],names},null,2));
 }catch(error){await page.screenshot({path:resolve(output,'failure.png')});console.error('Browser errors:',errors);throw error;}finally{await browser.close();}
