@@ -36,9 +36,5 @@ export function portNumberBox(entries){
  const w=Math.min(Math.max(18,longest*6.2+5),horizontal-2),h=Math.min(16,vertical-2),size=Math.min(10,(w-4)/(longest*.62),(h-3)/1.1);
  return {w,h,size,readable:w>=10&&h>=10&&size>=6};
 }
-import {textWidth} from './diagram/labels.mjs';
-export function wrapPortText(input,width,size=12,bold=false){
- const lines=[];for(const part of String(input??'').split('\n')){let rest=part.trim();if(!rest){lines.push('');continue;}
-  while(textWidth(rest,size,bold)>width){let at=1;while(at<rest.length&&textWidth(rest.slice(0,at+1),size,bold)<=width)at++;const space=rest.lastIndexOf(' ',at);if(space>at*.45)at=space;lines.push(rest.slice(0,at));rest=rest.slice(at).trimStart();}lines.push(rest);
- }return lines;
-}
+import {wrapText} from './diagram/labels.mjs';
+export function wrapPortText(input,width,size=12,bold=false){return wrapText(input,width,size,bold);}
