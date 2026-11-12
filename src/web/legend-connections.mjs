@@ -45,3 +45,16 @@ export function changeLegendConnections(project,pages,type,details,style,extraEd
  next.layout.drawingEdits=legendEdits;
  return next;
 }
+// Change the type (or speed) of the chosen connections only: other
+// connections of their old type keep it. A moved line drops its own color so
+// it takes the new type's style; its bends, name and width stay.
+export function changeSelectedConnections(project,paths,details){
+ const records=[];for(const path of paths){if(!path?.sourceLink||records.some(record=>sameConnection(record.link,path.sourceLink)))continue;records.push({link:path.sourceLink,generatedDevice:path.generatedDevice});}
+ const changes={};for(const key of ['media','speed'])if(Object.hasOwn(details,key))changes[key]=cleanConnectionDetails({[key]:details[key]})[key];
+ const changed=records.filter(({link})=>Object.entries(changes).some(([key,value])=>value!==String(link[key]??(key==='media'?'unknown':''))));
+ const next={...project,devices:project.devices.slice(),links:project.links.slice(),layout:{...project.layout,drawingEdits:cleanDrawingEdits(project.layout?.drawingEdits)}};
+ for(const {link,generatedDevice} of changed){const index=next.links.findIndex(l=>sameConnection(l,link)),updated={...link,...changes};if(index<0)Object.assign(next,prepareConnection(next,updated,-1,generatedDevice));else next.links[index]={...next.links[index],...changes};}
+ const edits=next.layout.drawingEdits;for(const path of paths)if(changed.some(({link})=>sameConnection(link,path.sourceLink))&&edits[path.editKey]){const patch={...edits[path.editKey]};delete patch.color;delete patch.opacity;if(Object.keys(patch).length)edits[path.editKey]=patch;else delete edits[path.editKey];}
+ return {project:next,changed:changed.length};
+}
+

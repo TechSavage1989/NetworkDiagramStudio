@@ -80,8 +80,23 @@ export function cleanConnectionDetails({media,mediaCustom,speed,speedCustom}={})
 
 // This controls captions and colors only. Generic fiber descriptions do not
 // establish reach, and new cable families do not assert an optic form factor.
+// Connection types the user added (layout.connectionTypes): a link whose
+// cable type names one of them takes that type and its color, before any
+// built-in match ("Fiber backbone" stays its own type, not generic fiber).
+let customTypes=[];
+const hexColor=/^#[0-9a-f]{6}$/i;
+export function cleanConnectionTypes(raw){
+ const seen=new Set(),out=[];
+ for(const row of Array.isArray(raw)?raw.slice(0,100):[]){const name=typeof row?.name==='string'?row.name.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g,'').slice(0,60):'';if(!name||seen.has(name.toLowerCase())||name===customConnectionValue)continue;seen.add(name.toLowerCase());out.push({name,color:hexColor.test(row.color||'')?row.color.toUpperCase():'#707A83'});}
+ return out;
+}
+export function setCustomConnectionTypes(raw){customTypes=cleanConnectionTypes(raw);}
+export function customConnectionTypes(){return customTypes.slice();}
+// The cable type choices, with the user's own types before "Custom".
+export function cableTypeChoices(){const custom=customTypes.map(type=>[type.name,type.name]);return [...cableTypes.slice(0,-1),...custom,cableTypes.at(-1)];}
 export function connectionMediaInfo(input,access=false){
  const scalar=value=>Array.isArray(value)?value.map(scalar).join(', '):value!=null&&typeof value!=='object'?String(value):'',text=scalar(input).trim(),media=text.toLowerCase();
+ const own=customTypes.find(type=>type.name.toLowerCase()===media);if(own)return {name:own.name,color:own.color};
  if(/\baoc\b|active[ -]+optical[ -]+cable/.test(media))return {name:'AOC',color:'#815AC0'};
  if(/\baec\b|active[ -]+electrical[ -]+cable/.test(media))return {name:'AEC',color:'#000000'};
  if(/(?:\bactive[ -]*(?:dac|direct[ .-]?attach|twinax)|(?:dac|direct[ .-]?attach|twinax)[ -]*active\b)/.test(media))return {name:'Active DAC',color:'#000000',plug:'DAC',slot:'dac'};

@@ -17,6 +17,7 @@ import {logicalPages} from './logical.mjs';
 import {documentationMode,documentationSections,includeTrunkReference,interfaceAddresses,savedReportLayout,logicalInventoryColumns,logicalInventoryName} from './documentation.mjs';
 import {corePages} from './core.mjs';
 import {siteMapPages} from './site-map.mjs';
+import {setCustomConnectionTypes} from '../connection-types.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
 import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
 import {cleanPageNumbers,footerAllowance,pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage,printGeometry} from '../page-options.mjs';
@@ -915,6 +916,8 @@ function logical(project,db,options={}){
 }
 export function buildPages(project={},options={}){
   project=effectiveWirelessPaperProject(project);
+  // The project's own connection types name and color its links in every page.
+  setCustomConnectionTypes(project.layout?.connectionTypes);
   // Drafts shared with the cache are copied only when their page has to be
   // finished again; an unchanged page reuses its finished copy.
   const memo=finishedPageMemo(options.cache),sources=new Map();

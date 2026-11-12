@@ -38,11 +38,11 @@ import {deviceCaptionPlacement,setDeviceCaptionCorners,CAPTION_CORNERS,CAPTION_C
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
 import {changeLinkStyle,linkDefaults,linkWeight} from './link-styles.mjs';
-import {legendConnections,commonConnectionDetails,changeLegendConnections} from './legend-connections.mjs';
+import {legendConnections,commonConnectionDetails,changeLegendConnections,changeSelectedConnections} from './legend-connections.mjs';
 import {quickPagePaperLayout} from './quick-page-paper.mjs';
 import {visiblePagePaper,cleanPageNumbers,pageNumber,cleanPageSetup,newPageSetup,cleanPaper,paperSizes,pageFamilies,pageFamily,pageGeometry,printPageStyles,paperDimensions,printGeometry,DEFAULT_PAGE_MARGIN_MM} from './page-options.mjs';
 import {connectionPorts,prepareConnection,sameConnection} from './connection-edit.mjs';
-import {cableTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
+import {cableTypes,cableTypeChoices,customConnectionTypes,cleanConnectionTypes,linkSpeeds,connectionValue,connectionChoices,cleanConnectionDetails,customConnectionValue,connectionMediaInfo} from './connection-types.mjs';
 import {deviceKinds,deviceKindOptions,deviceKindLabel} from './device-types.mjs';
 import {hardwareComposition} from './hardware-composition.mjs';
 import {intersects,pathCrossesText} from './diagram/labels.mjs';
@@ -157,7 +157,7 @@ function syncDrawingSelection(){
  $('drawing-group').disabled=drawingSelection.size<2;$('drawing-ungroup').disabled=!(project.layout?.drawingGroups||[]).some(g=>g.keys.some(k=>drawingSelection.has(k)));
  syncQuickText(single);
  $('device-transform-tools').hidden=!editDrawing||single?.type!=='device';if(single?.type==='device')$('device-angle').value=Math.round((single.angle||0)*180/Math.PI*100)/100;
- $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
+ $('drawing-tools').hidden=!editDrawing;$('drawing-selection').textContent=drawingSelection.size+' selected';$('drawing-properties').disabled=drawingSelection.size!==1;$('drawing-connection-type').disabled=!selectedCables().length;$('drawing-clear').disabled=!drawingSelection.size;$('drawing-organize').disabled=working||!pages[active]?.items.some(i=>i.type==='path');const arrangeable=!!pages[active]?.coreDeviceIds&&!!pages[active]?.dynamic;$('drawing-arrange').disabled=working||!arrangeable;$('drawing-arrange').parentElement.title=arrangeable?'Re-arrange the devices on this network page. The saved device order is kept: down each column, then across.':'Arrangements apply to network diagram pages that use Dynamic / Fit all paper.';if(pages[active]?.coreDeviceIds)$('drawing-arrange').value=pageArrangement(project,pages[active]);
  for(const b of $('drawing-tools').querySelectorAll('[data-align]'))b.disabled=drawingSelection.size<(b.dataset.align.startsWith('space')?3:2);
  $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
  $('drawing-snap-label').disabled=!editDrawing||!selectedConnectionLabel();
@@ -691,9 +691,43 @@ function linkStyleOptions(selected){
  body.append(el('p','Applies to matching lines and legends throughout the drawing.','hint'));
  const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,width:widths[0]??current.weight??4,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});picker.bindWidth(width);
  const bar=actions(body);button(bar,'Save link style',()=>{const weight=width.value!==initialWidth?{weight:lineWidthValue(width)}:{};setLegendStyle(type,details?.value||{},{...captions.value,color:picker.value,opacity:picker.opacity,...weight});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
- button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1,weight:4});close();});button(bar,'Cancel',close);
+ button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1,weight:4});close();});button(bar,'New connection type…',()=>newConnectionType());button(bar,'Cancel',close);
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
+$('drawing-connection-type').onclick=()=>task(connectionTypeOptions);
+// The user's own connection types (layout.connectionTypes, with a link style
+// for color and width), and moving selected connections to another type
+// without restyling every other connection of their old type.
+function addConnectionType(layout,{name,color,weight}){
+ const list=cleanConnectionTypes([...(layout.connectionTypes||[]),{name,color}]);if(!list.some(type=>type.name===name))throw Error('Use a different name: that connection type already exists.');
+ layout.connectionTypes=list;layout.linkStyles={...layout.linkStyles,[name]:{...layout.linkStyles?.[name],color,...(Number.isFinite(weight)?{weight}:{}),title:name,lineTitle:name}};
+}
+function typeFields(body){
+ const name=field(body,'Connection type name',''),color=el('input');name.maxLength=60;color.type='color';color.value='#2A7AB0';color.id='new-connection-color';const label=el('label','Line color');label.htmlFor=color.id;body.append(label,color);
+ const width=field(body,'Line width','4');width.type='number';width.min=.5;width.max=40;width.step=.5;
+ return {read(){const text=name.value.trim();if(!text)throw Error('Enter a name for the connection type.');if(text.length>60)throw Error('Use a connection type name of 60 characters or fewer.');if(cableTypes.some(([value,label])=>[value,label].some(v=>String(v).toLowerCase()===text.toLowerCase()))||connectionMediaInfo(text).name!==text&&!customConnectionTypes().some(t=>t.name.toLowerCase()===text.toLowerCase()))throw Error('That name is a built-in connection type. Choose another name.');const weight=Number(width.value);if(!(weight>=.5&&weight<=40))throw Error('Line width must be between 0.5 and 40.');return {name:text,color:color.value.toUpperCase(),weight};}};
+}
+function newConnectionType(){
+ const body=modal('New connection type');body.append(el('p','Add your own connection type with its color and width. Choose it for any connection under Cable type, or select connections in Edit drawing and use Connection type….','hint'));
+ const fields=typeFields(body);
+ button(actions(body),'Add connection type',()=>{const value=fields.read(),before=project.layout;project.layout=structuredClone(project.layout||{});try{addConnectionType(project.layout,value);perform();}catch(error){project.layout=before;throw error;}close();say('Connection type '+value.name+' added.');},'primary');
+}
+const selectedCables=()=>(pages[active]?.items||[]).filter(item=>item.type==='path'&&item.sourceLink&&drawingSelection.has(item.editKey));
+function connectionTypeOptions(){
+ const paths=selectedCables();if(!paths.length)throw Error('Select one or more connections in Edit drawing first.');
+ const body=modal('Connection type');body.append(el('p',(paths.length===1?'1 connection':paths.length+' connections')+' selected. Only these change type; every other connection keeps its own.','hint'));
+ const current=[...new Set(paths.map(path=>String(path.sourceLink.media??'unknown')))],choices=[...cableTypeChoices().filter(([value])=>value!==customConnectionValue),['__new__','New connection type…']];
+ const select=field(body,'Connection type',current.length===1&&choices.some(([v])=>v===current[0])?current[0]:'',[['','Choose a type'],...choices]);
+ const extra=el('div');body.append(extra);let fields=null;select.onchange=()=>{extra.replaceChildren();fields=select.value==='__new__'?typeFields(extra):null;};
+ button(actions(body),'Apply to selected connections',()=>{
+  if(!select.value)throw Error('Choose a connection type.');
+  const before=project;let next=project;
+  try{
+   let media=select.value;if(media==='__new__'){const value=fields.read();next={...project,layout:structuredClone(project.layout||{})};addConnectionType(next.layout,value);media=value.name;}
+   const result=changeSelectedConnections(next,paths,{media});project=result.project;validateDrawing();perform();close();say(result.changed?(result.changed===1?'1 connection':result.changed+' connections')+' changed to '+media+'.':'The selected connections already use that type.');
+  }catch(error){project=before;throw error;}
+ },'primary');
+}
 
 function attachSettingsPreview(body,read,configure,{validate=false,selectedName=pages[active]?.name,viewState={}}={}){
  const source=structuredClone(project);
@@ -1337,7 +1371,7 @@ function reviewLinks(){
 function connectionFields(parent,link,{onMediaChange,mixed=false}={}){
  const keep='__keep_connection_value__',choices=(catalog,value)=>mixed&&value===null?[[keep,'Mixed - keep existing'],...connectionChoices(catalog,'')]:connectionChoices(catalog,value),initial=(catalog,value)=>mixed&&value===null?keep:connectionValue(catalog,value);
  const grid=el('div','','compact-fields');parent.append(grid);const cell=(title,value,options)=>{const box=el('div','','compact-field');grid.append(box);return {box,input:field(box,title,value,options)};};
- const media=cell('Cable type',initial(cableTypes,link.media),choices(cableTypes,link.media)),speed=cell('Link speed',initial(linkSpeeds,link.speed),choices(linkSpeeds,link.speed));
+ const types=cableTypeChoices(),media=cell('Cable type',initial(types,link.media),choices(types,link.media)),speed=cell('Link speed',initial(linkSpeeds,link.speed),choices(linkSpeeds,link.speed));
  const mediaCustom=cell('Custom cable type',link.media||''),speedCustom=cell('Custom link speed',link.speed||'');mediaCustom.input.maxLength=160;speedCustom.input.maxLength=80;
  function refresh(){mediaCustom.box.hidden=media.input.value!==customConnectionValue;speedCustom.box.hidden=speed.input.value!==customConnectionValue;try{onMediaChange?.(cleanConnectionDetails({media:media.input.value,mediaCustom:mediaCustom.input.value,speed:''}).media);}catch{}}
  media.input.onchange=refresh;mediaCustom.input.oninput=refresh;speed.input.onchange=refresh;refresh();
