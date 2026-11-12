@@ -276,8 +276,10 @@ function fillRadius(inv,plan){
  // Never smaller than the builder's own markers; the builder layout keeps those.
  return radius>=plan.style.markerRadius?Math.floor(radius*1000)/1000:null;
 }
+// Drawing-set maps (fill), like the compact style, set a two-row panel's rows
+// almost touching: their numbers go above the top row and below the bottom one.
 function groupPlan(inv,group,portWidth,style=normalStyle,fill=false){
- const ports=inv.ports.filter(port=>port.group===group.id),pitch=portWidth+(style.compact?1:2),faceHeight=portWidth*23.2/25.2,layout=group.socketLayout,rowsCount=Math.max(...layout.map(socket=>socket.row))+1,numberFont=style.numberFont,rowPitch=faceHeight+(style.compact&&rowsCount<=2?1.4:numberFont*1.2+(style.compact?3:6));
+ const ports=inv.ports.filter(port=>port.group===group.id),pitch=portWidth+(style.compact?1:2),faceHeight=portWidth*23.2/25.2,layout=group.socketLayout,rowsCount=Math.max(...layout.map(socket=>socket.row))+1,numberFont=style.numberFont,rowPitch=faceHeight+((style.compact||fill)&&rowsCount<=2?1.4:numberFont*1.2+(style.compact?3:6));
  // A configured-interface panel (an unconfirmed module) measures its heading,
  // which may wrap, before its rows.
  if(group.configuredInterfaces&&!group.socketLayout?.length){const width=Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),header=Math.max(24,wrapPortText(groupTitle(inv,group,width-14,style.groupFont,fill),width-14,style.groupFont,true).length*style.groupFont*1.2+8);return {group,ports,configured:true,width,header,style,height:header+3+Math.max(1,ports.length)*22};}

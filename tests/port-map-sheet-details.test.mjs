@@ -140,3 +140,11 @@ test('a trunk-policy * or disabled ! mark sits beside the port number and never 
  }
  assert.ok(marked.items.some(i=>i.value==='All VLANs allowed (trunk policy)'),'the key explains *');
 });
+
+test('port map rows sit almost touching, numbers above the top row and below the bottom row',()=>{
+ const ports=Array.from({length:48},(_,i)=>({name:'GigabitEthernet0/'+(i+1),state:'up',native:10}));
+ const page=buildPages({name:'Lab',links:[],devices:[{id:'sw',name:'LAB-SW',kind:'switch',vendor:'Cisco',model:'WS-C3560E-48PD-SF',vlans:[{id:10,name:'Lab'}],ports}]}).find(page=>page.switchportReport&&page.role==='onePage');
+ const face=n=>page.items.find(i=>i.reportPortRole==='native'&&i.reportPort==='GigabitEthernet0/'+n),number=n=>page.items.find(i=>i.portNumberRole==='text'&&i.reportPort==='GigabitEthernet0/'+n);
+ const top=face(1),bottom=face(2);assert.ok(bottom.y-(top.y+top.h)<=2,'gap between rows '+(bottom.y-(top.y+top.h)).toFixed(2));
+ assert.ok(number(1).y+number(1).h<=top.y+1e-6,'top number above its jack');assert.ok(number(2).y>=bottom.y+bottom.h-1e-6,'bottom number below its jack');
+});
