@@ -158,7 +158,7 @@ function arrangeCore(boxes,links,{mode='compact',weight=4,extraTracks=0,reserve=
   const area=w*h,aspect=Math.max(w,h)/Math.max(1,Math.min(w,h));
   return area*(1+.3*Math.max(0,aspect-3))*(1+.1*(local.length?distance/local.length:0)/Math.sqrt(area))*(targetAspect?1+.9*Math.abs(Math.log((w/h)/targetAspect)):1);
  };
- return layouts.map(layout=>({layout,score:score(layout)})).sort((a,b)=>a.score-b.score||a.layout.columns-b.layout.columns).map(choice=>choice.layout);
+ return layouts.map(layout=>({layout,score:score(layout)})).sort((a,b)=>a.score-b.score||a.layout.columns-b.layout.columns).map(choice=>Object.assign(choice.layout,{score:choice.score}));
 }
 // Routing is a pure function of the edges, anchors, equipment geometry and
 // options. Saved bend points, colors and labels are applied afterwards, so an
@@ -285,7 +285,7 @@ export function corePages(project,inventory,{portNumbers}={}){
   // modules turn out to their nearest side and continuation links leave left.
   const reserveFor=layout=>{if(layout.columns<2)return stableReserve;const first=new Set(layout.ids[0]),touching=measuredEdges.filter(e=>first.has(e.a)||first.has(e.b)||first.has(db.devices.get(e.a)?.owner)||first.has(db.devices.get(e.b)?.owner)).length;return Math.max(ROUTE_STYLE.pitch,railPitch)*Math.max(0,Math.ceil(touching/2)+away-4)+expansion/2;};
   const choices=dynamic&&!hasPositions?arrangeCore(owners.map(id=>({id,w:measured.get(id).width,h:measured.get(id).height+expansion})),measuredEdges,{mode:arrangement,weight:cableWeight,extraTracks:sheet.columnTracks||0,reserve:reserveFor,targetAspect:arrangement==='compact'?targetPageAspect(aliasProject,{name:sheet.name,family:'core'}):null}):[];
-  const packing=choices[Math.min(sheet.rank||0,choices.length-1)]||null;sheet.choices=choices.length;
+  const packing=choices[Math.min(sheet.rank||0,choices.length-1)]||null;sheet.choices=choices.length;sheet.choiceScores=choices.map(choice=>choice.score);
   sheet.packedColumns=packing?.columns||1;
   const measuredHeight=dynamic?(packing?.h??[...measured.values()].reduce((sum,m)=>sum+m.height+expansion,0)):0;
   // Off-page tags line up left of the rails; reserve their measured width.
@@ -441,8 +441,11 @@ export function corePages(project,inventory,{portNumbers}={}){
   if(error.code!=='CORE_LAYOUT_CAPACITY'||!sheet)throw error;
   if(project._organizeCandidate===true||project._organizeCandidate?.family==='core'&&project._organizeCandidate.name===sheet.name)throw error;
   // A compact page first tries the next measured arrangements at the standard
-  // rail pitch, so one crowded caption does not spread every cable apart.
-  if((sheet.choices||0)>1&&!sheet.ranked){if((sheet.rank||0)<Math.min(2,sheet.choices-1)){sheet.rank=(sheet.rank||0)+1;continue;}sheet.ranked=true;sheet.rank=0;}
+  // rail pitch, so one crowded caption does not spread every cable apart, but
+  // only one nearly as compact: a caption is never worth a sheet a third larger
+  // (on paper, one tall column prints everything far smaller). The best
+  // arrangement then makes room for the caption instead.
+  if((sheet.choices||0)>1&&!sheet.ranked){const next=(sheet.rank||0)+1,scores=sheet.choiceScores||[];if(next<=Math.min(2,sheet.choices-1)&&!(scores[next]>scores[0]*1.35)){sheet.rank=next;continue;}sheet.ranked=true;sheet.rank=0;}
   if(dynamic&&error.labelClearance>(sheet.labelClearance||12)){sheet.labelClearance=error.labelClearance;sheet.expansion=0;sheet.spreadHandoffs=false;continue;}
   // Then widen the gaps between the chosen columns.
   if(sheet.packedColumns>1&&!sheet.columnOnly&&(sheet.columnTracks||0)<4){sheet.columnTracks=(sheet.columnTracks||0)+2;continue;}
