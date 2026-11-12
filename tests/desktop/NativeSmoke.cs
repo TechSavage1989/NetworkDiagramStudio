@@ -159,7 +159,11 @@ internal sealed partial class Studio
     async Task CheckDrawingControls()
     {
         const string sw="#canvas g[data-device-id='sw-1'][data-drawing-key$='|body']";
-        await ClickEditorTarget("#edit-drawing");
+        // Drawings open in Edit drawing; turn it on only when it is off, and
+        // leave it as it was found.
+        var editing=await browser.CoreWebView2.ExecuteScriptAsync("document.getElementById('edit-drawing').getAttribute('aria-pressed')")=="\"true\"";
+        if(!editing)await ClickEditorTarget("#edit-drawing");
+        await RequireEditor("if(document.getElementById('edit-drawing').getAttribute('aria-pressed')!=='true')throw Error('Edit drawing is not on')","edit drawing on");
         await ClickEditorTarget(sw);
         await ClickEditorTarget("#canvas g[data-device-id='sw-2'][data-drawing-key$='|body']",1,8);
         await RequireEditor("if(document.getElementById('drawing-selection').textContent!=='2 selected'||document.getElementById('dialog').open)throw Error('Shift selection failed')","Shift multi-selection");
@@ -198,7 +202,7 @@ internal sealed partial class Studio
         await RequireEditor("const field=name=>[...document.querySelectorAll('#dialog-body label')].find(l=>l.textContent===name)?.control;field('New page name').value='Native access wing';[...document.querySelectorAll('#dialog button')].find(b=>b.textContent==='Move devices').click();if(document.getElementById('dialog').open||!document.querySelector('#tabs .active').textContent.includes('Native access wing')||!document.querySelector('#canvas svg').textContent.includes('Core Network'))throw Error('Move to page or off-page indicator failed')","move with off-page references");
         await ClickEditorTarget("#drawing-undo");
         await RequireEditor("document.querySelector('#tabs button').click();delete window.__gestureBefore","restore original page");
-        await ClickEditorTarget("#edit-drawing");
+        if(!editing)await ClickEditorTarget("#edit-drawing");
     }
     async Task CheckPageSetup()
     {
