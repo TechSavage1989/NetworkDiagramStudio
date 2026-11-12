@@ -20,5 +20,7 @@ test('exported cables carry only normalized scene endpoint associations',()=>{
  const pages=buildPages(rotationProject()),html=exportInteractiveHtml(pages);
  assert.match(pages[0].svg,/data-from-device="a" data-from-port="p1" data-to-device="b" data-to-port="p1"/);
  assert.match(html,/requestAnimationFrame/);assert.match(html,/linksByPort/);assert.match(html,/Escape to clear/);assert.match(html,/addEventListener\('focusin'/);
+ // Panning uses a temporary compositor layer; wheel zoom follows the scroll distance.
+ assert.match(html,/#drawing\.moving\{will-change:transform\}/);assert.ok(!/#drawing\{[^}]*will-change/.test(html),'the layer is not permanent');assert.match(html,/deltaMode/);
  assert.ok(!html.includes('"sourceLink":'));
 });

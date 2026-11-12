@@ -36,7 +36,18 @@ try{
  for(const result of await viewer.locator('#results button').allTextContents())assert.equal(result.split(text).length-1,1,'A search result must show each full label once, not title + tspans');
  await viewer.locator('#results button').first().click();assert.equal(await viewer.locator('#inspection').textContent(),text);
  await viewer.locator('#search').fill('NO_MATCH_123456789');assert.equal(await viewer.locator('#matches').textContent(),'0 matches');await viewer.locator('#search').fill('');await viewer.getByRole('button',{name:'Fit page',exact:true}).click();await settle();
- const before=await viewer.locator('#drawing').getAttribute('style'),box=await viewer.locator('#drawing text').first().boundingBox();await viewer.mouse.move(box.x+box.width/2,box.y+box.height/2);await viewer.mouse.down();await viewer.mouse.move(box.x+box.width/2+90,box.y+box.height/2+45,{steps:5});await viewer.mouse.up();assert.notEqual(await viewer.locator('#drawing').getAttribute('style'),before);assert.equal(await viewer.evaluate(()=>getSelection().toString()),'','Panning from SVG text must not create a native text selection');await viewer.locator('#stage').press('0');await settle();assert.equal(await viewer.evaluate(()=>getSelection().toString()),'');
+ const before=await viewer.locator('#drawing').getAttribute('style'),box=await viewer.locator('#drawing text').first().boundingBox();await viewer.mouse.move(box.x+box.width/2,box.y+box.height/2);await viewer.mouse.down();await viewer.mouse.move(box.x+box.width/2+90,box.y+box.height/2+45,{steps:5});
+ // A pan moves the drawing as one compositor layer, dropped soon after release so it repaints once.
+ assert.equal(await viewer.locator('#drawing').evaluate(d=>d.classList.contains('moving')&&getComputedStyle(d).willChange==='transform'),true,'Panning moves the drawing as one compositor layer');
+ await viewer.mouse.up();assert.notEqual(await viewer.locator('#drawing').getAttribute('style'),before);
+ await viewer.waitForFunction(()=>!document.getElementById('drawing').classList.contains('moving'),null,{timeout:3000});assert.equal(await viewer.locator('#drawing').evaluate(d=>getComputedStyle(d).willChange),'auto','The layer is dropped once the pan stops');assert.equal(await viewer.evaluate(()=>getSelection().toString()),'','Panning from SVG text must not create a native text selection');await viewer.locator('#stage').press('0');await settle();assert.equal(await viewer.evaluate(()=>getSelection().toString()),'');
+ // Wheel zoom follows the distance moved: a mouse notch is about 15%, a small touchpad step a fraction of that.
+ const scaleOf=()=>viewer.locator('#drawing').evaluate(d=>+/scale\(([^)]+)\)/.exec(d.style.transform)[1]);
+ const stageBox=await viewer.locator('#stage').boundingBox();await viewer.mouse.move(stageBox.x+stageBox.width/2,stageBox.y+stageBox.height/2);
+ let start=await scaleOf();await viewer.mouse.wheel(0,-100);await settle();const notch=await scaleOf()/start;assert.ok(notch>1.12&&notch<1.18,'one mouse notch zooms about 15%: '+notch);
+ start=await scaleOf();await viewer.mouse.wheel(0,-4);await settle();const small=await scaleOf()/start;assert.ok(small>1&&small<1.02,'a small touchpad step zooms a little: '+small);
+ assert.equal(await viewer.locator('#drawing').evaluate(d=>d.classList.contains('moving')),false,'zooming does not use the pan layer');
+ await viewer.locator('#stage').press('0');await settle();
  await viewer.screenshot({path:resolve(output,'interactive-html.png')});await viewer.setViewportSize({width:390,height:844});await settle();assert.ok(await viewer.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  // Malicious imported markup stays inert; embedded raster images and port metadata survive.
  const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=';
