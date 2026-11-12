@@ -57,6 +57,7 @@ import {openVisioCatalog,loadImageStencil} from './stencils.mjs';
 import {stencilFiles,visioFile,filePath,droppedFiles} from './stencil-files.mjs';
 import {cleanNativeArt} from './native-art.mjs';
 import {sampleSite} from './sample.mjs';
+import {SITE_MAP_DETAILS,cleanSiteMap,siteMapSettings} from './site-map-settings.mjs';
 import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reopenEvidence} from './evidence.mjs';
 
@@ -648,6 +649,21 @@ function portMapOptions(){
  button(actions(body),'Apply port map options',()=>{project.layout.portMap={...(style.value==='faceplate'?{mapStyle:'faceplate'}:{}),...(stencils.value==='builder'?{stencilSheets:false}:{}),presentation:format.value,density:density.value,repeatFaceplate:repeat.value==='repeat',detailFilter:filter.value,groupConsecutive:group.value==='group'};perform();close();say('Port map table options saved.');},'primary');
 }
 $('port-map-options').onclick=()=>task(portMapOptions);
+// The site map's own choices: card details, grouping and connection captions.
+function siteMapOptions(){
+ const body=modal('Site map options'),current=siteMapSettings(project),check=(parent,text,checked)=>{const row=el('label','','check-option'),input=el('input');input.type='checkbox';input.checked=checked;row.append(input,document.createTextNode(text));parent.append(row);return input;};
+ body.append(el('p','The site map shows the hardware hierarchy and the connections between devices, without port details. Edit drawing can move cards and edit any text.','hint'));
+ const box=el('fieldset','','site-map-details');box.append(el('legend','Details on each card'));
+ const details=SITE_MAP_DETAILS.map(([key,text])=>{const input=check(box,text,current.details.includes(key));input.value=key;return input;});body.append(box);
+ const aps=field(body,'Access points',current.accessPoints,[['grouped','One card per switch (for example, 12 access points)'],['each','A card for each access point'],['hidden','Leave out']]);
+ const endpoints=field(body,'Servers, phones and other devices',current.endpoints,[['each','A card for each device'],['grouped','One card per device type and switch'],['hidden','Leave out']]);
+ const direction=field(body,'Direction',current.direction,[['auto','Automatic - fit the page'],['down','Top to bottom'],['right','Left to right']]);
+ const captions=field(body,'Connection captions',current.linkLabels,[['speed','Link count and speed (for example, 2 × 10 Gbps LAG)'],['ports','Port names'],['none','None']]);
+ const wan=check(body,'Show WAN and internet handoffs',current.wan),loose=check(body,'Show devices without a recorded connection',current.unconnected);
+ body.append(el('p','To leave the site map out of the drawing set, open Layout & content, choose the Site Map page and clear Show this page.','hint'));
+ button(actions(body),'Apply site map options',()=>{project.layout||={};const next=cleanSiteMap({details:details.filter(i=>i.checked).map(i=>i.value),accessPoints:aps.value,endpoints:endpoints.value,linkLabels:captions.value,direction:direction.value,wan:wan.checked,unconnected:loose.checked});if(next)project.layout.siteMap=next;else delete project.layout.siteMap;perform();close();say('Site map options saved.');},'primary');
+}
+$('site-map-options').onclick=()=>task(siteMapOptions);
 function linkCaptionFields(body,type,{collapsible=false}={}){
  let defaults={},currentType=type;
  const current=project.layout?.linkStyles?.[type]||{},section=el(collapsible?'details':'div','','link-caption-fields');body.append(section);
@@ -1083,7 +1099,7 @@ function draw(prepared){
  else if(!canvas.querySelector('#welcome')){viewport.clear();const welcome=el('div');welcome.id='welcome';welcome.append(el('p','NEW DRAWING','eyebrow'),el('h2','Build a site diagram'),el('p','Import device configurations, Auvik reports or show-command captures, open a saved project, or explore the editable sample.'));const start=el('div','','welcome-actions');welcome.append(start);button(start,'Import files',()=>$('import').click(),'primary');button(start,'Open project',()=>$('open').click());button(start,'Open sample site',sample);canvas.replaceChildren(welcome);}
  for(const id of ['export','export-menu','print','svg'])$(id).disabled=!pages.length||working;
  typeHighlights.show(canvas.querySelector('svg'));
- $('port-map-options').hidden=!pages[active]?.portMap;syncDrawingSelection();
+ $('port-map-options').hidden=!pages[active]?.portMap;$('site-map-options').hidden=!pages[active]?.siteMap;syncDrawingSelection();
 }
 function cleanStencil(s){
  if(!object(s)||!safeKey(s.id)||typeof s.name!=='string'||!/^data:image\/(png|jpeg);base64,[0-9a-z+/]+=*$/i.test(s.dataUrl)||s.dataUrl.length>20e6||!(s.width>0&&s.height>0))throw Error('Invalid hardware shape.');

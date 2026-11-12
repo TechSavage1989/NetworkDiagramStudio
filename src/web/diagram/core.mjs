@@ -217,6 +217,7 @@ const numberMemo=new Map();
 // A small device (an access point, a generic symbol) may have a caption wider
 // than its body, so short names such as "AP-Library" never break mid-word.
 const captionRoom=node=>Math.max(node.w,180);
+export {handoffs as siteHandoffs};
 export function corePages(project,inventory,{portNumbers}={}){
  const geometry=pageGeometry(project,'core'),{width:baseW,height:baseH,dynamic}=geometry,BOTTOM=baseH-74;
  const db=handoffs(inventory,project.layout?.suppressedHandoffs),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];

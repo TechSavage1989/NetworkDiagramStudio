@@ -37,7 +37,9 @@ export function cachedDraftEntry(cache,family,project,build){
  // network pages; even line spacing affects network and wireless pages.
  delete input.layout.snapping;
  // Global text styles are applied when pages are finished, never by a planner.
- delete input.layout.textStyles;
+ // The site map measures its cards with the chosen sizes, so it keeps them.
+ if(family!=='sitemap')delete input.layout.textStyles;
+ if(family!=='sitemap')delete input.layout.siteMap;
  if(family!=='core'){delete input.layout.coreArrangement;delete input.layout.cableCaptions;delete input.layout.corePortNumbers;delete input.layout.deviceCaptions;}
  if(family!=='core'&&family!=='wireless'){delete input.layout.lineSpacing;delete input.layout.hopStyle;}
  // Source selection has already been composed into devices/links. Raw evidence
