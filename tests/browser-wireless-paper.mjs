@@ -53,7 +53,7 @@ try{
  await page.pdf({path:resolve(output,'two-stack-letter.pdf'),preferCSSPageSize:true,printBackground:true});
  // A locked Letter page still accepts a deliberate move past its edge.
  const locked=wirelessTwoStackSite({preset:'letter',fit:'adaptive',locked:true});await open('two-stack-locked.nds.json',locked);await goTo('Wireless Connections 1');
- await page.locator('#edit-drawing').click();const ap=page.locator('#canvas svg [data-drawing-key*="|device|ap2-16|"]').first();
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();const ap=page.locator('#canvas svg [data-drawing-key*="|device|ap2-16|"]').first();
  // Start on verified AP artwork after the edit toolbars' layout has settled, so
  // the press grabs the AP rather than starting a box selection on the background.
  const start=await page.evaluate(async()=>{await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));const group=document.querySelector('#canvas svg [data-device-id="ap2-16"]')||document.querySelector('#canvas svg [data-drawing-key*="|device|ap2-16|"]'),b=group.getBoundingClientRect();for(const fx of [.5,.35,.65,.2,.8])for(const fy of [.5,.35,.65,.2,.8]){const x=b.x+b.width*fx,y=b.y+b.height*fy,hit=document.elementFromPoint(x,y);if(hit&&group.contains(hit)&&!hit.closest('text'))return {x,y};}return {error:'No visible AP artwork',bounds:{x:b.x,y:b.y,w:b.width,h:b.height},hit:document.elementFromPoint(b.x+b.width/2,b.y+b.height/2)?.outerHTML.slice(0,160)};});

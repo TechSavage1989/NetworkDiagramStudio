@@ -81,9 +81,10 @@ const viewport=diagramViewport($('canvas'),{out:$('zoom-out'),inside:$('zoom-in'
  return false;
 },onBeforeInteraction:commitInlineEdit,onMoveStart:startDrawingMove,onBoxStart:startDrawingBox,onBackground:e=>{if(editDrawing&&!besidePick&&!e.shiftKey&&!e.ctrlKey&&!e.metaKey){drawingSelection.clear();syncDrawingSelection();}},onEdit:(key,e,target=e.target)=>{if(!besidePick&&!target.closest('.cable-controls'))editOnDoubleClick(key);}});
 const el=(tag,text='',cls='')=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
-const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false,pageSetup:newPageSetup()}});
+// New projects start with snapping on and US Letter paper for every page.
+const emptyProject=()=>({name:'Untitled site',devices:[],links:[],warnings:[],stencils:{},optics:{},layout:{order:[],corePages:[],coreExclude:[],includeAPs:false,pageSetup:newPageSetup(),snapping:{enabled:true}}});
 let discoveredStencils=[],stencilResults=[],stencilDevice=null,modalGeneration=0;const stencilIndexes=new Map(),openCatalogs=new Map();
-let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=false,drawingReady=false,displayedProject=null;
+let project=emptyProject(),pages=[],active=0,dirty=false,working=false,evidenceSnapshot=null,editDrawing=true,drawingReady=false,displayedProject=null;
 const pageCache=new Map(),buildDrawing=(source=scoped(),options={})=>buildPages(source,{...options,cache:pageCache});
 const drawingSelection=new Set(),projectHistory=new ProjectHistory(project);
 let siteRename=null,modalHistoryScope=null,modalHistoryRefresh=null,inlineCancel=null,inlineSession=null,settingsPreviewSession=null;

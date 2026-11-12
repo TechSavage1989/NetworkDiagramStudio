@@ -25,7 +25,7 @@ try{
  assert.ok(await legend.count(),'connection key line is visible on the network page');
  await legend.hover();
  assert.ok(await page.locator('#canvas svg path.diagram-cable.connection-type-active').count(),'hovering a connection type highlights matching cables');
- await page.locator('#edit-drawing').click();
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();
  // Edit drawing expands the wrapped toolbar and the canvas observer refits
  // the SVG. A forced click skips Playwright's stable/receives-events checks
  // and can hit the old legend position after that reflow. Use a real stable

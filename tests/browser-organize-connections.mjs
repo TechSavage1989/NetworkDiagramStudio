@@ -18,7 +18,7 @@ const analyze=()=>page.getByRole('button',{name:'Analyze connections',exact:true
 const apply=()=>page.getByRole('button',{name:'Apply layout',exact:true});
 async function runAnalysis(){await analyze().click();await page.waitForFunction(()=>!document.querySelector('.organize-results').hidden&&!document.querySelector('.organize-check input').disabled,null,{timeout:20000});}
 try{
- await page.goto(url);await page.locator('#project-file').setInputFiles(fixture);await page.waitForSelector('#canvas svg');await page.locator('#edit-drawing').click();assert.equal(await page.locator('#drawing-organize').isVisible(),true);assert.equal(await page.locator('#drawing-organize').isEnabled(),true);
+ await page.goto(url);await page.locator('#project-file').setInputFiles(fixture);await page.waitForSelector('#canvas svg');if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();assert.equal(await page.locator('#drawing-organize').isVisible(),true);assert.equal(await page.locator('#drawing-organize').isEnabled(),true);
  const baseline=await scene('#canvas svg');assert.equal(await page.locator('#drawing-undo').isDisabled(),true);
  await page.locator('#drawing-organize').click();assert.equal(await page.locator('#dialog-title').textContent(),'Organize connections');assert.equal(await page.getByLabel('Compact device positions').isChecked(),true);assert.equal(await page.getByLabel('Keep manual cable bends').isChecked(),true);assert.equal(await apply().isDisabled(),true);
  // Abort in the first yielded work interval, before any candidate is applied.

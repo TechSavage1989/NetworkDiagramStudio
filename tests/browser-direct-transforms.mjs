@@ -43,7 +43,7 @@ const panToText=async selector=>{
  throw Error('Could not pan to text using the visible canvas: '+selector);
 };
 try{
- await page.locator('#sample').click();await page.waitForSelector('#canvas svg');await page.locator('#edit-drawing').click();
+ await page.locator('#sample').click();await page.waitForSelector('#canvas svg');if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();
  const text=page.locator('#canvas text[data-drawing-key]').filter({hasText:'Harbor Workshop'}).first();await text.click();
  assert.equal(await page.locator('#quick-text-tools').isVisible(),true);assert.equal(await page.locator('[data-transform]').count(),5);
  const key=await text.getAttribute('data-drawing-key');await page.locator('#quick-text-angle').fill('15');await page.locator('#quick-text-angle').press('Tab');

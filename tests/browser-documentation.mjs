@@ -58,7 +58,7 @@ try{
  assert.ok(accessPoints.length>0&&switches.length>0,'Wireless capture contains real sample equipment');
  await capture('compact-wireless',{switches:switches.map(device=>device.name),accessPointCount:accessPoints.length,accessPoints:accessPoints.map(device=>device.name),connections:await page.locator('#canvas path.diagram-cable').count()});
 
- await choosePage('Core network');await page.locator('#edit-drawing').click();await settle();await fit();
+ await choosePage('Core network');if(await page.locator('#edit-drawing').getAttribute('aria-pressed')!=='true')await page.locator('#edit-drawing').click();await settle();await fit();
  await page.locator('#drawing-organize').click();await page.getByRole('button',{name:'Analyze connections',exact:true}).click();
  await page.waitForFunction(()=>!document.querySelector('.organize-results').hidden&&!document.querySelector('.organize-check input').disabled,null,{timeout:60000});
  assert.equal(await page.locator('.organize-metrics tbody tr').count(),4);

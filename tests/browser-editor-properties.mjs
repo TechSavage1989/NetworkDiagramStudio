@@ -17,6 +17,7 @@ const pointer=async locator=>{const box=await locator.boundingBox();assert.ok(bo
 try{
  await fresh();await page.screenshot({path:resolve(output,'hero.png')});
  // A legend key highlights and double-clicks even before Edit drawing is on.
+ if(await page.locator('#edit-drawing').getAttribute('aria-pressed')==='true')await page.locator('#edit-drawing').click();
  const legend=page.locator('#canvas rect.diagram-legend-line[data-link-type="SR fiber"]'),legendKey=await legend.getAttribute('data-drawing-key'),at=await pointer(legend);
  await page.mouse.move(at.x,at.y);await page.waitForFunction(key=>document.querySelector('rect.diagram-legend-line.cable-hover')?.getAttribute('data-drawing-key')===key,legendKey);
  assert.equal(await legend.getAttribute('tabindex'),null);assert.equal(await page.locator('#edit-drawing').getAttribute('aria-pressed'),'false');
