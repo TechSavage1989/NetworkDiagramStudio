@@ -64,6 +64,11 @@ internal sealed partial class Studio : Form
     {
         updater = client ?? new Updater();
         token = nonce; Text = "NetworkDiagramStudio"; Width = 1380; Height = 900; MinimumSize = new Size(720, 520);
+#if !NDS_TEST_HOST
+        // Reopen at the last size and position; the native test host keeps the default window.
+        WindowPlacement.Restore(this);
+        FormClosing += (_, _) => WindowPlacement.Save(this);
+#endif
         Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
         Controls.Add(browser); Controls.Add(strip); strip.Controls.AddRange([status, check, summary, notes, download, install]);
         var updateDetails=ButtonOf("Update details");strip.Controls.Add(updateDetails);

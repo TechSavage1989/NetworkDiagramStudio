@@ -214,6 +214,9 @@ function moduleLegend(page,project){
  }if(Object.keys(inherited).length)for(const target of [page,...extra])applyDrawingEdits(target,project);return extra;
 }
 const numberMemo=new Map();
+// A small device (an access point, a generic symbol) may have a caption wider
+// than its body, so short names such as "AP-Library" never break mid-word.
+const captionRoom=node=>Math.max(node.w,180);
 export function corePages(project,inventory,{portNumbers}={}){
  const geometry=pageGeometry(project,'core'),{width:baseW,height:baseH,dynamic}=geometry,BOTTOM=baseH-74;
  const db=handoffs(inventory,project.layout?.suppressedHandoffs),layout=project.layout||{},excluded=new Set(layout.coreExclude||[]),custom=layout.corePages||[];
@@ -320,10 +323,10 @@ export function corePages(project,inventory,{portNumbers}={}){
    const d=viewDevice(sheet,id),m=pageSizes.get(id),position=packing?.positions.get(id),b=bounds(d,(position?TOP+position.y:row)+m.top*scale,width,sidebar.bodyLeft+(position?position.x-(width-bounds(d,0,width)[2])/2:0));b[3]=m.body*scale;
    const node=addDevice(page,pageProject,d,b,'core-'+i,{fitWidth:d.kind!=='handoff',...m.equipment});nodes.set(id,node);
    if(d.kind!=='handoff'){
-    const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(node.w,textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleAt=captionCorner(node,deviceCaptionPlacement(pageProject,id).name,titleWidth,titleHeight);
+    const titleKey=page.name+'|title|'+id,titlePatch=pageProject.layout?.drawingEdits?.[titleKey]||{},titleValue=titlePatch.value??name(d),titleSize=titlePatch.size||18,titleWidth=titlePatch.w||Math.min(captionRoom(node),textWidth(titleValue,titleSize,titlePatch.bold??true)),titleHeight=Math.max(titlePatch.h||23,wrapPortText(titleValue,titleWidth,titleSize,titlePatch.bold??true).length*titleSize*1.2),titleAt=captionCorner(node,deviceCaptionPlacement(pageProject,id).name,titleWidth,titleHeight);
     label(items,titleAt.x,titleAt.y,titleWidth,titleHeight,titleValue,titleSize,titlePatch.bold??true,C.ink,titleAt.align);Object.assign(items.at(-1),{full:true,titleOwner:id,editKey:titleKey});
     const detail=deviceDetails(d,project);
-    const detailKey=page.name+'|detail|'+id,detailPatch=pageProject.layout?.drawingEdits?.[detailKey]||{},detailValue=detailPatch.value??detail,detailSize=detailPatch.size||12,detailWidth=detailPatch.w||Math.min(node.w,textWidth(detailValue,detailSize,detailPatch.bold)),detailHeight=Math.max(detailPatch.h||18,wrapPortText(detailValue,detailWidth,detailSize,detailPatch.bold).length*detailSize*1.2);
+    const detailKey=page.name+'|detail|'+id,detailPatch=pageProject.layout?.drawingEdits?.[detailKey]||{},detailValue=detailPatch.value??detail,detailSize=detailPatch.size||12,detailWidth=detailPatch.w||Math.min(captionRoom(node),textWidth(detailValue,detailSize,detailPatch.bold)),detailHeight=Math.max(detailPatch.h||18,wrapPortText(detailValue,detailWidth,detailSize,detailPatch.bold).length*detailSize*1.2);
     const detailAt=captionCorner(node,deviceCaptionPlacement(pageProject,id).info,detailWidth,detailHeight);
     label(items,detailAt.x,detailAt.y,detailWidth,detailHeight,detailValue,detailSize,detailPatch.bold??false,C.muted,detailAt.align);Object.assign(items.at(-1),{full:true,titleOwner:id,titleSlot:'detail',editKey:detailKey});
    }

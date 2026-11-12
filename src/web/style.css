@@ -445,3 +445,12 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
 }
 /* Port map details (double-click a device on a port map page). */
 .port-map-detail-group{border:1px solid var(--rule);border-radius:8px;padding:8px 12px 10px;margin:10px 0 0}.port-map-detail-group legend{font-weight:600;padding:0 4px}
+/* Quick paper: lock toggle and All pages. */
+#active-page-lock{padding:3px 9px;font-size:12px;min-width:0}
+#active-page-lock[aria-pressed="true"]{background:#16364a;color:#fff;border-color:#16364a}
+.quick-page-paper .quick-all{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;white-space:nowrap}
+.quick-page-paper .quick-all input{margin:0}
+/* Global text styles: the category being edited glows on the preview page. */
+.settings-preview-stage text[data-preview-highlight]{fill:#c2410c!important;stroke:#fde047;stroke-width:4px;stroke-linejoin:round;paint-order:stroke}
+.settings-preview-stage text[data-preview-highlight] tspan{fill:#c2410c!important}
+.settings-preview-highlight{margin:2px 0 6px;font-size:12px;font-weight:600;color:#9a3412}

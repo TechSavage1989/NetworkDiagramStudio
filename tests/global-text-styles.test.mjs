@@ -61,3 +61,14 @@ test('category sizes are actual point sizes that replace a legacy scale',()=>{
  assert.ok(Math.abs(big.w-150*16/14)<1e-9,'the text box follows its new size');
  assert.equal(edited.size,11,'an individually edited size stays');
 });
+
+test('a changed text style replaces that property on individually edited text; other edits stay',async()=>{
+ const {globalTextOverrides}=await import('../src/web/global-text-styles.mjs');
+ const pages=[{items:[{type:'text',labelRole:'port',editKey:'P|a',size:12},{type:'text',labelRole:'port',editKey:'P|b',size:12},{type:'text',pageTitle:true,editKey:'P|title',size:30}]}];
+ const edits={'P|a':{size:20,color:'#112233',x:5},'P|b':{size:22},'P|title':{size:40}};
+ const after=globalTextOverrides(pages,{},{portLabels:{size:9}},edits);
+ assert.deepEqual(after['P|a'],{color:'#112233',x:5},'the size follows the new style, the color and position stay');
+ assert.equal(after['P|b'],undefined,'an edit with only the replaced property is removed');
+ assert.deepEqual(after['P|title'],{size:40},'other categories keep their edits');
+ assert.equal(globalTextOverrides(pages,{portLabels:{size:9}},{portLabels:{size:9}},edits),edits,'no change, no replacement');
+});

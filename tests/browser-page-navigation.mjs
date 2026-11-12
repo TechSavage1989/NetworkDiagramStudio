@@ -22,7 +22,7 @@ try{
  assert.equal(await quickPaper.inputValue(),'letter');
  await quickOrientation.selectOption('portrait');
  assert.equal(await quickOrientation.inputValue(),'portrait');
- assert.match(await page.locator('#active-page-paper-status').textContent(),/Unlocked · Auto-fit/);
+ assert.match(await page.locator('#active-page-paper-status').textContent(),/Auto-fit/);assert.equal((await page.locator('#active-page-lock').textContent()).trim(),'Unlocked');assert.equal(await page.locator('#active-page-lock').getAttribute('aria-pressed'),'false');
  await page.locator('#canvas').click({position:{x:10,y:10}});await page.keyboard.press('Control+z');
  await page.waitForFunction(()=>document.getElementById('active-page-orientation').value==='landscape');
  await page.keyboard.press('Control+z');

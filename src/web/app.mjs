@@ -33,7 +33,7 @@ import {safeCoreMoveOffsets,drawingObjects,drawingBounds,moveDrawingItems,moveme
 import {addCableBends,moveCablePoint,removeCablePoint,validCable} from './cable-edit.mjs';
 import {cableControls} from './cable-controls.mjs';
 import {connectionTypeForSelection,connectionTypeHighlights} from './connection-type-highlights.mjs';
-import {globalTextCategories,cleanGlobalTextStyles,globalTextCategory,TEXT_STYLE_PT} from './global-text-styles.mjs';
+import {globalTextCategories,cleanGlobalTextStyles,globalTextCategory,globalTextOverrides,TEXT_STYLE_PT} from './global-text-styles.mjs';
 import {deviceCaptionPlacement,setDeviceCaptionCorners,CAPTION_CORNERS,CAPTION_CORNER_LABELS} from './device-captions.mjs';
 import {movementStep,selectedInBox,moveAnchors} from './point-tools.mjs';
 import {colorPicker} from './color-picker.mjs';
@@ -673,7 +673,7 @@ function attachSettingsPreview(body,read,configure,{validate=false,selectedName=
 }
 function globalTextStyleOptions(){
  const body=modal('Global text styles');
- body.append(el('p','Set an actual font size in points, plus color, weight and alignment, for each category across this project. Leave a size blank to keep the built-in sizes. Sizes are at full drawing size: a page fitted to smaller paper prints proportionally smaller, as shown under each size. Individually edited text keeps its own settings; exported diagrams use the same styles.','hint'));
+ body.append(el('p','Set an actual font size in points, plus color, weight and alignment, for each category across this project. Leave a size blank to keep the built-in sizes. Sizes are at full drawing size: a page fitted to smaller paper prints proportionally smaller, as shown under each size. Changing a style here applies to every text of that category, including text you edited individually; edit a text afterwards to override it again. Exported diagrams use the same styles.','hint'));
  const presets=cleanGlobalTextStyles(project.layout?.textStyles),controls=[],page=pages[active];
  const span=values=>{const lo=roundPt(Math.min(...values)),hi=roundPt(Math.max(...values));return (lo===hi?lo:lo+'–'+hi)+' pt';};
  const median=values=>[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
@@ -720,13 +720,18 @@ function globalTextStyleOptions(){
  };
  button(bar,'Apply all text styles',()=>{
   const previous=project.layout||{},cleaned=collectStyles();
-  project.layout={...previous,textStyles:cleaned};
+  project.layout={...previous,textStyles:cleaned,drawingEdits:globalTextOverrides(pages,previous.textStyles,cleaned,previous.drawingEdits||{})};
   let prepared;try{prepared=validateDrawing();}catch(error){project.layout=previous;throw error;}
   perform('text-styles',prepared);close();say('Global text styles saved for all drawing pages. Undo restores the previous styles.');
  },'primary');
  button(bar,'Reset all styles',()=>{for(const c of controls){c.size.value='';c.color.value='';c.weight.value='default';c.align.value='default';c.describe();}});
  button(bar,'Cancel',close);
- attachSettingsPreview(body,collectStyles,(draft,styles)=>{draft.layout={...draft.layout,textStyles:styles};},{validate:true});
+ const session=attachSettingsPreview(body,collectStyles,(draft,styles)=>{draft.layout={...draft.layout,textStyles:styles};},{validate:true});
+ // Opening or working in a category highlights the text it styles on the preview.
+ const focusCategory=(id,title)=>session.highlight(id?item=>globalTextCategory(item)===id:null,title?.toLowerCase());
+ for(const [index,section] of [...rows.children].entries()){const [id,title]=globalTextCategories[index];
+  section.addEventListener('toggle',()=>{if(section.open)focusCategory(id,title);else if(![...rows.children].some(other=>other.open))focusCategory(null);});
+  section.addEventListener('focusin',()=>focusCategory(id,title));}
 }
 $('global-text-styles').onclick=()=>task(globalTextStyleOptions);
 
@@ -740,33 +745,41 @@ function layoutOptions(selected=pages[active]?.name){
 }
 $('page-layout').onclick=()=>task(()=>layoutOptions());
 function syncQuickPagePaper(){
- const page=pages[active],select=$('active-page-paper'),orientation=$('active-page-orientation'),status=$('active-page-paper-status');
+ const page=pages[active],select=$('active-page-paper'),orientation=$('active-page-orientation'),lock=$('active-page-lock'),all=$('active-page-all'),status=$('active-page-paper-status');
  if(!select.options.length)for(const [value,label] of [['dynamic','Dynamic / Fit all'],...paperSizes]){const option=el('option',value==='custom'?'Custom…':label);option.value=value;select.append(option);}
  const paper=visiblePagePaper(project,page),fit=cleanPageSetup(project.layout?.pageSetup).visible.fitMode;
  select.value=paper.preset;orientation.value=paper.orientation;
  select.disabled=working||!page||!drawingReady;orientation.disabled=select.disabled||paper.preset==='dynamic';
- status.textContent=page?(paper.locked?'Locked':'Unlocked')+' · '+(fit==='preserve'?'Preserve layout':'Auto-fit'):'';
- status.title='Applies to this page only. Paper size changes retain the shown lock and fit behavior. Use Paper & print to change them or apply to more pages.';
+ // Lock toggles the physical page size; Dynamic pages have nothing to lock.
+ lock.disabled=select.disabled||paper.preset==='dynamic';lock.setAttribute('aria-pressed',String(paper.locked===true));lock.textContent=paper.locked?'Locked':'Unlocked';
+ lock.title=paper.preset==='dynamic'?'Choose a paper size to lock the page':paper.locked?'Unlock the physical page size':'Lock the physical page size';
+ all.disabled=select.disabled;
+ status.textContent=page?(fit==='preserve'?'Preserve layout':'Auto-fit'):'';
+ status.title=all.checked?'Changes apply to every page and replace page-specific paper settings.':'Changes apply to this page only and override the all-pages setting. Tick All pages to change every page.';
 }
 function changeQuickPagePaper(patch){
  if(!commitInlineEdit()){syncQuickPagePaper();return;}
  if(patch.preset==='custom'){syncQuickPagePaper();pageOptions('custom');return;}
  const page=pages[active];if(!page)return;
- const before=project.layout;project.layout=quickPagePaperLayout(before,page,patch);
+ const all=$('active-page-all').checked,before=project.layout;project.layout=quickPagePaperLayout(before,page,patch,{all});
  let prepared;try{prepared=buildDrawing();}catch(error){project.layout=before;syncQuickPagePaper();throw error;}
+ // A locked page keeps the presentation it was locked with.
+ for(const updated of prepared)if(updated.pageLockFrame&&(all||updated.name===page.name))project.layout.pageSetup.visible.lockFrames[updated.name]=updated.pageLockFrame;
  const updated=prepared.find(item=>item.name===page.name);
- if(updated?.pageLockFrame)project.layout.pageSetup.visible.lockFrames[page.name]=updated.pageLockFrame;
  if(updated)active=prepared.indexOf(updated);
  perform('page-options',prepared);viewport.fit();
- say('Paper updated for '+(page.displayName||page.name)+' only. Use Paper & print for custom dimensions, locking or other pages.');
+ const what=patch.locked!==undefined?(patch.locked?'Page locked':'Page unlocked'):'Paper updated';
+ say(all?what+' on every page.':what+' for '+(page.displayName||page.name)+' only. Tick All pages to change every page.');
 }
 $('active-page-paper').onchange=()=>{const preset=$('active-page-paper').value;task(()=>changeQuickPagePaper({preset}));};
 $('active-page-orientation').onchange=()=>{const orientation=$('active-page-orientation').value;task(()=>changeQuickPagePaper({orientation}));};
+$('active-page-lock').onclick=()=>{const locked=$('active-page-lock').getAttribute('aria-pressed')!=='true';task(()=>changeQuickPagePaper({locked}));};
+$('active-page-all').onchange=()=>syncQuickPagePaper();
 function pageOptions(initialPreset){
  const p=cleanPageNumbers(project.layout?.pageNumbers),setup=cleanPageSetup(effectiveWirelessPaperProject(project).layout?.pageSetup),body=modal('Paper & print');
  body.append(el('p','Change the visible page proportions for all drawings, a page group or one page. Paper layout below decides how the drawings use the sheet; Optimize for paper arranges and sizes every page to print as large and readable as the sheet allows.','hint'));
  body.append(el('p','The preview shows the visible drawing page, not a separate Print/PDF sheet. Print-paper settings can differ without changing this preview; check Print/PDF before printing. Use Preview page to inspect other affected sheets.','hint'));
- const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (drawing default)']]);
+ const target=field(body,'Apply visible page proportions to','page',[['page','Individual page'],['group','Page group'],['all','All pages (replaces page and group settings)']]);
  const groupRow=el('div'),pageRow=el('div');body.append(groupRow,pageRow);
  const group=field(groupRow,'Page group',familyOf(pages[active]),pageFamilies.map(([key,label])=>[key,key==='ports'?'Port maps and inventory':label])),page=field(pageRow,'Individual page',String(active),pages.map((item,i)=>[String(i),(item.displayName||item.name)+'  ('+(pageFamilies.find(([id])=>id===familyOf(item))?.[1]||familyOf(item))+')']));
  const paperRow=el('div','','form-columns');body.append(paperRow);
@@ -779,21 +792,36 @@ function pageOptions(initialPreset){
  const preview=el('p','','page-size-preview');body.append(preview);
  // One Paper layout choice drives every page family: the content fit mode
  // (network packing, port-map fitting, report sheets) and the wireless plan.
- const visible=setup.visible,paperLayouts={optimize:['optimize','adaptive'],continue:['optimize','readable'],'keep-wireless':['optimize','layout'],preserve:['preserve','layout']};
- const currentLayout=visible.fitMode==='preserve'?'preserve':visible.wirelessFit==='readable'?'continue':visible.wirelessFit==='layout'?'keep-wireless':'optimize';
- const paperLayout=field(body,'Paper layout',currentLayout,[['optimize','Optimize for paper (everything as large and readable as the sheet allows)'],['continue','Optimize for paper, continuing wireless sheets to keep AP text at least 8 pt'],['keep-wireless','Optimize for paper, but keep wireless arrangements as drawn'],['preserve','Keep the existing layout (change only the page boundary)']]);
- paperLayout.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});
- const wirelessStack=field(body,'Wireless stack view',visible.wirelessStack||'whole',[['whole','Whole stack (unless text would print over 30% smaller)'],['members','Only stack members with AP links (larger text)']]);
+ // Paper layout is one general choice; the wireless-only choices sit in their
+ // own Wireless pages section.
+ const visible=setup.visible;
+ const paperLayout=field(body,'Paper layout',visible.fitMode==='preserve'?'preserve':'optimize',[['optimize','Optimize for paper (every page as large and readable as the sheet allows)'],['preserve','Keep the existing layout (change only the page boundary)']]);
  const pageMargin=field(body,'Page margin (mm)',Number.isFinite(visible.marginMm)?visible.marginMm:'');pageMargin.type='number';pageMargin.min=0;pageMargin.max=50;pageMargin.step=.5;pageMargin.placeholder=DEFAULT_PAGE_MARGIN_MM+' (default)';
- body.append(el('p','Optimize for paper uses the whole sheet on every page: network pages choose the arrangement that suits the sheet, port maps grow their jacks to fill it, and every access point stays on its switch\'s sheet with the APs placed above, below or beside the stack, wherever they print largest. Continuing wireless sheets instead splits a switch\'s APs across sheets to keep AP details at 8 pt. Keeping wireless arrangements fits them to the paper as drawn. Manually positioned devices and labels retain their saved positions. Page margin is the blank border around every drawing page; leave it empty for the automatic margin.','hint'));
+ body.append(el('p','Optimize for paper arranges and sizes every page for its sheet; manually positioned devices and labels keep their saved positions. Page margin is the blank border on every page edge.','hint'));
+ const wirelessPages=el('details','','wireless-paper-options');wirelessPages.append(el('summary','Wireless pages'));body.append(wirelessPages);
+ const wirelessFit=field(wirelessPages,'Wireless layout',visible.wirelessFit==='readable'?'readable':visible.wirelessFit==='layout'?'layout':'adaptive',[['adaptive','One sheet per switch, as large as the paper allows'],['readable','More sheets when needed to keep AP text at 8 pt'],['layout','Keep the wireless arrangement as drawn']]);
+ wirelessFit.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});paperLayout.addEventListener('change',()=>{visible.wirelessFitExplicit=true;});
+ const wirelessStack=field(wirelessPages,'Wireless stack view',visible.wirelessStack||'whole',[['whole','Whole stack (unless text would print over 30% smaller)'],['members','Only stack members with AP links (larger text)']]);
+ wirelessPages.append(el('p','With Optimize for paper, every access point stays on its switch\'s sheet, placed above, below or beside the stack wherever it prints largest. More sheets splits a switch\'s access points so their details stay at 8 pt.','hint'));
+ const syncWireless=()=>{wirelessFit.disabled=paperLayout.value==='preserve';};paperLayout.addEventListener('change',syncWireless);syncWireless();
  body.append(el('p','Keep the existing layout changes the page boundary without resizing or repacking content. A locked physical page keeps its dimensions and saved presentation scale; you can still move and resize content beyond its edges. Off-page content stays editable, but print/PDF and page-sized exports may clip it. Choosing a paper size does not enable the lock.','hint'));
  let selectedScope=target.value,selectedGroup=group.value,selectedPage=pages[active]?.name||'';
  const lookup=()=>selectedScope==='all'?visible.default:selectedScope==='group'?visible.groups[selectedGroup]:visible.pages[selectedPage];
  function store(){
   const inherit=preset.value==='inherit',value=cleanPaper({preset:preset.value,locked:paperLock.checked,orientation:orientation.value,widthMm:+width.value,heightMm:+height.value});
   if(selectedScope==='all')visible.default=value;
-  else if(selectedScope==='group'){if(inherit)delete visible.groups[selectedGroup];else visible.groups[selectedGroup]=value;}
-  else if(selectedPage){if(inherit)delete visible.pages[selectedPage];else visible.pages[selectedPage]=value;}
+  else if(selectedScope==='group'){if(inherit)delete visible.groups[selectedGroup];else visible.groups[selectedGroup]=value;if(JSON.stringify(visible.groups[selectedGroup])!==JSON.stringify(original.groups[selectedGroup]))edited.add('group:'+selectedGroup);}
+  else if(selectedPage){if(inherit)delete visible.pages[selectedPage];else visible.pages[selectedPage]=value;if(JSON.stringify(visible.pages[selectedPage])!==JSON.stringify(original.pages[selectedPage]))edited.add('page:'+selectedPage);}
+ }
+ // A change to All pages is global: on Apply it replaces the same settings on
+ // every page group and page not edited here, which keep their other settings.
+ // A later page or group change overrides it again.
+ const original=structuredClone({default:visible.default,groups:visible.groups,pages:visible.pages}),edited=new Set();
+ function applyGlobalPaper(){
+  const changed=Object.keys({...original.default,...visible.default}).filter(key=>JSON.stringify(original.default[key])!==JSON.stringify(visible.default[key]));if(!changed.length)return;
+  const patch=current=>{const paper=cleanPaper({...current,...Object.fromEntries(changed.map(key=>[key,visible.default[key]]))});if(paper.preset==='dynamic')paper.locked=false;return paper;};
+  for(const key of Object.keys(visible.groups))if(!edited.has('group:'+key))visible.groups[key]=patch(visible.groups[key]);
+  for(const key of Object.keys(visible.pages))if(!edited.has('page:'+key))visible.pages[key]=patch(visible.pages[key]);
  }
  function update(){
   const inherited=preset.value==='inherit';
@@ -841,7 +869,7 @@ function pageOptions(initialPreset){
   if(pageMargin.value!==''&&(!Number.isFinite(+pageMargin.value)||+pageMargin.value<0||+pageMargin.value>50))throw Error('Enter a page margin from 0 to 50 mm, or leave it empty for automatic.');
   if(pageMargin.value==='')delete visible.marginMm;else visible.marginMm=+pageMargin.value;
   if(wirelessStack.value==='members')visible.wirelessStack='members';else delete visible.wirelessStack;
-  store();[visible.fitMode,visible.wirelessFit]=paperLayouts[paperLayout.value];visible.lockFrames={};visible.editFrames={};
+  store();applyGlobalPaper();[visible.fitMode,visible.wirelessFit]=paperLayout.value==='preserve'?['preserve','layout']:['optimize',wirelessFit.value];visible.lockFrames={};visible.editFrames={};
   setup.printPaper=printSize.value==='drawing'?null:cleanPaper({preset:printSize.value,orientation:printOrientation.value,widthMm:+printWidth.value,heightMm:+printHeight.value});
   return {...project.layout,pageSetup:cleanPageSetup(setup),pageNumbers:cleanPageNumbers({show:show.checked,footer:footer.checked,start:+first.value,pad:+pad.value,format:format.value})};
  };

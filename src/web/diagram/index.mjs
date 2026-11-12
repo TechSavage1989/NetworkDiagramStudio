@@ -453,10 +453,12 @@ function builderLayout(project,db,info,palette,plan,{sheetLabel='1 / 1'}={},colu
 }
 function bookletInventory(project,db,device,ports,options,palette,grouped,start=null){
  // Natural order keeps chassis slots together (A1-A8, then B1) and numeric member/port order.
- // Dense, still-editable inventory typography: text prints at the 8 pt
- // readable minimum on Letter, with tight rows and padding so more ports fit
- // on each sheet. This affects the tabular inventory only, never faceplates.
- const type={cell:10.35,line:11.2,row:14.6,pad:1.6,header:10.35,headerLine:11.8,maxChunk:9};
+ // Dense, still-editable table typography (about 6.5 pt on Letter) with tight
+ // rows, so more ports fit on each sheet. Table text is marked compactTable:
+ // it is report typography, not held to the diagram's readable minimum, and
+ // Global text styles → Table text can still enlarge it. Faceplates are
+ // unaffected.
+ const type={cell:8.6,line:10,row:13.4,pad:1.6,header:8.6,headerLine:10.2,maxChunk:9,title:13,titleLine:15,detailLine:10.6,note:9.5,noteLine:12};
  const {width:W,height:H}=pageGeometry(project,'ports'),filter=options.detailFilter||'all',sorted=ports.slice().sort((a,b)=>cmp(a.name,b.name)||comparePorts(a,b)),prefix=portColumnPrefix(sorted.map(p=>p.name));
  // Short columns keep their heading readable; Description, Tagged VLANs and
  // Connected to share the rest of the page width.
@@ -485,13 +487,13 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   const link=[states.length===1?label3(states[0]):['up','down','unknown'].map(s=>{const n=record.members.filter(m=>m.state===s).length;return n?n+' '+label3(s).toLowerCase():'';}).filter(Boolean).join(', '),speeds.length===1?speeds[0]:'',media.length===1?media[0]:''].filter(Boolean).join(' · ');
   const connected=record.members.filter(m=>m.peers.length).map(m=>(names.length>1?portRanges([m.name],prefix)+': ':'')+m.peers.join(', ')).join('; ');
   const values=[portRanges(names,prefix)+(names.length>1?' ('+names.length+')':''),...record.fields.slice(0,1),...record.fields.slice(1),link,connected];
-  const lines=values.map((v,i)=>v?wrapPortText(v,columns[i][1]-12,type.cell,i===0):[]),size=Math.max(1,...lines.map(l=>l.length)),chunks=[];
+  const lines=values.map((v,i)=>v?wrapPortText(v,columns[i][1]-15,type.cell,i===0):[]),size=Math.max(1,...lines.map(l=>l.length)),chunks=[];
   let hash=2166136261;for(const char of JSON.stringify([record.signature,names]))hash=Math.imul(hash^char.charCodeAt(0),16777619)>>>0;
-  for(let from=0;from<size;from+=type.maxChunk){const slice=lines.map(l=>l.slice(from,from+type.maxChunk));if(from&&!slice[0].length)slice[0]=wrapPortText(portRanges(names,prefix)+' (continued)',columns[0][1]-12,type.cell,true);chunks.push({record,names,lines:slice,part:from/type.maxChunk,key:hash.toString(36),height:Math.max(type.row,2*type.pad+type.line*Math.max(...slice.map(l=>l.length)))});}
+  for(let from=0;from<size;from+=type.maxChunk){const slice=lines.map(l=>l.slice(from,from+type.maxChunk));if(from&&!slice[0].length)slice[0]=wrapPortText(portRanges(names,prefix)+' (continued)',columns[0][1]-15,type.cell,true);chunks.push({record,names,lines:slice,part:from/type.maxChunk,key:hash.toString(36),height:Math.max(type.row,2*type.pad+type.line*Math.max(...slice.map(l=>l.length)))});}
   return chunks;
  });
  const headings=columns.map(([title,w])=>wrapPortText(title,w-12,type.header,true)),header=Math.max(24,6+type.headerLine*Math.max(...headings.map(l=>l.length)));
- const barTitle=wrapPortText(nameOf(device)+'  /  Port inventory',W-100,15,true),barDetailLines=wrapPortText(deviceDetails(device,project)+'  |  Ports 0000-0000 of 0000',W-100,type.cell).length,barHeight=10+barTitle.length*17+barDetailLines*12.4;
+ const barTitle=wrapPortText(nameOf(device)+'  /  Port inventory',W-100,type.title,true),barDetailLines=wrapPortText(deviceDetails(device,project)+'  |  Ports 0000-0000 of 0000',W-100,type.cell).length,barHeight=9+barTitle.length*type.titleLine+barDetailLines*type.detailLine;
  const out=[],scopeBase=(project._reportPrefix?project._reportPrefix+'|':'')+'Port Inventory|'+equipmentScope(device);let at=0,sheet=0;
  do{
   // A combined sheet starts the table under its faceplates when the bar,
@@ -500,6 +502,8 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
   // table opens with a slim section bar instead of a second dark bar.
   const filterLine=sheet===0&&shown<ports.length?20:0,slim=26,slimFits=wrapPortText(nameOf(device)+'  /  Port inventory  |  Ports '+ports.length+'-'+ports.length+' of '+ports.length,W-88,11,true).length===1,full=!!start?.fullBar,host=sheet===0&&start&&(full||slimFits)&&start.top+(full?barHeight:slim)+filterLine+header+(rows[0]?.height||type.row)<=H-82+footerAllowance(project)?start.page:null,bar=host&&!full?slim-8:barHeight;
   const p=host||fresh('MDF Port Map','MDF port map','Port assignments, descriptions, VLANs and link state',project),a=p.items,scope=scopeBase+'|sheet:'+sheet;if(!host)p.editScope=scope;
+  // Inventory sheets are titled after the devices whose tables they hold.
+  if(!host)p.inventoryDevices=[{name:nameOf(device),continued:sheet>0}];else if(full&&host.inventoryDevices)host.inventoryDevices.push({name:nameOf(device),continued:false});
   let y=host?start.top:150;const barTop=y,tableTop=barTop+bar+8+filterLine;y=tableTop;
   if(sheet===0&&shown<ports.length){label(a,38,barTop+bar+6,W-80,18,shown+' of '+ports.length+' port records in details | '+(ports.length-shown)+' hidden by table filter',11,false,C.muted);a.at(-1).editKey=scope+'|filter-summary';}
   const tableStart=a.length;if(!host)p.tableTop=tableTop;else p.tableTop??=tableTop;
@@ -519,19 +523,19 @@ function bookletInventory(project,db,device,ports,options,palette,grouped,start=
    y+=row.height;count++;
   }
   if(!rows.length){label(a,49,y+20,W-100,25,ports.length?'No ports match the selected table filter. All physical ports remain on the faceplate.':'No physical switch port records were supplied.',14,false,C.muted);a.at(-1).editKey=scope+'|empty';}
-  for(const item of a.slice(tableStart))item.tableContent=true;
+  for(const item of a.slice(tableStart)){item.tableContent=true;item.compactTable=true;}
   const pageNames=new Set(members),records=sorted.filter(port=>pageNames.has(port.name)).map(port=>({device:device.id,name:port.name}));
   const first=records.length?sorted.findIndex(port=>port.name===records[0].name)+1:0,last=records.length?sorted.findIndex(port=>port.name===records.at(-1).name)+1:0;
   if(host&&!full)sectionBar(a,36,barTop,W-72,nameOf(device)+'  /  Port inventory  |  '+(records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'),scope+'|section');
   else{
    rect(a,36,barTop,W-72,barHeight,'#14283D');a.at(-1).editKey=scope+'|bar';
-   barTitle.forEach((text,line)=>{label(a,50,barTop+4+line*17,W-100,17,text,15,true,C.white);Object.assign(a.at(-1),{editKey:scope+'|bar-title'+(line?'|'+line:''),full:true});});
+   barTitle.forEach((text,line)=>{label(a,50,barTop+4+line*type.titleLine,W-100,type.titleLine,text,type.title,true,C.white);Object.assign(a.at(-1),{editKey:scope+'|bar-title'+(line?'|'+line:''),full:true});});
    const detail=wrapPortText([deviceDetails(device,project),records.length?'Ports '+first+'-'+last+' of '+ports.length:ports.length+' ports'].filter(Boolean).join('  |  '),W-100,type.cell);
-   detail.slice(0,barDetailLines).forEach((text,line)=>{label(a,50,barTop+5+barTitle.length*17+line*12.4,W-100,12.4,text,type.cell,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|bar-detail'+(line?'|'+line:''),full:true});});
+   detail.slice(0,barDetailLines).forEach((text,line)=>{label(a,50,barTop+5+barTitle.length*type.titleLine+line*type.detailLine,W-100,type.detailLine,text,type.cell,false,'#C7D4E2');Object.assign(a.at(-1),{editKey:scope+'|bar-detail'+(line?'|'+line:''),full:true,compactTable:true});});
   }
-  const note=wrapPortText('Confirm live link, LLDP/CDP, and MAC address table before moving production cables.'+(grouped?' Ports with the same settings share a row (port count in brackets).':''),W-76,11);
-  const noted=(!host||start.last&&start.note!==false)&&y+12+note.length*15<=H-75+footerAllowance(project);if(noted)note.forEach((text,line)=>{label(a,38,y+12+line*15,W-76,15,text,11,false,C.muted);a.at(-1).editKey=scope+'|note'+(line?'|'+line:'');});
-  out.end={page:p,y:y+(noted?12+note.length*15:0),tableEnd:y,noteTop:noted?y+12:Infinity,hosted:!!host};
+  const note=wrapPortText('Confirm live link, LLDP/CDP, and MAC address table before moving production cables.'+(grouped?' Ports with the same settings share a row (port count in brackets).':''),W-76,type.note);
+  const noted=(!host||start.last&&start.note!==false)&&y+10+note.length*type.noteLine<=H-75+footerAllowance(project);if(noted)note.forEach((text,line)=>{label(a,38,y+10+line*type.noteLine,W-76,type.noteLine,text,type.note,false,C.muted);Object.assign(a.at(-1),{editKey:scope+'|note'+(line?'|'+line:''),compactTable:true});});
+  out.end={page:p,y:y+(noted?10+note.length*type.noteLine:0),tableEnd:y,noteTop:noted?y+10:Infinity,hosted:!!host};
   if(host)out.hosted={records,shown};
   else{p.portMap={device:device.id,devices:[device.id],shown,total:ports.length,rowNames:records.map(r=>r.name),portRecords:records,density:'compact',overview:false,bookletRole:'inventory',inventoryTable:true};namePortInventory(p);out.push(p);}
   sheet++;
@@ -547,6 +551,14 @@ function bookletHeader(page){
  brand.x-=12;
  title.x+=12;title.w-=24;
  page.items.unshift(...banner);
+}
+// "Port Inventory - LAB-SW01, LAB-IDF" names a sheet after its devices (the
+// stable page name stays "Port Inventory N" for settings and frames); a sheet
+// that continues a table says so, and repeated names are numbered.
+function nameInventoryPages(pages){
+ const labels=pages.filter(page=>page.inventoryDevices?.length).map(page=>{const names=page.inventoryDevices.map(entry=>entry.name),shown=names.length>3?names.slice(0,3).join(', ')+' +'+(names.length-3):names.join(', ');return [page,'Port Inventory - '+shown+(page.inventoryDevices[0].continued?' (continued)':'')];});
+ const totals=new Map();for(const [,label] of labels)totals.set(label,(totals.get(label)||0)+1);
+ const seen=new Map();for(const [page,label] of labels){const n=(seen.get(label)||0)+1;seen.set(label,n);page.displayName=totals.get(label)>1?label+' '+n:label;}
 }
 function namePortInventory(page){
  page.name=page.name.replace(/MDF Port Map$/,'Port Inventory');
@@ -733,6 +745,7 @@ function portMaps(project,db){
   best=out;
  }
  const ordered=[...best,...extra],isInventory=page=>page.portMap?.bookletRole==='inventory'||/^Port Inventory/.test(page.name);
+ nameInventoryPages(ordered);
  return [...ordered.filter(page=>!isInventory(page)),...ordered.filter(isInventory)];
 }
 function portMapsAtScale(project,db,plan){
@@ -909,7 +922,9 @@ export function buildPages(project={},options={}){
   pages.forEach(p=>{
     if(reused.has(p))return;
     p.labelBacking=cleanLabelBacking(project.layout?.labelBacking);
-    applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??p.displayName;item.w=Math.max(item.w,textWidth(item.value,item.size,true));}
+    applyDrawingEdits(p,project);p.displayName=displayPageName(project,p);for(const item of p.items.filter(i=>i.pageTitle)){item.value=project.layout?.drawingEdits?.[item.editKey]?.value??p.displayName;
+     // A long title (an inventory sheet naming its devices) wraps within the sheet.
+     const room=Math.max(item.w,(p.width||1200)-item.x-36);item.w=Math.min(room,Math.max(item.w,textWidth(item.value,item.size,true)));const lines=wrapPortText(item.value,item.w,item.size,true).length;if(lines>1)item.h=Math.max(item.h,lines*item.size*1.2);}
     // Switchport sheets already reserve measured headers, keys and footers.
     // Keep their readable number/marker layout intact while allowing ordinary
     // object edits and uniform drawing scale like the other page families.

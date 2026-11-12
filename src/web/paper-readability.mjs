@@ -7,7 +7,8 @@ import {presentation} from './presentation.mjs';
 export function paperTextMetrics(page,project,exclude=new Set(),scale=1){
  const edits=project.layout?.drawingEdits||{},sizes=[],manual=[];
  for(const item of page.items||[]){
-  if(item.type!=='text'||item.hidden||exclude.has(item)||!String(item.value||'').trim())continue;
+  // Compact inventory tables use their own table typography.
+  if(item.type!=='text'||item.hidden||item.compactTable||exclude.has(item)||!String(item.value||'').trim())continue;
   const size=textLayout(scale===1?item:{...item,w:item.w*scale,h:item.h*scale,size:item.size*scale,presentation:{...item.presentation,fontScale:(item.presentation?.fontScale||1)*scale}}).size;
   if(Number.isFinite(edits[item.editKey]?.size))manual.push(size);else sizes.push(size);
  }
