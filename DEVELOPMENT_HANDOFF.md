@@ -1,3 +1,24 @@
+# Preview.66: whole words, compact paper layouts, captions against their devices
+
+Baseline: published preview.65. The owner reported:
+- a port label split as "Some Interfac" … "e" along its cable;
+- device names placed seemingly at random, and a network page that was not compact. It was one tall column on Letter landscape, printing at 2.0 pt, with a host name broken as "…matchc.or" / "g".
+
+Findings (fictional HA site in tests/core-paper-compact.test.mjs, built from the MDF lookalike with a second FortiGate and a long host name, which reproduces the same 2.0 pt):
+- Labels wrapped character by character at a fixed width. On-cable placement then drew each wrapped piece in its own white box along the cable.
+- Compact ranked two columns best (score 4271 against 8600 for one column). A port label failing in the two- and three-column layouts made the capacity retry take the next ranked arrangements: the third was one column, kept for good.
+- The paper pass grows names toward 8 pt at one common size, accepting any clear spot up to 64 units away or beside the device, so names landed wherever the large text fit.
+
+What changed:
+- wrapText (labels.mjs), shared with wrapPortText: word, then name-separator breaks, with no tiny orphans. Inline captions join a wrapped value into one line.
+- core.mjs: a compact retry takes a ranked alternative only within 35% of the best score; otherwise the best arrangement makes room (label clearance, column tracks). The fictional site now prints at 3.2 pt in two columns.
+- device-paper-labels.mjs: closeness first, in three stages:
+  - the chosen side up to 28 units out;
+  - then either side, close;
+  - then anywhere.
+  Each stage takes the largest common size it allows. The renderer's padding on right-aligned captions is kept clear of other device captions.
+- Tests: core-paper-compact.test.mjs (wrapping, one-run inline label, two columns, larger print, captions against their devices).
+
 # Preview.65: smoother panning and zooming in the interactive HTML viewer
 
 Baseline: published preview.64. The owner reported that the exported HTML viewer felt laggy, most of all on the network page and also on wireless pages.
