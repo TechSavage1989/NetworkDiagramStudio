@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0-preview.63",
-  "tag": "v0.1.0-preview.63",
+  "version": "0.1.0-preview.64",
+  "tag": "v0.1.0-preview.64",
   "prerelease": true,
   "revision": 1,
-  "notes": "docs/releases/0.1.0-preview.63.md"
+  "notes": "docs/releases/0.1.0-preview.64.md"
 }
