@@ -43,10 +43,11 @@ export function applyDrawingEdits(page,project){
  page.items.forEach((item,i)=>{
   if(!item.editKey){const semantic=item.semantic||JSON.stringify(item.type==='text'?[item.value,item.labelRole]:item.type==='path'?[item.name.replace(/^L\d+ /,'')]:[item.type,item.x,item.y,item.w,item.h]);let hash=0;for(const c of semantic)hash=Math.imul(hash,31)+c.charCodeAt(0)|0;const base=page.name+'|'+item.type+'|'+hash;let count=seen.get(base)||0;while(taken.has(base+'|'+count))count++;seen.set(base,count+1);item.editKey=base+'|'+count;taken.add(item.editKey);}
   if((item.pageHeading||item.pageFrame)&&!item._pageFurnitureSource)item._pageFurnitureSource=Object.fromEntries(['x','y','w','h','size'].filter(k=>Number.isFinite(item[k])).map(k=>[k,item[k]]));
-  if(item.type!=='device'&&!item.labelRole&&!item._panelTransform&&edits[item.editKey])Object.assign(item,edits[item.editKey],{full:true});
+  const own=edits[item.editKey]??(item.legacyEditKey&&item.type==='text'?edits[item.legacyEditKey]:undefined);
+  if(item.type!=='device'&&!item.labelRole&&!item._panelTransform&&own)Object.assign(item,own,{full:true});
  if(item.type==='path'&&edits[item.editKey]?.points&&item.from&&item.to){const pts=item.points.map(p=>[...p]);for(const [end,adj,anchor] of [[0,1,item.from],[pts.length-1,pts.length-2,item.to]]){const old=pts[end];if(pts[adj][0]===old[0])pts[adj][0]=anchor.x;else pts[adj][1]=anchor.y;pts[end]=[anchor.x,anchor.y];}item.points=pts;}
  });
- page.items=page.items.filter(i=>!edits[i.editKey]?.hidden);
+ page.items=page.items.filter(i=>!edits[i.editKey]?.hidden&&!(i.type==='text'&&i.legacyEditKey&&!edits[i.editKey]&&edits[i.legacyEditKey]?.hidden));
  for(const i of page.items)if(i.type==='device')i.children=i.children.filter(c=>!edits[c.editKey]?.hidden);
  applyLinkStyles(page,project.layout?.linkStyles,edits);
 }

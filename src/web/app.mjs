@@ -49,6 +49,7 @@ import {intersects,pathCrossesText} from './diagram/labels.mjs';
 import {relatedConnectionItems,nearestOnCable,positionOnCable,describeCableEnds,labelPositionRelativeToCable} from './connection-selection.mjs';
 import {importFiles,mergeModels,deviceId,hardwareCatalog,findDeviceIdentity} from './imports/index.mjs';
 import {portMapTarget,portMapDetailsDraft,applyPortMapDetails,PORT_MAP_DETAIL_LIMITS} from './port-map-details.mjs';
+import {hierarchyOrder,applyAutomaticOrder} from './device-hierarchy.mjs';
 import {endpointHardwareCatalog,matchEndpointHardware} from './imports/hardware.mjs';
 import {matchesHardware,modelKey} from './hardware-match.mjs';
 import {buildPages,exportVisio,exportStencil} from './diagram/index.mjs';
@@ -174,7 +175,10 @@ const storedFontSize=(item,units)=>item.type==='arttext'&&item.parent?units/item
 const drawingPt=item=>presentedFontUnits(item)/textFontScale(item)*.75;
 const printedPt=(item,page=pages[active])=>presentedFontUnits(item)*.75*(page?printGeometry(page).width/page.width:1);
 const roundPt=v=>Math.round(v*10)/10;
-function printedNote(item){const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'Prints at this size.':'This page is fitted to its paper, so it prints at '+roundPt(printed)+' pt.';}
+// Font sizes are at full drawing size; a page fitted to its paper prints them
+// smaller, which is what the readability notice and Text styles report.
+function printedNote(item){const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'Prints at this size.':'Prints at '+roundPt(printed)+' pt: this page is fitted to its paper at '+Math.round(printed/drawn*100)+'% of full drawing size.';}
+const printedBadge=item=>{const drawn=drawingPt(item),printed=printedPt(item);return Math.abs(printed-drawn)<.05*drawn?'':'prints '+roundPt(printed)+' pt';};
 function fontUnitsFromField(input,item){
  if(input.value===input.dataset.shown)return presentedFontUnits(item);
  const pt=Number(input.value);if(!input.value||!Number.isFinite(pt)||pt<1||pt>360)throw Error('Font size must be between 1 and 360 pt.');
@@ -182,7 +186,8 @@ function fontUnitsFromField(input,item){
 }
 function syncQuickText(item){
  const bar=$('quick-text-tools');bar.hidden=!editDrawing||!['text','arttext'].includes(item?.type);if(bar.hidden)return;
- const size=$('quick-text-size');size.value=size.dataset.shown=String(roundPt(drawingPt(item)));size.title='Font size in points. '+printedNote(item);
+ const size=$('quick-text-size');size.value=size.dataset.shown=String(roundPt(drawingPt(item)));size.title='Font size in points at full drawing size. '+printedNote(item);
+ $('quick-text-printed').textContent=printedBadge(item);$('quick-text-printed').title=printedNote(item);
  $('quick-text-bold').checked=!!item.bold;$('quick-text-align').value=item.align||'left';
  $('quick-text-color').value=/^#[0-9a-f]{6}$/i.test(item.color||'')?item.color:'#17364a';
  $('quick-text-angle').value=Math.round((item.angle||0)*180/Math.PI*100)/100;
@@ -925,6 +930,10 @@ function arrange(){
  const body=modal('Device order and core pages');project.layout||=cleanLayout({},project.devices.map(d=>d.id));const layout=project.layout;
  const check=el('input');check.type='checkbox';check.checked=layout.includeAPs===true;check.id='core-aps';const title=el('label','Include access points on automatic core pages');title.htmlFor=check.id;line(body,check,title);
  check.onchange=()=>{layout.includeAPs=check.checked;perform();};
+ // The network's own shape gives a starting order: edge, core, distribution,
+ // access, then access points under their switch, stacks together.
+ button(actions(body),'Sort by network hierarchy',()=>{layout.order=hierarchyOrder(project);layout.orderAuto=true;perform();arrange();say('Devices sorted by network hierarchy. Moving a device keeps your order from then on.');});
+ body.append(el('p','Imports keep this order up to date until you move a device yourself.','hint'));
  const bar=actions(body);button(bar,'Add core page',()=>{layout.corePages||=[];layout.corePages.push({id:crypto.randomUUID(),name:'Core Network '+(layout.corePages.length+1),devices:[]});perform();arrange();});
  button(bar,'Use automatic pages',()=>{layout.corePages=[];layout.coreExclude=[];perform();arrange();});
  for(const page of layout.corePages||[]){
@@ -960,7 +969,7 @@ function arrange(){
   row.append(select);addOrderControls(row,d,arrange);body.append(row);
  }
 }
-function rebuildEvidence(){composeEvidence(project);initialScope();for(const s of Object.values(project.stencils))assignMatching(s);evidenceSnapshot=snapshot();projectHistory.record(project,'imports');dirty=projectHistory.dirty;draw();}
+function rebuildEvidence(){composeEvidence(project);initialScope();applyAutomaticOrder(project);for(const s of Object.values(project.stencils))assignMatching(s);evidenceSnapshot=snapshot();projectHistory.record(project,'imports');dirty=projectHistory.dirty;draw();}
 function evidence(){
  const body=modal('Imported data');const sources=project.evidence?.sources||[];
  button(body,'Import files',()=>$('data-files').click(),'primary');
@@ -1430,7 +1439,7 @@ function editDrawingObject(key){
  const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);const inputs={};
  const property=(where,name,value,opts)=>{if(!hasPicker)return field(where,name,value,opts);const cell=el('div','','compact-field');where.append(cell);return field(cell,name,value,opts);};
  for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}
- if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,'Font size (pt)',String(roundPt(drawingPt(item))));inputs.size.dataset.shown=inputs.size.value;inputs.size.type='number';inputs.size.min=1;inputs.size.max=360;inputs.size.step='any';inputs.size.title=printedNote(item);inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);}
+ if(['text','arttext'].includes(item.type)){inputs.value=field(body,'Text',editableText(item),'multiline');inputs.value.rows=2;const style=el('div','','compact-fields compact-text-style');body.append(style);inputs.size=property(style,'Font size (pt)',String(roundPt(drawingPt(item))));inputs.size.dataset.shown=inputs.size.value;inputs.size.type='number';inputs.size.min=1;inputs.size.max=360;inputs.size.step='any';inputs.size.title=printedNote(item);inputs.bold=property(style,'Weight',item.bold?'true':'false',[['false','Regular'],['true','Bold']]);inputs.align=property(style,'Alignment',item.align||'left',['left','center','right']);if(printedBadge(item))body.append(el('p','Font size is at full drawing size. '+printedNote(item),'hint printed-size-note'));}
  else inputs.name=property(hasPicker?grid:body,'Object name',item.name||'');
  const labelRotation=item.labelRole&&item.relatedCableKey?field(body,'Connection label rotation',project.layout?.drawingEdits?.[item.editKey]?.rotationMode==='fixed'?String(Math.round((project.layout.drawingEdits[item.editKey].angle||0)*180/Math.PI)):'auto',[['auto','Follow cable automatically'],['0','Horizontal (0 degrees)'],['90','Vertical (90 degrees)'],['180','Reverse horizontal (180 degrees)'],['-90','Reverse vertical (-90 degrees)']]):null;
  const initialWeight=linkedSwatch?item.sampleWeight??item.h:item.weight||1;

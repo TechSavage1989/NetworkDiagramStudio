@@ -68,7 +68,6 @@ export function portMapTarget(page,item){
  const map=page.switchportReport||page.portMap||page.family==='ports';
  if(!map)return null;
  if(item.reportPanel&&item.sourceId)return {device:item.sourceId,member:item.reportMember,slot:item.reportSlot,identity:item.reportIdentity};
- if(item.reportDevice)return {device:item.reportDevice,member:item.reportMember,slot:item.reportSlot,identity:item.reportIdentity};
  if(item.type==='device'&&item.sourceId&&item.kind!=='plug')return {device:item.sourceId,member:item.equipmentPart};
  return null;
 }

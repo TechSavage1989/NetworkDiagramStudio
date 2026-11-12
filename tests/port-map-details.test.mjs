@@ -36,7 +36,7 @@ test('port map panels point at their device and member, and saved details reach 
  const page=buildPages(project).find(p=>p.switchportReport&&p.role==='onePage');
  const panel=page.items.find(item=>item.reportPanel&&item.reportMember==='2'),title=page.items.find(item=>item.reportDevice&&item.reportMember==='2');
  assert.deepEqual(portMapTarget(page,panel),{device:'idf',member:'2',slot:'',identity:'2'});
- assert.deepEqual(portMapTarget(page,title),{device:'idf',member:'2',slot:'',identity:'2'});
+ assert.equal(portMapTarget(page,title),null,'double-clicking the heading edits its text');
  assert.equal(portMapTarget({family:'core'},panel),null,'other pages keep their own double-click');
  const saved=applyPortMapDetails(project.devices[0],portMapTarget(page,panel),{...portMapDetailsDraft(project.devices[0],{member:'2'}),serialNumber:'SN-TEST-2',assetTag:'IT-7'});
  const again=buildPages({...project,devices:[saved]}).find(p=>p.switchportReport&&p.role==='onePage');

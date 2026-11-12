@@ -37,9 +37,11 @@ const paperOf=request=>{
  return reportPageGeometry(requested);
 };
 function page(request,name,title,subtitle,role,ids,width=paperOf(request).width,height=paperOf(request).height,compact=false){const margin=marginOf(request);
- const sheet=paperOf(request),titleSize=compact?18:20,subtitleSize=compact?10:10.5,p={reportMargin:margin,dense:!!request?.fill,name:'Switchport reports|'+name,title,displayName:title,family:'switchports',switchportReport:true,role,sourceDeviceIds:[...ids],width,height,widthMm:width*25.4/96,heightMm:height*25.4/96,paper:{preset:sheet.preset||'custom',orientation:sheet.orientation|| (width>=height?'landscape':'portrait'),widthMm:width*25.4/96,heightMm:height*25.4/96},items:[],compact},a=p.items,logo=request.logoDataUrl,available=width-margin*2-(logo?130:0),titleHeight=Math.max(titleSize*1.2,wrapPortText(title,available,titleSize,true).length*titleSize*1.2),subtitleHeight=Math.max(subtitleSize*1.2,wrapPortText(subtitle,available,subtitleSize).length*subtitleSize*1.2),headerHeight=titleHeight+subtitleHeight+(compact?14:30);
- rect(a,0,0,width,headerHeight,navy);text(a,margin,compact?5:12,available,title,titleSize,true,'#ffffff');text(a,margin,(compact?8:18)+titleHeight,available,subtitle,subtitleSize,false,'#dce9ee');p.contentTop=headerHeight+(compact?8:16);
- if(logo){const dims=logoDimensions(logo),h=Math.min(headerHeight-20,48),w=Math.min(112,h*dims.w/dims.h),actualH=w*dims.h/dims.w,lx=width-margin-w-4,ly=(headerHeight-actualH)/2;rect(a,lx-4,ly-4,w+8,actualH+8,'#ffffff','none');Object.assign(a.at(-1),{reportLogoBacking:true,editKey:p.name+'|logo-backing'});a.push({type:'device',kind:'logo',key:p.name+'|logo',editKey:p.name+'|logo',masterKey:'report-logo:'+logo.slice(-120),name:'Report logo',x:lx,y:ly,w,h:actualH,ports:{},children:[],asset:{name:'Report logo',width:dims.w,height:dims.h,dataUrl:logo}});}
+ const sheet=paperOf(request),titleSize=compact?18:20,subtitleSize=compact?10:10.5,p={reportMargin:margin,dense:!!request?.fill,name:'Switchport reports|'+name,title,displayName:title,family:'switchports',switchportReport:true,role,sourceDeviceIds:[...ids],width,height,widthMm:width*25.4/96,heightMm:height*25.4/96,paper:{preset:sheet.preset||'custom',orientation:sheet.orientation|| (width>=height?'landscape':'portrait'),widthMm:width*25.4/96,heightMm:height*25.4/96},items:[],compact},a=p.items,logo=request.logoDataUrl,inset=Number.isFinite(request?.margin)?margin:0,textX=inset?inset+12:margin,available=width-textX*2-(logo?130:0),titleHeight=Math.max(titleSize*1.2,wrapPortText(title,available,titleSize,true).length*titleSize*1.2),subtitleHeight=Math.max(subtitleSize*1.2,wrapPortText(subtitle,available,subtitleSize).length*subtitleSize*1.2),headerHeight=titleHeight+subtitleHeight+(compact?14:30);
+ // Drawing-set port maps keep their header band inside the page margin on
+ // every edge; standalone Switchport report outputs keep their full-width band.
+ rect(a,inset,inset,width-inset*2,headerHeight,navy,'none',1,inset?6:0);Object.assign(a.at(-1),{editKey:p.name+'|header-band',reportHeaderBand:true});text(a,textX,inset+(compact?5:12),available,title,titleSize,true,'#ffffff','left',{editKey:p.name+'|title'});text(a,textX,inset+(compact?8:18)+titleHeight,available,subtitle,subtitleSize,false,'#dce9ee','left',{editKey:p.name+'|subtitle'});p.contentTop=inset+headerHeight+(compact?8:16);
+ if(logo){const dims=logoDimensions(logo),h=Math.min(headerHeight-20,48),w=Math.min(112,h*dims.w/dims.h),actualH=w*dims.h/dims.w,lx=width-textX-w-4,ly=inset+(headerHeight-actualH)/2;rect(a,lx-4,ly-4,w+8,actualH+8,'#ffffff','none');Object.assign(a.at(-1),{reportLogoBacking:true,editKey:p.name+'|logo-backing'});a.push({type:'device',kind:'logo',key:p.name+'|logo',editKey:p.name+'|logo',masterKey:'report-logo:'+logo.slice(-120),name:'Report logo',x:lx,y:ly,w,h:actualH,ports:{},children:[],asset:{name:'Report logo',width:dims.w,height:dims.h,dataUrl:logo}});}
  return p;
 }
 // Port maps carry the builder's cable-move safety note at their foot, with or
@@ -54,7 +56,16 @@ function finish(p,request,palette,inventory,index=1,count=1){const margin=p.repo
  const note=MAP_ROLES.has(p.role)?(footer&&textWidth(CABLE_MOVE_NOTE+'  '+separate,9)<=room?CABLE_MOVE_NOTE+'  '+separate:CABLE_MOVE_NOTE):footer?separate:'';
  if(note)text(a,margin,y+(footer?8:4),room,note,9,false,muted,'left',{editKey:p.name+'|footer-note',reportFooterRole:MAP_ROLES.has(p.role)?'safety':'note'});
  if(request.pageFooter?.show!==false)text(a,p.width-margin-95,y+(footer?8:4),95,index+' / '+count,9,false,muted,'right',{reportFooterRole:'page'});
- for(const [n,item] of a.entries())item.editKey??=p.name+'|item|'+n;
+ // Text without its own key is keyed by its generated wording, so an edit
+ // stays with that text when the sheet is repacked; the older index key is
+ // kept as a fallback for edits saved before.
+ const seen=new Map();
+ for(const [n,item] of a.entries()){
+  if(item.editKey)continue;
+  if(item.type!=='text'){item.editKey=p.name+'|item|'+n;continue;}
+  let hash=0;for(const c of JSON.stringify([item.value,item.labelRole]))hash=Math.imul(hash,31)+c.charCodeAt(0)|0;
+  const base=p.name+'|text|'+hash,count=seen.get(base)||0;seen.set(base,count+1);item.editKey=base+'|'+count;item.legacyEditKey=p.name+'|item|'+n;
+ }
  p.reportPalette=palette;p.reportInventory=inventory?.hostname;p.reportSourceVersion='1.18.5';return p;
 }
 export function numberReportPages(pages){return pages.map((p,index)=>({...p,items:p.items.map(item=>item.reportFooterRole==='page'?{...item,value:(index+1)+' / '+pages.length}:item)}));}
@@ -80,11 +91,11 @@ function symbolKey(p,y,palette,inventory){
   if(x>margin&&x+step>p.width-margin){x=margin;lineY+=18;}
   paint(x,lineY);text(a,x+19,lineY,Math.max(70,textWidth(title,10)),title,10,false,muted);x+=step;
  };
- entry('Native VLAN',(x,y)=>rect(a,x,y+2,12,10,example,ink,.65));
+ entry('Native VLAN',(x,y)=>rect(a,x,y+2,12,10,example,ink,.65,2));
  entry('Tagged VLAN',(x,y)=>ellipse(a,x+2,y+3,8,8,example));
  entry('Voice VLAN',(x,y)=>diamond(a,x+1,y+2,10,example));
- entry('LAG / trunk',(x,y)=>rect(a,x,y+2,12,10,'#ffffff',outline,2));
- if(inventory.ports.some(port=>port.stackLink))entry('Stack / VSF',(x,y)=>rect(a,x,y+2,12,10,'#000000'));
+ entry('LAG / trunk',(x,y)=>rect(a,x,y+2,12,10,'#ffffff',outline,2,2.5));
+ if(inventory.ports.some(port=>port.stackLink))entry('Stack / VSF',(x,y)=>rect(a,x,y+2,12,10,'#000000','none',1,2));
  if(inventory.ports.some(port=>port.disabled))entry('Disabled',(x,y)=>text(a,x+1,y,12,'!',11,true));
  return lineY+17;
 }
@@ -109,18 +120,22 @@ function keySections(inventory,palette,width,compact=false,dense=false){
  return [{key:'vlans',title:'VLANs',rows:layout(vlans)},{key:'lags',title:'LAGs / trunks',rows:layout(lags)}].filter(section=>section.rows.length);
 }
 function keyRows(inventory,palette,width,compact=false,dense=false){return keySections(inventory,palette,width,compact,dense).flatMap(section=>section.rows);}
-function legendHeight(inventory,palette,width,compact=false,dense=false){return keySections(inventory,palette,width,compact,dense).reduce((height,section)=>height+(compact?18:23)+section.rows.reduce((sum,row)=>sum+row.height,0)+(compact?2:4),0)+symbolKeyHeight(inventory,width)+(compact?7:13);}
+function basisHeight(inventory,width,compact=false){const basis=uplinkBasis(inventory);return basis?(compact?18:23)+wrapPortText(basis.text,width,9.5).length*9.5*1.2+(compact?4:6):0;}
+function legendHeight(inventory,palette,width,compact=false,dense=false){return keySections(inventory,palette,width,compact,dense).reduce((height,section)=>height+(compact?18:23)+section.rows.reduce((sum,row)=>sum+row.height,0)+(compact?2:4),0)+basisHeight(inventory,width,compact)+symbolKeyHeight(inventory,width)+(compact?7:13);}
 function legend(p,y,inventory,palette,{continued=false}={}){const margin=p.reportMargin??MARGIN;
  const a=p.items,w=p.width-margin*2;
  for(const section of keySections(inventory,palette,w,p.compact,p.dense)){
   text(a,margin,y,w,section.title+(continued?' / continued':''),p.compact?11:12,true,ink,'left',{editKey:p.name+'|key-heading|'+section.key,reportKeyHeading:section.key});y+=p.compact?18:23;
-  for(const row of section.rows){for(let column=0;column<row.entries.length;column++){const entry=row.entries[column],x=margin+column*row.columnWidth;rect(a,x,y+1,14,12,entry.fill,entry.stroke||muted,entry.stroke?2:.7);const marked=p.dense&&entry.vlan,tx=marked?x+36:x+22;
+  for(const row of section.rows){for(let column=0;column<row.entries.length;column++){const entry=row.entries[column],x=margin+column*row.columnWidth;rect(a,x,y+1,14,12,entry.fill,entry.stroke||muted,entry.stroke?2:.7,2.5);const marked=p.dense&&entry.vlan,tx=marked?x+36:x+22;
     if(marked){const extra={editKey:p.name+'|key|'+entry.id+'|marker',reportKeyMarker:entry.id};if(entry.voice)diamond(a,x+18,y+1.5,11,entry.fill,'#263c49',.5,extra);else ellipse(a,x+18.5,y+2,10,10,entry.fill,'#263c49',.5,extra);}
     text(a,tx,y,row.columnWidth-(marked?44:30),entry.title,entry.font,!p.dense,ink,'left',{reportKeyTitle:entry.id});if(entry.names)text(a,x+22,y+entry.titleHeight,row.columnWidth-30,entry.names,entry.font,false,muted,'left',{reportKeyNames:entry.id});}y+=row.height;}
   y+=p.compact?2:4;
  }
+ y=drawBasis(p,y,inventory,w);
  return symbolKey(p,y+(p.compact?1:5),palette,inventory)+(p.compact?5:8);
 }
+// The builder's uplink note for an unconfirmed module, under its own heading.
+function drawBasis(p,y,inventory,width,x=p.reportMargin??MARGIN){const basis=uplinkBasis(inventory);if(!basis)return y;text(p.items,x,y,width,basis.title,p.compact?11:12,true,ink,'left',{editKey:p.name+'|key-heading|uplinks',reportKeyHeading:'uplinks'});y+=p.compact?18:23;const h=text(p.items,x,y,width,basis.text,9.5,false,muted,'left',{editKey:p.name+'|uplink-basis',reportUplinkBasis:true});return y+h+(p.compact?4:6);}
 // Port descriptions go under the key when every one of them fits the space
 // left on the sheet; otherwise they stay in the Port Inventory pages.
 function describedPorts(inventory){return (inventory.ports||[]).filter(port=>String(port.description||'').trim()&&String(port.description).trim()!==port.id).map(port=>({id:port.id,text:String(port.description).trim()}));}
@@ -147,14 +162,31 @@ function displayName(inv){return unique(inv.devices.filter(detail=>!detail.paren
 // A group heading names the member or slot, its model number (for example
 // JL256A) and its hardware (for example 48 RJ-45 + 4 SFP+), then the device
 // details entered for it while they still fit on the heading's line.
+// "GigabitEthernet0/49" -> "Gi49", "TenGigabitEthernet0/1" -> "Te1": the
+// builder's labels for the sockets of an unconfirmed module.
+export function shortInterface(id){
+ const m=String(id).match(/^([A-Za-z-]+)[\d/.]*?(\d+)$/);if(!m)return String(id);
+ const kind=m[1].toLowerCase(),prefix=kind.startsWith('ten')?'Te':kind.startsWith('twentyfive')?'Twe':kind.startsWith('forty')?'Fo':kind.startsWith('hundred')?'Hu':m[1].slice(0,2).replace(/^./,c=>c.toUpperCase());
+ return prefix+m[2];
+}
+// A 3560-E 48-port switch takes X2 modules or TwinGig converters in its two
+// uplink bays (the Switchport builder's CiscoHardware.Is3560E48).
+const is3560E48=inv=>inv.groups.some(group=>!group.configuredInterfaces&&/3560-?E[- ]?48|WS-C3560E-48/i.test(String(group.product||'')+' '+String(inv.model||'')));
+// The builder's note under the key when a module is unconfirmed.
+function uplinkBasis(inv){
+ if(!inv.groups.some(group=>group.configuredInterfaces&&group.socketLayout?.length))return null;
+ return {title:'Uplink configuration - installed sockets unconfirmed',text:(is3560E48(inv)?'Upper bay: Te1 OR Gi49/Gi50. Lower bay: Te2 OR Gi51/Gi52. ':'')+'Each interface retains its own saved settings; alternatives do not add installed sockets.'};
+}
 export function hardwareSummary(group){
+ // Interfaces of an unconfirmed module have no known media to count.
+ if(group.configuredInterfaces)return '';
  const counts=new Map();for(const socket of group.socketLayout||[]){const media=/RJ|copper/i.test(socket.media)?'RJ-45':socket.media||'port';counts.set(media,(counts.get(media)||0)+1);}
  if(!counts.size){if(group.copper)counts.set('RJ-45',group.copper);if(group.optical)counts.set(group.opticalType||'SFP',group.optical);}
  return [...counts].sort(([a],[b])=>(b==='RJ-45')-(a==='RJ-45')).map(([media,n])=>n+' '+media).join(' + ');
 }
 function groupTitle(inv,group,width=Infinity,font=11){
  const detail=inv.devices.find(detail=>detail.id===(group.slot?group.device+'/'+group.slot:group.device)),members=unique(inv.groups.map(row=>row.device)),identity=group.slot?(members.length>1?'Member '+group.device+' / ':'')+(group.rear?'Rear module ':'Slot ')+group.slot:members.length>1?'Member '+group.device:group.rear?'Rear panel':group.id;
- let title=[identity,group.product,hardwareSummary(group)].filter(Boolean).join(' | ');
+ let title=[identity,group.product,hardwareSummary(group),group.configuredInterfaces?(is3560E48(inv)?'X2 / TwinGig alternatives':'Configured interfaces'):''].filter(Boolean).join(' | ');
  for(const part of [detail?.name,detail?.serialNumber?'S/N '+detail.serialNumber:'',detail?.assetTag?'Asset '+detail.assetTag:''].filter(Boolean))if(textWidth(title+' | '+part,font,true)<=width)title+=' | '+part;
  return title;
 }
@@ -178,7 +210,10 @@ const DOT_GAP=.28;
 // proportions. Fitting paper must never make module optics artificially tall.
 const OPTICAL_HEIGHT={builder:16.2/25.2,map:16.2/25.2};
 const dotArea=(x,y,w,h,bottom)=>({x:x+1.6,y:y+1.6,w:Math.max(0,w-3.2),h:Math.max(0,h-1.6-bottom)});
-const dotReserve=(port,optical,numberFont)=>port.disabled||port.taggedVlanPolicy?numberFont*1.2+1:optical?2.4:3;
+// Dots stay above the jack's latch line when they fit there; a port that
+// needs the room may overlap it (the dots are drawn over the line). A
+// disabled '!' or policy '*' mark keeps its own band at the bottom.
+const dotReserve=(port,optical,numberFont,overlap=false)=>port.disabled||port.taggedVlanPolicy?numberFont*1.2+1:overlap?1.6:optical?2.4:3;
 function largestDot(n,box){let best=0;for(let cols=1;cols<=n;cols++){const rows=Math.ceil(n/cols),r=Math.min(box.w/(2*cols+DOT_GAP*(cols-1)),box.h/(2*rows+DOT_GAP*(rows-1)));if(r>best)best=r;}return best;}
 function dotLayout(n,box,r){
  const gap=r*DOT_GAP,step=r*2+gap,most=Math.max(1,Math.floor((box.w+gap)/step+1e-9)),rows=Math.ceil(n/most),cols=Math.ceil(n/rows),top=box.y+(box.h-(rows*step-gap))/2;
@@ -187,13 +222,15 @@ function dotLayout(n,box,r){
 function fillRadius(inv,plan){
  const specs=inv.groups.flatMap(group=>group.socketLayout.map(socket=>({socket,port:inv.ports.find(port=>port.group===group.id&&port.number===socket.number)}))).filter(row=>row.port),w=plan.portWidth;
  let radius=Math.min(5,w*.14);
- for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?plan.opticalRatio:23.2/25.2);radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,dotReserve(port,optical,plan.style.numberFont))));}
+ for(const {socket,port} of specs){const n=markerVlans(inv,port).length;if(!n)continue;const optical=!/RJ|copper/i.test(socket.media),h=w*(optical?plan.opticalRatio:23.2/25.2);radius=Math.min(radius,largestDot(n,dotArea(0,0,w,h,dotReserve(port,optical,plan.style.numberFont,true))));}
  // Never smaller than the builder's own markers; the builder layout keeps those.
  return radius>=plan.style.markerRadius?Math.floor(radius*1000)/1000:null;
 }
 function groupPlan(inv,group,portWidth,style=normalStyle){
  const ports=inv.ports.filter(port=>port.group===group.id),pitch=portWidth+(style.compact?1:2),faceHeight=portWidth*23.2/25.2,layout=group.socketLayout,rowsCount=Math.max(...layout.map(socket=>socket.row))+1,numberFont=style.numberFont,rowPitch=faceHeight+(style.compact&&rowsCount<=2?1.4:numberFont*1.2+(style.compact?3:6));
- if(group.configuredInterfaces)return {group,ports,configured:true,width:Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),height:27+Math.max(1,ports.length)*22};
+ // A configured-interface panel (an unconfirmed module) measures its heading,
+ // which may wrap, before its rows.
+ if(group.configuredInterfaces&&!group.socketLayout?.length){const width=Math.max(300,Math.max(...ports.map(port=>textWidth(port.id,10)))+270),header=Math.max(24,wrapPortText(groupTitle(inv,group,width-14,style.groupFont),width-14,style.groupFont,true).length*style.groupFont*1.2+8);return {group,ports,configured:true,width,header,style,height:header+3+Math.max(1,ports.length)*22};}
  const minimum=Math.min(...layout.map(socket=>socket.column)),maximum=Math.max(...layout.map(socket=>socket.column)),width=Math.max(180,(maximum-minimum)*pitch+portWidth+16),header=Math.max(style.compact?14:22,wrapPortText(groupTitle(inv,group,width-14,style.groupFont),width-14,style.groupFont,true).length*style.groupFont*1.2+(style.compact?2:8)),height=header+numberFont*1.2+(style.compact?1.2:4)+faceHeight+Math.max(0,rowsCount-1)*rowPitch+numberFont*1.2+(style.compact?3:8);
  return {group,ports,width,height,header,minimum,pitch,faceHeight,rowPitch,portWidth,rowsCount,numberFont,style};
 }
@@ -211,41 +248,41 @@ function devicePlan(item,style=normalStyle,width=null,fill=false){
 const panelColors=item=>{const art=item.artwork||{},body=art.body||'#edf1f2',dark=luminance(body)<.4;return {body,stroke:art.stroke||(art.body?'#5d7079':'#a8b7be'),empty:art.body||'#f4f6f7',emptyStroke:art.stroke||(art.body?'#5d7079':'#bdc8cc'),text:dark?'#ffffff':ink,muted:dark?'#d6dee2':muted,frame:art.frame||null,frameStroke:art.frameStroke||art.frame||null};};
 function drawPanel(p,item,palette,plan,x,y,width=plan.width,height=plan.height){
  const inv=item.inventory,group=plan.group,a=p.items,scope='Switchport reports|'+p.role+'|'+item.id+'|group|'+group.id;
- const colors=panelColors(item);rect(a,x,y,width,height,colors.body,colors.stroke,.7);// The panel and its heading identify the switch, stack member or module so a
+ const colors=panelColors(item);rect(a,x,y,width,height,colors.body,colors.stroke,.7,6);// The panel and its heading identify the switch, stack member or module so a
  // double-click opens that device's port map details.
  const identity={reportMember:String(group.device||'1'),reportSlot:group.slot||'',reportIdentity:group.slot?group.device+'/'+String(group.slot).toUpperCase():String(group.device||'1')};
- Object.assign(a.at(-1),{editKey:scope+'|body',reportPanel:true,reportGroup:group.id,sourceId:item.id,...identity});rect(a,x,y,width,plan.header||24,navy);
+ Object.assign(a.at(-1),{editKey:scope+'|body',reportPanel:true,reportGroup:group.id,sourceId:item.id,...identity});rect(a,x,y,width,plan.header||24,navy,'none',1,6);
  text(a,x+7,y+(plan.style?.compact?1:4),width-14,groupTitle(inv,group,plan.width-14,plan.style?.groupFont||11),plan.style?.groupFont||11,true,'#ffffff','left',{editKey:scope+'|title',reportDevice:item.id,...identity});
- if(plan.configured){let at=y+29;for(const port of plan.ports){text(a,x+8,at,width-16,port.id+' | '+port.media+' | configured alternative',10,false,ink,'left',{reportPort:port.id,editKey:scope+'|configured|'+port.id});at+=22;}return;}
+ if(plan.configured){let at=y+(plan.header||24)+5;for(const port of plan.ports){text(a,x+8,at,width-16,port.id+' | '+port.media+' | configured alternative',10,false,ink,'left',{reportPort:port.id,editKey:scope+'|configured|'+port.id});at+=22;}return;}
  const sockets=[],portEntries=[];
  for(const spec of group.socketLayout){
   const port=plan.ports.find(port=>port.number===spec.number);if(!port)throw new ReportCapacityError('A report socket has no matching interface.',{deviceId:item.id,group:group.id});
   const optical=!/RJ|copper/i.test(spec.media),w=plan.portWidth,h=w*(optical?plan.opticalRatio??OPTICAL_HEIGHT.builder:23.2/25.2),sx=x+8+(spec.column-plan.minimum)*plan.pitch,sy=y+plan.header+plan.numberFont*1.2+(plan.style.compact?1.2:4)+spec.row*plan.rowPitch+(plan.faceHeight-h)/2,fill=nativeFill(port,palette),outline=palette.aggregates[aggregateKey(port.aggregate)],socketKey=scope+'|port|'+port.id+(spec.suffix?'|'+spec.suffix:'');
   // All bodies and socket anchors are report-local. The topology hardware and
   // its saved anchors are never changed to make a reference sheet fit.
-  rect(a,sx,sy,w,h,fill,outline||'#50616c',outline?2.2:.8);Object.assign(a.at(-1),{editKey:socketKey+'|face',reportPort:port.id,reportPortRole:'native',vlanId:port.untaggedVlan,sourceId:item.id,socketForm:spec.media});
+  rect(a,sx,sy,w,h,fill,outline||'#50616c',outline?2.2:.8,Math.min(3,w*.1));Object.assign(a.at(-1),{editKey:socketKey+'|face',reportPort:port.id,reportPortRole:'native',vlanId:port.untaggedVlan,sourceId:item.id,socketForm:spec.media});
   // Copper faces keep only the latch bar, as the builder draws them: small
   // decorative contact pins read as VLAN markers on an enlarged sheet.
-  if(!optical)rect(a,sx+w*.32,sy+h-3,w*.36,2,'#4c5c65');else rect(a,sx+3,sy+h-2.1,w-6,.7,'#61727c');
+  if(!optical)rect(a,sx+w*.32,sy+h-3,w*.36,2,'#4c5c65','none',1,1);else rect(a,sx+3,sy+h-2.1,w-6,.7,'#61727c');
   const markerIds=markerVlans(inv,port),radius=plan.markerRadius??plan.style.markerRadius,step=radius*2+1,cols=Math.max(1,Math.floor((w-4)/step)),bottomReserve=port.disabled||port.taggedVlanPolicy?plan.numberFont*1.2+1:3,availableRows=Math.max(0,Math.floor((h-bottomReserve-radius*2-2.2)/step)+1),markerTop=sy+2.2;
   const drawMarker=(id,cx,cy)=>{const extra={editKey:socketKey+'|vlan|'+id,reportPort:port.id,reportPortRole:voiceVlan(inv,port,id)?'voice':'tagged',vlanId:id,sourceId:item.id,name:'VLAN '+id+(voiceVlan(inv,port,id)?' voice':' tagged')};if(voiceVlan(inv,port,id)){diamond(a,cx-radius-.3,cy-radius-.3,radius*2+.6,'#ffffff','#ffffff',.3);diamond(a,cx-radius,cy-radius,radius*2,palette.vlans[id],'#263c49',.5,extra);}else{ellipse(a,cx-radius-.3,cy-radius-.3,radius*2+.6,radius*2+.6,'#ffffff','#ffffff',.3);ellipse(a,cx-radius,cy-radius,radius*2,radius*2,palette.vlans[id],'#263c49',.5,extra);}};
-  if(plan.markerRadius!=null&&markerIds.length){const grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont)),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
+  if(plan.markerRadius!=null&&markerIds.length){let grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont)),radius);if(!grid.fits)grid=dotLayout(markerIds.length,dotArea(sx,sy,w,h,dotReserve(port,optical,plan.numberFont,true)),radius);if(!grid.fits)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});markerIds.forEach((id,index)=>drawMarker(id,grid.points[index].cx,grid.points[index].cy));}
   else{if(markerIds.length>cols*availableRows)throw new ReportCapacityError('The complete VLAN markers do not fit interface '+port.id+'.',{deviceId:item.id,port:port.id});
    markerIds.forEach((id,index)=>drawMarker(id,sx+2.6+radius+(index%cols)*step,markerTop+radius+Math.floor(index/cols)*step));}
   if(port.disabled)text(a,sx+w-9,sy+h-plan.numberFont*1.2,8,'!',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'center',{editKey:socketKey+'|disabled',reportPort:port.id,reportPortRole:'disabled'});
   if(port.taggedVlanPolicy)text(a,sx+2,sy+h-plan.numberFont*1.2,Math.max(10,w-12),'*',plan.numberFont,true,fill==='#000000'?'#ffffff':ink,'left',{editKey:socketKey+'|policy',reportPort:port.id,reportPortRole:'policy'});
-  const name=port.id+(spec.suffix?' ['+spec.suffix+']':'');portEntries.push({name,source:port,display:(port.displayNumber||portLabelText(port.id))+spec.suffix});sockets.push({name,x:sx,y:sy,w,h,form:spec.media});
+  const name=port.id+(spec.suffix?' ['+spec.suffix+']':'');portEntries.push({name,source:port,display:(group.configuredInterfaces?shortInterface(port.id):port.displayNumber||portLabelText(port.id))+spec.suffix});sockets.push({name,x:sx,y:sy,w,h,form:spec.media});
  }
  const labelGroup={x,y,w:width,h:height,editKey:scope,sourceId:item.id,ports:Object.fromEntries(sockets.map(socket=>[socket.name,[(socket.x+socket.w/2-x)/width,(socket.y+socket.h/2-y)/height]])),children:sockets.map(socket=>({type:'rect',socketPart:0,socketForm:socket.form,x:(socket.x-x)/width,y:(socket.y-y)/height,w:socket.w/width,h:socket.h/height})),panelRegions:[{x:0,y:0,w:1,h:1}]},numbers=portLabelLayout(labelGroup,portEntries,{fontSize:plan.numberFont,format:(_name,port)=>port.display,measureRequired:false,minWidth:plan.style.compact?0:Math.min(18,plan.portWidth),gap:plan.style.compact?1:2});
  if(!numbers.readable)throw new ReportCapacityError('The port numbers need more room in '+group.id+'.',{deviceId:item.id,group:group.id});
  for(const entry of numbers.entries){const b=entry.number;label(a,b.x,b.y,b.w,b.h,entry.text,b.size,true,colors.text,'center');Object.assign(a.at(-1),{editKey:entry.editKey+'|text',portNumberRole:'text',reportPortRole:'number',reportPort:entry.port.source.id,portName:entry.port.source.id,sourceId:item.id,full:true});}
  p.reportSockets??=[];p.reportSockets.push(...sockets.map(socket=>({...socket,deviceId:item.id,group:group.id})));p.reportNumberBoxes??=[];p.reportNumberBoxes.push(...numbers.labelObstacles);
 }
-function drawBand(p,plan,band,x,y,palette){const colors=panelColors(plan.item);for(const panel of band.panels){if(panel.plan)drawPanel(p,plan.item,palette,panel.plan,x+panel.x,y,panel.w,panel.h);else{rect(p.items,x+panel.x,y,panel.w,panel.h,colors.empty,colors.emptyStroke,.7);text(p.items,x+panel.x+8,y+Math.min(8,(panel.h-14)/2),panel.w-16,'Slot '+panel.empty+' / Not declared',11,false,colors.muted);}}}
+function drawBand(p,plan,band,x,y,palette){const colors=panelColors(plan.item);for(const panel of band.panels){if(panel.plan)drawPanel(p,plan.item,palette,panel.plan,x+panel.x,y,panel.w,panel.h);else{rect(p.items,x+panel.x,y,panel.w,panel.h,colors.empty,colors.emptyStroke,.7,6);text(p.items,x+panel.x+8,y+Math.min(8,(panel.h-14)/2),panel.w-16,'Slot '+panel.empty+' / Not declared',11,false,colors.muted);}}}
 function blockHeading(p,item,x,y,width,continued=false){const inv=item.inventory,title=displayName(inv)+(continued?' / continued':''),description=[modelLabel(inv),inv.os,inv.firmware!=='Unknown'?inv.firmware:''].filter(Boolean).join(' | '),height=text(p.items,x,y,width,title,14,true,ink,'left',{editKey:p.name+'|'+item.id+'|device-title'});return y+height+4+text(p.items,x,y+height+4,width,description,10,false,muted)+9;}
 function drawBlock(p,plan,x,y,palette,{bands=plan.bands,continued=false,heading=true}={}){let at=heading?blockHeading(p,plan.item,x,y,Math.max(plan.width,260),continued):y;
  // A chassis shows its frame color around and between its slots.
- const colors=panelColors(plan.item);if(colors.frame&&plan.item.inventory.chassisSlots&&bands.length){const m=Math.min(3,plan.gap/2+1),h=bands.reduce((sum,band)=>sum+band.height,0)+plan.gap*(bands.length-1),w=Math.max(...bands.map(band=>band.width));rect(p.items,x-m,at-m,w+m*2,h+m*2,colors.frame,colors.frameStroke,.8);Object.assign(p.items.at(-1),{editKey:'Switchport reports|'+p.role+'|'+plan.item.id+'|frame',reportFrame:true,sourceId:plan.item.id});}
+ const colors=panelColors(plan.item);if(colors.frame&&plan.item.inventory.chassisSlots&&bands.length){const m=Math.min(3,plan.gap/2+1),h=bands.reduce((sum,band)=>sum+band.height,0)+plan.gap*(bands.length-1),w=Math.max(...bands.map(band=>band.width));rect(p.items,x-m,at-m,w+m*2,h+m*2,colors.frame,colors.frameStroke,.8,8);Object.assign(p.items.at(-1),{editKey:'Switchport reports|'+p.role+'|'+plan.item.id+'|frame',reportFrame:true,sourceId:plan.item.id});}
  for(const band of bands){drawBand(p,plan,band,x,at,palette);at+=band.height+plan.gap;}return at;}
 function blockHeight(plan){const inv=plan.item.inventory;return Math.max(16.8,wrapPortText(displayName(inv),Math.max(plan.width,260),14,true).length*16.8)+4+Math.max(12,wrapPortText([modelLabel(inv),inv.os,inv.firmware!=='Unknown'?inv.firmware:''].filter(Boolean).join(' | '),Math.max(plan.width,260),10).length*12)+9+plan.height;}
 
@@ -260,9 +297,12 @@ function footerGain(request){return (request.pageFooter&&!request.pageFooter.foo
 // Height below the content that the footer band (or the safety note alone)
 // needs on a sheet with this margin.
 export function footerSpace(request,margin){const bare=request.pageFooter&&!request.pageFooter.footer&&!request.pageFooter.show;return bare?margin+16:margin+41;}
+// A chassis painted with its frame color shows that frame around its slots;
+// keep room for it inside the page margin.
+const frameRoom=item=>item.artwork?.frame&&item.inventory.chassisSlots?3:0;
 function mapCandidates(item,palette,request,styles,extra=0){const margin=marginOf(request);
  const sheet=paperOf(request),tops=new Map(),contentTop=compact=>{if(!tops.has(compact))tops.set(compact,page(request,item.id+'|measure',displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),'onePage',[item.id],sheet.width,sheet.height,compact).contentTop);return tops.get(compact);};
- const fits=(plan,style)=>plan.width<=sheet.width-margin*2&&contentTop(style.compact)+plan.height+(style.compact?4:12)+legendHeight(item.inventory,palette,sheet.width-margin*2,style.compact,true)+extra+(style.compact?49:59)-footerGain(request)<=sheet.height+.01;
+ const frame=frameRoom(item),fits=(plan,style)=>plan.width+frame*2<=sheet.width-margin*2&&contentTop(style.compact)+plan.height+(style.compact?4:12)+legendHeight(item.inventory,palette,sheet.width-margin*2,style.compact,true)+extra+(style.compact?49:59)-footerGain(request)<=sheet.height+.01;
  const out=[];
  for(const style of styles){
   let base;try{base=devicePlan(item,style,null,true);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;continue;}
@@ -288,10 +328,11 @@ export function reportDiagram(item,palette,request,{wall=false}={}){const margin
   // A port map (request.fill) draws one dot size, as large as its most
   // filled port allows.
   if(radius!=null)for(const band of plan.bands)for(const panel of band.panels)if(panel.plan)panel.plan.markerRadius=radius;
-  if(plan.width>width-margin*2){failure=new ReportCapacityError('The complete physical banks of '+displayName(item.inventory)+' exceed readable '+reportPageLabel(request.paper)+' width. Use larger paper or the wall chart.',{deviceId:item.id,requiredWidth:plan.width+margin*2});continue;}
+  const frame=wall?0:frameRoom(item);
+  if(plan.width+frame*2>width-margin*2){failure=new ReportCapacityError('The complete physical banks of '+displayName(item.inventory)+' exceed readable '+reportPageLabel(request.paper)+' width. Use larger paper or the wall chart.',{deviceId:item.id,requiredWidth:plan.width+margin*2});continue;}
   const p=page(request,item.id+'|'+(wall?'wall':'a4'),displayName(item.inventory)+' / Port map',[modelLabel(item.inventory),item.inventory.ports.length+' interfaces'].filter(Boolean).join(' | '),wall?'wall':'onePage',[item.id],width,sheet.height,style.compact),keyHeight=legendHeight(item.inventory,palette,width-margin*2,style.compact,!!request?.fill),gap=style.compact?4:12,needed=p.contentTop+plan.height+gap+keyHeight+(style.compact?49:59)-footerGain(request);
   if(wall){p.height=Math.max(p.height,needed);p.paper={preset:'custom',orientation:p.width>=p.height?'landscape':'portrait',widthMm:p.width*25.4/96,heightMm:p.height*25.4/96};}else if(needed>p.height+.01){failure=new ReportCapacityError('The complete port map and VLAN key need '+Math.ceil(needed)+' px of readable height; '+reportPageLabel(request.paper)+' provides '+Math.floor(p.height)+' px. The booklet keeps all content on continued sheets.',{deviceId:item.id,requiredHeight:needed});continue;}
-  try{const bottom=drawBlock(p,plan,margin,p.contentTop,palette,{heading:false}),keyBottom=legend(p,bottom+gap,item.inventory,palette);if(!wall)drawDescriptions(p,keyBottom+4,item.inventory,contentLimit(p));p.widthMm=p.width*25.4/96;p.heightMm=p.height*25.4/96;p.reportGeometryScale=style.scale;p.reportNumberFont=style.numberFont;if(fit!=null){p.reportMarkerFit=fit;p.reportMarkerRadius=radius;}return finish(p,request,palette,item.inventory);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;failure=error;}
+  try{const bottom=drawBlock(p,plan,margin+frame,p.contentTop+frame,palette,{heading:false})+frame,keyBottom=legend(p,bottom+gap,item.inventory,palette);if(!wall)drawDescriptions(p,keyBottom+4,item.inventory,contentLimit(p));p.widthMm=p.width*25.4/96;p.heightMm=p.height*25.4/96;p.reportGeometryScale=style.scale;p.reportNumberFont=style.numberFont;if(fit!=null){p.reportMarkerFit=fit;p.reportMarkerRadius=radius;}return finish(p,request,palette,item.inventory);}catch(error){if(error.code!=='SWITCHPORT_REPORT_CAPACITY')throw error;failure=error;}
  }
  throw failure;
 }
@@ -387,4 +428,4 @@ export function validateReportScene(p){
 
 // Shared measured primitives for the drawing-only adaptive paper planner.
 // Standalone reports keep their established geometry and export behavior.
-export const portMapPrimitives={devicePlan,fillRadius,page,finish,drawBlock,keyRows,keySections,text,ellipse,diamond,symbolKey,symbolKeyHeight,displayName,modelLabel,footerSpace};
+export const portMapPrimitives={devicePlan,fillRadius,page,finish,drawBlock,keyRows,keySections,text,ellipse,diamond,symbolKey,symbolKeyHeight,displayName,modelLabel,footerSpace,basisHeight,drawBasis,frameRoom};

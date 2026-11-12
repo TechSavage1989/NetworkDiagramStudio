@@ -1,3 +1,32 @@
+# Preview.61: port map polish, printed text sizes, device hierarchy order
+
+Baseline: published preview.60. The owner asked for:
+- no color block in Port Inventory lists;
+- Port Inventory interface pages named and sized like the other inventory pages;
+- an explanation of why a wireless port number set to 8 pt is reported as 3.8 pt;
+- tagged-VLAN dots allowed over the jack's latch line when needed;
+- automatic device order from the network hierarchy;
+- no text overlap on unconfirmed-module panels, and those modules drawn as sockets like the Switchport builder;
+- editable port map headers and text;
+- rounded corners on port map graphics;
+- the page margin on all four edges, including port map header bands.
+
+What changed:
+- **Printed size:** the 8 pt is the drawing size; the warning reports the printed size after the page is fitted to its paper (about 47% on that sheet). The quick Size box shows "prints X pt" (#quick-text-printed) and Properties shows the same hint.
+- **Port Inventory:** the swatch is gone. Interface pages use the inventory typography (compactTable) and device names (namePagesByDevices).
+- **Dots:** dotReserve(…, overlap) lets fillRadius use the jack face down to 1.6 px from its bottom edge.
+- **Hierarchy order:** device-hierarchy.mjs (hierarchyOrder, applyAutomaticOrder), layout.orderAuto, the Device order button. device-hierarchy.test.mjs.
+- **Port maps** (reports/scene.mjs, adaptive-port-map.mjs):
+  - measured configured-panel headers;
+  - socket drawing for configured modules with a socketLayout;
+  - shortInterface labels;
+  - the 3560-E uplink basis note;
+  - text keyed by wording with legacyEditKey;
+  - header band inset by the margin;
+  - frameRoom for chassis frames;
+  - rounded corners (cornerRadius in SVG, PDF and Visio).
+- **Tests:** port-map-sheet-details (dots over the latch, unconfirmed module sockets, names, interface pages), port-map-details, adaptive-port-map header inset. A scratch margin audit found no item outside the margin on the fictional fixtures.
+
 # Preview.60: global settings rule, paper lock, VLAN pages, access points on network pages
 
 Baseline: published preview.59. The owner asked for:

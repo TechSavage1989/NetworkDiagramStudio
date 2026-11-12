@@ -27,7 +27,7 @@ function arrange(plan,columns){
 // VLANs and LAGs each have their own heading.
 function keyPlan(inv,palette,width){
  const sections=P.keySections(inv,palette,width,true,true);
- return {width,sections,height:sections.reduce((sum,section)=>sum+22+section.rows.reduce((total,row)=>total+row.height,0)+2,0)};
+ return {width,sections,inv,height:sections.reduce((sum,section)=>sum+22+section.rows.reduce((total,row)=>total+row.height,0)+2,0)+P.basisHeight(inv,width,true)};
 }
 function drawKey(p,plan,x,y){
  const a=p.items;
@@ -36,7 +36,7 @@ function drawKey(p,plan,x,y){
  for(const row of section.rows){
   for(const [column,entry] of row.entries.entries()){
    const left=x+column*row.columnWidth;
-   rect(a,left,y+1,14,12,entry.fill,entry.stroke||'#536779',entry.stroke?2:.7);
+   rect(a,left,y+1,14,12,entry.fill,entry.stroke||'#536779',entry.stroke?2:.7,2.5);
    if(entry.vlan){
     const extra={editKey:p.name+'|key|'+entry.id+'|marker',reportKeyMarker:entry.id};
     if(entry.voice)P.diamond(a,left+18,y+1.5,11,entry.fill,'#263c49',.5,extra);
@@ -49,6 +49,7 @@ function drawKey(p,plan,x,y){
  }
  y+=2;
  }
+ P.drawBasis(p,y,plan.inv,plan.width,x);
 }
 function preserveLegacyKeys(page,previous){
  // Repacking changes incidental item indexes. Keep semantic text/header
@@ -74,11 +75,13 @@ export function adaptivePortMap(item,palette,request,identity){
  const legacy=sheet?.legacyAdaptive===true,margin=legacy?(sheet?.locked?24:12):Number.isFinite(request.margin)?request.margin:4;
  if(!sheet||!(sheet.width>0&&sheet.height>0))throw new ReportCapacityError('Adaptive port maps require measured paper dimensions.');
  const make=()=>{
-  const p=P.page(request,item.id+'|adaptive',P.displayName(inv),[P.modelLabel(inv),inv.ports.length+' interfaces'].filter(Boolean).join(' | '),identity.role,[item.id],sheet.width,sheet.height,true);
+  // A legacy frozen frame keeps its original full-width header geometry.
+  const p=P.page(legacy?{...request,margin:undefined}:request,item.id+'|adaptive',P.displayName(inv),[P.modelLabel(inv),inv.ports.length+' interfaces'].filter(Boolean).join(' | '),identity.role,[item.id],sheet.width,sheet.height,true);
   p.name=identity.name;p.displayName=identity.displayName||p.displayName;p.reportMargin=legacy?24:margin;if(!legacy)p.contentTop-=4;return p;
  };
- const sample=make(),top=sample.contentTop,contentWidth=sheet.width-2*margin;
- const footerSpace=P.footerSpace(request,legacy?24:margin),guideHeight=P.symbolKeyHeight(inv,legacy?sheet.width-48:contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top;
+ // A chassis frame drawn around the slots stays inside the page margin too.
+ const frame=legacy?0:P.frameRoom(item),sample=make(),top=sample.contentTop+frame,contentWidth=sheet.width-2*margin-2*frame;
+ const footerSpace=P.footerSpace(request,legacy?24:margin),guideHeight=P.symbolKeyHeight(inv,legacy?sheet.width-48:contentWidth),bottom=sheet.height-footerSpace-guideHeight,available=bottom-top-frame;
  const keys=[{side:false,key:keyPlan(inv,palette,contentWidth)},...[160,190,220,260].filter(width=>width<contentWidth*.4).map(width=>({side:true,key:keyPlan(inv,palette,width)}))];
  const candidates=[];
  for(const style of styles){
@@ -108,9 +111,9 @@ export function adaptivePortMap(item,palette,request,identity){
   if(radius!=null)for(const band of plan.bands)for(const panel of band.panels)if(panel.plan)panel.plan.markerRadius=radius;
   // Center the measured bank/key pair, not a page-sized mostly-empty canvas.
   const occupied=side?plan.width+GAP+key.width:contentWidth;
-  const x=side?margin+(contentWidth-occupied)/2:margin+(roomWidth-plan.width)/2;
+  const x=frame+(side?margin+(contentWidth-occupied)/2:margin+(roomWidth-plan.width)/2);
   try{
-   const bankBottom=P.drawBlock(p,plan,x,top,palette,{heading:false});
+   const bankBottom=P.drawBlock(p,plan,x,top,palette,{heading:false})+frame;
    drawKey(p,key,side?x+plan.width+GAP:margin,side?top:bankBottom+GAP);
    P.symbolKey(p,sheet.height-footerSpace-guideHeight,palette,inv);
    P.finish(p,request,palette,inv);preserveLegacyKeys(p,identity);

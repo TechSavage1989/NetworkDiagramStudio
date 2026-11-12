@@ -37,12 +37,12 @@ export function orderedDevices(project){
 }
 export function moveDevice(project,id,before){
  project.layout||={};const order=orderedDevices(project).map(d=>d.id).filter(v=>v!==id);
- const at=before==null?order.length:order.indexOf(before);order.splice(at<0?order.length:at,0,id);project.layout.order=order;
+ const at=before==null?order.length:order.indexOf(before);order.splice(at<0?order.length:at,0,id);project.layout.order=order;delete project.layout.orderAuto;
 }
 export function moveStep(project,id,step){
  const ids=orderedDevices(project).map(d=>d.id),i=ids.indexOf(id),j=i+step;
  if(i<0||j<0||j>=ids.length)return;
- [ids[i],ids[j]]=[ids[j],ids[i]];project.layout||={};project.layout.order=ids;
+ [ids[i],ids[j]]=[ids[j],ids[i]];project.layout||={};project.layout.order=ids;delete project.layout.orderAuto;
 }
 export function cleanLayout(raw,ids){
  const p=raw&&typeof raw==='object'?raw:{},known=new Set(ids),used=new Set(),pages=[];
@@ -50,7 +50,7 @@ export function cleanLayout(raw,ids){
   if(!v||typeof v.id!=='string'||used.has(v.id))continue;used.add(v.id);
   pages.push({id:v.id.slice(0,120),showReferences:v.showReferences!==false,hiddenReferences:[...new Set((Array.isArray(v.hiddenReferences)?v.hiddenReferences:[]).filter(key=>typeof key==='string'&&key.length<=500).slice(0,10000))],name:String(v.name||'Core Network').slice(0,80),...(CORE_ARRANGEMENTS.includes(v.arrangement)?{arrangement:v.arrangement}:{}),devices:[...new Set((Array.isArray(v.devices)?v.devices:[]).filter(id=>known.has(id)))]});
  }
- return {deviceStacks:cleanDeviceStacks(p.deviceStacks,ids),drawingGroups:cleanDrawingGroups(p.drawingGroups),sizeMode:p.sizeMode==='spacing'?'spacing':'models',labelBacking:cleanLabelBacking(p.labelBacking),suppressedHandoffs:[...new Set((Array.isArray(p.suppressedHandoffs)?p.suppressedHandoffs:[]).filter(id=>typeof id==='string'&&id.startsWith('handoff:')&&id.length<=650))],pageSetup:cleanPageSetup(p.pageSetup),linkStyles:cleanLinkStyles(p.linkStyles),textStyles:cleanGlobalTextStyles(p.textStyles),pageNumbers:cleanPageNumbers(p.pageNumbers),snapping:cleanSnap(p.snapping),drawingEdits:cleanDrawingEdits(p.drawingEdits),order:[...new Set((Array.isArray(p.order)?p.order:[]).filter(id=>known.has(id)))],corePages:pages,
+ return {deviceStacks:cleanDeviceStacks(p.deviceStacks,ids),drawingGroups:cleanDrawingGroups(p.drawingGroups),sizeMode:p.sizeMode==='spacing'?'spacing':'models',labelBacking:cleanLabelBacking(p.labelBacking),suppressedHandoffs:[...new Set((Array.isArray(p.suppressedHandoffs)?p.suppressedHandoffs:[]).filter(id=>typeof id==='string'&&id.startsWith('handoff:')&&id.length<=650))],pageSetup:cleanPageSetup(p.pageSetup),linkStyles:cleanLinkStyles(p.linkStyles),textStyles:cleanGlobalTextStyles(p.textStyles),pageNumbers:cleanPageNumbers(p.pageNumbers),snapping:cleanSnap(p.snapping),drawingEdits:cleanDrawingEdits(p.drawingEdits),order:[...new Set((Array.isArray(p.order)?p.order:[]).filter(id=>known.has(id)))],...(p.orderAuto===true?{orderAuto:true}:{}),corePages:pages,
   switchport:cleanSwitchportSettings({...p.switchport,deviceIds:(Array.isArray(p.switchport?.deviceIds)?p.switchport.deviceIds:[]).filter(id=>known.has(id))}),presentation:cleanPresentation(p.presentation),reportPages:cleanReportPages(p.reportPages,ids),coreArrangement:CORE_ARRANGEMENTS.includes(p.coreArrangement)?p.coreArrangement:'compact',cableCaptions:p.cableCaptions===true,...(p.corePortNumbers===false?{corePortNumbers:false}:{}),...cleanDeviceCaptions(p.deviceCaptions,ids),...(p.hopStyle==='bundle'?{hopStyle:'bundle'}:{}),lineSpacing:Object.fromEntries(Object.entries(p.lineSpacing&&typeof p.lineSpacing==='object'?p.lineSpacing:{}).filter(([page,value])=>page.length<=200&&Number.isFinite(value)&&value>=LINE_SPACING.min&&value<=LINE_SPACING.max).slice(0,200)),coreExclude:[...new Set((Array.isArray(p.coreExclude)?p.coreExclude:[]).filter(id=>known.has(id)))],includeAPs:p.includeAPs===true,documentation:p.documentation==='full'?'full':'concise',
   portMap:{...(p.portMap?.mapStyle==='faceplate'?{mapStyle:'faceplate'}:{}),...(p.portMap?.stencilSheets===false?{stencilSheets:false}:{}),presentation:['separate','combined','auto'].includes(p.portMap?.presentation)?p.portMap.presentation:p.portMap?.repeatFaceplate===true?'combined':'auto',density:p.portMap?.density==='expanded'?'expanded':'compact',repeatFaceplate:p.portMap?.repeatFaceplate===true,detailFilter:['all','assigned','connected'].includes(p.portMap?.detailFilter)?p.portMap.detailFilter:'all',groupConsecutive:p.portMap?.groupConsecutive!==false}};
 }

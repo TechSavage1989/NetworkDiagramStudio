@@ -103,7 +103,8 @@ test('fresh locked port maps fill their paper without a second border or referen
  const project=adaptiveProject('letter','landscape',5);project.layout.pageSetup.visible.groups.ports.locked=true;
  const page=maps(project)[0];assert.ok(page.pageLockFrame);
  assert.ok(page.adaptivePortMap.socketWidth>30);
- const header=page.items[0];assert.equal(header.x,0);assert.equal(header.y,0);assert.equal(header.w,page.width);
+ // The header band sits inside the 5 mm page margin on every edge.
+ const inset=5*96/25.4,header=page.items[0];assert.ok(Math.abs(header.x-inset)<.5&&Math.abs(header.y-inset)<.5&&Math.abs(header.x+header.w-(page.width-inset))<.5,'header band inside the margin');
  assert.deepEqual(validateReportScene(page),[]);
  // The banks reach the 5 mm default page margin on both sides.
  const margin=5*96/25.4,extent=panels(page);assert.ok(Math.min(...extent.map(p=>p.x))<margin+5);assert.ok(Math.min(...extent.map(p=>p.x))>=margin-1e-6);
@@ -123,10 +124,10 @@ test('saved legacy locked map frames retain their original reference base',()=>{
  assert.deepEqual(validateReportScene(page),[]);
 });
 
-test('adaptive port-map headers reach paper edges and dense banks keep the 5 mm page margin',()=>{
+test('adaptive port-map headers and dense banks keep the 5 mm page margin on every edge',()=>{
  for(const members of [5,8])for(const preset of ['letter','a4']){
   const page=maps(adaptiveProject(preset,'landscape',members))[0],header=page.items[0];
-  assert.equal(header.x,0);assert.equal(header.y,0);assert.equal(header.w,page.width);
+  const inset=5*96/25.4;assert.ok(Math.abs(header.x-inset)<.5&&Math.abs(header.y-inset)<.5&&Math.abs(header.x+header.w-(page.width-inset))<.5,'header band inside the margin');
   assert.ok(Math.abs(page.reportMargin-5*96/25.4)<1e-9);assert.deepEqual(validateReportScene(page),[]);
   assert.equal(numbers(page).length,members*52);
  }

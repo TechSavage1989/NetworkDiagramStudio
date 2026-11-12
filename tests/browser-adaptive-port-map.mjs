@@ -25,7 +25,8 @@ try{
   const original=await dimensions();assert.ok(Math.abs(original[0]/original[1]-297/210)<1e-6);
   const bodies=await page.locator('#canvas svg [data-drawing-key$="|body"][data-drawing-key*="|group|"]').evaluateAll(elements=>elements.map(e=>({x:Number(e.getAttribute('x')),y:Number(e.getAttribute('y')),w:Number(e.getAttribute('width'))})));
   assert.equal(bodies.length,members==='chassis'?6:members);assert.equal(new Set(bodies.map(b=>Math.round(b.x))).size,members==='chassis'?2:1);
-  if(members!==8){const left=Math.min(...bodies.map(b=>b.x)),right=Math.max(...bodies.map(b=>b.x+b.w));assert.ok((right-left)/original[0]>.94,'use spare page width for the bank');}
+  // The header band sits inside the top margin, so a height-bound bank is slightly narrower.
+  if(members!==8){const left=Math.min(...bodies.map(b=>b.x)),right=Math.max(...bodies.map(b=>b.x+b.w));assert.ok((right-left)/original[0]>.92,'use spare page width for the bank');}
   await page.screenshot({path:resolve(output,'adaptive-'+members+'-a4.png')});
   await page.locator('#page-options').click();const dialog=page.locator('#dialog');
   await dialog.getByLabel('Visible page proportions',{exact:true}).selectOption('letter');
@@ -40,12 +41,16 @@ try{
   await page.locator('#page-options').click();
   await dialog.getByLabel('Lock physical page size',{exact:true}).check();
   await dialog.getByRole('button',{name:'Apply paper settings'}).click();await page.waitForFunction(()=>!document.querySelector('#dialog').open);
-  const edgeHeader=await page.locator('#canvas svg').evaluate(svg=>{
-   const b=svg.viewBox.baseVal;
-   return [...svg.querySelectorAll('rect')].some(r=>Math.abs(+r.getAttribute('x')-b.x)<.01&&Math.abs(+r.getAttribute('y')-b.y)<.01&&Math.abs(+r.getAttribute('width')-b.width)<.01&&r.getAttribute('fill')==='#203746');
+  // The header band keeps the 5 mm page margin on its top, left and right edges.
+  const insetHeader=await page.locator('#canvas svg').evaluate(svg=>{
+   const b=svg.viewBox.baseVal,margin=5*96/25.4,toSvg=svg.getScreenCTM().inverse();
+   return [...svg.querySelectorAll('rect[fill="#203746"]')].some(r=>{
+    const box=r.getBBox(),m=toSvg.multiply(r.getScreenCTM()),a=new DOMPoint(box.x,box.y).matrixTransform(m),z=new DOMPoint(box.x+box.width,box.y+box.height).matrixTransform(m);
+    return Math.abs(a.x-b.x-margin)<1&&Math.abs(a.y-b.y-margin)<1&&Math.abs(b.x+b.width-z.x-margin)<1;
+   });
   });
-  assert.ok(edgeHeader,'locked Auto-fit header should reach both paper edges');
+  assert.ok(insetHeader,'locked Auto-fit header should keep the page margin on its top and both sides');
   await page.screenshot({path:resolve(output,'adaptive-'+members+'-letter-locked.png')});
  }
- assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['five/eight-member and chassis A4','slim gutters and enlarged banks','Letter reflow','locked full-width header','one-column order','Undo/redo','built offline app']},null,2));
+ assert.deepEqual(errors,[]);await writeFile(resolve(output,'result.json'),JSON.stringify({ok:true,checks:['five/eight-member and chassis A4','slim gutters and enlarged banks','Letter reflow','locked header inside the page margin','one-column order','Undo/redo','built offline app']},null,2));
 }finally{await browser.close();}

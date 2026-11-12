@@ -1,7 +1,7 @@
 import {labelBackingItems} from './label-backings.mjs';
 import {normalizedPage} from './dynamic-page.mjs';
 import {cleanNativeArt} from '../native-art.mjs';
-import {xml,round,textLayout} from './scene.mjs';
+import {xml,round,textLayout,cornerRadius} from './scene.mjs';
 import {zip} from './zip.mjs';
 const main='http://schemas.microsoft.com/office/visio/2012/main',doc='http://schemas.openxmlformats.org/officeDocument/2006/relationships',vr='http://schemas.microsoft.com/visio/2010/relationships/',pr='http://schemas.openxmlformats.org/package/2006/relationships';
 const head='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',ns=' xmlns="'+main+'" xmlns:r="'+doc+'"';
@@ -28,7 +28,7 @@ function ellipseOutline(w,h){
 function rectShape(i,id,H,masterChild,relative){
   const transform=relative||box(i.x,i.y,i.w,i.h,H).replace(cell('Angle',0),cell('Angle',i.angle||0));
   return '<Shape ID="'+id+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0"'+attr('Name',i.name)+attr('MasterShape',masterChild)+'>'+transform+(relative&&i.angle?cell('Angle',i.angle):'')+
-    cell('LinePattern',i.stroke==='none'?0:1)+cell('LineColor',i.stroke==='none'?'#FFFFFF':i.stroke)+lineWeight(i.weight||1)+
+    cell('LinePattern',i.stroke==='none'?0:1)+cell('LineColor',i.stroke==='none'?'#FFFFFF':i.stroke)+lineWeight(i.weight||1)+(i.type==='rect'&&cornerRadius(i)?cell('Rounding',inch(cornerRadius(i))):'')+
     cell('FillPattern',i.fill==='none'?0:1)+cell('FillForegnd',i.fill==='none'?'#FFFFFF':i.fill)+cell('FillForegndTrans',1-(i.opacity??1))+(i.type==='ellipse'?ellipseOutline(i.w,i.h):outline(i.w,i.h))+'</Shape>';
 }
 function vectorShape(i,id,H){
