@@ -11,7 +11,7 @@ import {editDeviceShape} from '../drawing-edits.mjs';
 import {simplifyRoute,ROUTE_STYLE} from './routing.mjs';
 import {linkDefaults,legendEntryId,defaultLinkWeight,cleanLinkStyles} from '../link-styles.mjs';
 import {wrapPortText} from '../port-table.mjs';
-import {connectionMediaInfo} from '../connection-types.mjs';
+import {connectionMediaInfo,cleanConnectionTypes} from '../connection-types.mjs';
 import {genericDeviceSymbol} from '../device-symbols.mjs';
 import {textWidth} from './labels.mjs';
 export const W = 1200, H = 975;
@@ -52,9 +52,16 @@ export function rate(v){
 export function mediaInfo(v,access=false){
   return connectionMediaInfo(value(v),access);
 }
-export function linkLegend(page){
+// The user's own connection types marked for the key, with their saved link
+// style; a network page lists them even before any connection uses them.
+export function keyedConnectionTypes(project){
+ const styles=cleanLinkStyles(project.layout?.linkStyles);
+ return cleanConnectionTypes(project.layout?.connectionTypes).filter(type=>type.key).map(type=>{const style=styles[type.name];return {name:type.name,color:(style?.color||type.color).toUpperCase(),opacity:style?.opacity??1,weight:style?.weight||cableWeight,style};});
+}
+export function linkLegend(page,keyed=[]){
  const defaults=linkDefaults,scope=page.editScope||page.name,entries=new Map();
  for(const path of page.items.filter(i=>i.type==='path')){const name=path.linkType||'Link',color=path.color.toUpperCase(),opacity=path.opacity??1,weight=path.weight||cableWeight,key=JSON.stringify([name,color,opacity,weight]);if(!entries.has(key))entries.set(key,{name,color,opacity,weight,style:path.linkStyle,speeds:new Set()});if(path.sourceLink)entries.get(key).speeds.add(rate(path.sourceLink.speed)||'Unspecified speed');}
+ for(const type of keyed)if(![...entries.values()].some(entry=>entry.name===type.name))entries.set(JSON.stringify([type.name,type.color,type.opacity,type.weight]),{...type,speeds:new Set()});
  const titleOf=entry=>(entry.style?.title||entry.name)+(entry.style?.showSpeed&&entry.speeds.size?' | '+[...entry.speeds].sort().join(', '):'')+(entry.opacity<1?' ('+Math.round(entry.opacity*100)+'%)':'');
  const values=[...entries.values()].sort((a,b)=>{const rank=n=>defaults.findIndex(([name])=>name===n||name.startsWith('Fiber')&&/unspecified|Fiber/.test(n));return (rank(a.name)<0?9:rank(a.name))-(rank(b.name)<0?9:rank(b.name))||a.color.localeCompare(b.color)||a.opacity-b.opacity;});
  if(!values.length)return;

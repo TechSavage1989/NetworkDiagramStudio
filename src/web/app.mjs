@@ -119,6 +119,7 @@ function button(parent,label,fn,cls=''){const b=el('button',label,cls);b.type='b
 function line(parent,...nodes){const row=el('div','','itemrow');row.append(...nodes);parent.append(row);return row;}
 function actions(parent){const n=el('div','','actions');parent.append(n);return n;}
 let fieldCount=0;
+function checkbox(parent,text,checked=false){const row=el('label','','check-option'),input=el('input');input.type='checkbox';input.checked=checked;row.append(input,document.createTextNode(text));parent.append(row);return input;}
 function field(parent,labelText,value='',opts=null){
  const label=el('label',labelText);let input;
  if(Array.isArray(opts)){input=el('select');for(const o of opts){const [val,name]=Array.isArray(o)?o:[o,o];const n=el('option',String(name));n.value=val;input.append(n);}input.value=value;}
@@ -684,28 +685,33 @@ function linkCaptionFields(body,type,{collapsible=false}={}){
 function lineWidthValue(input){const value=Number(input.value);if(input.value.trim()===''||!Number.isFinite(value)||value<=0||value>12000)throw Error('Line width must be greater than 0 and no more than 12000.');return value;}
 function linkStyleOptions(selected){
  const used=new Map();for(const p of pages)for(const line of p.items.filter(i=>i.type==='path'))if(!used.has(line.linkType))used.set(line.linkType,line);
- const types=[...new Set([...used.keys(),...linkDefaults.map(([type])=>type)])],type=types.includes(selected)?selected:types[0],line=used.get(type),current=project.layout?.linkStyles?.[type]||{},body=modal('Link styles','compact-color-dialog');
+ const own=customConnectionTypes(),types=[...new Set([...used.keys(),...linkDefaults.map(([type])=>type),...own.map(t=>t.name)])],type=types.includes(selected)?selected:types[0],line=used.get(type),current=project.layout?.linkStyles?.[type]||{},body=modal('Link styles','compact-color-dialog');
  const choice=field(body,'Link type',type,types.map(t=>[t,t+(used.has(t)?'':' (unused)')]));choice.onchange=()=>linkStyleOptions(choice.value);
  const details=legendFields(body,type);
  const captions=linkCaptionFields(body,type),widths=[...new Set(pages.flatMap(page=>page.items.filter(item=>item.type==='path'&&item.linkType===type).map(item=>unpresentPatch(item,{weight:item.weight}).weight)))],initialWidth=widths.length>1?'':String(widths[0]??current.weight??4),width=field(body,'Line width',initialWidth);width.type='number';width.step=.1;width.min=.1;width.max=12000;if(widths.length>1)width.placeholder='Mixed - keep existing';
  body.append(el('p','Applies to matching lines and legends throughout the drawing.','hint'));
- const fallback=linkDefaults.find(([t])=>t===type)?.[1]||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,width:widths[0]??current.weight??4,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});picker.bindWidth(width);
- const bar=actions(body);button(bar,'Save link style',()=>{const weight=width.value!==initialWidth?{weight:lineWidthValue(width)}:{};setLegendStyle(type,details?.value||{},{...captions.value,color:picker.value,opacity:picker.opacity,...weight});picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
- button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1,weight:4});close();});button(bar,'New connection type…',()=>newConnectionType());button(bar,'Cancel',close);
+ const ownType=own.find(t=>t.name===type),keyed=ownType?checkbox(body,'Show in the connection key on network pages, even when no connection uses it',!!ownType.key):null;
+ const fallback=linkDefaults.find(([t])=>t===type)?.[1]||ownType?.color||'#707A83',picker=colorPicker(body,{color:current.color||line?.color||fallback,opacity:current.opacity??line?.opacity??1,width:widths[0]??current.weight??4,used:pages.flatMap(p=>p.items.filter(i=>i.type==='path').map(i=>i.color))});picker.bindWidth(width);
+ const bar=actions(body);button(bar,'Save link style',()=>{const weight=width.value!==initialWidth?{weight:lineWidthValue(width)}:{};const prior=project;if(keyed&&keyed.checked!==!!ownType.key)project={...project,layout:{...project.layout,connectionTypes:cleanConnectionTypes((project.layout?.connectionTypes||[]).map(t=>t.name===type?{...t,key:keyed.checked}:t))}};try{setLegendStyle(type,details?.value||{},{...captions.value,color:picker.value,opacity:picker.opacity,...weight});}catch(error){project=prior;throw error;}picker.remember();close();say('Link style and matching legend entries saved.');},'primary');
+ button(bar,'Reset link style',()=>{setLinkStyle(type,{title:type,description:'',lineTitle:type,lineDescription:'',color:fallback,opacity:1,weight:4});close();});button(bar,'Add connection of this type…',()=>addTypedConnection(type));button(bar,'New connection type…',()=>newConnectionType());button(bar,'Cancel',close);
 }
 $('link-styles').onclick=()=>task(()=>linkStyleOptions());
 $('drawing-connection-type').onclick=()=>task(connectionTypeOptions);
 // The user's own connection types (layout.connectionTypes, with a link style
 // for color and width), and moving selected connections to another type
 // without restyling every other connection of their old type.
-function addConnectionType(layout,{name,color,weight}){
- const list=cleanConnectionTypes([...(layout.connectionTypes||[]),{name,color}]);if(!list.some(type=>type.name===name))throw Error('Use a different name: that connection type already exists.');
+// The cable type value whose connections a key entry or link style names.
+const mediaForType=type=>cableTypeChoices().find(([value])=>value!==customConnectionValue&&(value===type||connectionMediaInfo(value).name===type))?.[0]??type;
+const addTypedConnection=type=>{close();editLink(-1,null,{media:mediaForType(type)});};
+function addConnectionType(layout,{name,color,weight,key}){
+ const list=cleanConnectionTypes([...(layout.connectionTypes||[]),{name,color,...(key?{key:true}:{})}]);if(!list.some(type=>type.name===name))throw Error('Use a different name: that connection type already exists.');
  layout.connectionTypes=list;layout.linkStyles={...layout.linkStyles,[name]:{...layout.linkStyles?.[name],color,...(Number.isFinite(weight)?{weight}:{}),title:name,lineTitle:name}};
 }
 function typeFields(body){
  const name=field(body,'Connection type name',''),color=el('input');name.maxLength=60;color.type='color';color.value='#2A7AB0';color.id='new-connection-color';const label=el('label','Line color');label.htmlFor=color.id;body.append(label,color);
  const width=field(body,'Line width','4');width.type='number';width.min=.5;width.max=40;width.step=.5;
- return {read(){const text=name.value.trim();if(!text)throw Error('Enter a name for the connection type.');if(text.length>60)throw Error('Use a connection type name of 60 characters or fewer.');if(cableTypes.some(([value,label])=>[value,label].some(v=>String(v).toLowerCase()===text.toLowerCase()))||connectionMediaInfo(text).name!==text&&!customConnectionTypes().some(t=>t.name.toLowerCase()===text.toLowerCase()))throw Error('That name is a built-in connection type. Choose another name.');const weight=Number(width.value);if(!(weight>=.5&&weight<=40))throw Error('Line width must be between 0.5 and 40.');return {name:text,color:color.value.toUpperCase(),weight};}};
+ const keyed=checkbox(body,'Show in the connection key on network pages, even before a connection uses it',true);
+ return {read(){const text=name.value.trim();if(!text)throw Error('Enter a name for the connection type.');if(text.length>60)throw Error('Use a connection type name of 60 characters or fewer.');if(cableTypes.some(([value,label])=>[value,label].some(v=>String(v).toLowerCase()===text.toLowerCase()))||connectionMediaInfo(text).name!==text&&!customConnectionTypes().some(t=>t.name.toLowerCase()===text.toLowerCase()))throw Error('That name is a built-in connection type. Choose another name.');const weight=Number(width.value);if(!(weight>=.5&&weight<=40))throw Error('Line width must be between 0.5 and 40.');return {name:text,color:color.value.toUpperCase(),weight,key:keyed.checked};}};
 }
 function newConnectionType(){
  const body=modal('New connection type');body.append(el('p','Add your own connection type with its color and width. Choose it for any connection under Cable type, or select connections in Edit drawing and use Connection type….','hint'));
@@ -1388,9 +1394,9 @@ function saveConnection(index,link,{drawing=null,patch=null,style=null}={}){
   const prepared=validateDrawing();perform('connection',prepared);
  }catch(error){Object.assign(project,before);throw error;}
 }
-function editLink(i=-1,drawing=null){
+function editLink(i=-1,drawing=null,preset={}){
  if(project.devices.length<2){say('Add or import at least two devices first.');return;}
- const l=project.links[i]||drawing?.sourceLink||{},devices=[...project.devices];if(drawing?.generatedDevice&&!devices.some(d=>d.id===drawing.generatedDevice.id))devices.push(drawing.generatedDevice);
+ const l=project.links[i]||drawing?.sourceLink||preset,devices=[...project.devices];if(drawing?.generatedDevice&&!devices.some(d=>d.id===drawing.generatedDevice.id))devices.push(drawing.generatedDevice);
  const body=modal(i<0&&!drawing?'Add connection':'Configure connection','compact-color-dialog'),opts=devices.map(d=>[d.id,d.name]),grid=el('div','','compact-fields');body.append(grid);
  const property=(title,value,options)=>{const cell=el('div','','compact-field');grid.append(cell);return field(cell,title,value,options);};
  const a=property('First device',l.a||opts[0][0],opts),b=property('Second device',l.b||opts[1][0],opts),ap=property('First port','',[]),bp=property('Second port','',[]),apCustom=property('First custom port',''),bpCustom=property('Second custom port','');
@@ -1518,6 +1524,7 @@ function editDrawingObject(key){
  const select=field(body,'Drawing object',item.editKey,options);select.onchange=()=>editDrawingObject(select.value);
  // A port map device also offers its port map details (name, serial, asset tag...).
  const mapTarget=portMapTarget(page,item);if(mapTarget&&project.devices.some(device=>device.id===mapTarget.device)){const row=el('div','','actions');body.append(row);button(row,'Port map details…',()=>editPortMapDetails({...mapTarget,key:item.editKey}));}
+ if(item.legendEntry&&item.linkType){const row=el('div','','actions');body.append(row);button(row,'Add connection of this type…',()=>addTypedConnection(item.linkType));button(row,'New connection type…',()=>newConnectionType());}
  const normalized=item.normalized,factor=normalized?100:1,grid=el('div','',hasPicker?'compact-fields':'form-grid');body.append(grid);const inputs={};
  const property=(where,name,value,opts)=>{if(!hasPicker)return field(where,name,value,opts);const cell=el('div','','compact-field');where.append(cell);return field(cell,name,value,opts);};
  for(const k of ['path','vector'].includes(item.type)||linkedSwatch?[]:item.type==='arttext'?['w']:['w','h']){inputs[k]=property(grid,({w:'Width',h:'Height'})[k]+(normalized?' (%)':''),Math.round(item[k]*factor*1000)/1000);inputs[k].type='number';inputs[k].step=normalized?.1:1;}

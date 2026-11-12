@@ -87,7 +87,7 @@ let customTypes=[];
 const hexColor=/^#[0-9a-f]{6}$/i;
 export function cleanConnectionTypes(raw){
  const seen=new Set(),out=[];
- for(const row of Array.isArray(raw)?raw.slice(0,100):[]){const name=typeof row?.name==='string'?row.name.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g,'').slice(0,60):'';if(!name||seen.has(name.toLowerCase())||name===customConnectionValue)continue;seen.add(name.toLowerCase());out.push({name,color:hexColor.test(row.color||'')?row.color.toUpperCase():'#707A83'});}
+ for(const row of Array.isArray(raw)?raw.slice(0,100):[]){const name=typeof row?.name==='string'?row.name.trim().replace(/[\u0000-\u001F\u007F-\u009F]/g,'').slice(0,60):'';if(!name||seen.has(name.toLowerCase())||name===customConnectionValue)continue;seen.add(name.toLowerCase());out.push({name,color:hexColor.test(row.color||'')?row.color.toUpperCase():'#707A83',...(row.key===true?{key:true}:{})});}
  return out;
 }
 export function setCustomConnectionTypes(raw){customTypes=cleanConnectionTypes(raw);}

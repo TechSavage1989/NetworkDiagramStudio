@@ -28,3 +28,13 @@ test('changing selected connections leaves every other connection of the old typ
  assert.ok(after.items.some(i=>i.legendEntry&&i.linkType==='Building backbone'),'the key lists the new type');
  assert.equal(project.links.filter(l=>l.media==='Building backbone').length,0,'the original project is unchanged');
 });
+
+test('a connection type marked for the key shows on network pages before any connection uses it',()=>{
+ const project=fictionalCampus();project.layout={connectionTypes:[{name:'Spare dark fiber',color:'#7A3FB2',key:true},{name:'Lab only',color:'#B23F3F'}],linkStyles:{'Spare dark fiber':{color:'#7A3FB2',weight:5}}};
+ assert.deepEqual(cleanConnectionTypes(project.layout.connectionTypes),[{name:'Spare dark fiber',color:'#7A3FB2',key:true},{name:'Lab only',color:'#B23F3F'}]);
+ const core=buildPages(project).find(p=>p.coreDeviceIds),key=core.items.filter(i=>i.legendEntry);
+ assert.ok(!core.items.some(i=>i.type==='path'&&i.linkType==='Spare dark fiber'),'no connection uses it');
+ const swatch=key.find(i=>i.type==='rect'&&i.linkType==='Spare dark fiber');assert.ok(swatch,'the key lists it');assert.equal(swatch.fill,'#7A3FB2');
+ assert.ok(key.some(i=>i.type==='text'&&i.linkType==='Spare dark fiber'&&/Spare dark fiber/.test(i.value)));
+ assert.ok(!key.some(i=>i.linkType==='Lab only'),'an unmarked unused type stays out of the key');
+});

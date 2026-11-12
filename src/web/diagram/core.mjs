@@ -14,7 +14,7 @@ import {applyDrawingEdits,editDeviceShape} from '../drawing-edits.mjs';
 import {linkCaption,hasLineCaption,linkWeight} from '../link-styles.mjs';
 import {hardwareProfile,portCapability} from '../imports/hardware.mjs';
 import {wrapPortText} from '../port-table.mjs';
-import {C,addDevice,bridge,cableWeight,displayPortCaption,fresh,getAnchor,label,linkLegend,mediaInfo,optic,physicalPorts,portList,rate,rect,route} from './scene.mjs';
+import {C,addDevice,bridge,cableWeight,displayPortCaption,fresh,getAnchor,label,linkLegend,keyedConnectionTypes,mediaInfo,optic,physicalPorts,portList,rate,rect,route} from './scene.mjs';
 
 const name=d=>d?.name||d?.id||'Device';
 function cableName(db,e){return 'L'+(e.idx+1)+' '+name(db.devices.get(e.a))+' '+e.ap+' / '+name(db.devices.get(e.b))+' '+e.bp;}
@@ -424,7 +424,7 @@ export function corePages(project,inventory,{portNumbers}={}){
   }
   applyDrawingEdits(page,pageProject);
   for(const req of requests.filter(r=>r.role==='media')){const path=page.items.find(i=>i.type==='path'&&i.sourceLink&&linkKey(i.sourceLink)===req.editKey.split('|media|')[1]);if(path){const h=path.color.replace('#',''),v=[0,2,4].map(n=>parseInt(h.slice(n,n+2),16));req.color=(v[0]*.299+v[1]*.587+v[2]*.114)>180?C.ink:path.color;}}
-  linkLegend(page);const modulePages=moduleLegend(page,pageProject);applyDrawingEdits(page,pageProject);for(const continued of modulePages)applyDrawingEdits(continued,pageProject);
+  linkLegend(page,keyedConnectionTypes(pageProject));const modulePages=moduleLegend(page,pageProject);applyDrawingEdits(page,pageProject);for(const continued of modulePages)applyDrawingEdits(continued,pageProject);
   informationPanel(page,pageProject);scaleText(page,pageProject);bridge(page,{style:hopStyle(pageProject)});fitDynamicPage(page,pageProject);placeDeviceTitles(page,pageProject,nodes);fitDynamicPage(page,pageProject);
   const fontFactor=presentation(pageProject,page).textScale;for(const request of requests){request.size=12*fontFactor;request.minSize=Math.min(12,request.size);request.fontFactor=fontFactor;}
   // Port names use leader lines only after the page has made more room for
