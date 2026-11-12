@@ -38,6 +38,7 @@ export function globalTextCategory(item){
  if(item?.type!=='text')return null;
  if(item.pageTitle)return 'pageTitles';
  if(item.pageHeading||item.pageFrame)return 'pageMetadata';
+ if(item.siteMapSlot)return item.siteMapSlot==='name'?'deviceNames':item.siteMapSlot==='link'?'linkLabels':'deviceDetails';
  if(item.labelRole)return item.labelRole==='port'?'portLabels':'linkLabels';
  if(item.titleOwner||item.deviceInfo)return item.titleSlot==='detail'||item.deviceInfo==='model'||item.deviceInfo==='mac'?'deviceDetails':'deviceNames';
  if(item.legendEntry||/\|legend\|/.test(item.editKey||''))return 'connectionKey';

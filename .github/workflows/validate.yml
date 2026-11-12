@@ -81,7 +81,8 @@ jobs:
             @{ name = 'port-sizing-controls'; script = 'tests/browser-port-sizing-controls.mjs' },
             @{ name = 'wireless-paper'; script = 'tests/browser-wireless-paper.mjs' },
             @{ name = 'port-map-details'; script = 'tests/browser-port-map-details.mjs' },
-            @{ name = 'paper-controls'; script = 'tests/browser-paper-controls.mjs' }
+            @{ name = 'paper-controls'; script = 'tests/browser-paper-controls.mjs' },
+            @{ name = 'site-map'; script = 'tests/browser-site-map.mjs' }
           )
           $results = @()
           foreach ($check in $checks) {

@@ -457,3 +457,4 @@ input,textarea,[contenteditable]:not([contenteditable="false"]),[data-inline-edi
 /* The printed size of the selected text, beside its drawing-size field. */
 .quick-printed{font-size:11.5px;color:#9a3412;white-space:nowrap;margin-left:2px}
 .quick-printed:empty{display:none}
+.site-map-details{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:0 14px;border:1px solid #cedce0;border-radius:8px;padding:4px 12px 2px;margin:8px 0 12px}.site-map-details legend{font-weight:600;padding:0 4px}.site-map-details .check-option{margin:6px 0}

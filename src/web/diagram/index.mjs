@@ -16,6 +16,7 @@ import {deviceFaceplate} from './faceplate.mjs';
 import {logicalPages} from './logical.mjs';
 import {documentationMode,documentationSections,includeTrunkReference,interfaceAddresses,savedReportLayout,logicalInventoryColumns,logicalInventoryName} from './documentation.mjs';
 import {corePages} from './core.mjs';
+import {siteMapPages} from './site-map.mjs';
 import {buildWirelessPages} from './wireless-layout.mjs';
 import {applyDrawingEdits,drawingObjects,deviceEditKey} from '../drawing-edits.mjs';
 import {cleanPageNumbers,footerAllowance,pageNumber,pageGeometry,pageFamily,fitColumns,printPageStyles,fitVisiblePage,printGeometry} from '../page-options.mjs';
@@ -896,7 +897,7 @@ export function buildPages(project={},options={}){
   // finished again; an unchanged page reuses its finished copy.
   const memo=finishedPageMemo(options.cache),sources=new Map();
   const cached=(family,build)=>{if(!options.cache)return build();const entry=cachedDraftEntry(options.cache,family,project,build);return entry.pages.map((page,i)=>{const own=entry.shared?{...page}:page;sources.set(own,{shared:entry.shared?page:null,token:family+':'+entry.serial+':'+i,family});return own;});};
-  const db=inventory(project),pages=[...cached('core',()=>corePages(project,physicalInventory(db),{portNumbers})),...cached('ports',()=>portMaps(project,db)),...cached('wireless',()=>wireless(project,physicalInventory(db))),...cached('logical',()=>logical(project,db)),...cached('switchports',()=>buildSwitchportReports(project))];
+  const db=inventory(project),pages=[...cached('core',()=>corePages(project,physicalInventory(db),{portNumbers})),...cached('sitemap',()=>siteMapPages(project,physicalInventory(db))),...cached('ports',()=>portMaps(project,db)),...cached('wireless',()=>wireless(project,physicalInventory(db))),...cached('logical',()=>logical(project,db)),...cached('switchports',()=>buildSwitchportReports(project))];
   for(const report of cleanReportPages(project.layout?.reportPages,(project.devices||[]).map(d=>d.id))){
     const selected=new Set(report.devices),copy={...project,devices:(project.devices||[]).filter(d=>selected.has(d.id)),links:(project.links||[]).filter(l=>selected.has(l.a)&&selected.has(l.b)),_reportPrefix:'report:'+report.id},data=inventory(copy);
     const generated=report.family==='ports'?portMaps(copy,data):report.family==='wireless'?wireless(copy,physicalInventory(data)):logical(copy,data,{includeTrunks:report.family==='trunk',includeLogical:report.family==='logical'}).filter(p=>pageFamily(p.title)===report.family);

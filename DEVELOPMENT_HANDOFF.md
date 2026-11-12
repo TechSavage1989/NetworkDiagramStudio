@@ -1,3 +1,39 @@
+# Preview.62: site map page and engineer review in the HTML viewer
+
+Baseline: published preview.61. The owner asked for:
+- a site map: a higher-level diagram of the hardware hierarchy and connections, without port detail, with details customisable through options;
+- an interactive HTML report that shows information and links when items are clicked, highlights and moves to associated objects, and adds features useful for review and troubleshooting.
+
+What changed:
+- **Site map** (src/web/diagram/site-map.mjs, src/web/site-map-settings.mjs):
+  - levels from the WAN edge;
+  - stacks as one card;
+  - access point groups;
+  - leaf units beside or below their parent;
+  - one line per device pair;
+  - ordered band tracks;
+  - automatic or explicit direction;
+  - fixed-page scale search with the key above or beside.
+
+  Site map options are in the stage toolbar on the site map. The site map has its own sidebar page group. Exports: SVG, vector PDF and Visio (valid package, glued connectors).
+- **Viewer** (src/web/interactive-html.mjs):
+  - details panel;
+  - connection lists with jumps;
+  - Shown on pages;
+  - path to the edge;
+  - dimming;
+  - connection-type highlight;
+  - Back and page keys;
+  - device search results;
+  - deep links.
+
+  The scene SVG carries kind, members, caption owner, speed and off-page data attributes.
+- **Tests:**
+  - site-map.test.mjs: hierarchy, options, stacks, leaves, directions, fixed papers, edits, cache, Visio;
+  - browser-site-map.mjs: dialog, Undo, card nudge (in CI);
+  - extended browser-interactive-html.mjs;
+  - fictional fixture tests/fixtures/site-map-campus.mjs.
+
 # Preview.61: port map polish, printed text sizes, device hierarchy order
 
 Baseline: published preview.60. The owner asked for:

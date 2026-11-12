@@ -4,7 +4,7 @@ import {guideTopics,matchingGuideTopics,guideSearchKeydown} from '../src/web/use
 test('offline guide covers common tasks with nonempty stable topics and unique navigation',()=>{
  assert.equal(new Set(guideTopics.map(t=>t.id)).size,guideTopics.length);
  for(const id of ['start','paper','calibration','panel','lock','edit','exports','troubleshooting'])assert.ok(guideTopics.some(t=>t.id===id));
- for(const t of guideTopics){assert.ok(t.title&&t.summary&&t.tip&&t.steps.length>=3);for(const action of t.actions||[])assert.ok(['page-options','page-layout','screen-calibrate'].includes(action));}
+ for(const t of guideTopics){assert.ok(t.title&&t.summary&&t.tip&&t.steps.length>=3);for(const action of t.actions||[])assert.ok(['page-options','page-layout','screen-calibrate','site-map-options'].includes(action));}
 });
 test('guide search matches all words case-insensitively without modifying topics',()=>{
  const before=JSON.stringify(guideTopics);
