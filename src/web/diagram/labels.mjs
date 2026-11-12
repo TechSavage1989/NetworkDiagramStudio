@@ -6,6 +6,24 @@ import {devicePoint,deviceBounds} from './device-geometry.mjs';
 // wide letters, then narrow marks, capitals and digits; everything else .56.
 const advance=new Float64Array(128).fill(.56);
 for(const [chars,value] of [['0123456789',.57],['ABCDEFGHIJKLMNOPQRSTUVWXYZ',.72],["ilI1.,:;!|' ",.29],['MW@%#',.94]])for(const c of chars)advance[c.charCodeAt(0)]=value;
+// Wrap text into lines no wider than `width`: at the last space that fits,
+// else after a separator inside a name (- . / _ : , ;) such as a host name,
+// and only then inside a word, never leaving one or two letters alone.
+export function wrapText(input,width,size=12,bold=false){
+ const lines=[];
+ for(const part of String(input??'').split('\n')){
+  let rest=part.trim();if(!rest){lines.push('');continue;}
+  while(textWidth(rest,size,bold)>width){
+   let at=1;while(at<rest.length&&textWidth(rest.slice(0,at+1),size,bold)<=width)at++;
+   let cut=rest.lastIndexOf(' ',at);
+   if(cut<1){cut=-1;for(let i=at-1;i>=1;i--)if(/[-./_:,;]/.test(rest[i])){cut=i+1;break;}}
+   if(cut<1){cut=at;if(rest.length-cut<3&&cut>4)cut=rest.length-3;}
+   lines.push(rest.slice(0,cut).trimEnd());rest=rest.slice(cut).trimStart();
+  }
+  lines.push(rest);
+ }
+ return lines;
+}
 export function textWidth(value,size=12,bold=false){
  let w=0;for(const c of String(value)){const code=c.length===1?c.charCodeAt(0):128;w+=code<128?advance[code]:.56;}return Math.ceil(w*size*(bold?1.06:1)+6);
 }
@@ -109,7 +127,9 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  const result=[],sidebar=page.legendLayout==='sidebar',contentLeft=page.dynamic?(page.originX||0)+36:sidebar?(page.sidebar?.contentLeft??306):38;
  const measure=req=>{
   const source=Array.isArray(req.value)?req.value:[req.value],patches=source.map((_,i)=>edits[req.editKey+'|'+i]||{}),size=Math.max(req.minSize??12,req.size||12,...patches.map(p=>p.size||0)),maxWidth=sidebar?(req.role==='media'&&page.dynamic?180:96):req.side==='right'?Math.max(96,1154-Math.max(req.outer+8,984)):Math.max(100,Math.min(req.outer-46,250));
-  const lines=[];for(const [index,original] of source.entries()){const patch=patches[index];if(patch.hidden)continue;const value=patch.value??original;let line='',fragment=0;const push=()=>lines.push({value:line,patch,key:req.editKey+'|'+index+(fragment++?'|wrap'+fragment:'')});for(const char of String(value)){if(line&&textWidth(line+char,size,true)>maxWidth){push();line='';}line+=char;}if(line)push();}
+  // Each value wraps at word or name boundaries; `source` and `full` let a
+  // caption on its own cable put a wrapped value back on one line.
+  const lines=[];for(const [index,original] of source.entries()){const patch=patches[index];if(patch.hidden)continue;const full=String(patch.value??original);if(!full.trim())continue;wrapText(full,maxWidth,size,true).forEach((value,fragment)=>lines.push({value,patch,source:index,full,key:req.editKey+'|'+index+(fragment?'|wrap'+(fragment+1):'')}));}
   return {patches,size,lines,w:lines.length?Math.max(...lines.map(s=>textWidth(s.value,size,s.patch.bold!==false))):0,h:lines.length*(size+4)};
  };
  const clear=(b,owner,inline)=>!(b.x<contentLeft||b.x+b.w>maxX||b.y<minY||b.y+b.h>maxY||occupied.some(o=>intersects(b,o,3))||bodies.some(o=>intersects(b,o,3))||paths.some(p=>inline&&p===owner?(p.hops||[]).some(hop=>intersects(hop,b,2)):pathCrossesText(p,b,2)));
@@ -173,13 +193,17 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
  // One request at one text size: the chosen box, or null when nothing fits.
  const placeOne=req=>{
   const {patches,size,lines,w,h}=measure(req),candidates=[];if(!lines.length)return {skip:true};
+  // On its own cable a caption is one run of text: each value on one line,
+  // never its wrapped pieces in separate boxes along the cable.
+  const one=lines.filter((line,i)=>!i||line.source!==lines[i-1].source).map(line=>({...line,value:line.full.trim(),key:req.editKey+'|'+line.source}));
   const snapped=patches.find(p=>Number.isFinite(p.cableFraction)),snapOwner=paths.find(path=>path.linkId===req.linkId&&req.linkId!=null);
   if(snapped&&snapOwner){
     const hit=positionOnCable(snapOwner.points,snapped.cableFraction);
     if(hit){
      const angle=snapped.rotationMode==='fixed'&&Number.isFinite(snapped.angle)?snapped.angle:hit.angle,side=snapped.cableSide||'on';
-     const aligned=labelPositionRelativeToCable(hit,{placement:side,width:w,height:h,rotation:angle});
-     return {box:{x:aligned.x-w/2,y:aligned.y-h/2,w,h,angle,manual:true,inline:side==='on',stacked:lines.length>1,parts:lines.map(line=>textWidth(line.value,size,true)+8)},lines,size};
+     const on=side==='on',shown=on?one:lines,bw=on?Math.max(...one.map(line=>textWidth(line.value,size,line.patch.bold!==false))):w,bh=on?one.length*(size+4):h;
+     const aligned=labelPositionRelativeToCable(hit,{placement:side,width:bw,height:bh,rotation:angle});
+     return {box:{x:aligned.x-bw/2,y:aligned.y-bh/2,w:bw,h:bh,angle,manual:true,inline:on,stacked:shown.length>1,parts:shown.map(line=>textWidth(line.value,size,true)+8)},lines:shown,size};
     }
    }
   // A moved label is pinned, not an automatic-placement suggestion. Preserve
@@ -222,11 +246,11 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
    // Visio-style connector text: one line on the cable itself, on a white
    // background. Dense parallel bundles keep their even pitch instead of being
    // pushed apart only to make room for captions beside each cable.
-   const th=size+4,parts=lines.map(s=>textWidth(s.value,size,s.patch.bold!==false)+8),total=parts.reduce((a,b)=>a+b,0);
+   const th=size+4,parts=one.map(s=>textWidth(s.value,size,s.patch.bold!==false)+8),total=parts.reduce((a,b)=>a+b,0);
    const runs=owner.points.slice(1).map((b,i)=>[owner.points[i],b]).sort(([a,b],[c,d])=>Math.abs(d[0]-c[0])+Math.abs(d[1]-c[1])-Math.abs(b[0]-a[0])-Math.abs(b[1]-a[1]));
    // A short run, or one shared with a port label, may still hold the same
    // caption as two stacked lines centered on the cable.
-   const stacked=lines.length>1?Math.max(...parts):Infinity;
+   const stacked=one.length>1?Math.max(...parts):Infinity;
    for(const [length,stack] of [[total,false],[stacked,true]])for(const [a,b] of runs){
     const list=stack?late:candidates;
     if(!Number.isFinite(length))continue;
@@ -234,7 +258,7 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
     if(hi<lo)continue;
     const steps=new Set([.5,.35,.65,.2,.8,.05,.95].map(t=>lo+(hi-lo)*t));for(let along=lo;along<=hi&&steps.size<48;along+=8)steps.add(along);
     for(const along of steps){
-     const across=stack?th*lines.length:th;
+     const across=stack?th*one.length:th;
      list.push(vertical?{x:a[0]-length/2,y:along+length/2-across/2,w:length,h:across,angle:Math.PI/2,inline:true,stacked:stack,parts}:{x:along,y:a[1]-across/2,w:length,h:across,inline:true,stacked:stack,parts});
     }
    }
@@ -243,7 +267,7 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
    // Prefer port names centered on their own cable, on a white backing,
    // on the half of the cable nearer that port. Clear beside-line positions
    // remain a fallback, rather than forcing an inline collision.
-   const th=size+4,parts=lines.map(s=>textWidth(s.value,size,s.patch.bold!==false)+8),length=parts.reduce((a,b)=>a+b,0);
+   const th=size+4,parts=one.map(s=>textWidth(s.value,size,s.patch.bold!==false)+8),length=parts.reduce((a,b)=>a+b,0);
    // Bounded: a few dozen spots from this end, inside the visible page.
    let spots=0;
    for(let i=1;i<points.length&&travelled[i-1]<half&&spots<96;i++){
@@ -310,7 +334,7 @@ export function placeCableLabels(page,requests,edits={},{portLeaders=false}={}){
    }
    if(box)break;
   }
-  return box?{box,lines,size}:{failed:true,clearance:h+12};
+  return box?{box,lines:box.inline?one:lines,size}:{failed:true,clearance:h+12};
  };
  for(const req of requests){
   if(banked.has(req))continue;
