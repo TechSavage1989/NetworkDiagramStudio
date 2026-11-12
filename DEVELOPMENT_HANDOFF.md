@@ -1,3 +1,14 @@
+# Preview.67: page names on one line in the page picker
+
+Baseline: published preview.66. The owner showed the page picker with "Wireless Connections - MAT-1FL-IDF-STACK" wrapping onto a clipped, offset second line.
+
+- **Cause:** the editor styles dropdowns as customizable selects (`appearance: base-select`). In that mode the closed control's value is ordinary content that wraps (`white-space: normal`). It also cannot shrink, so keeping it on one line only pushed the arrow out of view.
+- **Fix** (form-controls.mjs, style.css):
+  - Each single-choice select gets an author value button with `<selectedcontent>` (the platform's way to style the closed value). It shows one line with an ellipsis before the arrow, and the full value as a tooltip.
+  - It is re-added when options are rebuilt, and engines without base-select keep the native control.
+  - The page bar's `:empty` tests became `:has(option)`.
+- **Tests:** browser-page-navigation checks a long page name stays on one line with an ellipsis, the arrow's room and the tooltip. Sidebar navigation and keyboard opening were checked by hand in Chromium.
+
 # Preview.66: whole words, compact paper layouts, captions against their devices
 
 Baseline: published preview.65. The owner reported:
