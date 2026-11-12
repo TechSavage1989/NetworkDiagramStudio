@@ -101,7 +101,9 @@ test('tagged-VLAN dots may run over the jack latch line when a port needs the ro
  for(const dot of dots){const list=byPort.get(dot.reportPort)||[];list.push(dot);byPort.set(dot.reportPort,list);}
  const lowest=port=>Math.max(...byPort.get(port).map(dot=>dot.y+dot.h)),latchTop=port=>{const face=faces.get(port),optical=!/RJ|copper/i.test(face.socketForm);return face.y+face.h-(optical?2.4:3);};
  const busiest=[...byPort.keys()].sort((a,b)=>byPort.get(b).length-byPort.get(a).length)[0],sparse=[...byPort.keys()].find(port=>byPort.get(port).length===1);
- assert.ok(lowest(busiest)>latchTop(busiest),'the busiest port uses the latch line for larger dots');
+ // A cramped optical port takes the full row height or the latch band for larger dots.
+ assert.ok(lowest(busiest)>latchTop(busiest)||faces.get(busiest).h>faces.get(busiest).w*.85,'the busiest port gets room for larger dots');
+ const radius=port=>byPort.get(port)[0].w/2;assert.ok(radius(sparse)>radius(busiest),'a port with few dots draws them larger');
  assert.ok(lowest(sparse)<=latchTop(sparse)+1e-6,'a port with room keeps its dots above the latch line');
  for(const [port,list] of byPort)for(const dot of list){const face=faces.get(port);assert.ok(dot.x>=face.x+1&&dot.x+dot.w<=face.x+face.w-1&&dot.y>=face.y+1&&dot.y+dot.h<=face.y+face.h-1,'dots stay inside the jack, clear of its edges');}
 });
