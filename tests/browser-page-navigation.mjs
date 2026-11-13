@@ -42,6 +42,23 @@ try{
  assert.equal(await inventoryGroup.count(),1,'Port inventory has its own page group');
  assert.ok((await inventoryGroup.locator('button[data-page]').allTextContents()).every(name=>/^Port Inventory/.test(name)),'the inventory group lists only inventory pages');
  assert.ok((await portGroup.locator('button[data-page]').allTextContents()).every(name=>!/^Port Inventory/.test(name)),'port maps no longer list inventory pages');
+ // Each switch has its own inventory sheet. The page menu puts devices on one
+ // sheet as one Undo step.
+ await inventoryGroup.locator('summary').click();
+ const sidebarNames=()=>page.locator('#page-families button[data-page]').allTextContents();
+ assert.deepEqual(await inventoryGroup.locator('button[data-page]').allTextContents(),['Port Inventory - SW-1','Port Inventory - SW-2'],'one inventory sheet per switch');
+ await inventoryGroup.locator('button[data-page]').first().click({button:'right'});
+ await page.getByRole('menuitem',{name:'Devices on these pages…',exact:true}).click();
+ await page.waitForFunction(()=>document.querySelector('#dialog').open);
+ const joins=page.locator('#dialog').getByLabel('SW-2',{exact:true});
+ assert.equal(await joins.inputValue(),'own','SW-2 starts on its own sheet');
+ await joins.selectOption('@sw-1');await page.locator('#dialog').getByRole('button',{name:'Apply',exact:true}).click();
+ await page.waitForFunction(()=>!document.querySelector('#dialog').open);
+ await page.waitForFunction(()=>[...document.querySelectorAll('#page-families button[data-page]')].some(b=>b.textContent==='Port Inventory - SW-1, SW-2'));
+ assert.ok(!(await sidebarNames()).includes('Port Inventory - SW-2'),'SW-2 joined the SW-1 sheet');
+ await page.locator('#canvas').click({position:{x:10,y:10}});await page.keyboard.press('Control+z');
+ await page.waitForFunction(()=>[...document.querySelectorAll('#page-families button[data-page]')].some(b=>b.textContent==='Port Inventory - SW-2'));
+ await inventoryGroup.locator('summary').click();
  await portGroup.locator('summary').click();
  assert.ok(await portGroup.evaluate(e=>e.open),'sidebar group expands its page list');
  assert.equal(await page.locator('main > aside#page-navigation').count(),1,'page groups live in their own sidebar');

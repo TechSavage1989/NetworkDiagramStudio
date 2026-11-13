@@ -24,6 +24,7 @@ Read this file, the current development handoff, and the shared standards before
 | src/web/imports/endpoint-hardware.mjs | Sourced server/storage/HCI/platform family recognition without invented sockets; see docs/ENDPOINT_HARDWARE.md. |
 | src/web/connection-edit.mjs, src/web/point-tools.mjs, src/web/color-picker.mjs, src/web/port-table.mjs | Port selection/conflicts, normalized box/group movement, solid-color formats/palettes and port table rules. |
 | src/web/hardware-composition.mjs | Validated user confirmation of stack members and installed chassis/rear/uplink modules. |
+| src/web/document-pages.mjs | Which devices share VLANs and Routing and Port Inventory pages: one per device or stack by default, plus the user's choices (layout.documentPages). |
 | src/web/port-map-details.mjs | Port map device details (Switchport builder identity fields, model, IP, MAC) opened by double-clicking a port map device. |
 | src/web/diagram/site-map.mjs, src/web/site-map-settings.mjs | Site map page: hardware hierarchy and connections without port detail, and its options (layout.siteMap). |
 | src/web/interactive-html.mjs | Offline read-only HTML viewer: page snapshots, search, details panel, cross-page links, path to the edge. |
@@ -340,7 +341,7 @@ Port map sheets end with the safety note "Confirm live link, LLDP/CDP, and MAC a
 
 Double-clicking a port map panel body (reportPanel with reportMember, reportSlot and reportIdentity), or a device on a faceplate port map, opens Port map details (port-map-details.mjs): device name, model and member/module model from the hardware database, management IP, MAC and the Switchport builder's identity fields (display or module name, serial number, asset tag, notes) for that switch, member or module. It saves on the device record (reportDetails, stackMembers, modules) as one validated history action and links to All device settings and Drawing properties; the object Properties dialog of a port map device offers it too. A device with its own imported front-panel stencil draws its port map on that artwork (the faceplate sheet) unless Port map options choose the builder sheet for every device (`layout.portMap.stencilSheets:false`).
 
-Port Inventory tables use compact table typography (8.6 px cells, about 6.5 pt on Letter; Global text styles → Table text can enlarge them). Their text is marked compactTable, which paperTextMetrics leaves out of the diagram's readable minimum. A device's table starts on the previous device's last inventory sheet when its full bar, heading and first row fit (bookletInventory start.fullBar); the earlier note moves to the end of the shared sheet and the page's portMap lists every device and record. Inventory pages are top-aligned on paper. Each sheet's displayName and title name its devices (nameInventoryPages: "Port Inventory - A, B", "(continued)" for a continuing table, numbered when repeated, more than three shown as +N); the stable page name stays "Port Inventory N" for settings and frames, and a long title wraps within the sheet.
+Port Inventory tables use compact table typography (8.6 px cells, about 6.5 pt on Letter; Global text styles → Table text can enlarge them). Their text is marked compactTable, which paperTextMetrics leaves out of the diagram's readable minimum. Within one inventory page group (see Preview.68), a device's table starts on the previous device's last inventory sheet when its full bar, heading and first row fit (bookletInventory start.fullBar); the earlier note moves to the end of the shared sheet and the page's portMap lists every device and record. Inventory pages are top-aligned on paper. Each sheet's displayName and title name its devices (nameInventoryPages: "Port Inventory - A, B", "(continued)" for a continuing table, numbered when repeated, more than three shown as +N); the stable page name stays "Port Inventory N" for settings and frames, and a long title wraps within the sheet.
 
 ## Preview.60: global settings, paper lock, VLAN pages, access points
 
@@ -350,7 +351,7 @@ Paper & print → Paper layout offers only Optimize for paper and Keep the exist
 
 Global text styles highlight the category being edited on the live preview: settingsPreview's highlight(match, label) marks matching text[data-drawing-key] with data-preview-highlight (orange glyphs with a yellow glow, rotation-safe) and reports the count; opening or focusing a category section calls it.
 
-VLANs and Routing (logicalPages) measures every device section first, then places them in order: a device that does not fit the room left starts the next page whole, unless a later device fits that room and is drawn there first; only a device taller than a page continues. Concise (compact) typography is 11 px cells, 14 px headings, 24 px column headers and 19 px minimum rows, and its cells and column headers are compactTable.
+VLANs and Routing (logicalPages) measures every device section first, then places them in order, one page group at a time (options.groupOf, see Preview.68): a device that does not fit the room left starts the next page whole, unless a later device of the same group fits that room and is drawn there first; only a device taller than a page continues. Concise (compact) typography is 11 px cells, 14 px headings, 24 px column headers and 19 px minimum rows, and its cells and column headers are compactTable.
 
 layout.includeAPs (Layout & content → Show wireless access points on network pages, on the drawing defaults and network pages, and Device order) draws access points and their links on the network pages. Small devices may have captions up to 180 units wide (captionRoom) so short names never break mid-word.
 
@@ -453,4 +454,16 @@ The paper pass for device names and details is closeness first (readableDeviceLa
 - only then farther out or beside, as before.
 
 A larger size never moves a caption to the other side or away from its device. Right-aligned captions keep the renderer's padding (added back on their left) clear of other device captions, measured in paper units so locking changes nothing. The readability notice reports the actual printed size.
+
+## Preview.68: one VLAN and inventory page per switch or stack
+
+VLANs and Routing, Port Inventory (builder tables) and Port Inventory - Interfaces start a new page for every device by default. document-pages.mjs decides the page group:
+- documentPageKey(project, family, section) is 'shared' for records several devices share, else 'device:' + documentPageAnchor;
+- the anchor is the device itself, or the lowest-numbered member of its layout.deviceStacks stack;
+- layout.documentPages ({logical:{id:anchorId}, inventory:{...}}, cleaned by cleanDocumentPages in cleanLayout against known ids) stores the user's choices: a device joins its anchor's page, an anchor equal to the device keeps it on its own page (also out of its stack's), chains are followed and loops settle on the first id in sort order;
+- setDocumentPage stores only choices that differ from the default.
+
+logicalPages takes options.groupOf: a group change starts a new page and the filler takes only devices of the same group. referencePortMaps builds each inventory group separately (its own carry). Both inventory families share the 'inventory' choices; VLANs and Routing keeps its own. The page cache keeps documentPages only for the logical and ports families.
+
+The editor offers Devices on these pages… in the page list and canvas menus of these pages, and Move to page… opens the same dialog when no network device is selected (documentPagesDialog in app.mjs: one select per device, Own page or With another device, Apply as one validated history action, and One page per switch or stack to reset). Menu actions already run inside task(), so they must not wrap another task() (it returns at once while working). Old table-cell edits ('VLANs and Routing|text|…') still lock device records only when they match a cell of the old single-table layout (hasLegacyCellEdits): page heading edits share that key shape and must not turn off shared grouping.
 

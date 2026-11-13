@@ -42,6 +42,8 @@ export function cachedDraftEntry(cache,family,project,build){
  if(family!=='sitemap')delete input.layout.siteMap;
  if(family!=='core'){delete input.layout.coreArrangement;delete input.layout.cableCaptions;delete input.layout.corePortNumbers;delete input.layout.deviceCaptions;}
  if(family!=='core'&&family!=='wireless'){delete input.layout.lineSpacing;delete input.layout.hopStyle;}
+ // Which devices share a VLANs and Routing or Port Inventory page.
+ if(family!=='logical'&&family!=='ports')delete input.layout.documentPages;
  // Source selection has already been composed into devices/links. Raw evidence
  // and source metadata do not participate in drawing calculations.
  delete input.evidence;delete input.warnings;

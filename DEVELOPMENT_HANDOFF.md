@@ -1,3 +1,13 @@
+# Preview.68: one VLAN and inventory page per switch or stack
+
+Baseline: published preview.67. The owner asked for VLANs and Routing pages one per switch or stack by default, with the ability to add specific devices to a page, and the same for Port Inventory.
+
+- **Model** (document-pages.mjs): every device has its own page group; members of a layout.deviceStacks stack share their first member's; records shared by several devices keep the Shared page. layout.documentPages holds per-family choices (logical, inventory), cleaned in cleanLayout.
+- **Planners:** logicalPages groups sections (options.groupOf) and never mixes groups on a page; referencePortMaps builds each inventory group on its own. Page names already list their devices, so the page list reads "VLANs and Routing - SW-1" and so on.
+- **Editor:** Devices on these pages… (page list and canvas menus) and Move to page… on these pages open a dialog with one Own page / With … choice per device, applied as one Undo step, plus a reset.
+- **Fix found on the way:** a page heading edit on a VLANs and Routing page matched the old table-cell key pattern and turned off shared grouping for the whole site. The legacy check now looks for an actual old table cell (hasLegacyCellEdits).
+- **Tests:** document-pages.test.mjs (anchors, stacks, loops, storing only real choices, cleaning, interface inventory); logical-pages.test.mjs (one page per switch, chosen and stacked groups, a group larger than a page); updated inventory and diagram tests; browser-page-navigation checks the menu, the dialog, the merged sheet name and Undo on the sample.
+
 # Preview.67: page names on one line in the page picker
 
 Baseline: published preview.66. The owner showed the page picker with "Wireless Connections - MAT-1FL-IDF-STACK" wrapping onto a clipped, offset second line.

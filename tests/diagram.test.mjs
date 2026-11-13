@@ -34,7 +34,7 @@ test('media coloring, source field retention, optics and front access point plac
   assert.equal(apPath.color,'#00B050');assert.equal(apPath.to.y,ap.y+ap.h);
   for(const [m,c] of [['DAC','#000000'],['SR','#FF0000'],['LR','#00B0F0'],['Copper','#FFD965'],['unknown','#707A83']])assert.equal(mediaInfo(m).color,c);
   assert.ok(ps.find(p=>p.name==='Trunk VLANs').svg.includes('11-13, 27'));
-  assert.ok(ps.find(p=>p.name==='VLANs and Routing').svg.includes('virtual-wire-pair'));
+  assert.ok(ps.some(p=>/^VLANs and Routing/.test(p.name)&&p.svg.includes('virtual-wire-pair')));
   assert.equal(printDocument(ps).match(/<section /g).length,ps.length);
 });
 test('native ZIP, true groups, explicit foreign image parts, port glue on switch and AP',async()=>{

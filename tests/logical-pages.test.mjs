@@ -29,13 +29,33 @@ test('logical text edits survive reordering and native Visio exports device head
  const parts=await unzip(await exportVisio(p,pages).arrayBuffer()),xml=[...parts].filter(([k])=>/^visio\/pages\/page\d+\.xml$/.test(k)).map(([,v])=>new TextDecoder().decode(v)).join('');assert.ok(xml.includes('LAB-SWITCH-A'));assert.ok(xml.includes('Office users'));
 });
 
-test('VLANs and Routing keeps each device whole and fills pages with the devices that fit',async()=>{
- const {buildPages}=await import('../src/web/diagram/index.mjs');
- // A fictional campus: twelve switches with different VLAN and route counts.
- const project={name:'Fictional campus',links:[],layout:{pageSetup:{visible:{default:{preset:'letter'}}}},devices:Array.from({length:12},(_,d)=>({id:'sw'+d,name:'LAB-SW-'+(d+1),kind:'switch',vendor:'Aruba',model:'JL256A',ip:'10.0.'+d+'.1',ports:Array.from({length:8},(_,i)=>({name:String(i+1),state:'up',native:10})),vlans:Array.from({length:4+(d*7)%23},(_,v)=>({id:10+v,name:'Lab VLAN '+(10+v),ip:'10.'+d+'.'+v+'.1/24'})),routes:Array.from({length:d%4},()=>({destination:'0.0.0.0/0',gateway:'10.'+d+'.0.254'}))}))};
- const pages=buildPages(project).filter(page=>/^VLANs and Routing/.test(page.name)),sections=pages.flatMap(page=>page.logicalSections||[]);
+// A fictional campus: twelve switches with different VLAN and route counts.
+const campus=layout=>({name:'Fictional campus',links:[],layout:{pageSetup:{visible:{default:{preset:'letter'}}},...layout},devices:Array.from({length:12},(_,d)=>({id:'sw'+d,name:'LAB-SW-'+(d+1),kind:'switch',vendor:'Aruba',model:'JL256A',ip:'10.0.'+d+'.1',ports:Array.from({length:8},(_,i)=>({name:String(i+1),state:'up',native:10})),vlans:Array.from({length:4+(d*7)%23},(_,v)=>({id:10+v,name:'Lab VLAN '+(10+v),ip:'10.'+d+'.'+v+'.1/24'})),routes:Array.from({length:d%4},()=>({destination:'0.0.0.0/0',gateway:'10.'+d+'.0.254'}))}))});
+const vlanPages=project=>buildPages(project).filter(page=>/^VLANs and Routing/.test(page.name));
+const devicesOn=pages=>pages.map(page=>[...new Set(page.logicalSections.map(section=>section.name))]);
+
+test('VLANs and Routing gives every switch its own page by default and keeps it whole',()=>{
+ const project=campus(),pages=vlanPages(project),sections=pages.flatMap(page=>page.logicalSections||[]);
  assert.equal(sections.filter(section=>section.continued).length,0,'no device continues onto another page');
- assert.deepEqual(sections.map(section=>section.name).sort(),project.devices.map(device=>device.name).sort(),'every device appears once');
- assert.ok(pages.length<=7,'pages are filled with the devices that fit ('+pages.length+')');
+ assert.deepEqual(devicesOn(pages),project.devices.map(device=>[device.name]),'one page per switch, in device order');
+ assert.deepEqual(pages.map(page=>page.displayName),project.devices.map(device=>'VLANs and Routing - '+device.name));
  for(const page of pages)assert.equal(page.pageOverflow,false);
+});
+
+test('devices chosen for one page share it, and a stack shares one page',()=>{
+ const grouped=vlanPages(campus({documentPages:{logical:{sw7:'sw0',sw10:'sw0'}}}));
+ assert.deepEqual(devicesOn(grouped).slice(0,2),[['LAB-SW-1','LAB-SW-8','LAB-SW-11'],['LAB-SW-2']],'the chosen devices share the first device\'s page');
+ assert.equal(grouped[0].displayName,'VLANs and Routing - LAB-SW-1, LAB-SW-8, LAB-SW-11');
+ assert.equal(grouped.length,10);
+ const stacked=vlanPages(campus({deviceStacks:[{id:'stack-a',members:[{deviceId:'sw5',number:2},{deviceId:'sw4',number:1}]}]}));
+ assert.deepEqual(devicesOn(stacked).find(names=>names.includes('LAB-SW-5')),['LAB-SW-5','LAB-SW-6'],'stack members share one page');
+ assert.equal(stacked.length,11);
+ // A member chosen for its own page leaves its stack's page.
+ const own=vlanPages(campus({deviceStacks:[{id:'stack-a',members:[{deviceId:'sw4',number:1},{deviceId:'sw5',number:2}]}],documentPages:{logical:{sw5:'sw5'}}}));
+ assert.equal(own.length,12);
+ // A group larger than a page continues on the next page with whole devices.
+ const all=vlanPages(campus({documentPages:{logical:Object.fromEntries(Array.from({length:11},(_,d)=>['sw'+(d+1),'sw0']))}}));
+ assert.ok(all.length>1&&all.length<12,'the twelve switches fill pages together ('+all.length+')');
+ assert.deepEqual(all.flatMap(page=>page.logicalSections.map(section=>section.name)).sort(),campus().devices.map(device=>device.name).sort(),'every device appears once');
+ assert.equal(all.flatMap(page=>page.logicalSections).filter(section=>section.continued).length,0);
 });

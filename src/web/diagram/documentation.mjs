@@ -1,5 +1,5 @@
 import {logicalPort} from '../physical-links.mjs';
-import {logicalHash,logicalDevicePrefix} from './logical.mjs';
+import {logicalHash,logicalDevicePrefix,hasLegacyCellEdits} from './logical.mjs';
 import {portRanges} from '../port-table.mjs';
 
 const NAME='VLANs and Routing';
@@ -83,7 +83,7 @@ export function documentationSections(project,devices){
   return {id:device.id,name:device.name||device.id,sourceDeviceIds:[device.id],keyPrefix:prefix,records:rows};
  }).filter(section=>section.records.length);
  const finish=section=>({...section,rows:section.records.map(row=>row.values),recordKeys:section.records.map(row=>row.key)});
- const edits=Object.keys(project.layout?.drawingEdits||{}),full=documentationMode(project)==='full',legacy=edits.some(key=>/^VLANs and Routing(?: \d+)?\|text\|/.test(key)),groups=new Map();
+ const edits=Object.keys(project.layout?.drawingEdits||{}),full=documentationMode(project)==='full',legacy=edits.some(key=>/^VLANs and Routing(?: \d+)?\|text\|/.test(key))&&hasLegacyCellEdits(project,partitionInventory(project,records).filter(section=>!section.inventory).map(finish)),groups=new Map();
  if(full&&!edits.some(key=>key.includes(NAME+'|shared|')||key.startsWith(inventoryBase(project)+'|scope|')))return partitionInventory(project,records).map(finish);
  for(const section of records){
   // Old device-specific edits retain their original scope and keys. Shared
