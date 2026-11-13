@@ -60,6 +60,7 @@ import {cleanNativeArt} from './native-art.mjs';
 import {sampleSite} from './sample.mjs';
 import {SITE_MAP_DETAILS,cleanSiteMap,siteMapSettings} from './site-map-settings.mjs';
 import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
+import {documentPageAnchor,setDocumentPage} from './document-pages.mjs';
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reopenEvidence} from './evidence.mjs';
 
 // Keep browser navigation/debug actions out of the drawing workspace.
@@ -163,7 +164,7 @@ function syncDrawingSelection(){
  $('drawing-spacing').disabled=!editDrawing||drawingSelection.size<2;$('drawing-undo').disabled=!projectHistory.canUndo();$('drawing-redo').disabled=!projectHistory.canRedo();$('drawing-undo-all').disabled=!projectHistory.canUndo();const snap=cleanSnap(project.layout?.snapping);$('drawing-snap').textContent='Snapping: '+(snap.enabled?'on':'off');$('drawing-snap').setAttribute('aria-pressed',String(snap.enabled));
  $('drawing-snap-label').disabled=!editDrawing||!selectedConnectionLabel();
  typeHighlights.setSelected(connectionTypeForSelection(pages[active],drawingSelection));
- const selectedDevices=selectedDrawingDevices();syncBesideTools();$('drawing-page').disabled=!selectedDevices.length;$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
+ const selectedDevices=selectedDrawingDevices(),pageFamily=documentFamily(pages[active]);syncBesideTools();$('drawing-page').disabled=!selectedDevices.length&&!(pageFamily&&documentDevices(pageFamily).length>1);$('drawing-page').title=pageFamily&&!selectedDevices.length?'Choose which devices share '+(pageFamily==='logical'?'VLANs and Routing':'Port Inventory')+' pages':'Move the selected devices to another network page';$('drawing-smaller').disabled=$('drawing-larger').disabled=!objects.some(o=>drawingSelection.has(o.editKey)&&o.type!=='path');
  const cable=selectedCable();$('cable-tools').hidden=!editDrawing||!cable;$('cable-edit-points').disabled=!cable;$('cable-endpoints').disabled=!cable?.sourceLink;$('cable-remove-point').disabled=!cable||cablePoint<1;
  if(cable&&svg&&editDrawing){if(cablePoint>=cable.points.length-1)cablePoint=-1;cableControls(svg,cable,cablePoint);$('cable-point-info').textContent=cablePoint>0?'Bend '+cablePoint+' selected':'Drag a square to move a bend. Click + to add bends.';$('cable-remove-point').disabled=cablePoint<1;}
  else $('cable-point-info').textContent='Move near a cable to highlight it, then click to select.';
@@ -295,7 +296,7 @@ function handleEditorContextMenu(event){
  const tab=target.closest('#page-families button[data-page]');
  if(tab){
   const page=pages.find(page=>page.name===tab.dataset.page);
-  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Paper & print',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Layout & content',()=>layoutOptions(page.name)]]);
+  if(page)showEditorContextMenu(event,[['Page: '+(page.displayName||page.name),null],['Rename page',()=>renamePageTab(page,tab)],['Paper & print',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Layout & content',()=>layoutOptions(page.name)],...documentPageAction(page)]);
   return;
  }
  if(!target.closest('#canvas'))return;
@@ -333,7 +334,7 @@ function handleEditorContextMenu(event){
   if(d)actions.push(['Edit device and port details',()=>editDevice(d)]);
  }
  if(!item&&!socket)actions.push(['Page',null]);
- actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Paper & print',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Layout & content',()=>layoutOptions(page.name)]);
+ actions.push(['Fit drawing to viewport',()=>viewport.fit()],['Paper & print',()=>{if(!commitInlineEdit())return;active=pages.indexOf(page);draw(pages);pageOptions();}],['Layout & content',()=>layoutOptions(page.name)],...documentPageAction(page));
  showEditorContextMenu(event,actions);
 }
 function changeCablePoints(item,points){if(!validCable(points))throw Error('Cable segments must be horizontal or vertical, with at most 200 points.');setDrawingEdits({...project.layout?.drawingEdits,[item.editKey]:{...project.layout?.drawingEdits?.[item.editKey],...unpresentPatch(item,{points})}});}
@@ -481,6 +482,32 @@ $('drawing-group').onclick=()=>task(()=>{project.layout={...project.layout,drawi
 $('drawing-ungroup').onclick=()=>task(()=>{project.layout={...project.layout,drawingGroups:ungroupDrawingSelection(project.layout?.drawingGroups,drawingSelection)};perform('drawing-group');say('Objects ungrouped without changing their positions.');});
 $('drawing-properties').onclick=()=>task(()=>editDrawingObject([...drawingSelection][0]));$('drawing-clear').onclick=()=>{cancelBesidePick();drawingSelection.clear();syncDrawingSelection();};
 $('drawing-organize').onclick=()=>task(()=>connectionLayoutEditor({project:scoped(),page:pages[active],pages,buildPages:source=>buildPages(source,{cache:pageCache}),modal,el,button,actions,run:task,close,apply(result){const before=project.layout;project.layout={...before,lineSpacing:result.lineSpacing||before?.lineSpacing||{}};try{setDrawingEdits(result.edits);}catch(error){project.layout=before;throw error;}viewport.fit();say((result.spacing?'Lines evenly spaced. ':'Connections organized. ')+'Undo restores the previous layout.');}}));
+// VLANs and Routing and Port Inventory pages: each switch or stack has its own
+// pages unless the user puts devices together (document-pages.mjs).
+function documentFamily(page){return page?.logicalSections?'logical':page?.interfaceSections||page?.portMap?.bookletRole==='inventory'?'inventory':null;}
+// The devices with their own pages in a family, in page order.
+function documentDevices(family){
+ const ids=[];
+ for(const page of pages){
+  const sections=family==='logical'?page.logicalSections:page.interfaceSections,list=sections?sections.filter(s=>!s.shared).flatMap(s=>s.sourceDeviceIds||[s.deviceId]):family==='inventory'&&page.portMap?.bookletRole==='inventory'?(page.portMap.devices||[page.portMap.device]):[];
+  for(const id of list)if(id&&!ids.includes(id)&&project.devices.some(d=>d.id===id))ids.push(id);
+ }
+ return ids;
+}
+// The page menu entry for choosing which devices share these pages.
+function documentPageAction(page){const family=documentFamily(page);return family&&documentDevices(family).length>1?[['Devices on these pages…',()=>documentPagesDialog(family)]]:[];}
+function documentPagesDialog(family){
+ const title=family==='logical'?'VLANs and Routing':'Port Inventory',ids=documentDevices(family);
+ if(ids.length<2)throw Error('Only one device has '+title+' pages here, so there is nothing to put together.');
+ const name=id=>project.devices.find(d=>d.id===id)?.name||id,body=modal(title+' pages');
+ body.append(el('p','Each switch or stack starts its own pages. To put devices on the same pages, choose the device each one joins. Undo restores the previous pages.','hint'));
+ // Device choices carry an '@' so no device id can be read as 'Own page'.
+ const fields=ids.map(id=>{const anchor=documentPageAnchor(project,family,id),others=[...new Set([...ids,anchor])].filter(other=>other!==id),input=field(body,name(id),anchor===id?'own':'@'+anchor,[['own','Own page'],...others.map(other=>['@'+other,'With '+name(other)])]);input.dataset.device=id;return input;});
+ const apply=(next,message)=>{const previous=project.layout;project.layout=next;try{validateDrawing();}catch(error){project.layout=previous;throw error;}perform('drawing');close();draw();say(message);};
+ const row=actions(body);
+ button(row,'Apply',()=>{let next=project.layout;for(const input of fields){const id=input.dataset.device;next=setDocumentPage(next,family,id,input.value==='own'?id:input.value.slice(1),project);}apply(next,title+' pages updated.');},'primary');
+ button(row,'One page per switch or stack',()=>{const next=structuredClone(project.layout||{});if(next.documentPages){delete next.documentPages[family];if(!Object.keys(next.documentPages).length)delete next.documentPages;}apply(next,title+' pages reset: one per switch or stack.');});
+}
 function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
 // Devices and generated WAN/ISP/egress cards can be placed beside another object.
 const placeable=item=>item?.type==='device'&&item.kind!=='plug'&&(project.devices.some(d=>d.id===item.sourceId)||item.kind==='handoff'&&!!item.ownerKey);
@@ -545,6 +572,7 @@ for(const button of $('drawing-beside').querySelectorAll('[data-place]'))button.
 });
 $('placement-cancel').onclick=()=>{cancelBesidePick();say('Placement cancelled.');};
 $('drawing-page').onclick=()=>task(()=>{
+ const family=documentFamily(pages[active]);if(family&&!selectedDrawingDevices().length)return documentPagesDialog(family);
  const chosen=selectedDrawingDevices(),ids=new Set(chosen.map(d=>d.sourceId)),body=modal('Move devices to page'),choices=corePageChoices().filter(([id])=>!['exclude','auto'].includes(id));
  const target=field(body,'Destination page','new',choices),name=field(body,'New page name','Network page');name.maxLength=80;const update=()=>name.hidden=name.previousElementSibling.hidden=target.value!=='new';target.onchange=update;update();
  body.append(el('p',chosen.map(d=>d.name).join(', '),'hint'));const references=field(body,'Connections to other pages','show',[['show','Show off-page device indicators'],['hide','Hide off-page indicators']]);

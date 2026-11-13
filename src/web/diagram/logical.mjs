@@ -6,6 +6,10 @@ import {applyDrawingEdits} from '../drawing-edits.mjs';
 const TOP=160,NAME='VLANs and Routing';
 export const logicalHash=value=>{let n=14695981039346656037n;for(const c of value)n=BigInt.asUintN(64,(n^BigInt(c.codePointAt(0)))*1099511628211n);return n.toString(36);};
 export const logicalDevicePrefix=(project,id)=>(project._reportPrefix?project._reportPrefix+'|':'')+NAME+'|device|'+logicalHash(String(id));
+// True only when a saved edit belongs to a table cell of the old single-table
+// layout. Page headings use the same '|text|' key shape, so the key alone
+// cannot tell them apart.
+export const hasLegacyCellEdits=(project,sections)=>legacyChanges(project,sections).size>0;
 function legacyChanges(project,sections){
  const edits=project.layout?.drawingEdits||{},result=new Map();
  if(!Object.keys(edits).some(k=>/^VLANs and Routing(?: \d+)?\|text\|/.test(k)))return result;
@@ -26,13 +30,19 @@ function legacyChanges(project,sections){
 export function logicalPages(project,sections,options={}){
  const name=options.name||NAME,{width:W,height:H}=pageGeometry(project,options.family||'logical'),BOTTOM=H-69+Math.min(33,footerAllowance(project)),columns=options.columns||[['Record',132],['Name / destination',330],['Address / next hop / type',302],['Egress / members / details',364]];
  const pages=[],edits=project.layout?.drawingEdits||{},legacy=name===NAME?legacyChanges(project,sections):new Map(),compact=options.compact===true,dense=compact&&options.typography==='inventory',PAD=dense?3.2:compact?6:12,FONT=dense?8.6:compact?11:13,HEAD=dense?8.6:compact?11:14,HEAD_LINE=dense?10.2:compact?14:17,MIN_ROW=dense?13.4:compact?19:28,TITLE=dense?13:compact?14:18,GAP=dense?8:compact?10:18;let page,y;
- const next=()=>{page=fresh(name,name,options.subtitle||'VLAN definitions, interfaces, bridges and routing entries',project);page.logicalSections=[];page.sourceDeviceIds=[];pages.push(page);y=TOP;};
- next();
- // Measure every device section first, then place them in order. A device
- // that does not fit in the room left on a page starts the next page whole,
- // unless a later device fits that room: it is drawn there first, so pages
- // fill up without splitting a device. Only a device taller than a page
- // continues onto another page.
+ const next=group=>{page=fresh(name,name,options.subtitle||'VLAN definitions, interfaces, bridges and routing entries',project);page.logicalSections=[];page.sourceDeviceIds=[];page.logicalGroup=group;pages.push(page);y=TOP;};
+ // options.groupOf names each section's page group (document-pages.mjs): a
+ // new group always starts a new page, so each switch or stack, or the
+ // devices the user put together, gets its own pages.
+ const groupOf=options.groupOf||(()=>null),order=[];
+ for(const section of sections){const group=groupOf(section);let entry=order.find(e=>e.group===group);if(!entry)order.push(entry={group,sections:[]});entry.sections.push(section);}
+ sections=order.flatMap(entry=>entry.sections);
+ next(sections.length?groupOf(sections[0]):null);
+ // Measure every device section first, then place them in order. Each page
+ // group starts its own page; within a group, a device that does not fit in
+ // the room left on a page starts the next page whole, unless a later device
+ // of the group fits that room: it is drawn there first. Only a device taller
+ // than a page continues onto another page.
  const prepare=section=>{
   const prefix=section.keyPrefix||logicalDevicePrefix(project,section.id),seen=new Map(),sourceDeviceIds=section.sourceDeviceIds||[section.id];
   const allColumns=section.columns||columns,visible=allColumns.map((_,i)=>i).filter(i=>!options.omitEmpty||i===0||section.rows.some((values,record)=>String(values[i]??'').length||legacy.has(JSON.stringify([section.id,record,i+1])))||Object.keys(edits).some(key=>key.startsWith(prefix+'|')&&key.includes('|cell|'+i))),COLS=fitColumns(visible.map(i=>allColumns[i]),W-72),HEADER=Math.max(dense?18:compact?24:32,...COLS.map(([title,width])=>wrapPortText(title,width-16,HEAD,true).length*HEAD_LINE+(dense?6:compact?8:10)));
@@ -46,18 +56,20 @@ export function logicalPages(project,sections,options={}){
   const headingHeight=part=>{const key=prefix+'|heading|'+part,patch=edits[key]||{},value=patch.value??(section.name+(part?' (continued)':'')),size=patch.size||TITLE,w=patch.w||W-72;return {key,value,size,w,height:Math.max(dense?18:compact?24:32,patch.h||0,wrapPortText(value,w,size,true).length*size*1.25+(compact?6:8))};};
   const notes=(section.notes||[]).map(note=>{const key=prefix+'|'+note.key,patch=edits[key]||{},value=patch.value??note.value,size=patch.size||FONT,w=patch.w||W-88;return {key,value,size,w,height:Math.max(size*1.2+8,patch.h||0,wrapPortText(value,w,size).length*size*1.2+8)};}),notesHeight=notes.reduce((sum,note)=>sum+note.height,0);
   const full=headingHeight(0).height+notesHeight+HEADER+rows.reduce((n,r)=>n+r.height,0);
-  return {section,prefix,sourceDeviceIds,visible,COLS,HEADER,rows,headingHeight,notes,notesHeight,full};
+  return {section,group:groupOf(section),prefix,sourceDeviceIds,visible,COLS,HEADER,rows,headingHeight,notes,notesHeight,full};
  };
  const queue=sections.map(prepare);
  while(queue.length){
   let index=0;
-  if(y>TOP&&y+queue[0].full>BOTTOM&&queue[0].full<=BOTTOM-TOP){const filler=queue.findIndex(entry=>y+entry.full<=BOTTOM);if(filler>0)index=filler;else next();}
+  if(queue[0].group!==page.logicalGroup){if(y>TOP)next(queue[0].group);else page.logicalGroup=queue[0].group;}
+  // A later section of the same group that fits the room left is drawn first.
+  if(y>TOP&&y+queue[0].full>BOTTOM&&queue[0].full<=BOTTOM-TOP){const filler=queue.findIndex(entry=>entry.group===page.logicalGroup&&y+entry.full<=BOTTOM);if(filler>0)index=filler;else next(queue[0].group);}
   const [{section,prefix,sourceDeviceIds,visible,COLS,HEADER,rows,headingHeight,notes,notesHeight}]=queue.splice(index,1);
   let part=0,at=0,offset=0;
   while(at<rows.length){
    const head=headingHeight(part),minimum=head.height+notesHeight+HEADER+(offset===0&&rows[at].height<=BOTTOM-TOP-head.height-notesHeight-HEADER?rows[at].height:rows[at].lineHeight+PAD);
    if(minimum>BOTTOM-TOP)throw Error('This device heading or record needs more room on the VLANs and Routing page.');
-   if(y+minimum>BOTTOM)next();
+   if(y+minimum>BOTTOM)next(page.logicalGroup);
    const start=y;
    label(page.items,36,y,head.w,head.height-8,head.value,head.size,true,C.teal);Object.assign(page.items.at(-1),{editKey:head.key,logicalDeviceId:section.id,logicalSourceDeviceIds:sourceDeviceIds,logicalHeading:true,full:true});y+=head.height;
    for(const note of notes){label(page.items,44,y+4,note.w,note.height-8,note.value,note.size,false,C.muted);Object.assign(page.items.at(-1),{editKey:note.key,logicalDeviceId:section.id,logicalSourceDeviceIds:sourceDeviceIds,logicalProfile:true,full:true});y+=note.height;}
@@ -73,7 +85,7 @@ export function logicalPages(project,sections,options={}){
     y+=height;painted++;offset+=take;if(offset>=row.lines){at++;offset=0;}
    }
    page.logicalSections.push({deviceId:section.id,sourceDeviceIds,name:section.name,shared:section.shared===true,continued:part>0,y:start,h:y-start});page.sourceDeviceIds=[...new Set([...page.sourceDeviceIds,...sourceDeviceIds])];
-   part++;y+=GAP;if(at<rows.length)next();
+   part++;y+=GAP;if(at<rows.length)next(page.logicalGroup);
    if(!painted)throw Error('This VLAN or route record needs more room on its page.');
   }
   }

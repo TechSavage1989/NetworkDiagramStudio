@@ -1,4 +1,5 @@
 import {effectiveWirelessPaperProject} from '../wireless-paper-defaults.mjs';
+import {documentPageKey} from '../document-pages.mjs';
 import {cleanLabelBacking} from '../label-backing-settings.mjs';
 import {devicePoint,deviceRegionBounds} from './device-geometry.mjs';
 import {physicalInventory} from '../physical-links.mjs';
@@ -609,12 +610,18 @@ function referencePortMaps(project,db,switches,options,plan){
  // Automatic merged sheet hosts the table under that device's own lists.
  if(separate){
   const seen=new Set(),devices=plan.views.filter(v=>!seen.has(v.id)&&seen.add(v.id)).map(v=>switches.find(d=>d.id===v.id)||v);
-  // Port Inventory tables follow one another: a device's table starts on the
-  // previous table's last sheet when its bar, heading and first row fit.
-  let carry=null;
-  devices.forEach((d,index)=>{
+  // Port maps in device order; then the Port Inventory tables, page group by
+  // page group (document-pages.mjs: each switch or stack, or the devices the
+  // user put together). Within a group a device's table starts on the
+  // previous table's last sheet when its bar, heading and first row fit; a
+  // new group always starts a new sheet.
+  const jobs=devices.map((d,index)=>{
    const ports=physicalPorts(d).sort(comparePorts),shown=ports.filter(port=>{const o=uplinkSettings(db.devices.get(d.id)||d,port);return hasPortDetails(o,db.links.some(l=>l.a===d.id&&l.ap.toLowerCase()===o.name.toLowerCase()||l.b===d.id&&l.bp.toLowerCase()===o.name.toLowerCase()),filter);}).map(port=>port.name);
    const sheets=builderSheets(project,db,{device:d,ports,shown},palette,plan,{sheetLabel:(index+1)+' / '+devices.length});out.push(...sheets);
+   return {d,ports,sheets,group:documentPageKey(project,'inventory',{id:d.id,sourceDeviceIds:[d.id]})};
+  });
+  const groups=[];for(const job of jobs){let entry=groups.find(g=>g.key===job.group);if(!entry)groups.push(entry={key:job.group,jobs:[]});entry.jobs.push(job);}
+  for(const entry of groups){let carry=null;for(const {d,ports,sheets} of entry.jobs){
    if(options.mergeSheets===true&&sheets.length===1){
     const map=sheets[0],pages=bookletInventory(project,db,d,ports,options,palette,true,{page:map,top:sheets.contentBottom+16,last:true,note:false}),records=pages.hosted?.records||[];out.push(...pages);
     if(pages.hosted){map.portMap={...map.portMap,rowNames:records.map(r=>r.name),portRecords:records,mergedInventory:true};delete map.portMap.bookletRole;}
@@ -628,7 +635,7 @@ function referencePortMaps(project,db,switches,options,plan){
     }
     out.push(...pages);carry=pages.end?.page?.portMap?.bookletRole==='inventory'?pages.end:null;
    }
-  });
+  }}
   return out;
  }
  // Pack measured panels first; keep their member-local assignment data with them.
@@ -706,7 +713,7 @@ function artworkColors(project,d){
  return bay?{frame:plate.fill,frameStroke:solidColor(plate.stroke)?plate.stroke:null,body:bay.fill,stroke:solidColor(bay.stroke)?bay.stroke:null}:{body:plate.fill,stroke:solidColor(plate.stroke)?plate.stroke:null};
 }
 function portMaps(project,db){
- const switches=[...db.devices.values()].filter(d=>d.kind==='switch'),interfaces=documentationSections(project,db.devices.values()).filter(section=>section.inventory),extra=interfaces.length?logicalPages(project,interfaces,{name:logicalInventoryName,family:'ports',columns:logicalInventoryColumns,compact:true,typography:'inventory',omitEmpty:true,subtitle:'Logical and routed interfaces, observed state and configured membership'}):[];
+ const switches=[...db.devices.values()].filter(d=>d.kind==='switch'),interfaces=documentationSections(project,db.devices.values()).filter(section=>section.inventory),extra=interfaces.length?logicalPages(project,interfaces,{name:logicalInventoryName,family:'ports',columns:logicalInventoryColumns,compact:true,typography:'inventory',omitEmpty:true,groupOf:section=>documentPageKey(project,'inventory',section),subtitle:'Logical and routed interfaces, observed state and configured membership'}):[];
  for(const page of extra){page.interfaceInventory=true;page.interfaceSections=page.logicalSections;delete page.logicalSections;page.tableTop=160;for(const item of page.items)if(item.y>=160)item.tableContent=true;bookletHeader(page);}
  // Interface inventory sheets are named after their devices too.
  namePagesByDevices(extra,'Port Inventory - Interfaces',page=>page.interfaceSections);
@@ -916,7 +923,7 @@ function logical(project,db,options={}){
     for(const g of profiles.values())trunks.push(Object.assign([name,interfaceList(g.names),...g.values],{sourceDeviceId:d.id}));
   }
   const matrix=includeTrunks?membershipMatrix(project,db):[];
-  return [...(showLogical?logicalPages(project,sections,{compact:documentationMode(project)==='concise',omitEmpty:documentationMode(project)==='concise'}):[]),
+  return [...(showLogical?logicalPages(project,sections,{compact:documentationMode(project)==='concise',omitEmpty:documentationMode(project)==='concise',groupOf:section=>documentPageKey(project,'logical',section)}):[]),
     ...(includeTrunks?(matrix.length?matrix:tablePages(project,'Trunk VLANs','Native and tagged VLAN membership on trunks and aggregates',[['Device',243],['Interface',164],['Native VLAN',145],['Tagged VLANs',235],['LAG',94],['Description',247]],trunks,'No trunk, tagged-port or aggregate records were supplied.')):[])];
 }
 export function buildPages(project={},options={}){

@@ -61,7 +61,11 @@ test('the safety note never overlaps the key, with or without the footer and at 
 test('Port Inventory sheets are named after their devices and use compact table text',async()=>{
  const {wirelessTwoStackSite}=await import('./fixtures/wireless-two-stack.mjs'),{printGeometry}=await import('../src/web/page-options.mjs'),{textLayout}=await import('../src/web/diagram/scene.mjs');
  const p=wirelessTwoStackSite({mac:false});p.layout={...p.layout,pageSetup:{visible:{default:{preset:'letter'}}}};
- const pages=buildPages(p).filter(page=>page.portMap?.bookletRole==='inventory');
+ const inventory=project=>buildPages(project).filter(page=>page.portMap?.bookletRole==='inventory');
+ assert.deepEqual(inventory(p).map(page=>page.displayName),['Port Inventory - LAB-SW01-MDF','Port Inventory - LAB-2FL-IDF-STACK','Port Inventory - LAB-1FL-IDF-STACK'],'one sheet per switch or stack by default');
+ // The user puts the second stack on the core switch's sheet.
+ p.layout.documentPages={inventory:{s2:'mdf'}};
+ const pages=inventory(p);
  assert.deepEqual(pages.map(page=>page.displayName),['Port Inventory - LAB-SW01-MDF, LAB-2FL-IDF-STACK','Port Inventory - LAB-1FL-IDF-STACK']);
  assert.deepEqual(pages.map(page=>page.name),['Port Inventory 1','Port Inventory 2'],'stable page names stay for settings and frames');
  for(const page of pages){
