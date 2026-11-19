@@ -5,12 +5,12 @@ Baseline: published preview.68. The owner sent a real site's Auvik workbooks (si
 Findings:
 - Auvik reports a switch's VLAN interface (DEFAULT_VLAN, Cisco VLAN1) as a neighbor, typed "Virtual NIC". It was not recognized as logical, so SW-01 43 drew three cables to SW-02 (43-43, 43-DEFAULT_VLAN, DEFAULT_VLAN-43).
 - A FortiGate dmz interface that is down was listed beside port1 and port2 on two switch ports.
-- Printer JetDirect interface names contain commas and were cut at them, and a port named "42 (To FortiGate Port 2(Wireless Management))" kept its description, so the same cable came in twice.
+- Printer JetDirect interface names contain commas and were cut at them, and a port named with a description that has brackets of its own ("42 (To firewall port 2(Management))") kept the description, so the same cable came in twice.
 - An endpoint behind a downstream switch was listed on the core switch's uplink too.
 - Two "Unidentified Device" rows (different IPs) were merged into one device with the wrong address.
 - Endpoints with routes each got a VLANs and Routing page; the interface page title listed every shared device.
 
-What changed: see the Preview.69 section of AGENTS.md (logical types, joined VLAN halves, down and reached-through alternates, comma and bracket names, placeholders) and the Preview.68 section (other devices share pages; Shared titles). On the real files every page now draws at most one cable per port; with all 66 devices the set is 34 pages instead of 46. The remaining import notes are truthful (a down dmz with a peer, a printer speed disagreement, unconfirmed 2920 rear cards, a VLAN 100 name that differs between the October configuration and Auvik).
+What changed: see the Preview.69 section of AGENTS.md (logical types, joined VLAN halves, down and reached-through alternates, comma and bracket names, placeholders) and the Preview.68 section (other devices share pages; Shared titles). On the real files every page now draws at most one cable per port; with all 66 devices the set is 34 pages instead of 46. The remaining import notes are truthful (a down firewall interface with a peer, a printer speed disagreement, unconfirmed 2920 rear cards, a VLAN name that differs between the configuration and Auvik).
 
 # Preview.68: one VLAN and inventory page per switch or stack
 
