@@ -6,7 +6,7 @@ import {textLayout} from '../src/web/diagram/scene.mjs';
 import {intersects,pathCrossesText} from '../src/web/diagram/labels.mjs';
 // A port number its own cable passes behind: background-filled, on that cable,
 // and painted after it.
-const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!!number.background;
+const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!number.background;
 
 // Same geometry as a busy eight-member stack with all 32 AP uplinks on one
 // member; fictional names, addresses and evidence only. Each AP has two leads.

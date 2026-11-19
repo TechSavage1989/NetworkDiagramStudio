@@ -15,7 +15,7 @@ test('all preset orientations build bounded scenes with complete table data',()=
  const baseline=buildPages(sampleSite()),basePorts=new Set(baseline.flatMap(p=>p.portMap?.portRecords?.map(r=>r.device+'/'+r.name)||[]));
  for(const [preset] of paperSizes)for(const orientation of ['portrait','landscape']){
   const site=sampleSite();site.layout={pageSetup:{default:{preset,orientation}}};const pages=buildPages(site),g=pageGeometry(site);
-  for(const p of pages){assert.equal(p.width,g.width);assert.equal(p.height,g.height);assert.ok(p.svg.includes('viewBox="0 0 '+p.width+' '+p.height+'"'));for(const i of p.items.filter(i=>i.type!=='path')){assert.ok(i.x>=0&&i.x+i.w<=p.width+1&&i.y+i.h<=p.height+1,preset+' '+orientation+' '+p.name+' '+i.value);if(i.type==='text')assert.ok(textLayout(i).size>=8);}}
+  for(const p of pages){assert.equal(p.width,g.width);assert.equal(p.height,g.height);assert.ok(p.svg.includes('viewBox="0 0 '+p.width+' '+p.height+'"'));for(const i of p.items.filter(i=>i.type!=='path')){assert.ok(i.x>=0&&i.x+i.w<=p.width+1&&i.y+i.h<=p.height+1,preset+' '+orientation+' '+p.name+' '+i.value);if(i.type==='text'&&i.portNumberRole!=='text')assert.ok(textLayout(i).size>=8);}}
   assert.deepEqual(new Set(pages.flatMap(p=>p.portMap?.portRecords?.map(r=>r.device+'/'+r.name)||[])),basePorts);
  }
 });

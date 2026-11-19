@@ -295,7 +295,7 @@ function renderBankPage(project,db,device,edges,layout,batchIndex,portNumbers){
  planned.cost[0]+=planned.routes.filter(r=>numberBoxes.numbers.some(box=>box.leadThrough!==r.e.idx&&crossesText(r.points,box,r.weight/2))).length;
  for(const r of planned.routes){const e=edges.find(e=>e.idx===r.e.idx);route(page,r.a.anchor,r.b.anchor,r.points,r.a.info.color,'AP link '+(e.idx+1),r.a.info.name,{a:e.a,ap:e.ap,b:e.b,bp:e.bp,media:e.media,speed:e.speed,status:e.status});Object.assign(page.items.at(-1),{editKey:pathKey(project,e),linkId:e.idx,weight:pathWeight(project,e)});}
  // A number its own cable passes behind is painted after the cables.
- const through=page.items.filter(i=>i.leadThrough!=null);if(through.length)page.items=[...page.items.filter(i=>i.leadThrough==null),...through];
+ 
  page.wirelessLayout={...(project._wirelessAdaptive?{adaptiveAP:true,adaptiveFactor:project._wirelessAdaptiveFactor||1,adaptiveFrozen:!!wirelessFrame(project),batchLimit:project._wirelessBatchLimit||null}:{}),...(layout.planKey?{planKey:layout.planKey}:{}),numberScale:wirelessNumberMinimum(project),kind:layout.kind||'banks',rows:layout.rowCount,deviceId:device.id,memberIds:(device.stackMembers||[]).map(m=>String(m.id)),padding:layout.padding,memberGaps:layout.memberGaps,links:edges.map(e=>e.idx),routingCost:planned.cost,routingStats:planned.stats};
  return page;
 }

@@ -373,7 +373,7 @@ export function corePages(project,inventory,{portNumbers}={}){
    // ports, so an edit elsewhere reuses them instead of measuring again.
    const key=JSON.stringify([page.name,node.x,node.y,node.w,node.h,node.masterKey,node.children.map(c=>[c.x,c.y,c.w,c.h,c.socketPart,c.portName]),ports.map(port=>port.name)]);
    let numbers=numberMemo.get(key);
-   if(!numbers){numbers=[];for(const fontScale of [1,.85,.7]){const out=[];try{portNumbers(out,node,ports,{selected:new Set(),upright:true,fontScale});}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;continue;}numbers=out;break;}
+   if(!numbers){numbers=[];for(const fontScale of ['firewall','router'].includes(d.kind)?[1,.85,.7,.6,.5]:[1,.85,.7]){const out=[];try{portNumbers(out,node,ports,{selected:new Set(),upright:true,fontScale});}catch(error){if(error.code!=='PORT_LABEL_CAPACITY')throw error;continue;}numbers=out;break;}
     if(numberMemo.size>=512)numberMemo.clear();numberMemo.set(key,numbers);}
    if(!numbers.length)continue;
    // page.items (not the earlier items alias, replaced by applyDrawingEdits).

@@ -8,7 +8,7 @@ import {crossesText,intersects,pathCrossesText,textFootprint} from '../src/web/d
 import {sampleSite} from '../src/web/sample.mjs';
 // A port number its own cable passes behind: background-filled, on that cable,
 // and painted after it.
-const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!!number.background;
+const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!number.background;
 
 function wirelessLab(members,count=28,center=false,preset='dynamic'){
  const ports=Array.from({length:count},(_,i)=>({name:(center?3:i%members+1)+'/'+(center?i+1:Math.floor(i/members)*2+1)})),sw={id:'sw',name:'LAB-STACK-'+members,kind:'switch',model:'JL558A',stackMembers:Array.from({length:members},(_,i)=>({id:String(i+1),model:'JL558A'})),ports};

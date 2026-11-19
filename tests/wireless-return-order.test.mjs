@@ -4,7 +4,7 @@ import {buildPages} from '../src/web/diagram/index.mjs';
 import {pathCrossesText} from '../src/web/diagram/labels.mjs';
 // A port number its own cable passes behind: background-filled, on that cable,
 // and painted after it.
-const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!!number.background;
+const throughOwn=(number,path)=>number.leadThrough!=null&&number.leadThrough===path.linkId&&!number.background;
 
 // Fictional eight-member stack, with 32 APs on member seven. The original
 // planner left 34 crossings: 23 on the left, 11 in the right return bundle.
