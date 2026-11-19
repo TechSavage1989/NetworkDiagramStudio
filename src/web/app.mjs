@@ -60,7 +60,7 @@ import {cleanNativeArt} from './native-art.mjs';
 import {sampleSite} from './sample.mjs';
 import {SITE_MAP_DETAILS,cleanSiteMap,siteMapSettings} from './site-map-settings.mjs';
 import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
-import {documentPageAnchor,setDocumentPage,OTHER_DEVICES} from './document-pages.mjs';
+import {documentPageAnchor,setDocumentPages,OTHER_DEVICES} from './document-pages.mjs';
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reopenEvidence} from './evidence.mjs';
 
 // Keep browser navigation/debug actions out of the drawing workspace.
@@ -505,7 +505,7 @@ function documentPagesDialog(family){
  const fields=ids.map(id=>{const anchor=documentPageAnchor(project,family,id),others=[...new Set([...ids,anchor])].filter(other=>other!==id&&other!==OTHER_DEVICES),input=field(body,name(id),anchor===id?'own':'@'+anchor,[['own','Own page'],['@'+OTHER_DEVICES,'With other devices'],...others.map(other=>['@'+other,'With '+name(other)])]);input.dataset.device=id;return input;});
  const apply=(next,message)=>{const previous=project.layout;project.layout=next;try{validateDrawing();}catch(error){project.layout=previous;throw error;}perform('drawing');close();draw();say(message);};
  const row=actions(body);
- button(row,'Apply',()=>{let next=project.layout;for(const input of fields){const id=input.dataset.device;next=setDocumentPage(next,family,id,input.value==='own'?id:input.value.slice(1),project);}apply(next,title+' pages updated.');},'primary');
+ button(row,'Apply',()=>apply(setDocumentPages(project.layout,family,fields.map(input=>({id:input.dataset.device,anchor:input.value==='own'?input.dataset.device:input.value.slice(1)})),project),title+' pages updated.'),'primary');
  button(row,'Restore default pages',()=>{const next=structuredClone(project.layout||{});if(next.documentPages){delete next.documentPages[family];if(!Object.keys(next.documentPages).length)delete next.documentPages;}apply(next,title+' pages restored: one per switch or stack, other devices together.');});
 }
 function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}

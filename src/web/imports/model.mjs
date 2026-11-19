@@ -7,10 +7,22 @@ export const empty = () => ({devices: [], links: [], warnings: []});
 export function device(name, fields = {}) {
   return {id: deviceId(name), name, kind: 'unknown', vendor: '', model: '', ports: [], vlans: [], routes: [], ...fields};
 }
+// A trailing "(description)" is not part of the name. A description with
+// brackets of its own, "42 (To firewall port 2(Management))", is one only when
+// what remains is a single port-like token (with a digit), so names such as
+// "vEthernet (Intel(R) Ethernet)" stay whole.
+const trailingDescription=text=>{
+  const plain=text.replace(/\s+\([^)]*\)\s*$/, '');
+  const nested=text.replace(/\s+\((?:[^()]|\([^()]*\))*\)\s*$/, '');
+  return nested.length<plain.length&&/^\S*\d\S*$/.test(nested)?nested:plain;
+};
+// The trailing description that portName leaves out, without its brackets.
+export function portDescription(value) {
+  const text=String(value ?? '').trim(),base=trailingDescription(text);
+  return base.length<text.length?text.slice(base.length).trim().replace(/^\(/,'').replace(/\)$/,'').trim():'';
+}
 export function portName(value) {
-  // A trailing "(description)" is not part of the name, including one that
-  // has its own brackets, such as "42 (To firewall port 2(Management))".
-  return String(value ?? '').trim().replace(/\s+\((?:[^()]|\([^()]*\))*\)\s*$/, '').replace(/^GigabitEthernet(?=\d)/i, 'Gi')
+  return trailingDescription(String(value ?? '').trim()).replace(/^GigabitEthernet(?=\d)/i, 'Gi')
     .replace(/^TenGigabitEthernet(?=\d)/i, 'Te').replace(/^FastEthernet(?=\d)/i, 'Fa')
     .replace(/^Port-channel\s*(?=\d)/i, 'Port-channel').replace(/^lag\s*(?=\d)/i, 'lag ');
 }
@@ -147,6 +159,7 @@ export function mergeModels(...models) {
   const placeholders=new Map();
   for(const d of devices.values())if(d.placeholderOf){if(!placeholders.has(d.placeholderOf))placeholders.set(d.placeholderOf,[]);placeholders.get(d.placeholderOf).push(d);}
   if(placeholders.size){
+    const moved=new Map();
     for(const e of reported)for(const [end,other,otherPort] of [['b','a','ap'],['a','b','bp']]){
       const candidates=placeholders.get(e[end]);if(!candidates)continue;
       const from=devices.get(e[other]),port=deviceId(e[otherPort]),same=u=>deviceId(u.device)===e[other]||identity.id(deviceId(u.device))===e[other]||deviceId(u.device)===deviceId(from?.name||'');
@@ -155,11 +168,17 @@ export function mergeModels(...models) {
       let match=candidates.filter(d=>listed(d)||reports(d));
       if(!match.length&&candidates.length===1)match=candidates;
       if(match.length!==1)continue;
-      e.reportedEndpoints=uniq([...(e.reportedEndpoints||[]),{a:e.a,ap:e.ap,b:e.b,bp:e.bp}]);e[end]=match[0].id;
+      e.reportedEndpoints=uniq([...(e.reportedEndpoints||[]),{a:e.a,ap:e.ap,b:e.b,bp:e.bp}]);
+      if(!moved.has(e[end]))moved.set(e[end],new Set());moved.get(e[end]).add(match[0].id);e[end]=match[0].id;
     }
     for(const id of placeholders.keys()){
       const d=devices.get(id);
-      if(d&&!d.placeholderOf&&!reported.some(e=>e.a===id||e.b===id)&&!d.ip&&!d.mac&&!meaningful(d.model))devices.delete(id);
+      if(!d||d.placeholderOf||reported.some(e=>e.a===id||e.b===id)||d.ip||d.mac||meaningful(d.model))continue;
+      devices.delete(id);
+      // Saved edits and layout references to the bare name follow the device
+      // that every one of its reports moved to.
+      const to=[...(moved.get(id)||[])];
+      if(to.length===1){const target=devices.get(to[0]);target.identityAliases=uniq([...(target.identityAliases||[]),id]);}
     }
   }
   // Projects saved before preview.69 cut interface names at their commas, so

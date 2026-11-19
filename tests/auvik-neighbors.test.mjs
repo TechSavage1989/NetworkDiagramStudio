@@ -120,3 +120,45 @@ test('a project saved with interface names cut at their commas reopens with one 
  assert.deepEqual(cables(model),['lab-core-01 1 <-> lab-printer '+JETDIRECT]);
  assert.deepEqual(model.devices.find(d=>d.id==='lab-printer').ports.map(p=>p.name),[JETDIRECT],'the cut piece is not kept as a port');
 });
+
+// Review follow-ups: each case below once hid or doubled a cable.
+const link=(a,ap,b,bp,extra={})=>({a,ap,b,bp,media:'unknown',speed:'1 Gbps',status:'observed',...extra});
+const dev=(id,kind,ports=[])=>({id,name:id.toUpperCase(),kind,ports:ports.map(name=>typeof name==='string'?{name,type:'Ethernet',state:'up'}:name),vlans:[],routes:[]});
+const drawnEnds=model=>{const ends=new Map();for(const l of physicalInventory(model).links)for(const e of [l.a+' '+l.ap,l.b+' '+l.bp])ends.set(e,(ends.get(e)||0)+1);return ends;};
+
+test('redundant paths never hide every cable of an endpoint, and notes name drawn cables only',()=>{
+ // lab-sw-a 1 and lab-sw-b 24 are joined through a desk switch; the real uplink is a 7 / b 5.
+ const model=mergeModels([{devices:[dev('lab-sw-a','switch',['1','7']),dev('lab-sw-b','switch',['24','5']),dev('lab-pc','workstation',['nic'])],links:[link('lab-sw-a','1','lab-sw-b','24'),link('lab-sw-a','7','lab-sw-b','5'),link('lab-sw-a','1','lab-pc','nic'),link('lab-sw-b','5','lab-pc','nic')],warnings:[]}]);
+ assert.ok([...drawnEnds(model).keys()].some(end=>end.startsWith('lab-pc ')),'the PC keeps a drawn cable');
+ assert.ok(!model.warnings.some(w=>/reached through/.test(w)),'a loop of candidates proves nothing: '+model.warnings.join(' | '));
+ // A daisy chain: the note names the cable that is drawn.
+ const chain=mergeModels([{devices:[dev('lab-x','switch',['1']),dev('lab-s','switch',['1','2']),dev('lab-t','switch',['1','3']),dev('lab-e','workstation',['nic'])],links:[link('lab-x','1','lab-s','1'),link('lab-s','2','lab-t','1'),link('lab-t','3','lab-e','nic'),link('lab-x','1','lab-e','nic'),link('lab-s','2','lab-e','nic')],warnings:[]}]);
+ assert.deepEqual([...drawnEnds(chain).keys()].filter(end=>end.startsWith('lab-e ')),['lab-e nic']);
+ assert.equal(drawnEnds(chain).get('lab-e nic'),1);
+ for(const w of chain.warnings.filter(w=>/reached through/.test(w)))assert.match(w,/drawing uses LAB-T 3\.$/);
+});
+
+test('one switch export alone: the peer DEFAULT_VLAN is logical by name',()=>{
+ const rows=[['INTERFACES'],['Admin Status','Oper Status','Interface Name','MAC Address','Type','Parent Device','Negotiated Speed','Connected To','Configuration Details'],
+  row('Up','Up','43','02:00:00:00:01:55','Ethernet','LAB-CORE-01','1.0 Gbit/s','43  on LAB-EDGE-02, DEFAULT_VLAN  on LAB-EDGE-02')];
+ const model=mergeModels([parseTable(rows,'Fictional core.xlsx / Interfaces')]);
+ assert.deepEqual(cables(model),['lab-core-01 43 <-> lab-edge-02 43']);
+ assert.ok(!model.warnings.some(w=>/multiple reported peers/.test(w)));
+});
+
+test('neighbor lists keep device names with commas and never join across lines',()=>{
+ const one=value=>parseTable([['INTERFACES'],['Admin Status','Oper Status','Interface Name','MAC Address','Type','Parent Device','Negotiated Speed','Connected To','Configuration Details'],row('Up','Up','5','','Ethernet','LAB-SW-A','1.0 Gbit/s',value)],'t').links.map(l=>l.b+' | '+l.bp);
+ assert.deepEqual(one('eth0  on Front Desk, Lobby, 48  on LAB-SW-B'),['front desk, lobby | eth0','lab-sw-b | 48']);
+ assert.deepEqual(one('eth0  on Front Desk, Lobby\n48  on LAB-SW-B'),['front desk, lobby | eth0','lab-sw-b | 48']);
+ assert.deepEqual(one(JETDIRECT+'  on LAB-PRINTER'),['lab-printer | '+JETDIRECT]);
+ assert.deepEqual(one('Intel(R) Ethernet, I219-V  on LAB-PC'),['lab-pc | Intel(R) Ethernet, I219-V']);
+});
+
+test('trailing descriptions: unbalanced brackets still go, names that are not port-like stay whole',async()=>{
+ const {portName,portDescription}=await import('../src/web/imports/model.mjs');
+ assert.equal(portName('42 (Link to FW port 2(Mgmt)'),'42');
+ assert.equal(portName('42 (To firewall port 2(Management))'),'42');
+ assert.equal(portDescription('42 (To firewall port 2(Management))'),'To firewall port 2(Management)');
+ assert.equal(portName('vEthernet (Intel(R) I350 Gigabit Network Connection)'),'vEthernet (Intel(R) I350 Gigabit Network Connection)');
+ assert.equal(portName('Gi1/0/1 (uplink)'),'Gi1/0/1');
+});

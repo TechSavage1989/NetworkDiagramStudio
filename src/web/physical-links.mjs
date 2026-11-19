@@ -4,7 +4,7 @@ const virtual=new Set(['virtual','logical','loopback','aggregate','link aggregat
 // "Virtual NIC" for a switch's VLAN (management) interface.
 const virtualType=type=>virtual.has(type)||/\bvirtual\b/.test(type);
 export function logicalPort(port={}){
- return Boolean(port.logical===true||port.parent||port.members?.length||virtualType(String(port.type||'').toLowerCase())||virtualType(String(port.configuredType||'').toLowerCase())||/^(?:vlan(?:if|[-. ]?\d)|loopback|lo\d+$|lag[- ]?\d|trk\d+$|port-channel|po\d+$|ae\d+$|bridge-aggregation|route-aggregation|eth-trunk|bond\d+|null\d+|bridge[- ]?\d|tunnel\d*|irb\d*|bvi\d*|bdi\d*)/i.test(String(port.name||''))||/^\S+\.\d+$/.test(String(port.name||'')));
+ return Boolean(port.logical===true||port.parent||port.members?.length||virtualType(String(port.type||'').toLowerCase())||virtualType(String(port.configuredType||'').toLowerCase())||/^(?:vlan(?:if|[-. ]?\d)|loopback|lo\d+$|lag[- ]?\d|trk\d+$|port-channel|po\d+$|ae\d+$|bridge-aggregation|route-aggregation|eth-trunk|bond\d+|null\d+|bridge[- ]?\d|tunnel\d*|irb\d*|bvi\d*|bdi\d*|default_vlan$)/i.test(String(port.name||''))||/^\S+\.\d+$/.test(String(port.name||'')));
 }
 export function physicalLink(link,devices){
  if(link.physicalEvidence?.kind==='alternate-interface'&&link.status!=='confirmed')return false;
@@ -66,29 +66,6 @@ export function reconcilePhysicalObservations(links,devices,warnings=new Set()){
  const alternate=(link,reason,preferred)=>{if(link.status!=='confirmed')link.physicalEvidence={kind:'alternate-interface',reason,preferred};return link.status!=='confirmed';};
  for(const link of links)if(link.physicalEvidence?.kind==='alternate-interface')delete link.physicalEvidence;
  const usable=()=>links.filter(link=>physicalLink(link,devices));
- // An endpoint on an uplink and on a port of the switch that uplink leads to.
- {
-  const live=usable(),at=new Map();
-  const byDevice=new Map();
-  for(const link of live)for(const [local,lp,remote,rp] of ends(link)){
-   const key=local+'\n'+String(lp).toLowerCase();if(!at.has(key))at.set(key,[]);at.get(key).push({remote,rp,link});
-   if(!byDevice.has(local))byDevice.set(local,[]);byDevice.get(local).push(link);
-  }
-  for(const link of live)for(const [x,xp,e] of ends(link)){
-   if(!infrastructure(x)||infrastructure(e)||unknownName(xp))continue;
-   // Other switches, routers or firewalls on the same jack of x.
-   const uplinks=(at.get(x+'\n'+String(xp).toLowerCase())||[]).filter(row=>row.link!==link&&row.remote!==x&&row.remote!==e&&infrastructure(row.remote));
-   const found=[];
-   for(const row of uplinks)for(const other of byDevice.get(e)||[]){
-    if(other===link||other===row.link)continue;
-    for(const [local,,remote,rp] of ends(other))if(local===e&&remote===row.remote&&String(rp).toLowerCase()!==String(row.rp).toLowerCase())found.push({device:row.remote,port:rp});
-   }
-   const via=[...new Set(found.map(entry=>entry.device))];
-   if(via.length!==1)continue;
-   const port=found[0].port;
-   if(alternate(link,'Seen through '+name(via[0])+', which reports this device on its own port.',{device:via[0],port}))warnings.add(name(x)+' '+xp+': '+name(e)+' is reached through '+name(via[0])+'; drawing uses '+name(via[0])+' '+port+'.');
-  }
- }
  // Several interfaces of one peer on the same jack.
  const groups=new Map();
  for(const link of usable())for(const [local,lp,remote,rp] of ends(link)){
@@ -109,5 +86,43 @@ export function reconcilePhysicalObservations(links,devices,warnings=new Set()){
   if(ports.length!==1)continue;
   const preferred=data[0];
   for(const row of rows.filter(row=>special(row.rp)))if(alternate(row.link,'HA/management alternative to an observed data port on the same peer.',{device:row.remote,port:preferred.rp}))warnings.add(name(row.local)+' '+row.lp+': '+name(row.remote)+' '+row.rp+' is an alternate HA/management observation; drawing uses observed '+preferred.rp+'.');
+ }
+ // An endpoint on an uplink and on a port of the switch that uplink leads to.
+ // Candidates are collected first and each one is kept only when following the
+ // switches it is reached through ends at a cable that stays drawn; a loop of
+ // candidates (redundant paths) proves nothing, so those stay as observed.
+ {
+  const live=usable(),at=new Map(),byDevice=new Map(),candidates=new Map();
+  for(const link of live)for(const [local,lp,remote,rp] of ends(link)){
+   const key=local+'\n'+String(lp).toLowerCase();if(!at.has(key))at.set(key,[]);at.get(key).push({remote,rp,link});
+   if(!byDevice.has(local))byDevice.set(local,[]);byDevice.get(local).push(link);
+  }
+  for(const link of live)for(const [x,xp,e] of ends(link)){
+   if(!infrastructure(x)||infrastructure(e)||unknownName(xp))continue;
+   // Other switches, routers or firewalls on the same jack of x.
+   const uplinks=(at.get(x+'\n'+String(xp).toLowerCase())||[]).filter(row=>row.link!==link&&row.remote!==x&&row.remote!==e&&infrastructure(row.remote));
+   const found=[];
+   for(const row of uplinks)for(const other of byDevice.get(e)||[]){
+    if(other===link||other===row.link)continue;
+    for(const [local,,remote,rp] of ends(other))if(local===e&&remote===row.remote&&String(rp).toLowerCase()!==String(row.rp).toLowerCase())found.push({device:row.remote,port:rp,link:other});
+   }
+   const via=[...new Set(found.map(entry=>entry.device))];
+   if(via.length===1)candidates.set(link,{x,xp,e,via:via[0],options:found});
+  }
+  const drawn=start=>{
+   const seen=new Set([start]);let queue=[start];
+   while(queue.length){
+    const next=[];
+    for(const link of queue)for(const option of candidates.get(link).options){
+     if(seen.has(option.link))continue;seen.add(option.link);
+     if(!candidates.has(option.link))return option;
+     next.push(option.link);
+    }
+    queue=next;
+   }
+   return null;
+  };
+  const marks=[...candidates].map(([link,c])=>({link,c,target:drawn(link)})).filter(mark=>mark.target);
+  for(const {link,c,target} of marks)if(alternate(link,'Seen through '+name(c.via)+', which reports this device on its own port.',{device:target.device,port:target.port}))warnings.add(name(c.x)+' '+c.xp+': '+name(c.e)+' is reached through '+name(c.via)+'; drawing uses '+name(target.device)+' '+target.port+'.');
  }
 }

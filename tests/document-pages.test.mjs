@@ -79,3 +79,25 @@ test('an interface page of records several devices share is named Shared',()=>{
  assert.ok(pages.some(page=>page.interfaceSections.some(section=>section.shared)),'the loopback record is shared');
  for(const page of pages)if(page.interfaceSections.every(section=>section.shared))assert.equal(page.displayName,'Port Inventory - Interfaces - Shared');
 });
+
+test('a router or switch of unknown kind from its own configuration keeps its own page',()=>{
+ const project={devices:[{id:'lab-rtr-1',name:'LAB-RTR-1',kind:'unknown',fromConfig:true},{id:'lab-cli',name:'LAB-CLI',kind:'unknown',operational:true},{id:'lab-tag',name:'LAB-TAG',kind:'unknown'}],layout:{}};
+ assert.equal(documentPageKey(project,'logical',{id:'lab-rtr-1'}),'device:lab-rtr-1');
+ assert.equal(documentPageKey(project,'logical',{id:'lab-cli'}),'device:lab-cli');
+ assert.equal(documentPageKey(project,'logical',{id:'lab-tag'}),'other');
+});
+
+test('several choices at once settle the same way in any order',async()=>{
+ const {setDocumentPages}=await import('../src/web/document-pages.mjs');
+ const project={devices:[{id:'sw-a',kind:'switch'},{id:'sw-b',kind:'switch'},{id:'srv',kind:'server'}],layout:{deviceStacks:[{id:'lab-stack',members:[{deviceId:'sw-a',number:1},{deviceId:'sw-b',number:2}]}],documentPages:{logical:{'sw-a':OTHER_DEVICES}}}};
+ // Both members back on the stack's own page, and the server with the stack.
+ const choices=[{id:'sw-b',anchor:'sw-a'},{id:'sw-a',anchor:'sw-a'},{id:'srv',anchor:'sw-a'}];
+ const forward=setDocumentPages(project.layout,'logical',choices,project),backward=setDocumentPages(project.layout,'logical',[...choices].reverse(),project);
+ assert.deepEqual(forward.documentPages,backward.documentPages);
+ for(const id of ['sw-a','sw-b','srv'])assert.equal(documentPageAnchor({...project,layout:forward},'logical',id),'sw-a',id);
+ // A member put with the other devices while its stack's first member moves back.
+ const other=[{id:'sw-b',anchor:OTHER_DEVICES},{id:'sw-a',anchor:'sw-a'}];
+ const one=setDocumentPages(project.layout,'logical',other,project),two=setDocumentPages(project.layout,'logical',[...other].reverse(),project);
+ assert.deepEqual(one.documentPages,two.documentPages);
+ assert.equal(documentPageAnchor({...project,layout:one},'logical','sw-b'),OTHER_DEVICES);
+});

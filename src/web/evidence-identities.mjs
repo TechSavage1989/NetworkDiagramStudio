@@ -1,4 +1,5 @@
 import {findDeviceIdentity} from './imports/identity.mjs';
+import {portName} from './imports/model.mjs';
 
 const copy=value=>JSON.parse(JSON.stringify(value));
 const cableKey=link=>[link.a+'/'+link.ap,link.b+'/'+link.bp].sort().join('|');
@@ -15,7 +16,11 @@ export function migrateIdentityReferences(project,before,identities){
   const old=String(alias).toLowerCase();if(old!==d.id&&!active.has(old))aliases.set(old,d.id);
  }
  for(const d of before.devices){const target=findDeviceIdentity(identities,d.id);if(target&&target.id!==d.id&&!active.has(d.id))aliases.set(d.id,target.id);}
- if(!aliases.size)return;
+ // A port whose saved name now reads differently (a trailing description that
+ // has brackets of its own) keeps its saved cable references.
+ const linkNames=new Set(project.links.map(cableKey)),renamedPort=link=>({...link,ap:portName(link.ap),bp:portName(link.bp)});
+ const portRenames=before.links.some(link=>{const next=renamedPort(link);return cableKey(next)!==cableKey(link)&&linkNames.has(cableKey(next));});
+ if(!aliases.size&&!portRenames)return;
  const changes=[...aliases].sort(([a],[b])=>b.length-a.length),resolve=id=>aliases.get(id)||id;
  const token=value=>{
   if(aliases.has(value))return resolve(value);
@@ -30,9 +35,9 @@ export function migrateIdentityReferences(project,before,identities){
  const replacing=new Set(changes.filter(([old,next])=>previous.has(old)&&!previous.has(next)).map(([old])=>old));
  const linkKeys=new Map(),pathKeys=new Map(),pathOverwrite=new Set(),oldNames=new Map(before.devices.map(d=>[d.id,d.name||d.id])),names=new Map(project.devices.map(d=>[d.id,d.name||d.id]));
  for(const link of before.links){
-  const next={...link,a:token(link.a),b:token(link.b)},old=cableKey(link),key=cableKey(next);if(old!==key)linkKeys.set(old,key);
+  const moved={...link,a:token(link.a),b:token(link.b)},renamed=renamedPort(moved),next=linkNames.has(cableKey(renamed))?renamed:moved,old=cableKey(link),key=cableKey(next);if(old!==key)linkKeys.set(old,key);
   const oldTitle=(oldNames.get(link.a)||link.a)+' '+link.ap+' / '+(oldNames.get(link.b)||link.b)+' '+link.bp;
-  const title=(names.get(next.a)||oldNames.get(link.a)||link.a)+' '+link.ap+' / '+(names.get(next.b)||oldNames.get(link.b)||link.b)+' '+link.bp;
+  const title=(names.get(next.a)||oldNames.get(link.a)||link.a)+' '+next.ap+' / '+(names.get(next.b)||oldNames.get(link.b)||link.b)+' '+next.bp;
   if(oldTitle!==title){pathKeys.set(pathHash(oldTitle),pathHash(title));if(replacing.has(link.a)||replacing.has(link.b))pathOverwrite.add(pathHash(oldTitle));}
  }
  const key=original=>{

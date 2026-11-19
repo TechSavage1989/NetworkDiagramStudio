@@ -1,20 +1,29 @@
 import {macAddresses} from '../device-details.mjs';
 import {unzip} from '../zip.mjs';
-import {device, deviceId, empty, ensurePort, ensureVlan, portName, rate} from './model.mjs';
+import {device, deviceId, empty, ensurePort, ensureVlan, portDescription, portName, rate} from './model.mjs';
 import {identify} from './hardware.mjs';
 import {classifyDeviceKind} from '../device-types.mjs';
 
 const missing = v => ['','0','n/a','unknown','none','-'].includes(String(v??'').trim().toLowerCase());
 const split = v => String(v||'').split(/[,;\n]/).map(t=>t.trim()).filter(t=>!missing(t));
-// Auvik lists neighbors as "<interface>  on <device>", separated by commas.
+// Auvik lists neighbors as "<interface>  on <device>", separated by ", ".
 // An interface name can contain commas of its own (printer JetDirect cards
-// report "HP ETHERNET MULTI-ENVIRONMENT,ROM none,JETDIRECT,..."), so a piece
-// without " on " belongs to the next one.
+// report "HP ETHERNET MULTI-ENVIRONMENT,ROM none,JETDIRECT,..."), so only a
+// comma followed by a space separates entries. A piece without " on " is the
+// rest of the previous entry's device name ("on Front Desk, Lobby"), or, at
+// the start, the beginning of the next entry's interface name. Entries never
+// run across a semicolon or a line break.
 const neighbors=v=>{
-  const out=[];let pending='';
-  for(const piece of String(v||'').split(/[;\n]/).flatMap(part=>part.split(','))){
-    pending=pending?pending+','+piece:piece;
-    if(/\s+on\s+\S/i.test(pending)){out.push(pending.trim());pending='';}
+  const out=[];
+  for(const part of String(v||'').split(/[;\n]/)){
+    const entries=[];let lead='';
+    for(const piece of part.split(/,(?=\s)/)){
+      if(/\s+on\s+\S/i.test(piece))entries.push((lead?lead+',':'')+piece);
+      else if(entries.length)entries[entries.length-1]+=','+piece;
+      else lead=lead?lead+','+piece:piece;
+      if(/\s+on\s+\S/i.test(piece))lead='';
+    }
+    out.push(...entries.map(t=>t.trim()));
   }
   return out.filter(t=>!missing(t));
 };
@@ -132,7 +141,7 @@ export function parseTable(rows, filename='report.csv') {
     }else{
       const full=val('interface name');if(missing(full))continue;
       const p=ensurePort(d,full);p.type=val('type');if(mac)p.mac=mac;
-      const alias=/\s\(((?:[^()]|\([^()]*\))+)\)$/.exec(full)?.[1];if(alias)p.reportedDescription=alias;
+      const alias=portDescription(full);if(alias)p.reportedDescription=alias;
       const oper=val('oper status').toLowerCase();if(oper==='up'||oper==='down')p.state=oper;
       const admin=val('admin status').toLowerCase();if(admin==='up'||admin==='down')p.admin=admin;
       const speed=rate(val('negotiated speed'));if(speed)p.speed=speed;

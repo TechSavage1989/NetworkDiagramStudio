@@ -34,10 +34,13 @@ function stackAnchors(project){
 }
 
 // A device listed in the project that is not network infrastructure shares
-// the other devices' pages unless it is in a stack.
+// the other devices' pages unless it is in a stack. A device of unknown kind
+// imported from its own configuration or show commands (a router or switch
+// whose kind the import could not tell) keeps its own page.
 function sharesOtherPages(project,id){
  const device=(project.devices||[]).find(d=>d.id===id);
- return Boolean(device&&!OWN_PAGE_KINDS.has(device.kind));
+ if(!device||OWN_PAGE_KINDS.has(device.kind))return false;
+ return !((device.kind||'unknown')==='unknown'&&(device.fromConfig||device.operational));
 }
 
 // The device whose page `id` is drawn on, for one family, or OTHER_DEVICES.
@@ -76,3 +79,17 @@ export function setDocumentPage(layout,family,id,anchor,project){
  if(!Object.keys(next.documentPages).length)delete next.documentPages;
  return next;
 }
+
+// Several choices at once (the dialog's rows). A stack member's default
+// follows its stack's first member, so the choices are applied until they
+// settle; the result does not depend on their order.
+export function setDocumentPages(layout,family,choices,project){
+ let next=layout;
+ for(let pass=0;pass<=choices.length;pass++){
+  const before=JSON.stringify(next?.documentPages||null);
+  for(const {id,anchor} of choices)next=setDocumentPage(next,family,id,anchor,{...project,layout:next});
+  if(JSON.stringify(next?.documentPages||null)===before)break;
+ }
+ return next;
+}
+
