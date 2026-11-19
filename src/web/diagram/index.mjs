@@ -716,7 +716,7 @@ function portMaps(project,db){
  const switches=[...db.devices.values()].filter(d=>d.kind==='switch'),interfaces=documentationSections(project,db.devices.values()).filter(section=>section.inventory),extra=interfaces.length?logicalPages(project,interfaces,{name:logicalInventoryName,family:'ports',columns:logicalInventoryColumns,compact:true,typography:'inventory',omitEmpty:true,groupOf:section=>documentPageKey(project,'inventory',section),subtitle:'Logical and routed interfaces, observed state and configured membership'}):[];
  for(const page of extra){page.interfaceInventory=true;page.interfaceSections=page.logicalSections;delete page.logicalSections;page.tableTop=160;for(const item of page.items)if(item.y>=160)item.tableContent=true;bookletHeader(page);}
  // Interface inventory sheets are named after their devices too.
- namePagesByDevices(extra,'Port Inventory - Interfaces',page=>page.interfaceSections);
+ namePagesByDevices(extra,'Port Inventory - Interfaces',page=>page.interfaceSections.map(section=>({name:section.shared?'Shared':section.name})));
  if(!switches.length)return [...(extra.length&&documentationMode(project)==='concise'?[]:portMapsAtScale(project,db)),...extra];
  const savedKeys=Object.keys(project.layout?.drawingEdits||{}).filter(key=>/(?:^|\|)(?:MDF Port Map|Port Inventory)(?:\b|\|)/.test(key)&&!key.includes(logicalInventoryName)),retention=new WeakMap(),retained=pages=>{if(!savedKeys.length)return 0;if(!retention.has(pages)){const keys=new Set(pages.flatMap(page=>drawingObjects(page).flatMap(item=>[item.editKey,item.legacyEditKey])));retention.set(pages,savedKeys.filter(key=>keys.has(key)).length);}return retention.get(pages);};
  // Port maps use the switchport builder's sheet by default, fitted to US

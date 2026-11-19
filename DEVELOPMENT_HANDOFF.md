@@ -1,3 +1,19 @@
+# Preview.69: one cable per port from Auvik exports
+
+Baseline: published preview.68. The owner sent a real site's Auvik workbooks (site and per-device) and one Aruba 2920 configuration, and showed the network page with two or three cables on one port. The files stay outside the repository; tests/auvik-neighbors.test.mjs reproduces each pattern with a fictional export.
+
+Findings:
+- Auvik reports a switch's VLAN interface (DEFAULT_VLAN, Cisco VLAN1) as a neighbor, typed "Virtual NIC". It was not recognized as logical, so SW-01 43 drew three cables to SW-02 (43-43, 43-DEFAULT_VLAN, DEFAULT_VLAN-43).
+- A FortiGate dmz interface that is down was listed beside port1 and port2 on two switch ports.
+- Printer JetDirect interface names contain commas and were cut at them, and a port named with a description that has brackets of its own ("42 (To firewall port 2(Management))") kept the description, so the same cable came in twice.
+- An endpoint behind a downstream switch was listed on the core switch's uplink too.
+- Two "Unidentified Device" rows (different IPs) were merged into one device with the wrong address.
+- Endpoints with routes each got a VLANs and Routing page; the interface page title listed every shared device.
+
+An adversarial review (four reviewers, a refuting verifier per finding) confirmed 13 of 25 findings; 12 were fixed with fictional regression tests that fail on the earlier code (redundant-path loops hiding an endpoint, notes naming undrawn cables, DEFAULT_VLAN without its own row, the neighbor splitter, unbalanced and non-port-like descriptions, saved edits on placeholders, deleted duplicates, joined cables next to user corrections, Identity-off sources, renamed ports on reopen, unknown-kind configured routers and dialog row order). A second round over those fixes confirmed 13 more (joined uplinks dropped beside imported observations, notes naming cables hidden by a later rule, peer rules not revisited, a confirmed cable not counting as drawn, neighbor pieces with ", " in later interface names, plain-comma entries, deliberate deletions undone and cut duplicates' removals deleting the kept cable, the bare placeholder alias saved for good, identity order, renamed ports losing evidence edits); all are fixed with tests that fail on the first fix commit. The 13th of the first round is pre-existing: Auvik interface names whose own brackets are part of the name ("WAN Miniport (IP)" / "(IPv6)") still collapse into one port; this change no longer widens it.
+
+What changed: see the Preview.69 section of AGENTS.md (logical types, joined VLAN halves, down and reached-through alternates, comma and bracket names, placeholders) and the Preview.68 section (other devices share pages; Shared titles). On the real files every page now draws at most one cable per port; with all 66 devices the set is 34 pages instead of 46. The remaining import notes are truthful (a down firewall interface with a peer, a printer speed disagreement, unconfirmed 2920 rear cards, a VLAN name that differs between the configuration and Auvik).
+
 # Preview.68: one VLAN and inventory page per switch or stack
 
 Baseline: published preview.67. The owner asked for VLANs and Routing pages one per switch or stack by default, with the ability to add specific devices to a page, and the same for Port Inventory.

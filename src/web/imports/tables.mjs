@@ -1,11 +1,46 @@
 import {macAddresses} from '../device-details.mjs';
 import {unzip} from '../zip.mjs';
-import {device, deviceId, empty, ensurePort, ensureVlan, portName, rate} from './model.mjs';
+import {device, deviceId, empty, ensurePort, ensureVlan, portDescription, portName, rate} from './model.mjs';
 import {identify} from './hardware.mjs';
 import {classifyDeviceKind} from '../device-types.mjs';
 
 const missing = v => ['','0','n/a','unknown','none','-'].includes(String(v??'').trim().toLowerCase());
 const split = v => String(v||'').split(/[,;\n]/).map(t=>t.trim()).filter(t=>!missing(t));
+// Auvik lists neighbors as "<interface>  on <device>", separated by ", ".
+// An interface name can contain commas of its own (printer JetDirect cards
+// report "HP ETHERNET MULTI-ENVIRONMENT,ROM none,JETDIRECT,..."), so a comma
+// with no space after it never separates entries, unless a piece then holds
+// two entries ("48  on SW-B,7  on SW-C"). A piece without " on " ends the
+// previous entry's device name when that makes the name of a device the sheet
+// knows ("on Front Desk, Lobby"); otherwise it starts the next entry's
+// interface name ("Xerox Ethernet, 10/100/1000 Mbps  on PRN"). Entries never
+// run across a semicolon or a line break.
+const ON=/\s+on\s+\S/i;
+const entriesIn=piece=>{
+  if((piece.match(/\s+on\s+\S/gi)||[]).length<2)return [piece];
+  const out=[];let pending='';
+  for(const part of piece.split(',')){pending=pending?pending+','+part:part;if(ON.test(pending)){out.push(pending);pending='';}}
+  if(pending)out[out.length-1]+=','+pending;
+  return out;
+};
+const neighbors=(v,known=new Set())=>{
+  const out=[];
+  for(const line of String(v||'').split(/[;\n]/)){
+    const entries=[];let lead='';
+    for(const piece of line.split(/,(?=\s)/)){
+      if(ON.test(piece)){for(const entry of entriesIn(piece)){entries.push((lead?lead+',':'')+entry);lead='';}continue;}
+      const previous=entries.at(-1),device=previous&&/^(.+?)\s+on\s+(.+)$/i.exec(previous)?.[2].trim();
+      if(previous&&!known.has(device.toLowerCase())&&known.has((device+','+piece).trim().toLowerCase()))entries[entries.length-1]+=','+piece;
+      else lead=lead?lead+','+piece:piece;
+    }
+    if(lead&&entries.length)entries[entries.length-1]+=','+lead;
+    out.push(...entries.map(t=>t.trim()));
+  }
+  return out.filter(t=>!missing(t));
+};
+// Auvik's names for devices it could not identify. Several rows with one of
+// these names are different devices.
+const placeholder=name=>/^(?:unidentified device|unknown name|unknown device|unnamed device)$/i.test(String(name||'').trim());
 export function readCSV(text) {
   const rows=[];let row=[],cell='',quoted=false;
   for(let i=0;i<text.length;i++){
@@ -86,14 +121,26 @@ export function parseTable(rows, filename='report.csv') {
   }
   if(!type){out.warnings.push(filename+': no supported Auvik Devices, Interfaces or Routes header found.');return out;}
   const get=n=>{const id=deviceId(n);if(!map.has(id))map.set(id,device(n));return map.get(id);};
-  const ipCount=new Map();
+  const ipCount=new Map(),knownDevices=new Set(type==='ports'?rows.slice(i+1).map(r=>String(r[headers.indexOf('parent device')]??'').trim().toLowerCase()).filter(Boolean):[]);
   if(type==='devices')for(const r of rows.slice(i+1))for(const ip of split(r[headers.indexOf('ip address(es)')]))ipCount.set(ip,(ipCount.get(ip)||0)+1);
   for(const row of rows.slice(i+1)){
     const val=k=>String(row[headers.indexOf(k)]??'').trim();
     const mac=macAddresses(['mac address','mac address(es)','mac addresses','mac','physical address','hardware address'].flatMap(key=>macAddresses(val(key)))).join(', ');
-    const name=val(type==='ports'?'parent device':'device name');
-    if(missing(name))continue; const d=get(name);
+    let name=val(type==='ports'?'parent device':'device name');
+    if(missing(name))continue;
+    // Unidentified devices are told apart by their address: the Devices sheet
+    // lists it, and their own Interfaces rows carry it in the configuration
+    // details (or as the interface MAC). The switch ports Auvik lists for one
+    // let a neighbor report naming the placeholder find the right device.
+    const label=placeholder(name)&&(type==='devices'?split(val('ip address(es)'))[0]:type==='ports'?/\b(\d{1,3}(?:\.\d{1,3}){3})\s*\(\/\d+\)/.exec(val('configuration details'))?.[1]:'')||placeholder(name)&&type!=='routes'&&mac.split(', ')[0];
+    const original=name;if(label)name+=' ('+label+')';
+    const d=get(name);
+    if(label)d.placeholderOf=deviceId(original);
     if(type==='devices'){
+      if(label){
+        const uplinks=split(val('connected to')).map(entry=>/^(.+?)\s+through\s+(.+)$/i.exec(entry)).filter(Boolean).map(m=>({device:m[1].trim(),port:m[2].trim()}));
+        if(uplinks.length)d.placeholderUplinks=uplinks;
+      }
       if(mac)d.mac=mac;
       const spec=identify(val('make & model'),val('description')); Object.assign(d,spec);
       const kind=classifyDeviceKind(val('type')); if(kind!=='unknown')d.kind=kind;
@@ -105,14 +152,14 @@ export function parseTable(rows, filename='report.csv') {
     }else{
       const full=val('interface name');if(missing(full))continue;
       const p=ensurePort(d,full);p.type=val('type');if(mac)p.mac=mac;
-      const alias=/\s\(([^)]+)\)$/.exec(full)?.[1];if(alias)p.reportedDescription=alias;
+      const alias=portDescription(full);if(alias)p.reportedDescription=alias;
       const oper=val('oper status').toLowerCase();if(oper==='up'||oper==='down')p.state=oper;
       const admin=val('admin status').toLowerCase();if(admin==='up'||admin==='down')p.admin=admin;
       const speed=rate(val('negotiated speed'));if(speed)p.speed=speed;
       for(const m of val('configuration details').matchAll(/\bVLAN\s+(\d+)(?:\s+\(([^)]*)\))?/gi)){
         const v=ensureVlan(d,m[1]);if(m[2])v.name ||=m[2];(p.reportedVlans||=[]).push(Number(m[1]));
       }
-      for(const piece of split(val('connected to'))){
+      for(const piece of neighbors(val('connected to'),knownDevices)){
         const match=/^(.+?)\s+on\s+(.+)$/i.exec(piece);if(!match)continue;
         const peer=match[2].trim(),remote=portName(match[1]); if(missing(remote)||missing(peer))continue;
         const b=get(peer);

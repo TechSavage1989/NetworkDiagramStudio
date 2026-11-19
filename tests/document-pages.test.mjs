@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cleanDocumentPages,documentPageAnchor,documentPageKey,setDocumentPage} from '../src/web/document-pages.mjs';
+import {cleanDocumentPages,documentPageAnchor,documentPageKey,setDocumentPage,OTHER_DEVICES} from '../src/web/document-pages.mjs';
 import {cleanLayout} from '../src/web/layout.mjs';
 import {buildPages} from '../src/web/diagram/index.mjs';
 
@@ -49,4 +49,55 @@ test('VLAN interface inventory follows the same per-device pages and choices',()
  assert.deepEqual(names(buildPages(project({inventory:{sw2:'sw0'}}))),['Port Inventory - Interfaces - LAB-SW-1, LAB-SW-3','Port Inventory - Interfaces - LAB-SW-2']);
  const vlan=buildPages(project({inventory:{sw2:'sw0'}})).filter(page=>/^VLANs and Routing/.test(page.name)).map(page=>page.displayName);
  assert.deepEqual(vlan,['VLANs and Routing - LAB-SW-1','VLANs and Routing - LAB-SW-2','VLANs and Routing - LAB-SW-3'],'inventory choices do not move VLAN pages');
+});
+
+test('devices other than switches, routers and firewalls share pages unless chosen otherwise',()=>{
+ // Fictional site: two switches, a firewall and three servers with routes.
+ const project=documentPages=>({name:'Fictional campus',links:[],layout:{pageSetup:{visible:{default:{preset:'letter'}}},...(documentPages?{documentPages}:{})},devices:[
+  ...['LAB-SW-1','LAB-SW-2'].map((name,d)=>({id:'sw'+d,name,kind:'switch',vendor:'Aruba',model:'JL256A',ports:[],vlans:[{id:10+d,name:'Lab VLAN '+d,ip:'10.'+d+'.0.1/24'}],routes:[]})),
+  {id:'fw',name:'LAB-FW',kind:'firewall',vendor:'Fortinet',model:'FortiGate 101F',ports:[],vlans:[{id:30,name:'Lab DMZ',ip:'10.30.0.1/24'}],routes:[]},
+  ...['LAB-SRV-1','LAB-SRV-2','LAB-PRN-1'].map((name,d)=>({id:'host'+d,name,kind:d<2?'server':'printer',ports:[],vlans:[],routes:[{destination:'0.0.0.0/0',gateway:'10.9.'+d+'.1'}]}))
+ ]});
+ const names=pages=>pages.filter(page=>/^VLANs and Routing/.test(page.name)).map(page=>page.displayName||page.name);
+ assert.deepEqual(documentPageKey(project(),'logical',{id:'host0',sourceDeviceIds:['host0']}),'other');
+ assert.deepEqual(documentPageKey(project(),'logical',{id:'fw',sourceDeviceIds:['fw']}),'device:fw');
+ assert.deepEqual(names(buildPages(project())),['VLANs and Routing - LAB-SW-1','VLANs and Routing - LAB-SW-2','VLANs and Routing - LAB-FW','VLANs and Routing - LAB-SRV-1, LAB-SRV-2, LAB-PRN-1']);
+ // A server on its own page; a switch put with the other devices.
+ assert.deepEqual(names(buildPages(project({logical:{host1:'host1',sw1:OTHER_DEVICES}}))),['VLANs and Routing - LAB-SW-1','VLANs and Routing - LAB-SW-2, LAB-SRV-1, LAB-PRN-1','VLANs and Routing - LAB-FW','VLANs and Routing - LAB-SRV-2'],'pages follow the device order of their first device');
+ // The stored choices are exactly the ones that differ from the default.
+ let layout=setDocumentPage(project().layout,'logical','host0','host0',project());
+ assert.deepEqual(layout.documentPages,{logical:{host0:'host0'}});
+ layout=setDocumentPage(layout,'logical','host0',OTHER_DEVICES,{...project(),layout});
+ assert.equal(layout.documentPages,undefined);
+ assert.deepEqual(cleanDocumentPages({logical:{host0:OTHER_DEVICES,sw0:'*nope'}},['host0','sw0']),{logical:{host0:OTHER_DEVICES}});
+});
+
+test('an interface page of records several devices share is named Shared',()=>{
+ // Fictional switches with an identical loopback record.
+ const project={name:'Fictional campus',links:[],layout:{pageSetup:{visible:{default:{preset:'letter'}}}},devices:['LAB-SW-1','LAB-SW-2'].map((name,d)=>({id:'sw'+d,name,kind:'switch',vendor:'Aruba',model:'JL256A',ports:[{name:'1',state:'up',native:1},{name:'lo0',type:'loopback',state:'up'}],vlans:[],routes:[]}))};
+ const pages=buildPages(project).filter(page=>page.interfaceInventory);
+ assert.ok(pages.some(page=>page.interfaceSections.some(section=>section.shared)),'the loopback record is shared');
+ for(const page of pages)if(page.interfaceSections.every(section=>section.shared))assert.equal(page.displayName,'Port Inventory - Interfaces - Shared');
+});
+
+test('a router or switch of unknown kind from its own configuration keeps its own page',()=>{
+ const project={devices:[{id:'lab-rtr-1',name:'LAB-RTR-1',kind:'unknown',fromConfig:true},{id:'lab-cli',name:'LAB-CLI',kind:'unknown',operational:true},{id:'lab-tag',name:'LAB-TAG',kind:'unknown'}],layout:{}};
+ assert.equal(documentPageKey(project,'logical',{id:'lab-rtr-1'}),'device:lab-rtr-1');
+ assert.equal(documentPageKey(project,'logical',{id:'lab-cli'}),'device:lab-cli');
+ assert.equal(documentPageKey(project,'logical',{id:'lab-tag'}),'other');
+});
+
+test('several choices at once settle the same way in any order',async()=>{
+ const {setDocumentPages}=await import('../src/web/document-pages.mjs');
+ const project={devices:[{id:'sw-a',kind:'switch'},{id:'sw-b',kind:'switch'},{id:'srv',kind:'server'}],layout:{deviceStacks:[{id:'lab-stack',members:[{deviceId:'sw-a',number:1},{deviceId:'sw-b',number:2}]}],documentPages:{logical:{'sw-a':OTHER_DEVICES}}}};
+ // Both members back on the stack's own page, and the server with the stack.
+ const choices=[{id:'sw-b',anchor:'sw-a'},{id:'sw-a',anchor:'sw-a'},{id:'srv',anchor:'sw-a'}];
+ const forward=setDocumentPages(project.layout,'logical',choices,project),backward=setDocumentPages(project.layout,'logical',[...choices].reverse(),project);
+ assert.deepEqual(forward.documentPages,backward.documentPages);
+ for(const id of ['sw-a','sw-b','srv'])assert.equal(documentPageAnchor({...project,layout:forward},'logical',id),'sw-a',id);
+ // A member put with the other devices while its stack's first member moves back.
+ const other=[{id:'sw-b',anchor:OTHER_DEVICES},{id:'sw-a',anchor:'sw-a'}];
+ const one=setDocumentPages(project.layout,'logical',other,project),two=setDocumentPages(project.layout,'logical',[...other].reverse(),project);
+ assert.deepEqual(one.documentPages,two.documentPages);
+ assert.equal(documentPageAnchor({...project,layout:one},'logical','sw-b'),OTHER_DEVICES);
 });

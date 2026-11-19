@@ -1,4 +1,4 @@
-import {physicalLink,reconcilePhysicalObservations} from '../physical-links.mjs';
+import {physicalLink,reconcilePhysicalObservations,joinLogicalObservations} from '../physical-links.mjs';
 import {hardwareProfile,portCapability} from './hardware.mjs';
 import {identityPlan} from './identity.mjs';
 
@@ -7,8 +7,22 @@ export const empty = () => ({devices: [], links: [], warnings: []});
 export function device(name, fields = {}) {
   return {id: deviceId(name), name, kind: 'unknown', vendor: '', model: '', ports: [], vlans: [], routes: [], ...fields};
 }
+// A trailing "(description)" is not part of the name. A description with
+// brackets of its own, "42 (To firewall port 2(Management))", is one only when
+// what remains is a single port-like token (with a digit), so names such as
+// "vEthernet (Intel(R) Ethernet)" stay whole.
+const trailingDescription=text=>{
+  const plain=text.replace(/\s+\([^)]*\)\s*$/, '');
+  const nested=text.replace(/\s+\((?:[^()]|\([^()]*\))*\)\s*$/, '');
+  return nested.length<plain.length&&/^\S*\d\S*$/.test(nested)?nested:plain;
+};
+// The trailing description that portName leaves out, without its brackets.
+export function portDescription(value) {
+  const text=String(value ?? '').trim(),base=trailingDescription(text);
+  return base.length<text.length?text.slice(base.length).trim().replace(/^\(/,'').replace(/\)$/,'').trim():'';
+}
 export function portName(value) {
-  return String(value ?? '').trim().replace(/\s+\([^)]*\)\s*$/, '').replace(/^GigabitEthernet(?=\d)/i, 'Gi')
+  return trailingDescription(String(value ?? '').trim()).replace(/^GigabitEthernet(?=\d)/i, 'Gi')
     .replace(/^TenGigabitEthernet(?=\d)/i, 'Te').replace(/^FastEthernet(?=\d)/i, 'Fa')
     .replace(/^Port-channel\s*(?=\d)/i, 'Port-channel').replace(/^lag\s*(?=\d)/i, 'lag ');
 }
@@ -95,7 +109,7 @@ export function mergeModels(...models) {
   const identity=identityPlan(models,warnings);
   // These notices depend on the selected evidence as a whole. Recompute them,
   // rather than retaining stale conflicts from a separately imported worksheet.
-  const derivedWarning=warning=>/ has multiple reported peers\. Verify physical adjacency\.$| is reported down but has a reported peer\.$| is an alternate HA\/management observation; drawing uses observed .+\.$|^Hostname .+ has multiple fully qualified names\. Devices remain separate; review source identities\.$/.test(warning);
+  const derivedWarning=warning=>/ has multiple reported peers\. Verify physical adjacency\.$| is reported down but has a reported peer\.$| is an alternate HA\/management observation; drawing uses observed .+\.$| is reported down; drawing uses .+\.$| is reached through .+; (?:drawing uses .+|no other cable to it is drawn)\.$| each report the other device's VLAN interface \(.+\); drawing joins them as one inferred cable\. Verify the connection\.$|^Hostname .+ has multiple fully qualified names\. Devices remain separate; review source identities\.$/.test(warning);
   const conflict=link=>{if(link.status!=='conflict')link.statusBeforeConflict=link.status||'observed';link.status='conflict';};
   for (const model of models) {
     for (const warning of model.warnings || []) if(!derivedWarning(warning))warnings.add(warning);
@@ -132,10 +146,58 @@ export function mergeModels(...models) {
       if(e.status==='conflict'&&(e.statusBeforeConflict||priorConflict))e.status=e.statusBeforeConflict||'observed';
       delete e.statusBeforeConflict;
       if(e.physicalEvidence?.kind==='alternate-interface')delete e.physicalEvidence;
-      if(e.a!==deviceId(entry.a)||e.b!==deviceId(entry.b))e.reportedEndpoints=uniq([...(entry.reportedEndpoints||[]),{a:entry.a,ap:entry.ap,b:entry.b,bp:entry.bp}]);
+      // A cable joined from two VLAN-interface observations is recomputed
+      // from those observations, unless the user confirmed it.
+      if(e.endpointSource==='logical neighbor observations'&&e.status!=='confirmed')continue;
+      // A renamed device or port keeps the key it was reported (and edited) under.
+      const lower=v=>String(v??'').toLowerCase();
+      if(e.a!==deviceId(entry.a)||e.b!==deviceId(entry.b)||lower(e.ap)!==lower(entry.ap)||lower(e.bp)!==lower(entry.bp))e.reportedEndpoints=uniq([...(entry.reportedEndpoints||[]),{a:entry.a,ap:entry.ap,b:entry.b,bp:entry.bp}]);
       reported.push(e);
     }
   }
+  // A neighbor report can name an Auvik placeholder ("Unidentified Device")
+  // that several devices share. Use the one listing the reporting port as its
+  // uplink; a bare placeholder made only by such reports then goes away.
+  const placeholders=new Map();
+  for(const d of devices.values())if(d.placeholderOf){if(!placeholders.has(d.placeholderOf))placeholders.set(d.placeholderOf,[]);placeholders.get(d.placeholderOf).push(d);}
+  if(placeholders.size){
+    const moved=new Map();
+    for(const e of reported)for(const [end,other,otherPort] of [['b','a','ap'],['a','b','bp']]){
+      const candidates=placeholders.get(e[end]);if(!candidates)continue;
+      const from=devices.get(e[other]),port=deviceId(e[otherPort]),same=u=>deviceId(u.device)===e[other]||identity.id(deviceId(u.device))===e[other]||deviceId(u.device)===deviceId(from?.name||'');
+      const listed=d=>(d.placeholderUplinks||[]).some(u=>same(u)&&deviceId(portName(u.port))===port);
+      const reports=d=>reported.some(r=>r!==e&&[[r.a,r.ap,r.b,r.bp],[r.b,r.bp,r.a,r.ap]].some(([x,,y,yp])=>x===d.id&&y===e[other]&&deviceId(yp)===port));
+      let match=candidates.filter(d=>listed(d)||reports(d));
+      if(!match.length&&candidates.length===1)match=candidates;
+      if(match.length!==1)continue;
+      e.reportedEndpoints=uniq([...(e.reportedEndpoints||[]),{a:e.a,ap:e.ap,b:e.b,bp:e.bp}]);
+      if(!moved.has(e[end]))moved.set(e[end],new Set());moved.get(e[end]).add(match[0].id);e[end]=match[0].id;
+    }
+    for(const id of placeholders.keys()){
+      const d=devices.get(id);
+      if(!d||d.placeholderOf||reported.some(e=>e.a===id||e.b===id)||d.ip||d.mac||meaningful(d.model))continue;
+      devices.delete(id);
+      // Saved edits and layout references to the bare name follow the device
+      // that every one of its reports moved to.
+      const to=[...(moved.get(id)||[])];
+      if(to.length===1){const target=devices.get(to[0]);target.identityAliases=uniq([...(target.identityAliases||[]),id]);}
+    }
+  }
+  // Projects saved before preview.69 cut interface names at their commas, so
+  // a report can name only the last piece ("EEPROM V.36.41") of a printer's
+  // "HP ETHERNET ...,EEPROM V.36.41". A bare port that is the last piece of
+  // exactly one other interface name on that device is that interface.
+  const pieces=new Map();
+  for(const e of reported)for(const [id,field] of [[e.a,'ap'],[e.b,'bp']]){
+    const d=devices.get(id),name=e[field],own=d?.ports.find(p=>deviceId(p.name)===deviceId(name));
+    if(!d||(own&&Object.keys(own).some(k=>!['name','capability'].includes(k))))continue;
+    const whole=d.ports.filter(p=>p!==own&&deviceId(p.name).endsWith(','+deviceId(name)));
+    if(whole.length!==1)continue;
+    e.reportedEndpoints=uniq([...(e.reportedEndpoints||[]),{a:e.a,ap:e.ap,b:e.b,bp:e.bp}]);e[field]=whole[0].name;
+    if(own)pieces.set(own,d);
+  }
+  for(const [port,d] of pieces)if(!reported.some(e=>[[e.a,e.ap],[e.b,e.bp]].some(([id,name])=>id===d.id&&deviceId(name)===deviceId(port.name))))d.ports.splice(d.ports.indexOf(port),1);
+  const entriesPerLink=new Map();
   // Reconcile only an existing adjacency with an explicit description naming a
   // known device AND a known far-end jack. Keep the original report for review.
   const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -154,11 +216,24 @@ export function mergeModels(...models) {
       let ends = [[e.a,deviceId(e.ap)],[e.b,deviceId(e.bp)]].map(key);
       if (ends[0] === ends[1]) continue;
       const id = key([...ends].sort());
+      entriesPerLink.set(id,(entriesPerLink.get(id)||0)+1);
       if (!links.has(id)) links.set(id,e);
       else {
         const existing=links.get(id);assign(existing,e,['a','ap','b','bp','reportedEndpoints'],warnings,e.a+' '+e.ap+' / '+e.b+' '+e.bp);
         if(e.reportedEndpoints?.length)existing.reportedEndpoints=uniq([...(existing.reportedEndpoints||[]),...e.reportedEndpoints]);
       }
+  }
+  // A link made from several reported links (for example a printer cable once
+  // listed twice, under a cut name and the whole one) marks the other names as
+  // separate observations: an edit saved for one of them is about that one.
+  for(const [id,e] of links)if(e.reportedEndpoints?.length){
+    const byEnds=new Map();
+    for(const r of e.reportedEndpoints){const k=key([r.a,r.ap,r.b,r.bp]),seen=byEnds.get(k);byEnds.set(k,{a:r.a,ap:r.ap,b:r.b,bp:r.bp,...(seen?.observation||r.observation||entriesPerLink.get(id)>1?{observation:true}:{})});}
+    e.reportedEndpoints=[...byEnds.values()];
+  }
+  for(const e of joinLogicalObservations([...links.values()],devices,warnings)){
+    const id=key([[e.a,deviceId(e.ap)],[e.b,deviceId(e.bp)]].map(key).sort());
+    if(!links.has(id))links.set(id,e);
   }
   reconcilePhysicalObservations([...links.values()],devices,warnings);
   for(const [id,e] of links){
