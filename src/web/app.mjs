@@ -60,7 +60,7 @@ import {cleanNativeArt} from './native-art.mjs';
 import {sampleSite} from './sample.mjs';
 import {SITE_MAP_DETAILS,cleanSiteMap,siteMapSettings} from './site-map-settings.mjs';
 import {coreLinkKey,orderedDevices,moveDevice,moveStep,cleanLayout} from './layout.mjs';
-import {documentPageAnchor,setDocumentPage} from './document-pages.mjs';
+import {documentPageAnchor,setDocumentPage,OTHER_DEVICES} from './document-pages.mjs';
 import {categories,readSources,ensureEvidence,captureEdits,composeEvidence,reopenEvidence} from './evidence.mjs';
 
 // Keep browser navigation/debug actions out of the drawing workspace.
@@ -500,13 +500,13 @@ function documentPagesDialog(family){
  const title=family==='logical'?'VLANs and Routing':'Port Inventory',ids=documentDevices(family);
  if(ids.length<2)throw Error('Only one device has '+title+' pages here, so there is nothing to put together.');
  const name=id=>project.devices.find(d=>d.id===id)?.name||id,body=modal(title+' pages');
- body.append(el('p','Each switch or stack starts its own pages. To put devices on the same pages, choose the device each one joins. Undo restores the previous pages.','hint'));
+ body.append(el('p','Each switch, router, firewall or stack starts its own pages, and other devices share pages. To put devices on the same pages, choose the device each one joins. Undo restores the previous pages.','hint'));
  // Device choices carry an '@' so no device id can be read as 'Own page'.
- const fields=ids.map(id=>{const anchor=documentPageAnchor(project,family,id),others=[...new Set([...ids,anchor])].filter(other=>other!==id),input=field(body,name(id),anchor===id?'own':'@'+anchor,[['own','Own page'],...others.map(other=>['@'+other,'With '+name(other)])]);input.dataset.device=id;return input;});
+ const fields=ids.map(id=>{const anchor=documentPageAnchor(project,family,id),others=[...new Set([...ids,anchor])].filter(other=>other!==id&&other!==OTHER_DEVICES),input=field(body,name(id),anchor===id?'own':'@'+anchor,[['own','Own page'],['@'+OTHER_DEVICES,'With other devices'],...others.map(other=>['@'+other,'With '+name(other)])]);input.dataset.device=id;return input;});
  const apply=(next,message)=>{const previous=project.layout;project.layout=next;try{validateDrawing();}catch(error){project.layout=previous;throw error;}perform('drawing');close();draw();say(message);};
  const row=actions(body);
  button(row,'Apply',()=>{let next=project.layout;for(const input of fields){const id=input.dataset.device;next=setDocumentPage(next,family,id,input.value==='own'?id:input.value.slice(1),project);}apply(next,title+' pages updated.');},'primary');
- button(row,'One page per switch or stack',()=>{const next=structuredClone(project.layout||{});if(next.documentPages){delete next.documentPages[family];if(!Object.keys(next.documentPages).length)delete next.documentPages;}apply(next,title+' pages reset: one per switch or stack.');});
+ button(row,'Restore default pages',()=>{const next=structuredClone(project.layout||{});if(next.documentPages){delete next.documentPages[family];if(!Object.keys(next.documentPages).length)delete next.documentPages;}apply(next,title+' pages restored: one per switch or stack, other devices together.');});
 }
 function selectedDrawingDevices(){return pages[active]?.items.filter(i=>i.type==='device'&&i.kind!=='plug'&&drawingSelection.has(i.editKey)&&project.devices.some(d=>d.id===i.sourceId))||[];}
 // Devices and generated WAN/ISP/egress cards can be placed beside another object.
