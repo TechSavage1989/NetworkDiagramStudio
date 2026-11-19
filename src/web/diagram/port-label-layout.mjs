@@ -124,7 +124,7 @@ function attempt(g,ports,options,size){
  * requiredScale means that enlargement cannot resolve the mapped geometry.
  */
 export function portLabelLayout(g,ports,raw={}){
- const fontSize=Math.max(8,Number.isFinite(raw.fontSize)?raw.fontSize:10),options={fontSize,vertical:raw.vertical===true,minFontSize:Math.min(fontSize,Math.max(8,Number.isFinite(raw.minFontSize)?raw.minFontSize:fontSize)),minWidth:Math.max(0,Number.isFinite(raw.minWidth)?raw.minWidth:18),gap:Math.max(1,Number.isFinite(raw.gap)?raw.gap:2),obstacleGap:Math.max(0,Number.isFinite(raw.obstacleGap)?raw.obstacleGap:1),contentInset:Math.max(0,Number.isFinite(raw.contentInset)?raw.contentInset:1),format:typeof raw.format==='function'?raw.format:portLabelText};
+ const floor=Number.isFinite(raw.floor)?Math.max(4,raw.floor):8,fontSize=Math.max(floor,Number.isFinite(raw.fontSize)?raw.fontSize:10),options={fontSize,vertical:raw.vertical===true,minFontSize:Math.min(fontSize,Math.max(floor,Number.isFinite(raw.minFontSize)?raw.minFontSize:fontSize)),minWidth:Math.max(0,Number.isFinite(raw.minWidth)?raw.minWidth:18),gap:Math.max(1,Number.isFinite(raw.gap)?raw.gap:2),obstacleGap:Math.max(0,Number.isFinite(raw.obstacleGap)?raw.obstacleGap:1),contentInset:Math.max(0,Number.isFinite(raw.contentInset)?raw.contentInset:1),format:typeof raw.format==='function'?raw.format:portLabelText};
  if(!finiteBox(g)||!g.w||!g.h)throw new TypeError('Port labels need finite, positive device bounds.');
  let layout;
  for(let size=options.fontSize;size>=options.minFontSize-.001;size=Math.max(options.minFontSize,size-.5)){

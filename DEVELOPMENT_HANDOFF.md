@@ -1,3 +1,11 @@
+# Preview.70: firewall port numbers, cables over faceplate numbers
+
+Baseline: published preview.69. The owner asked for port numbers on FortiGate and other firewall faceplates, and for cables not to be hidden by faceplate numbers (crossing them is fine; cable labels are unchanged).
+
+- core.mjs: firewalls and routers try number scales .6 and .5 after .7; portNumbers passes a lowered size floor (port-label-layout floor) for scales below 1. A FortiGate 101F now gets numbers on its uncabled sockets. Switches are unchanged.
+- wireless-number-leads.mjs / wireless-layout.mjs: a pass-through number no longer gets a plate-colored backing or moves after the cables, so the cable is drawn over it.
+- Tests updated: wireless number tests expect no backing and the cable painted after its number; page-size exempts faceplate numbers from the 8-unit text check.
+
 # Preview.69: one cable per port from Auvik exports
 
 Baseline: published preview.68. The owner sent a real site's Auvik workbooks (site and per-device) and one Aruba 2920 configuration, and showed the network page with two or three cables on one port. The files stay outside the repository; tests/auvik-neighbors.test.mjs reproduces each pattern with a fictional export.

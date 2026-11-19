@@ -28,18 +28,18 @@ test('wireless port numbers stay in line with their sockets when a cable leaves 
  // Numbers stay on the faceplate rather than straddling its edge (the text box
  // includes line spacing, so it may reach a little past the glyphs).
  assert.ok(numbers.every(n=>n.y>=device.y-n.h*.15&&n.y+n.h<=device.y+device.h+n.h*.15),'numbers stay on the faceplate');
- // The cable rises straight out of its socket, behind its own number, which
- // is painted after it on a backing in the plate color.
+ // The cable rises straight out of its socket over its own number, drawn on
+ // top of it so the cable is never hidden.
  const own=numbers.find(n=>n.portName==='GigabitEthernet0/37');
- assert.equal(own.leadThrough,path.linkId);assert.equal(own.background,own.surface);assert.match(own.surface,/^#[0-9A-F]{6}$/i);
- assert.ok(page.items.indexOf(own)>page.items.indexOf(path),'the number is painted over its cable');
+ assert.equal(own.leadThrough,path.linkId);assert.equal(own.background,undefined,'no backing hides the cable');
+ assert.ok(page.items.indexOf(own)<page.items.indexOf(path),'the cable is painted over its number');
  assert.equal(path.points[0][0],path.points[1][0],'the first run is vertical');assert.ok(Math.abs(path.points[0][0]-(own.x+own.w/2))<1e-6,'straight out of the socket');
  assert.ok(path.points[1][1]<own.y,'the cable continues past the number before it turns');
  assert.ok(path.points.length<=4,'no detour along the number row');
  // Only its own cable passes behind it; no other number is crossed.
  for(const number of numbers)if(number!==own)assert.ok(!pathCrossesText(path,number,1),number.value);
  const backing=labelBackingItems(page.items,page.labelBacking).filter(i=>i.captionBacking);
- assert.ok(backing.some(i=>i.fill===own.surface),'the SVG paints the backing');
+ assert.ok(!backing.some(i=>i.fill===own.surface&&i.owner===own),'no backing covers the cable');
  assert.ok(page.svg.includes('>37</text>'));
 });
 

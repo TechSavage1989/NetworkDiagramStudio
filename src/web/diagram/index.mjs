@@ -167,7 +167,9 @@ function faceBoxes(g,entries,limit=2.6){
 }
 function portNumbers(items,g,ports,{fill=()=>C.pale,selected=null,stateKey=false,marks=null,fontScale=null,format=null,unconfiguredFill=null,upright=false}={}){
  const firstItem=items.length;
- const size=10*(fontScale??1),minimum=8*(fontScale??1),formatting=format?{format}:{};
+ // A font scale below 1 (network-page faceplates with narrow sockets, such as
+ // firewalls) really lowers the size floor.
+ const size=10*(fontScale??1),minimum=8*(fontScale??1),formatting={...(format?{format}:{}),...(fontScale&&fontScale<1?{floor:minimum}:{})};
  let layout=portLabelLayout(g,ports,{fontSize:size,minFontSize:minimum,minWidth:0,measureRequired:false,...formatting});
  // Upright callers (wireless paper sheets) never rotate numbers; they widen
  // the hardware until horizontal numbers fit.

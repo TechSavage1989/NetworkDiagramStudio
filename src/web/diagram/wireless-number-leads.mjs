@@ -70,12 +70,12 @@ export function wirelessNumberLeads(page,node,endData,project={}){
   if(!found&&through){
    // Rather than push the whole number row away from its sockets (which
    // leaves that row out of line with the others), a cable rising straight
-   // out of its socket that crosses only its own number passes behind it, on
-   // a backing in the plate color. Every number keeps its distance from its
-   // socket.
+   // out of its socket that crosses only its own number passes over
+   // the number: the cable is drawn over it, so the cable is never hidden.
+   // Every number keeps its distance from its socket.
    const own=numberItems().find(i=>i.portName.toLowerCase()===anchor.port.toLowerCase()),link=attached.find(v=>v.anchor===anchor)?.e?.idx;
    if(own&&link!=null&&own.surface&&!own.angle&&own.leadThrough==null&&!Number.isFinite(edits[own.editKey]?.x)&&!Number.isFinite(edits[own.editKey]?.y)&&numbers.every(box=>box===own||!crossesText(existing,box,pad))&&!reserved.some(other=>other.points.some(([x,y])=>inside({x,y},own)))&&reserveNumberRow(anchor,region,true)){
-    Object.assign(own,{leadThrough:link,linkId:link,background:own.surface});marked.push(own);reserved.push({points:existing,weight:anchor.weight});continue;
+    Object.assign(own,{leadThrough:link,linkId:link});marked.push(own);reserved.push({points:existing,weight:anchor.weight});continue;
    }
   }
   if(!found&&reserveNumberRow(anchor,region))found=choose();
