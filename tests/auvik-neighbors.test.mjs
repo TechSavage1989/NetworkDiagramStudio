@@ -147,9 +147,13 @@ test('one switch export alone: the peer DEFAULT_VLAN is logical by name',()=>{
 });
 
 test('neighbor lists keep device names with commas and never join across lines',()=>{
- const one=value=>parseTable([['INTERFACES'],['Admin Status','Oper Status','Interface Name','MAC Address','Type','Parent Device','Negotiated Speed','Connected To','Configuration Details'],row('Up','Up','5','','Ethernet','LAB-SW-A','1.0 Gbit/s',value)],'t').links.map(l=>l.b+' | '+l.bp);
- assert.deepEqual(one('eth0  on Front Desk, Lobby, 48  on LAB-SW-B'),['front desk, lobby | eth0','lab-sw-b | 48']);
- assert.deepEqual(one('eth0  on Front Desk, Lobby\n48  on LAB-SW-B'),['front desk, lobby | eth0','lab-sw-b | 48']);
+ const lobby=row('Up','Up','eth0','','Ethernet','Front Desk, Lobby','1.0 Gbit/s','5  on LAB-SW-A');
+ const one=(value,...extra)=>parseTable([['INTERFACES'],['Admin Status','Oper Status','Interface Name','MAC Address','Type','Parent Device','Negotiated Speed','Connected To','Configuration Details'],row('Up','Up','5','','Ethernet','LAB-SW-A','1.0 Gbit/s',value),...extra],'t').links.filter(l=>l.a==='lab-sw-a').map(l=>l.b+' | '+l.bp);
+ // A device the sheet knows keeps its comma; anything else begins the next interface name.
+ assert.deepEqual(one('eth0  on Front Desk, Lobby, 48  on LAB-SW-B',lobby),['front desk, lobby | eth0','lab-sw-b | 48']);
+ assert.deepEqual(one('eth0  on Front Desk, Lobby\n48  on LAB-SW-B',lobby),['front desk, lobby | eth0','lab-sw-b | 48']);
+ assert.deepEqual(one('48  on LAB-SW-B, Xerox Embedded Ethernet Controller, 10/100/1000 Mbps, v1.0, RJ-45  on LAB-XRX'),['lab-sw-b | 48','lab-xrx | Xerox Embedded Ethernet Controller, 10/100/1000 Mbps, v1.0, RJ-45']);
+ assert.deepEqual(one('48  on LAB-SW-B,7  on LAB-SW-C'),['lab-sw-b | 48','lab-sw-c | 7']);
  assert.deepEqual(one(JETDIRECT+'  on LAB-PRINTER'),['lab-printer | '+JETDIRECT]);
  assert.deepEqual(one('Intel(R) Ethernet, I219-V  on LAB-PC'),['lab-pc | Intel(R) Ethernet, I219-V']);
 });
@@ -161,4 +165,18 @@ test('trailing descriptions: unbalanced brackets still go, names that are not po
  assert.equal(portDescription('42 (To firewall port 2(Management))'),'To firewall port 2(Management)');
  assert.equal(portName('vEthernet (Intel(R) I350 Gigabit Network Connection)'),'vEthernet (Intel(R) I350 Gigabit Network Connection)');
  assert.equal(portName('Gi1/0/1 (uplink)'),'Gi1/0/1');
+});
+
+test('peer rules look again after the reached-through rule, and a confirmed cable counts as drawn',()=>{
+ // lab-x 1 is lab-x's uplink to lab-s; lab-e is on lab-s 5; lab-e also shows on lab-x 3 (up) and lab-x 2 (down).
+ const seen=mergeModels([{devices:[dev('lab-x','switch',['1','2','3']),dev('lab-s','switch',['24','5']),dev('lab-e','server',['eth0'])],links:[link('lab-x','1','lab-s','24'),link('lab-x','1','lab-e','eth0'),link('lab-x','3','lab-e','eth0'),link('lab-s','5','lab-e','eth0')],warnings:[]}]);
+ assert.ok(!physicalInventory(seen).links.some(l=>l.a+' '+l.ap==='lab-x 1'&&l.b==='lab-e'||l.b+' '+l.bp==='lab-x 1'&&l.a==='lab-e'),'the uplink is not drawn to the server');
+ // Every 'drawing uses' note names a drawn cable end.
+ const notes=mergeModels([{devices:[dev('lab-x','switch',['1']),dev('lab-s','switch',['24','5']),dev('lab-e','server',['eth0',{name:'eth1',type:'Ethernet',state:'down'}])],links:[link('lab-x','1','lab-e','eth0'),link('lab-x','1','lab-e','eth1'),link('lab-x','1','lab-s','24'),link('lab-s','5','lab-e','eth0')],warnings:[]}]);
+ const ends=[...drawnEnds(notes).keys()];
+ for(const w of notes.warnings.filter(w=>/drawing uses/.test(w))){const m=/drawing uses (?:(\S+) )?(\S+)\.$/.exec(w);assert.ok(m&&(!m[1]?ends.some(e=>e.endsWith(' '+m[2])):ends.includes(m[1].toLowerCase()+' '+m[2])),w);}
+ // A loop broken by a confirmed cable draws the confirmed one only.
+ const loop=mergeModels([{devices:[dev('lab-x','switch',['1','7']),dev('lab-s','switch',['24','5']),dev('lab-e','server',['eth0'])],links:[link('lab-x','1','lab-s','24'),link('lab-x','7','lab-s','5'),link('lab-x','1','lab-e','eth0'),link('lab-s','5','lab-e','eth0',{status:'confirmed'})],warnings:[]}]);
+ assert.deepEqual([...drawnEnds(loop).keys()].filter(end=>end.startsWith('lab-e ')),['lab-e eth0']);
+ assert.equal(drawnEnds(loop).get('lab-e eth0'),1);
 });

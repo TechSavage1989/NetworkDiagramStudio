@@ -53,3 +53,70 @@ test('reopening keeps saved cable edits of a port whose description had brackets
  assert.ok(p.links.some(l=>l.ap==='42'||l.bp==='42'),'the port reads 42 now');
  assert.deepEqual(p.layout.drawingEdits['Core Network|path|lab-srv-1/Some Interface|lab-sw-a/42'],{points:[[0,0],[0,10]]});
 });
+
+// Second review round.
+const drawn=p=>physicalInventory(p).links.map(l=>[l.a+' '+l.ap,l.b+' '+l.bp].sort().join(' <-> ')).sort();
+const H=['Admin Status','Oper Status','Interface Name','MAC Address','Type','Parent Device','Negotiated Speed','Connected To','Configuration Details'];
+const iface=(name,type,parent,connected)=>['Up','Up',name,'',type,parent,'1.0 Gbit/s',connected,''];
+
+test('one switch export alone keeps the joined uplink beside an endpoint seen on the same port',()=>{
+ const rows=[['INTERFACES'],H,iface('45','Ethernet','LAB-CORE-01','VLAN1  on LAB-REMOTE-SW, Some Interface  on LAB-PHONE'),iface('DEFAULT_VLAN','Virtual NIC','LAB-CORE-01','g9  on LAB-REMOTE-SW')];
+ const p=project([mergeModels([parseTable(rows,'core.xlsx / Interfaces')])]);
+ assert.ok(drawn(p).includes('lab-core-01 45 <-> lab-remote-sw g9'),drawn(p).join(' | '));
+});
+
+test('an endpoint whose drawn target is a joined cable keeps a cable after composition',()=>{
+ const dev2=(id,kind,ports)=>({id,name:id.toUpperCase(),kind,vendor:'',model:'',ports:ports.map(p=>typeof p==='string'?{name:p,type:'Ethernet',state:'up'}:p),vlans:[],routes:[]});
+ const l=(a,ap,b,bp)=>({a,ap,b,bp,media:'unknown',speed:'1 Gbps',status:'observed'});
+ const saved={devices:[dev2('lab-x','switch',['1']),dev2('lab-s','switch',['24','5',{name:'DEFAULT_VLAN',type:'Virtual NIC'}]),dev2('lab-e','server',['eth0',{name:'vEthernet',type:'Virtual NIC'}]),dev2('lab-phone','phone',['lan'])],links:[l('lab-x','1','lab-s','24'),l('lab-x','1','lab-e','eth0'),l('lab-e','eth0','lab-s','DEFAULT_VLAN'),l('lab-s','5','lab-e','vEthernet'),l('lab-s','5','lab-phone','lan')],warnings:[]};
+ const p=project([saved]);
+ assert.ok(drawn(p).some(c=>c.includes('lab-e ')),'the server keeps a drawn cable: '+drawn(p).join(' | '));
+ for(const w of p.warnings.filter(w=>/drawing uses/.test(w))){const m=/drawing uses (\S+) (\S+)\.$/.exec(w);if(m&&/^LAB-/.test(m[1]))assert.ok(drawn(p).some(c=>c.includes(m[1].toLowerCase()+' '+m[2])),w);}
+});
+
+test('a deliberate deletion of a merged printer cable sticks, and removing only the cut duplicate keeps it',async()=>{
+ const {captureEdits}=await import('../src/web/evidence.mjs');
+ const saved=()=>({devices:[dev('lab-core-01','LAB-CORE-01','switch',['1']),{...dev('lab-printer','LAB-PRINTER','printer',[JETDIRECT]),ports:[{name:JETDIRECT,type:'Ethernet',state:'up'},{name:'EEPROM V.36.41'}]}],links:[
+  {a:'lab-core-01',ap:'1',b:'lab-printer',bp:'EEPROM V.36.41',media:'unknown',speed:'1 Gbps',status:'observed'},
+  {a:'lab-printer',ap:JETDIRECT,b:'lab-core-01',bp:'1',media:'unknown',speed:'1 Gbps',status:'observed'}],warnings:[]});
+ const printer=p=>physicalInventory(p).links.filter(l=>[l.a,l.b].includes('lab-printer'));
+ // Only the cut-name duplicate was removed in the old release.
+ assert.equal(printer(project([saved()],{fields:{links:{rows:{[key('lab-core-01','1','lab-printer','EEPROM V.36.41')]:{remove:true}}}}})).length,1);
+ // The old confirmation follows the merged cable; deleting it now removes it for good.
+ const p=project([saved()],{fields:{links:{rows:{[key('lab-core-01','1','lab-printer','EEPROM V.36.41')]:{fields:{status:{set:'confirmed'}}}}}}});
+ assert.equal(printer(p)[0].status,'confirmed');
+ const before=structuredClone({devices:p.devices,links:p.links,warnings:p.warnings});
+ p.links=p.links.filter(l=>![l.a,l.b].includes('lab-printer'));captureEdits(p,before);composeEvidence(p);
+ assert.equal(printer(p).length,0,'the deleted cable stays deleted');
+});
+
+test('a shared placeholder name is not saved as a lasting identity',()=>{
+ const switchExport=parseTable([['INTERFACES'],H,iface('20','Ethernet','LAB-CORE-01','Some Interface  on Unknown Name')],'core.xlsx / Interfaces');
+ const siteExport=parseTable([['DEVICES'],['Status','Device Name','Type','Make & Model','MAC Address(es)','IP Address(es)','Network(s)','Connected To'],['Up','Unknown Name','Generic Device','Fictional reader','02:00:00:00:09:65','192.0.2.65','192.0.2.0/24','LAB-CORE-01 through 20']],'site.xlsx / Devices');
+ const p=project([mergeModels([switchExport]),mergeModels([siteExport])]);
+ assert.ok(!(p.evidence.identityGroups||[]).some(group=>group.includes('unknown name')),JSON.stringify(p.evidence.identityGroups));
+});
+
+test('saved edits of a port renamed on reopen apply to the renamed cable',()=>{
+ const old='42 (To firewall port 2(Management))';
+ const saved=()=>({devices:[dev('lab-sw-a','LAB-SW-A','switch',[old]),dev('lab-srv-1','LAB-SRV-1','server',['nic1'])],links:[{a:'lab-sw-a',ap:old,b:'lab-srv-1',bp:'nic1',media:'unknown',speed:'1 Gbps',status:'observed'}],warnings:[]});
+ const confirmed=project([saved()],{fields:{links:{rows:{[key('lab-sw-a',old,'lab-srv-1','nic1')]:{fields:{status:{set:'confirmed'},media:{set:'fiber'}}}}}}});
+ const cable=confirmed.links.find(l=>[l.a,l.b].includes('lab-srv-1'));
+ assert.equal(cable.status,'confirmed');assert.equal(cable.media,'fiber');
+ const removed=project([saved()],{fields:{links:{rows:{[key('lab-sw-a',old,'lab-srv-1','nic1')]:{remove:true}}}}});
+ assert.ok(!removed.links.some(l=>[l.a,l.b].includes('lab-srv-1')),'a deleted cable stays deleted');
+});
+
+test('a corrected cable saved under the old full hostname still replaces the joined cable',()=>{
+ // Auvik knows the remote switch by its FQDN; a later configuration names it by the short name.
+ const auvik={devices:[dev('lab-core','LAB-CORE','switch',['45','46']),{...dev('lab-core','LAB-CORE','switch',[]),ports:[{name:'DEFAULT_VLAN',type:'Virtual NIC'}]},dev('lab-remote.example.net','lab-remote.example.net','switch',['g9']),{...dev('lab-remote.example.net','lab-remote.example.net','switch',[]),ports:[{name:'VLAN1',type:'Virtual NIC'}]}],links:[
+  {a:'lab-core',ap:'45',b:'lab-remote.example.net',bp:'VLAN1',media:'unknown',speed:'1 Gbps',status:'observed'},
+  {a:'lab-core',ap:'DEFAULT_VLAN',b:'lab-remote.example.net',bp:'g9',media:'unknown',speed:'1 Gbps',status:'observed'}],warnings:[]};
+ const config={devices:[dev('lab-remote','lab-remote','switch',['g9'],{fromConfig:true})],links:[],warnings:[]};
+ const corrected={a:'lab-core',ap:'46',b:'lab-remote.example.net',bp:'g9',media:'copper',speed:'1 Gbps',status:'confirmed'};
+ const edits={fields:{links:{rows:{[key('lab-core','46','lab-remote.example.net','g9')]:{set:corrected}}}}};
+ const p=project([auvik,{...config,kind:'Configuration'}],edits),ids=new Set(p.devices.map(d=>d.id));
+ const g9=physicalInventory(p).links.filter(l=>[l.a+' '+l.ap,l.b+' '+l.bp].some(end=>/^lab-remote(\.example\.net)? g9$/.test(end)));
+ assert.equal(g9.length,1,'one cable on g9: '+drawn(p).join(' | ')+' devices '+[...ids].join(','));
+ assert.ok([g9[0].a+' '+g9[0].ap,g9[0].b+' '+g9[0].bp].includes('lab-core 46'));
+});

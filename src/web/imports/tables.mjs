@@ -8,21 +8,32 @@ const missing = v => ['','0','n/a','unknown','none','-'].includes(String(v??'').
 const split = v => String(v||'').split(/[,;\n]/).map(t=>t.trim()).filter(t=>!missing(t));
 // Auvik lists neighbors as "<interface>  on <device>", separated by ", ".
 // An interface name can contain commas of its own (printer JetDirect cards
-// report "HP ETHERNET MULTI-ENVIRONMENT,ROM none,JETDIRECT,..."), so only a
-// comma followed by a space separates entries. A piece without " on " is the
-// rest of the previous entry's device name ("on Front Desk, Lobby"), or, at
-// the start, the beginning of the next entry's interface name. Entries never
+// report "HP ETHERNET MULTI-ENVIRONMENT,ROM none,JETDIRECT,..."), so a comma
+// with no space after it never separates entries, unless a piece then holds
+// two entries ("48  on SW-B,7  on SW-C"). A piece without " on " ends the
+// previous entry's device name when that makes the name of a device the sheet
+// knows ("on Front Desk, Lobby"); otherwise it starts the next entry's
+// interface name ("Xerox Ethernet, 10/100/1000 Mbps  on PRN"). Entries never
 // run across a semicolon or a line break.
-const neighbors=v=>{
+const ON=/\s+on\s+\S/i;
+const entriesIn=piece=>{
+  if((piece.match(/\s+on\s+\S/gi)||[]).length<2)return [piece];
+  const out=[];let pending='';
+  for(const part of piece.split(',')){pending=pending?pending+','+part:part;if(ON.test(pending)){out.push(pending);pending='';}}
+  if(pending)out[out.length-1]+=','+pending;
+  return out;
+};
+const neighbors=(v,known=new Set())=>{
   const out=[];
-  for(const part of String(v||'').split(/[;\n]/)){
+  for(const line of String(v||'').split(/[;\n]/)){
     const entries=[];let lead='';
-    for(const piece of part.split(/,(?=\s)/)){
-      if(/\s+on\s+\S/i.test(piece))entries.push((lead?lead+',':'')+piece);
-      else if(entries.length)entries[entries.length-1]+=','+piece;
+    for(const piece of line.split(/,(?=\s)/)){
+      if(ON.test(piece)){for(const entry of entriesIn(piece)){entries.push((lead?lead+',':'')+entry);lead='';}continue;}
+      const previous=entries.at(-1),device=previous&&/^(.+?)\s+on\s+(.+)$/i.exec(previous)?.[2].trim();
+      if(previous&&!known.has(device.toLowerCase())&&known.has((device+','+piece).trim().toLowerCase()))entries[entries.length-1]+=','+piece;
       else lead=lead?lead+','+piece:piece;
-      if(/\s+on\s+\S/i.test(piece))lead='';
     }
+    if(lead&&entries.length)entries[entries.length-1]+=','+lead;
     out.push(...entries.map(t=>t.trim()));
   }
   return out.filter(t=>!missing(t));
@@ -110,7 +121,7 @@ export function parseTable(rows, filename='report.csv') {
   }
   if(!type){out.warnings.push(filename+': no supported Auvik Devices, Interfaces or Routes header found.');return out;}
   const get=n=>{const id=deviceId(n);if(!map.has(id))map.set(id,device(n));return map.get(id);};
-  const ipCount=new Map();
+  const ipCount=new Map(),knownDevices=new Set(type==='ports'?rows.slice(i+1).map(r=>String(r[headers.indexOf('parent device')]??'').trim().toLowerCase()).filter(Boolean):[]);
   if(type==='devices')for(const r of rows.slice(i+1))for(const ip of split(r[headers.indexOf('ip address(es)')]))ipCount.set(ip,(ipCount.get(ip)||0)+1);
   for(const row of rows.slice(i+1)){
     const val=k=>String(row[headers.indexOf(k)]??'').trim();
@@ -148,7 +159,7 @@ export function parseTable(rows, filename='report.csv') {
       for(const m of val('configuration details').matchAll(/\bVLAN\s+(\d+)(?:\s+\(([^)]*)\))?/gi)){
         const v=ensureVlan(d,m[1]);if(m[2])v.name ||=m[2];(p.reportedVlans||=[]).push(Number(m[1]));
       }
-      for(const piece of neighbors(val('connected to'))){
+      for(const piece of neighbors(val('connected to'),knownDevices)){
         const match=/^(.+?)\s+on\s+(.+)$/i.exec(piece);if(!match)continue;
         const peer=match[2].trim(),remote=portName(match[1]); if(missing(remote)||missing(peer))continue;
         const b=get(peer);

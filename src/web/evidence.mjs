@@ -1,7 +1,8 @@
 import {importFiles,mergeModels,findDeviceIdentity} from './imports/index.mjs';
 import {isOperational} from './imports/operational.mjs';
 import {migrateIdentityReferences} from './evidence-identities.mjs';
-import {physicalLink} from './physical-links.mjs';
+import {physicalLink,joinNote} from './physical-links.mjs';
+import {portName} from './imports/model.mjs';
 
 export const categories=['identity','ports','links','vlans','routes','bridges'];
 const copy=x=>JSON.parse(JSON.stringify(x));
@@ -95,6 +96,8 @@ function difference(before,after,type='root'){
   for(const k of new Set([...a.keys(),...b.keys()])){
    const v=!b.has(k)?{remove:true}:!a.has(k)?{set:b.get(k)}:difference(a.get(k),b.get(k));if(v)rows[k]=v;
   }
+  // Deleting a link made from several reported links deletes each of them.
+  if(type==='links')for(const [k,v] of a)if(!b.has(k))for(const r of v.reportedEndpoints||[])if(r.observation)try{const alias=recordKey(r,'links');if(!b.has(alias))rows[alias]={remove:true};}catch{}
   return {rows};
  }
  if(before&&after&&typeof before==='object'&&typeof after==='object'&&!Array.isArray(before)&&!Array.isArray(after)){
@@ -116,25 +119,26 @@ function patch(value,change,type='root',identities=[]){
  if(Object.hasOwn(change||{},'set'))return copy(change.set);
  if(change?.rows){
   const rows=new Map((value||[]).map(v=>[recordKey(v,type),v]));
-  // A link merged from several observations also answers to the key each
-  // observation had when the edit was saved (reportedEndpoints).
-  const merged=new Map();
-  if(type==='links')for(const [k,v] of rows)for(const r of v.reportedEndpoints||[])try{const alias=recordKey(r,'links');if(!rows.has(alias)&&!merged.has(alias))merged.set(alias,k);}catch{}
+  // A link also answers to the keys it was reported under (reportedEndpoints).
+  // A renamed device or port is the same observation, so every edit saved
+  // under its old key applies. A link made from several reported links
+  // (observation) answers to each of them, but a removal saved for one of
+  // them removes only that one: the link stays while another is kept.
+  const renamed=new Map(),observed=new Map();
+  if(type==='links')for(const [k,v] of rows)for(const r of v.reportedEndpoints||[])try{const alias=recordKey(r,'links'),into=r.observation?observed:renamed;if(!rows.has(alias)&&!into.has(alias))into.set(alias,k);}catch{}
   const resolve=original=>{
-   let k=original;
+   let k=original,via=false;
    if(!rows.has(k)&&type==='devices')k=findDeviceIdentity(identities,k)?.id||k;
    if(!rows.has(k)&&type==='links')try{k=JSON.stringify(JSON.parse(k).map(endpoint=>{const at=endpoint.lastIndexOf('|'),id=endpoint.slice(0,at);return (findDeviceIdentity(identities,id)?.id||id)+endpoint.slice(at);}).sort());}catch{}
-   if(!rows.has(k)&&merged.has(k))k=merged.get(k);
-   if(!rows.has(k)&&merged.has(original))k=merged.get(original);
-   return k;
+   if(!rows.has(k)&&type==='ports'&&rows.has(portName(k)))k=portName(k);
+   for(const key of [k,original])if(!rows.has(k)&&renamed.has(key))k=renamed.get(key);
+   for(const key of [k,original])if(!rows.has(k)&&observed.has(key)){k=observed.get(key);via=true;}
+   return {k,via};
   };
-  const entries=Object.entries(change.rows).map(([original,p])=>({original,p,k:resolve(original)}));
-  // Removing one observation of a merged link does not remove the link while
-  // an edit saved for another of its observations keeps it.
-  const keeps=k=>entries.some(entry=>entry.k===k&&!entry.p?.remove);
-  for(const {original,p,k} of entries){
+  const entries=Object.entries(change.rows).map(([original,p])=>({original,p,...resolve(original)}));
+  for(const {original,p,k,via} of entries){
    if(!rows.has(k)&&!Object.hasOwn(p,'set'))continue;
-   if(type==='links'&&p?.remove&&keeps(k))continue;
+   if(type==='links'&&p?.remove&&(via||entries.some(other=>other.k===k&&other.via&&!other.p?.remove)))continue;
    const v=patch(rows.get(k),p,'root',identities);if(v===undefined)rows.delete(k);else {if(type==='devices'&&k!==original)v.id=k;rows.set(k,v);}
   }return [...rows.values()];
  }
@@ -145,8 +149,11 @@ function patch(value,change,type='root',identities=[]){
 // and links, while a correction follows the remaining name of the same device.
 function patchIdentities(e,result){
  const norm=value=>String(value).toLowerCase(),groups=e.identityGroups||[];
- for(const d of result.devices)if(d.identityAliases?.length){
-  const group=[...new Set([d.id,...d.identityAliases].map(norm))].sort();
+ // A shared Auvik placeholder name ("unknown name") stands for this device in
+ // this composition only; saving it would tie unrelated devices together.
+ for(const d of result.devices){
+  const saved=(d.identityAliases||[]).filter(alias=>!d.placeholderOf||norm(alias)!==norm(d.placeholderOf));if(!saved.length)continue;
+  const group=[...new Set([d.id,...saved].map(norm))].sort();
   if(!groups.some(v=>JSON.stringify(v)===JSON.stringify(group)))groups.push(group);
  }
  if(groups.length)e.identityGroups=groups;
@@ -180,12 +187,22 @@ export function composeEvidence(p){
   if(port?.media&&(!l.media||l.media==='unknown'))l.media=port.media;
  }
  const identities=patchIdentities(e,result),edited=patch(result,e.edits,'root',identities);
- // A cable joined from two VLAN-interface observations gives way to a cable
- // the user drew or corrected on either of its ports.
- const ends=new Map(),endsOf=link=>[link.a+'|'+String(link.ap).toLowerCase(),link.b+'|'+String(link.bp).toLowerCase()];
- for(const link of edited.links||[])if(physicalLink(link,edited.devices||[]))for(const end of endsOf(link))ends.set(end,(ends.get(end)||0)+1);
- if(edited.links)edited.links=edited.links.filter(link=>link.endpointSource!=='logical neighbor observations'||link.status==='confirmed'||endsOf(link).every(end=>(ends.get(end)||0)<=1));
+ // Links the user drew, changed or confirmed (anything the edits did not
+ // leave exactly as observed).
+ const observed=new Map((result.links||[]).map(link=>[recordKey(link,'links'),JSON.stringify(link)]));
+ const userLinks=new Set((edited.links||[]).filter(link=>link.status==='confirmed'||observed.get(recordKey(link,'links'))!==JSON.stringify(link)));
  for(const link of edited.links)for(const end of ['a','b'])link[end]=findDeviceIdentity(identities,link[end])?.id||link[end];
+ // A cable joined from two VLAN-interface observations gives way to a cable
+ // the user drew, changed or confirmed on either of its ports; its note goes
+ // with it. Imported observations on its ports stay for review as before.
+ const endsOf=link=>[link.a+'|'+String(link.ap).toLowerCase(),link.b+'|'+String(link.bp).toLowerCase()],taken=new Set();
+ for(const link of userLinks)if(link.endpointSource!=='logical neighbor observations'&&physicalLink(link,edited.devices||[]))for(const end of endsOf(link))taken.add(end);
+ const dropped=(edited.links||[]).filter(link=>link.endpointSource==='logical neighbor observations'&&link.status!=='confirmed'&&!userLinks.has(link)&&endsOf(link).some(end=>taken.has(end)));
+ if(dropped.length){
+  edited.links=edited.links.filter(link=>!dropped.includes(link));
+  const notes=new Set(dropped.map(link=>joinNote(link)).filter(Boolean));
+  if(Array.isArray(edited.warnings))edited.warnings=edited.warnings.filter(warning=>!notes.has(warning));
+ }
  Object.assign(p,edited);
  migrateIdentityReferences(p,before,identities);
  return model(p);

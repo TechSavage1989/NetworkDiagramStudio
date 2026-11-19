@@ -109,7 +109,7 @@ export function mergeModels(...models) {
   const identity=identityPlan(models,warnings);
   // These notices depend on the selected evidence as a whole. Recompute them,
   // rather than retaining stale conflicts from a separately imported worksheet.
-  const derivedWarning=warning=>/ has multiple reported peers\. Verify physical adjacency\.$| is reported down but has a reported peer\.$| is an alternate HA\/management observation; drawing uses observed .+\.$| is reported down; drawing uses .+\.$| is reached through .+; drawing uses .+\.$| each report the other device's VLAN interface \(.+\); drawing joins them as one inferred cable\. Verify the connection\.$|^Hostname .+ has multiple fully qualified names\. Devices remain separate; review source identities\.$/.test(warning);
+  const derivedWarning=warning=>/ has multiple reported peers\. Verify physical adjacency\.$| is reported down but has a reported peer\.$| is an alternate HA\/management observation; drawing uses observed .+\.$| is reported down; drawing uses .+\.$| is reached through .+; (?:drawing uses .+|no other cable to it is drawn)\.$| each report the other device's VLAN interface \(.+\); drawing joins them as one inferred cable\. Verify the connection\.$|^Hostname .+ has multiple fully qualified names\. Devices remain separate; review source identities\.$/.test(warning);
   const conflict=link=>{if(link.status!=='conflict')link.statusBeforeConflict=link.status||'observed';link.status='conflict';};
   for (const model of models) {
     for (const warning of model.warnings || []) if(!derivedWarning(warning))warnings.add(warning);
@@ -149,7 +149,9 @@ export function mergeModels(...models) {
       // A cable joined from two VLAN-interface observations is recomputed
       // from those observations, unless the user confirmed it.
       if(e.endpointSource==='logical neighbor observations'&&e.status!=='confirmed')continue;
-      if(e.a!==deviceId(entry.a)||e.b!==deviceId(entry.b))e.reportedEndpoints=uniq([...(entry.reportedEndpoints||[]),{a:entry.a,ap:entry.ap,b:entry.b,bp:entry.bp}]);
+      // A renamed device or port keeps the key it was reported (and edited) under.
+      const lower=v=>String(v??'').toLowerCase();
+      if(e.a!==deviceId(entry.a)||e.b!==deviceId(entry.b)||lower(e.ap)!==lower(entry.ap)||lower(e.bp)!==lower(entry.bp))e.reportedEndpoints=uniq([...(entry.reportedEndpoints||[]),{a:entry.a,ap:entry.ap,b:entry.b,bp:entry.bp}]);
       reported.push(e);
     }
   }
@@ -195,6 +197,7 @@ export function mergeModels(...models) {
     if(own)pieces.set(own,d);
   }
   for(const [port,d] of pieces)if(!reported.some(e=>[[e.a,e.ap],[e.b,e.bp]].some(([id,name])=>id===d.id&&deviceId(name)===deviceId(port.name))))d.ports.splice(d.ports.indexOf(port),1);
+  const entriesPerLink=new Map();
   // Reconcile only an existing adjacency with an explicit description naming a
   // known device AND a known far-end jack. Keep the original report for review.
   const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -213,11 +216,20 @@ export function mergeModels(...models) {
       let ends = [[e.a,deviceId(e.ap)],[e.b,deviceId(e.bp)]].map(key);
       if (ends[0] === ends[1]) continue;
       const id = key([...ends].sort());
+      entriesPerLink.set(id,(entriesPerLink.get(id)||0)+1);
       if (!links.has(id)) links.set(id,e);
       else {
         const existing=links.get(id);assign(existing,e,['a','ap','b','bp','reportedEndpoints'],warnings,e.a+' '+e.ap+' / '+e.b+' '+e.bp);
         if(e.reportedEndpoints?.length)existing.reportedEndpoints=uniq([...(existing.reportedEndpoints||[]),...e.reportedEndpoints]);
       }
+  }
+  // A link made from several reported links (for example a printer cable once
+  // listed twice, under a cut name and the whole one) marks the other names as
+  // separate observations: an edit saved for one of them is about that one.
+  for(const [id,e] of links)if(e.reportedEndpoints?.length){
+    const byEnds=new Map();
+    for(const r of e.reportedEndpoints){const k=key([r.a,r.ap,r.b,r.bp]),seen=byEnds.get(k);byEnds.set(k,{a:r.a,ap:r.ap,b:r.b,bp:r.bp,...(seen?.observation||r.observation||entriesPerLink.get(id)>1?{observation:true}:{})});}
+    e.reportedEndpoints=[...byEnds.values()];
   }
   for(const e of joinLogicalObservations([...links.values()],devices,warnings)){
     const id=key([[e.a,deviceId(e.ap)],[e.b,deviceId(e.bp)]].map(key).sort());
