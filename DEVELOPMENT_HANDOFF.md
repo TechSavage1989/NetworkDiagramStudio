@@ -1,3 +1,10 @@
+# Preview.71: signed Windows executable
+
+Baseline: published preview.70. The owner asked for this app to be code signed the same way as their other apps.
+
+- validate.yml `portable` job: on main, signs dist/windows/NetworkDiagramStudio.exe with Azure Artifact Signing (azure/login OIDC + azure/artifact-signing-action, pinned as in Configuration Inspector) after build-windows.ps1 and before package-release.py, then requires Get-AuthenticodeSignature Valid with a timestamp. Pull requests stay unsigned. release.yml grants id-token: write to the validate call.
+- The Entra federated credential (github-codesign app, Branch main) and the five repository variables are set; see docs/CODE_SIGNING.md.
+
 # Preview.70: firewall port numbers, cables over faceplate numbers
 
 Baseline: published preview.69. The owner asked for port numbers on FortiGate and other firewall faceplates, and for cables not to be hidden by faceplate numbers (crossing them is fine; cable labels are unchanged).
