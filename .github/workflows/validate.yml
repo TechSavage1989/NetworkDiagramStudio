@@ -108,6 +108,15 @@ jobs:
     name: Windows and browser validation
     runs-on: windows-2022
     timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      # Builds of main are Authenticode signed with Azure Artifact Signing once the
+      # repository variables are set (docs/CODE_SIGNING.md). GitHub signs in to Azure
+      # with OIDC, so no password or client secret is stored anywhere. Pull requests
+      # build unsigned.
+      SIGN: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.ARTIFACT_SIGNING_PROFILE != '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
@@ -130,6 +139,38 @@ jobs:
       - name: Publish and verify Windows executable
         shell: pwsh
         run: ./scripts/build-windows.ps1
+      - name: Sign in to Azure (OIDC)
+        if: env.SIGN == 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+      - name: Sign the executable
+        if: env.SIGN == 'true'
+        uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82
+        with:
+          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
+          files: ${{ github.workspace }}\dist\windows\NetworkDiagramStudio.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: NetworkDiagramStudio
+          description-url: https://github.com/${{ github.repository }}
+      - name: Verify the signature
+        if: env.SIGN == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature dist\windows\NetworkDiagramStudio.exe
+          if ($sig.Status -ne 'Valid' -or -not $sig.TimeStamperCertificate) { throw "Signature check failed: $($sig.Status) $($sig.StatusMessage)" }
+          Write-Host "Signed by: $($sig.SignerCertificate.Subject)"
+          Write-Host "Timestamped by: $($sig.TimeStamperCertificate.Subject)"
+      - name: Report an unsigned main build
+        if: env.SIGN != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: Write-Output '::warning title=Unsigned build::The ARTIFACT_SIGNING_PROFILE repository variable is not set, so this executable is not signed. See docs/CODE_SIGNING.md.'
       - name: Verify native switchport report paper media boxes
         shell: pwsh
         run: dotnet run --project tests/report-paper-native/ReportPaperChecks.csproj --configuration Release

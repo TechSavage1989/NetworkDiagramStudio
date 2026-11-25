@@ -12,6 +12,10 @@ concurrency:
 jobs:
   validate:
     if: github.ref == 'refs/heads/main'
+    # id-token lets the Windows build sign in to Azure Artifact Signing (docs/CODE_SIGNING.md).
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/validate.yml
   publish:
     needs: validate
